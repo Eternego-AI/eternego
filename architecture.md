@@ -61,9 +61,15 @@ On failure, broadcast the failure as an event before returning. Include a `reaso
 
 ### Error Handling
 
-Implementation flows downward: business calls core, core calls platform. Error handling flows upward: platform raises raw errors, core may raise domain exceptions (e.g. `UnsupportedOS`), business catches them all and turns them into user-friendly outcomes with broadcast events.
+Implementation flows downward: business calls core, core calls platform. Error handling flows upward in three steps:
 
-Every business function wraps its logic in a try/catch for the specific exceptions that can happen. We already know what core functions can raise — catch those, not generic `Exception`. On each caught exception, broadcast a failure event with the error details and return a failed `Outcome` with a user-friendly message. Internal details go into the signal's details dict for logs, never into the outcome message.
+1. **Platform** raises raw errors (`URLError`, `subprocess.CalledProcessError`, `OSError`, keyring errors, etc.)
+2. **Core** catches platform errors and raises domain exceptions (`InstallationError`, `EngineConnectionError`, `SecretStorageError`, `DiaryError`). Each core function knows what platform errors it can face.
+3. **Business** catches domain exceptions and returns user-friendly `Outcome` with a broadcast event. Internal details go into the signal's details dict for logs, never into the outcome message.
+
+Every business function wraps its logic in a try/catch for the specific domain exceptions that can happen. We already know what core functions can raise — catch those, not generic `Exception`.
+
+Do not add try/catch to business specs before implementing core. Go down first — implement core, see what platform errors it faces, define the domain exceptions, add catches in core. Then come back up and add catches in business.
 
 ### Outcome
 
@@ -126,6 +132,8 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
 
 Notice: the business spec called `is_installed`, `install`, `get_default_model`, `check`, and `pull`. Those are the only functions that exist in the core module — because the spec asked for them.
 
+**Note:** The example above uses `URLError` directly. The current codebase has since been updated — core now catches `URLError` and raises `EngineConnectionError`, and business catches that instead.
+
 ---
 
 ## Core Layer
@@ -162,6 +170,14 @@ async def get_default_model() -> str | None:
 ### Single ownership of paths and constants
 
 If a path or constant belongs to a module, other modules receive it as a parameter — they don't compute it themselves. For example, the persona directory path lives only in `identity.memory_path(persona)`. The diary module receives the path, it never imports `PERSONAS_DIR`.
+
+### When to merge vs. separate core modules
+
+If two core modules manage the same concept or data, merge them. For example, `config` was merged into `identity` because both managed persona files — identity owns the persona directory. If a module manages a distinct concern, keep it separate. For example, `diary` is separate from `identity` because backup/versioning is a different concern from persona file management.
+
+### Persona is config, files are state
+
+The `Persona` dataclass holds configuration and metadata: id, name, model, frontier, channels. The files on disk (identity buckets, instructions, skills, training data) are the persona's state, managed by `identity`. When someone asks who I am, I give my name — not my skills or assets. Those are separate and need further authorization.
 
 ### Rules
 
