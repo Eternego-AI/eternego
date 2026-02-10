@@ -46,7 +46,7 @@ There are three business modules:
 |---|---|
 | `environment.py` | Preparing and verifying the environment |
 | `persona.py` | Persona lifecycle: creation, migration, identity, learning, diary, sleep |
-| `channel.py` | Managing communication channels: add, verify, update |
+| `gateway.py` | Managing communication channels: add, verify, update |
 
 ### Signals
 
@@ -159,6 +159,10 @@ async def get_default_model() -> str | None:
     return models[0]["name"]
 ```
 
+### Single ownership of paths and constants
+
+If a path or constant belongs to a module, other modules receive it as a parameter — they don't compute it themselves. For example, the persona directory path lives only in `identity.memory_path(persona)`. The diary module receives the path, it never imports `PERSONAS_DIR`.
+
 ### Rules
 
 - Core functions use platform modules for all infrastructure — never call external libraries directly.
@@ -184,6 +188,8 @@ def get(path: str) -> dict:
 ### Portable
 
 Platform modules are portable across projects. We copied `logger` and `observer` directly from another project. A platform module should never contain project-specific logic — that belongs in core.
+
+This means: no project-specific defaults, no project-specific parameter names. For example, `crypto.derive_key(secret, salt)` takes a generic `secret` string and requires `salt` explicitly — the fact that we use a recovery phrase as the secret and a persona ID as the salt is a core decision, not a platform one.
 
 ### Shared modules
 

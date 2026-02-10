@@ -18,3 +18,36 @@ async def install(program: str) -> None:
             stderr=asyncio.subprocess.PIPE,
         )
         await process.communicate()
+    elif program == "git":
+        process = await asyncio.create_subprocess_exec(
+            "brew", "install", "git",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await process.communicate()
+
+
+async def store_secret(key: str, value: str) -> None:
+    """Store a secret in the macOS Keychain."""
+    import subprocess
+
+    subprocess.run([
+        "security", "add-generic-password",
+        "-a", "eternego",
+        "-s", f"eternego:{key}",
+        "-w", value,
+        "-U",
+    ], check=True)
+
+
+async def retrieve_secret(key: str) -> str:
+    """Retrieve a secret from the macOS Keychain."""
+    import subprocess
+
+    result = subprocess.run([
+        "security", "find-generic-password",
+        "-a", "eternego",
+        "-s", f"eternego:{key}",
+        "-w",
+    ], capture_output=True, text=True, check=True)
+    return result.stdout.strip()

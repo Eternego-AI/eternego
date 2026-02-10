@@ -1,9 +1,7 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
-from urllib.error import URLError
-
-from application.core import bus, local_inference_engine
-from application.core.exceptions import UnsupportedOS
+from application.core import bus, system, local_inference_engine
+from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError
 from application.business.outcome import Outcome
 
 
@@ -12,6 +10,9 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
     await bus.propose("Preparing environment", {"model": model})
 
     try:
+        if not await system.is_installed("git"):
+            await system.install("git")
+
         if not await local_inference_engine.is_installed():
             await local_inference_engine.install()
 
@@ -41,7 +42,14 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
         })
         return Outcome(success=False, message="Your operating system is not supported. Eternego requires Linux, macOS, or Windows.")
 
-    except URLError as e:
+    except InstallationError as e:
+        await bus.broadcast("Environment preparation failed", {
+            "reason": "installation",
+            "error": str(e),
+        })
+        return Outcome(success=False, message=str(e))
+
+    except EngineConnectionError as e:
         await bus.broadcast("Environment preparation failed", {
             "reason": "connection",
             "model": model,
@@ -62,7 +70,7 @@ async def check_model(model: str) -> Outcome[dict]:
         await bus.broadcast("Model check failed", {"model": model})
         return Outcome(success=False, message="Model is not available")
 
-    except URLError as e:
+    except EngineConnectionError as e:
         await bus.broadcast("Model check failed", {
             "reason": "connection",
             "model": model,
