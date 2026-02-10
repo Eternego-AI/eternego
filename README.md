@@ -10,7 +10,7 @@ We believe it is time to unite biological and electronic intelligence to make th
 
 It makes it easy to set up and prepare an environment for your persona to grow.
 
-1. Check if Ollama is installed, if not install it
+1. Check if a local inference engine is installed, if not install it
 2. Pull at least one model and verify it is available and running
 
 ### 2. Persona Creation
@@ -102,7 +102,7 @@ It lets your persona rest, reflect, and grow stronger from everything it experie
 
 The initial release focuses on the core twin experience:
 
-- Local model running via Ollama
+- Local model running via a local inference engine
 - Communication channel (Telegram)
 - Skills and actions with confirmation
 - Identity storage (flat files)

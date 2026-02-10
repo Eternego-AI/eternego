@@ -1,0 +1,1 @@
+"""Channel — managing communication channels."""
