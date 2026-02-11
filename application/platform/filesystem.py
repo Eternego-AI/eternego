@@ -2,6 +2,7 @@
 
 import io
 import json
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -44,6 +45,23 @@ def read(path: Path) -> str:
     return path.read_text()
 
 
+def read_bytes(path: Path) -> bytes:
+    """Read binary data from a file."""
+    return path.read_bytes()
+
+
 def read_json(path: Path) -> dict:
     """Read JSON data from a file."""
     return json.loads(path.read_text())
+
+
+def unzip(data: bytes, destination: Path) -> None:
+    """Extract a zip archive from bytes to a directory."""
+    ensure_dir(destination)
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        zf.extractall(destination)
+
+
+def copy_dir(source: Path, destination: Path) -> None:
+    """Copy a directory tree to a new location."""
+    shutil.copytree(source, destination, dirs_exist_ok=True)

@@ -1,12 +1,13 @@
 """Identity — persona identity initialization and management."""
 
+import json
 import uuid
 from dataclasses import asdict
 from pathlib import Path
 
 from application.platform import logger, filesystem, OS, linux, mac, windows
 from application.core.data import Channel, Model, Persona
-from application.core.exceptions import UnsupportedOS, SecretStorageError
+from application.core.exceptions import UnsupportedOS, SecretStorageError, IdentityError
 
 
 PERSONAS_DIR = Path.home() / ".eternego" / "personas"
@@ -80,6 +81,26 @@ async def skills(persona: Persona, data: dict[str, str]) -> None:
     path = PERSONAS_DIR / persona.id / "skills"
     for key, content in data.items():
         filesystem.write(path / f"{key}.md", content)
+
+
+async def distill(materials: Path) -> Persona:
+    """Restore a persona from diary materials into the personas directory."""
+    logger.info("Distilling persona from materials", {"path": str(materials)})
+    try:
+        config = filesystem.read_json(materials / "config.json")
+        persona = Persona(
+            id=config["id"],
+            name=config["name"],
+            model=Model(**config["model"]),
+            frontier=Model(**config["frontier"]) if config.get("frontier") else None,
+            channels=[Channel(**ch) for ch in config["channels"]] if config.get("channels") else None,
+        )
+        filesystem.copy_dir(materials, PERSONAS_DIR / persona.id)
+        return persona
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        raise IdentityError("Persona data is malformed") from e
+    except OSError as e:
+        raise IdentityError("Failed to restore persona files") from e
 
 
 async def save_persona(persona: Persona) -> None:

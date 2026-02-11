@@ -19,3 +19,7 @@ class SecretStorageError(Exception):
 
 class DiaryError(Exception):
     pass
+
+
+class IdentityError(Exception):
+    pass
