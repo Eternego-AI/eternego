@@ -23,3 +23,7 @@ class DiaryError(Exception):
 
 class IdentityError(Exception):
     pass
+
+
+class ExternalDataError(Exception):
+    pass

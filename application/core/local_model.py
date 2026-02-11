@@ -1,10 +1,33 @@
 """Local model — communicating with the local model."""
 
+import json
 from urllib.error import URLError
 
 from application.platform import logger, ollama
-from application.core.data import Persona
+from application.core import prompts
+from application.core.data import Observation, Persona
 from application.core.exceptions import EngineConnectionError
+
+
+async def digest(model: str, conversations: str) -> Observation:
+    """Analyze conversations and extract observations using the given model."""
+    logger.info("Digesting conversations", {"model": model})
+    try:
+        response = ollama.post("/api/generate", {
+            "model": model,
+            "prompt": prompts.EXTRACTION.format(conversations=conversations),
+            "stream": False,
+        })
+        parsed = json.loads(response["response"])
+        return Observation(
+            facts=parsed.get("facts", []),
+            traits=parsed.get("traits", []),
+            context=parsed.get("context", []),
+        )
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+    except (json.JSONDecodeError, KeyError) as e:
+        raise EngineConnectionError("Model returned an invalid response") from e
 
 
 async def generate_encryption_phrase(persona: Persona) -> str:
@@ -13,7 +36,7 @@ async def generate_encryption_phrase(persona: Persona) -> str:
     try:
         response = ollama.post("/api/generate", {
             "model": persona.model.name,
-            "prompt": "Generate a 24-word recovery phrase using random common English words. Return only the 24 words separated by spaces, nothing else.",
+            "prompt": prompts.RECOVERY_PHRASE,
             "stream": False,
         })
         return response["response"].strip()

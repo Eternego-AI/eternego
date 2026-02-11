@@ -18,6 +18,13 @@ class Model:
 
 
 @dataclass(kw_only=True)
+class Observation:
+    facts: list[str]
+    traits: list[str]
+    context: list[str]
+
+
+@dataclass(kw_only=True)
 class Persona:
     id: str
     name: str

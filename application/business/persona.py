@@ -1,9 +1,10 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, identity, diary, instructions, skills, local_model
-from application.core.data import Channel, Model, Persona
+from application.core import bus, identity, diary, instructions, skills, local_model, external_llms
+from application.core.data import Channel, Model, Observation, Persona
 from application.core.exceptions import (
-    UnsupportedOS, EngineConnectionError, SecretStorageError, DiaryError, IdentityError,
+    UnsupportedOS, EngineConnectionError, SecretStorageError,
+    DiaryError, IdentityError, ExternalDataError,
 )
 from application.business import environment, gateway
 from application.business.outcome import Outcome
@@ -149,6 +150,56 @@ async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
     except SecretStorageError as e:
         await bus.broadcast("Persona migration failed", {"reason": "secret_storage", "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")
+
+
+async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
+    """It lets you feed your persona with your existing AI history so it can know you faster."""
+    await bus.propose("Feeding persona", {"persona_id": persona.id, "source": source})
+
+    try:
+        conversations = await external_llms.read(data, source)
+
+        observations = await local_model.digest(persona.model.name, conversations)
+
+        outcome = await grow(persona, observations)
+        if not outcome.success:
+            await bus.broadcast("Persona feeding failed", {"reason": "grow", "persona_id": persona.id})
+            return outcome
+
+        await bus.broadcast("Persona fed", {
+            "persona_id": persona.id,
+            "source": source,
+        })
+
+        return outcome
+
+    except ExternalDataError as e:
+        await bus.broadcast("Persona feeding failed", {"reason": "external_data", "error": str(e)})
+        return Outcome(success=False, message="Could not parse the external data. Please check the file format.")
+
+    except EngineConnectionError as e:
+        await bus.broadcast("Persona feeding failed", {"reason": "connection", "error": str(e)})
+        return Outcome(success=False, message="Could not analyze the conversations. Please make sure the model is running.")
+
+
+async def grow(persona: Persona, observations: Observation) -> Outcome[dict]:
+    """It lets your persona grow from what it observed."""
+    await bus.propose("Growing persona", {"persona_id": persona.id})
+
+    try:
+        await identity.learn(persona, observations)
+
+        await bus.broadcast("Persona grew", {"persona_id": persona.id})
+
+        return Outcome(
+            success=True,
+            message="Persona grew successfully",
+            data={"persona_id": persona.id},
+        )
+
+    except IdentityError as e:
+        await bus.broadcast("Persona growth failed", {"reason": "identity", "error": str(e)})
+        return Outcome(success=False, message="Could not save observations to persona.")
 
 
 async def write_diary(persona: Persona) -> Outcome[dict]:

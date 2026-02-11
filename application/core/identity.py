@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from application.platform import logger, filesystem, OS, linux, mac, windows
-from application.core.data import Channel, Model, Persona
+from application.core.data import Channel, Model, Observation, Persona
 from application.core.exceptions import UnsupportedOS, SecretStorageError, IdentityError
 
 
@@ -81,6 +81,24 @@ async def skills(persona: Persona, data: dict[str, str]) -> None:
     path = PERSONAS_DIR / persona.id / "skills"
     for key, content in data.items():
         filesystem.write(path / f"{key}.md", content)
+
+
+async def learn(persona: Persona, observations: Observation) -> None:
+    """Save observations to the appropriate identity files."""
+    logger.info("Learning from observations", {"persona_id": persona.id})
+    try:
+        base = PERSONAS_DIR / persona.id
+
+        if observations.facts:
+            filesystem.append(base / "person-identity.md", "\n".join(observations.facts) + "\n")
+
+        if observations.traits:
+            filesystem.append(base / "person-traits.md", "\n".join(observations.traits) + "\n")
+
+        if observations.context:
+            filesystem.append(base / "persona-context.md", "\n".join(observations.context) + "\n")
+    except OSError as e:
+        raise IdentityError("Failed to save observations") from e
 
 
 async def distill(materials: Path) -> Persona:

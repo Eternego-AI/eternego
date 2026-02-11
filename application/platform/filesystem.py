@@ -40,6 +40,13 @@ def zip(source: Path) -> bytes:
     return buffer.getvalue()
 
 
+def append(path: Path, content: str) -> None:
+    """Append text content to a file."""
+    ensure_dir(path.parent)
+    with open(path, "a") as f:
+        f.write(content)
+
+
 def read(path: Path) -> str:
     """Read text content from a file."""
     return path.read_text()
