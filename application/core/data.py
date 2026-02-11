@@ -1,6 +1,7 @@
 """Data models for the application."""
 
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(kw_only=True)
@@ -31,3 +32,7 @@ class Persona:
     model: Model
     frontier: Model | None = None
     channels: list[Channel] | None = None
+
+    @property
+    def storage_dir(self) -> Path:
+        return Path.home() / ".eternego" / "personas" / self.id

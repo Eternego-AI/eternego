@@ -3,7 +3,9 @@
 import subprocess
 
 from application.platform import logger, OS, linux, mac, windows
-from application.core.exceptions import UnsupportedOS, InstallationError
+from application.core import local_model
+from application.core.data import Persona
+from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError
 
 
 async def is_installed(program: str) -> bool:
@@ -38,3 +40,47 @@ async def install(program: str) -> None:
             await windows.install(program)
     except (subprocess.CalledProcessError, NotImplementedError) as e:
         raise InstallationError(f"Failed to install {program}") from e
+
+
+async def generate_encryption_phrase(persona: Persona) -> str:
+    """Generate a recovery phrase for the persona."""
+    logger.info("Generating encryption phrase", {"persona_id": persona.id})
+    return await local_model.generate_encryption_phrase(persona)
+
+
+async def save_phrases(persona: Persona, phrase: str) -> None:
+    """Save the encryption phrase in OS secure storage."""
+    logger.info("Saving encryption phrase", {"persona_id": persona.id})
+    platform = OS.get_supported()
+
+    if platform is None:
+        raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
+
+    try:
+        if platform == "linux":
+            await linux.store_secret(persona.id, phrase)
+        elif platform == "mac":
+            await mac.store_secret(persona.id, phrase)
+        elif platform == "windows":
+            await windows.store_secret(persona.id, phrase)
+    except Exception as e:
+        raise SecretStorageError("Failed to save encryption phrase to secure storage") from e
+
+
+async def get_phrases(persona: Persona) -> str:
+    """Retrieve the encryption phrase from OS secure storage."""
+    logger.info("Retrieving encryption phrase", {"persona_id": persona.id})
+    platform = OS.get_supported()
+
+    if platform is None:
+        raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
+
+    try:
+        if platform == "linux":
+            return await linux.retrieve_secret(persona.id)
+        elif platform == "mac":
+            return await mac.retrieve_secret(persona.id)
+        elif platform == "windows":
+            return await windows.retrieve_secret(persona.id)
+    except Exception as e:
+        raise SecretStorageError("Failed to retrieve encryption phrase from secure storage") from e

@@ -1,10 +1,10 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, identity, diary, instructions, skills, local_model, external_llms
+from application.core import bus, agent, person, frontier, diary, system, local_model, external_llms
 from application.core.data import Channel, Model, Observation, Persona
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
-    DiaryError, IdentityError, ExternalDataError,
+    DiaryError, IdentityError, PersonError, ExternalDataError,
 )
 from application.business import environment, gateway
 from application.business.outcome import Outcome
@@ -14,7 +14,7 @@ async def create(
     name: str,
     model: Model,
     channel: Channel,
-    frontier: Model | None = None,
+    frontier_model: Model | None = None,
 ) -> Outcome[dict]:
     """It gives birth to your persona with minimum but powerful initial abilities."""
     await bus.propose(
@@ -29,22 +29,21 @@ async def create(
             )
             return Outcome(success=False, message=outcome.message)
 
-        persona = await identity.initialize(name, model, frontier, channels=[channel])
+        persona = await agent.initialize(name, model, frontier_model, channels=[channel])
 
-        await identity.prepare_person_identity_bucket(persona)
-        await identity.prepare_person_traits_bucket(persona)
-        await identity.prepare_persona_identity_bucket(persona)
-        await identity.prepare_persona_context_bucket(persona)
-        await identity.prepare_training_material_bucket(persona)
+        await person.prepare_buckets(persona)
+        await agent.prepare_buckets(persona)
+        await agent.give_instructions(persona)
+        await agent.equip_basic_skills(persona)
 
-        await identity.instructions(persona, instructions.basic_instructions(frontier))
-        await identity.skills(persona, skills.basic_skills())
+        if frontier_model:
+            await frontier.allow_escalation(persona)
 
-        await identity.save_persona(persona)
+        await agent.save_persona(persona)
 
-        phrase = await local_model.generate_encryption_phrase(persona)
+        phrase = await system.generate_encryption_phrase(persona)
 
-        await identity.save_phrases(persona, phrase)
+        await system.save_phrases(persona, phrase)
 
         await diary.open_for(persona)
 
@@ -81,6 +80,10 @@ async def create(
         await bus.broadcast("Persona creation failed", {"reason": "secret_storage", "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")
 
+    except (IdentityError, PersonError) as e:
+        await bus.broadcast("Persona creation failed", {"reason": "identity", "error": str(e)})
+        return Outcome(success=False, message="Could not set up persona files.")
+
     except DiaryError as e:
         await bus.broadcast("Persona creation failed", {"reason": "diary", "error": str(e)})
         return Outcome(success=False, message="Could not save the persona diary.")
@@ -98,12 +101,12 @@ async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
             await bus.broadcast("Persona migration failed", {"reason": "environment"})
             return Outcome(success=False, message=outcome.message)
 
-        persona = await identity.distill(materials)
+        persona = await agent.distill(materials)
 
         persona.model = model
-        await identity.save_persona(persona)
+        await agent.save_persona(persona)
 
-        await identity.save_phrases(persona, phrase)
+        await system.save_phrases(persona, phrase)
 
         await diary.open_for(persona)
 
@@ -187,7 +190,9 @@ async def grow(persona: Persona, observations: Observation) -> Outcome[dict]:
     await bus.propose("Growing persona", {"persona_id": persona.id})
 
     try:
-        await identity.learn(persona, observations)
+        await person.add_facts(persona, observations.facts)
+        await person.add_traits(persona, observations.traits)
+        await agent.learn(persona, observations.context)
 
         await bus.broadcast("Persona grew", {"persona_id": persona.id})
 
@@ -197,7 +202,7 @@ async def grow(persona: Persona, observations: Observation) -> Outcome[dict]:
             data={"persona_id": persona.id},
         )
 
-    except IdentityError as e:
+    except (IdentityError, PersonError) as e:
         await bus.broadcast("Persona growth failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not save observations to persona.")
 
@@ -207,8 +212,8 @@ async def write_diary(persona: Persona) -> Outcome[dict]:
     await bus.propose("Saving diary", {"persona_id": persona.id})
 
     try:
-        phrase = await identity.get_phrases(persona)
-        await diary.record(identity.memory_path(persona), phrase)
+        phrase = await system.get_phrases(persona)
+        await diary.record(persona.storage_dir, phrase)
 
         await bus.broadcast("Diary saved", {"persona_id": persona.id})
 

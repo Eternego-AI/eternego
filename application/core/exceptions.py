@@ -25,5 +25,9 @@ class IdentityError(Exception):
     pass
 
 
+class PersonError(Exception):
+    pass
+
+
 class ExternalDataError(Exception):
     pass
