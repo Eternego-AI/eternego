@@ -207,6 +207,37 @@ async def grow(persona: Persona, observations: Observation) -> Outcome[dict]:
         return Outcome(success=False, message="Could not save observations to persona.")
 
 
+async def oversee(persona: Persona) -> Outcome[dict]:
+    """It lets you look into your persona's mind — what it knows, what it learned, and how it sees you."""
+    await bus.propose("Overseeing persona", {"persona_id": persona.id})
+
+    try:
+        facts = await person.identified_by(persona)
+        traits = await person.traits_toward(persona)
+        agent_data = await agent.identity(persona)
+        skill_list = await agent.skills(persona)
+        conversations = await agent.memory(persona)
+
+        await bus.broadcast("Persona overseen", {"persona_id": persona.id})
+
+        return Outcome(
+            success=True,
+            message="Persona overview ready",
+            data={
+                "person": system.make_rows_traceable(facts, "pi"),
+                "traits": system.make_rows_traceable(traits, "pt"),
+                "agent": system.make_rows_traceable(agent_data["identity"], "pai")
+                    + system.make_rows_traceable(agent_data["context"], "pc"),
+                "skills": system.make_rows_traceable(skill_list, "sk"),
+                "memory": system.make_rows_traceable(conversations, "mem"),
+            },
+        )
+
+    except (IdentityError, PersonError) as e:
+        await bus.broadcast("Persona oversight failed", {"reason": "identity", "error": str(e)})
+        return Outcome(success=False, message="Could not read persona data.")
+
+
 async def write_diary(persona: Persona) -> Outcome[dict]:
     """It preserves your persona's life so it survives across time, hardware, and changes."""
     await bus.propose("Saving diary", {"persona_id": persona.id})

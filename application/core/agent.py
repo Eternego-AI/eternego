@@ -36,6 +36,7 @@ async def prepare_buckets(persona: Persona) -> None:
         filesystem.write(persona.storage_dir / "persona-identity.md", "")
         filesystem.write(persona.storage_dir / "persona-context.md", "")
         filesystem.ensure_dir(persona.storage_dir / "training")
+        filesystem.ensure_dir(persona.storage_dir / "memory")
     except OSError as e:
         raise IdentityError("Failed to prepare agent buckets") from e
 
@@ -68,6 +69,53 @@ async def equip_basic_skills(persona: Persona) -> None:
         filesystem.ensure_dir(persona.storage_dir / "skills")
     except OSError as e:
         raise IdentityError("Failed to equip basic skills") from e
+
+
+async def identity(persona: Persona) -> dict[str, list[str]]:
+    """Read the agent's identity and context."""
+    logger.info("Reading agent identity", {"persona_id": persona.id})
+    try:
+        identity_content = filesystem.read(persona.storage_dir / "persona-identity.md")
+        context_content = filesystem.read(persona.storage_dir / "persona-context.md")
+
+        return {
+            "identity": [line for line in identity_content.splitlines() if line.strip()],
+            "context": [line for line in context_content.splitlines() if line.strip()],
+        }
+    except OSError as e:
+        raise IdentityError("Failed to read agent identity") from e
+
+
+async def skills(persona: Persona) -> list[str]:
+    """Read the agent's skills."""
+    logger.info("Reading agent skills", {"persona_id": persona.id})
+    try:
+        entries = []
+        skills_dir = persona.storage_dir / "skills"
+        if skills_dir.exists():
+            for file in sorted(skills_dir.glob("*.md")):
+                content = filesystem.read(file)
+                if content.strip():
+                    entries.append(content)
+        return entries
+    except OSError as e:
+        raise IdentityError("Failed to read agent skills") from e
+
+
+async def memory(persona: Persona) -> list[str]:
+    """Read the agent's conversations since last sleep."""
+    logger.info("Reading agent memory", {"persona_id": persona.id})
+    try:
+        entries = []
+        memory_dir = persona.storage_dir / "memory"
+        if memory_dir.exists():
+            for file in sorted(memory_dir.glob("*")):
+                content = filesystem.read(file)
+                if content.strip():
+                    entries.append(content)
+        return entries
+    except OSError as e:
+        raise IdentityError("Failed to read agent memory") from e
 
 
 async def learn(persona: Persona, context: list[str]) -> None:

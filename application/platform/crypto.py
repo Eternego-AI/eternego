@@ -1,9 +1,11 @@
-"""Crypto — key derivation and encryption."""
+"""Crypto — key derivation, encryption, and hashing."""
+
+import hashlib
+import base64
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
-import base64
 
 
 def derive_key(secret: str, salt: bytes) -> bytes:
@@ -25,3 +27,8 @@ def encrypt(data: bytes, key: bytes) -> bytes:
 def decrypt(data: bytes, key: bytes) -> bytes:
     """Decrypt data using a Fernet key."""
     return Fernet(key).decrypt(data)
+
+
+def generate_unique_id(content: str) -> str:
+    """Generate a short unique hash from content."""
+    return hashlib.sha256(content.encode()).hexdigest()[:6]

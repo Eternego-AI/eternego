@@ -15,6 +15,26 @@ async def prepare_buckets(persona: Persona) -> None:
         raise PersonError("Failed to prepare person buckets") from e
 
 
+async def identified_by(persona: Persona) -> list[str]:
+    """Read how the person is identified by this persona."""
+    logger.info("Reading person identity", {"persona_id": persona.id})
+    try:
+        content = filesystem.read(persona.storage_dir / "person-identity.md")
+        return [line for line in content.splitlines() if line.strip()]
+    except OSError as e:
+        raise PersonError("Failed to read person identity") from e
+
+
+async def traits_toward(persona: Persona) -> list[str]:
+    """Read the person's behavioral traits toward this persona."""
+    logger.info("Reading person traits", {"persona_id": persona.id})
+    try:
+        content = filesystem.read(persona.storage_dir / "person-traits.md")
+        return [line for line in content.splitlines() if line.strip()]
+    except OSError as e:
+        raise PersonError("Failed to read person traits") from e
+
+
 async def add_facts(persona: Persona, facts: list[str]) -> None:
     """Save factual observations about the person."""
     logger.info("Adding facts", {"persona_id": persona.id})

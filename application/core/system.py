@@ -2,10 +2,18 @@
 
 import subprocess
 
-from application.platform import logger, OS, linux, mac, windows
+from application.platform import logger, crypto, OS, linux, mac, windows
 from application.core import local_model
 from application.core.data import Persona
 from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError
+
+
+def make_rows_traceable(rows: list[str], prefix: str) -> list[dict]:
+    """Tag each row with a trackable ID using its content hash."""
+    return [
+        {"id": f"{prefix}-{crypto.generate_unique_id(row)}", "content": row}
+        for row in rows
+    ]
 
 
 async def is_installed(program: str) -> bool:
