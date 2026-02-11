@@ -238,6 +238,44 @@ async def oversee(persona: Persona) -> Outcome[dict]:
         return Outcome(success=False, message="Could not read persona data.")
 
 
+async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
+    """It gives you full control over what your persona knows — you always have the final say."""
+    await bus.propose("Controlling persona", {"persona_id": persona.id, "count": len(entry_ids)})
+
+    try:
+        for entry_id in entry_ids:
+            prefix, hash_part = entry_id.split("-", 1)
+
+            if prefix == "pi":
+                await person.delete_identity(persona, hash_part)
+            elif prefix == "pt":
+                await person.delete_trait(persona, hash_part)
+            elif prefix == "pai":
+                await agent.delete_identity(persona, hash_part)
+            elif prefix == "pc":
+                await agent.delete_context(persona, hash_part)
+            elif prefix == "sk":
+                await agent.delete_skill(persona, hash_part)
+            elif prefix == "mem":
+                await agent.delete_memory(persona, hash_part)
+
+        await bus.broadcast("Persona controlled", {"persona_id": persona.id, "removed": len(entry_ids)})
+
+        return Outcome(
+            success=True,
+            message="Entries removed successfully",
+            data={"removed": len(entry_ids)},
+        )
+
+    except ValueError:
+        await bus.broadcast("Persona control failed", {"reason": "invalid_id", "persona_id": persona.id})
+        return Outcome(success=False, message="Invalid entry ID format.")
+
+    except (IdentityError, PersonError) as e:
+        await bus.broadcast("Persona control failed", {"reason": "identity", "error": str(e)})
+        return Outcome(success=False, message="Could not remove entry. It may have been modified or already deleted.")
+
+
 async def write_diary(persona: Persona) -> Outcome[dict]:
     """It preserves your persona's life so it survives across time, hardware, and changes."""
     await bus.propose("Saving diary", {"persona_id": persona.id})

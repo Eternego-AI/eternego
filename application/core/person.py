@@ -1,6 +1,6 @@
 """Person — the human behind the persona."""
 
-from application.platform import logger, filesystem
+from application.platform import logger, filesystem, crypto
 from application.core.data import Persona
 from application.core.exceptions import PersonError
 
@@ -33,6 +33,37 @@ async def traits_toward(persona: Persona) -> list[str]:
         return [line for line in content.splitlines() if line.strip()]
     except OSError as e:
         raise PersonError("Failed to read person traits") from e
+
+
+async def delete_identity(persona: Persona, hash_part: str) -> None:
+    """Remove a fact from person identity by its content hash."""
+    logger.info("Deleting identity entry", {"persona_id": persona.id, "hash": hash_part})
+    try:
+        path = persona.storage_dir / "person-identity.md"
+        content = filesystem.read(path)
+        lines = content.splitlines()
+        remaining = [line for line in lines if crypto.generate_unique_id(line) != hash_part]
+        if len(remaining) == len(lines):
+            raise PersonError("Entry not found or already modified")
+        filesystem.write(path, "\n".join(remaining) + "\n" if remaining else "")
+    except OSError as e:
+        raise PersonError("Failed to delete identity entry") from e
+
+
+async def delete_trait(persona: Persona, hash_part: str) -> None:
+    """Remove a trait from person traits by its content hash."""
+    logger.info("Deleting trait entry", {"persona_id": persona.id, "hash": hash_part})
+    try:
+        path = persona.storage_dir / "person-traits.md"
+        content = filesystem.read(path)
+        lines = content.splitlines()
+        remaining = [line for line in lines if crypto.generate_unique_id(line) != hash_part]
+        if len(remaining) == len(lines):
+            raise PersonError("Entry not found or already modified")
+        filesystem.write(path, "\n".join(remaining) + "\n" if remaining else "")
+    except OSError as e:
+        raise PersonError("Failed to delete trait entry") from e
+
 
 
 async def add_facts(persona: Persona, facts: list[str]) -> None:

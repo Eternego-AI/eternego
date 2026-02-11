@@ -69,6 +69,11 @@ def unzip(data: bytes, destination: Path) -> None:
         zf.extractall(destination)
 
 
+def delete(path: Path) -> None:
+    """Delete a file."""
+    path.unlink()
+
+
 def copy_dir(source: Path, destination: Path) -> None:
     """Copy a directory tree to a new location."""
     shutil.copytree(source, destination, dirs_exist_ok=True)
