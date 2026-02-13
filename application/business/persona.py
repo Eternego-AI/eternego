@@ -1,10 +1,12 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, agent, person, frontier, diary, system, local_model, external_llms
-from application.core.data import Channel, Model, Observation, Persona
+from application.core import bus, agent, person, frontier, diary, system, external_llms, prompts
+from application.core.bus import Message
+from application.core.data import Channel, Model, Observation, Persona, Thought
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
-    DiaryError, IdentityError, PersonError, ExternalDataError,
+    DiaryError, IdentityError, PersonError, ExternalDataError, FrontierError,
+    ExecutionError,
 )
 from application.business import environment, gateway
 from application.business.outcome import Outcome
@@ -80,9 +82,13 @@ async def create(
         await bus.broadcast("Persona creation failed", {"reason": "secret_storage", "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")
 
-    except (IdentityError, PersonError) as e:
+    except IdentityError as e:
         await bus.broadcast("Persona creation failed", {"reason": "identity", "error": str(e)})
-        return Outcome(success=False, message="Could not set up persona files.")
+        return Outcome(success=False, message="Could not set up persona identity files.")
+
+    except PersonError as e:
+        await bus.broadcast("Persona creation failed", {"reason": "person", "error": str(e)})
+        return Outcome(success=False, message="Could not set up person files.")
 
     except DiaryError as e:
         await bus.broadcast("Persona creation failed", {"reason": "diary", "error": str(e)})
@@ -202,9 +208,322 @@ async def grow(persona: Persona, observations: Observation) -> Outcome[dict]:
             data={"persona_id": persona.id},
         )
 
-    except (IdentityError, PersonError) as e:
+    except IdentityError as e:
         await bus.broadcast("Persona growth failed", {"reason": "identity", "error": str(e)})
-        return Outcome(success=False, message="Could not save observations to persona.")
+        return Outcome(success=False, message="Could not save context observations to persona.")
+
+    except PersonError as e:
+        await bus.broadcast("Persona growth failed", {"reason": "person", "error": str(e)})
+        return Outcome(success=False, message="Could not save person observations to persona.")
+
+
+async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict]:
+    """It lets the persona sense a stimulus from a channel and process it."""
+    await bus.propose(
+        "Sensing", {"persona_id": persona.id, "channel": channel.name}
+    )
+
+    try:
+        think = agent.given(persona, {"type": "stimulus", "role": "user", "content": prompt, "channel": channel.name})
+
+        failed = False
+        async for thought in think.reason():
+            if thought.intent == "saying":
+                await say(persona, thought, channel)
+            elif thought.intent == "doing":
+                if failed:
+                    agent.note({
+                        "type": "act",
+                        "tool_calls": thought.tool_calls,
+                        "result": "Skipped — a previous tool call failed in this interaction.",
+                    })
+                else:
+                    outcome = await act(persona, thought)
+                    if not outcome.success:
+                        failed = True
+            elif thought.intent == "consulting":
+                await escalate(persona, thought.content, channel)
+            elif thought.intent == "reasoning":
+                await bus.share("Reasoning", {"content": thought.content})
+
+        await reflect(persona, channel)
+
+        await bus.broadcast(
+            "Sensed", {"persona_id": persona.id, "channel": channel.name}
+        )
+
+        return Outcome(
+            success=True,
+            message="Stimulus processed",
+            data={"persona_id": persona.id},
+        )
+
+    except EngineConnectionError as e:
+        await bus.broadcast(
+            "Sensing failed",
+            {"reason": "connection", "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not connect to the inference engine. Please make sure it is running.",
+        )
+
+
+async def say(persona: Persona, thought: Thought, channel: Channel | None = None) -> Outcome[dict]:
+    """It lets the persona express a thought through a channel."""
+    await bus.propose(
+        "Saying", {"persona_id": persona.id}
+    )
+
+    channels = [channel] if channel else persona.channels or []
+
+    signals = await bus.order(
+        "Say", {"content": thought.content, "channels": [ch.name for ch in channels]}
+    )
+
+    for signal in signals:
+        if (
+            signal.title == "Communicated"
+            and signal.details.get("content") == thought.content
+        ):
+            person.heard({
+                "type": "communicated",
+                "channel": signal.details.get("channel"),
+                "content": thought.content,
+            })
+
+            await bus.broadcast(
+                "Said", {"persona_id": persona.id, "channel": signal.details.get("channel")}
+            )
+
+            return Outcome(
+                success=True,
+                message="Thought expressed",
+                data={"persona_id": persona.id},
+            )
+
+    await bus.broadcast(
+        "Saying failed", {"persona_id": persona.id}
+    )
+
+    return Outcome(
+        success=False,
+        message="No channel communicated the thought.",
+        data={"persona_id": persona.id},
+    )
+
+
+async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
+    """It lets the persona act on the world by executing a tool call."""
+    await bus.propose(
+        "Acting", {"persona_id": persona.id, "tool": thought.tool_calls}
+    )
+
+    signals = await bus.ask(
+        "Can I run this command?", {"tool_calls": thought.tool_calls}
+    )
+
+    authorized = any(
+        isinstance(signal, Message)
+        and signal.title == "Run command authorized"
+        and signal.details.get("tool_calls") == thought.tool_calls
+        for signal in signals
+    )
+
+    if not authorized:
+        agent.note({
+            "type": "act",
+            "tool_calls": thought.tool_calls,
+            "result": "Rejected — the person declined to run this command.",
+        })
+
+        await bus.broadcast(
+            "Acting rejected",
+            {"persona_id": persona.id, "tool": thought.tool_calls},
+        )
+
+        return Outcome(
+            success=False,
+            message="Command rejected by the person.",
+            data={"persona_id": persona.id},
+        )
+
+    try:
+        result = await system.execute(thought.tool_calls)
+
+        agent.note({"type": "act", "tool_calls": thought.tool_calls, "result": result})
+
+        await bus.broadcast(
+            "Acted", {"persona_id": persona.id, "tool": thought.tool_calls}
+        )
+
+        return Outcome(
+            success=True,
+            message="Action executed",
+            data={"persona_id": persona.id},
+        )
+
+    except ExecutionError as e:
+        agent.note({
+            "type": "act",
+            "tool_calls": thought.tool_calls,
+            "result": f"Failed: {e}",
+        })
+
+        await bus.broadcast(
+            "Acting failed",
+            {"persona_id": persona.id, "tool": thought.tool_calls, "error": str(e)},
+        )
+
+        return Outcome(
+            success=False,
+            message="Command failed to execute.",
+            data={"persona_id": persona.id},
+        )
+
+    except UnsupportedOS as e:
+        agent.note({
+            "type": "act",
+            "tool_calls": thought.tool_calls,
+            "result": f"Failed: {e}",
+        })
+
+        await bus.broadcast(
+            "Acting failed",
+            {"persona_id": persona.id, "tool": thought.tool_calls, "error": str(e)},
+        )
+
+        return Outcome(
+            success=False,
+            message="Your operating system is not supported.",
+            data={"persona_id": persona.id},
+        )
+
+
+async def escalate(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict]:
+    """It lets the persona escalate to a frontier model when the task exceeds its ability."""
+    await bus.propose(
+        "Escalating", {"persona_id": persona.id}
+    )
+
+    try:
+        observation = [{"role": "user", "content": prompt}]
+
+        failed = False
+        async for response in frontier.consulting(persona.frontier, prompt).reason():
+            if response.intent == "saying":
+                observation.append({"role": "assistant", "content": response.content})
+                await say(persona, response, channel)
+            elif response.intent == "doing":
+                observation.append({"role": "assistant", "tool_calls": response.tool_calls})
+                if failed:
+                    agent.note({
+                        "type": "act",
+                        "tool_calls": response.tool_calls,
+                        "result": "Skipped — a previous tool call failed in this interaction.",
+                    })
+                else:
+                    outcome = await act(persona, response)
+                    if not outcome.success:
+                        failed = True
+            elif response.intent == "reasoning":
+                # Reasoning is not observed. The agent should develop its own reasoning
+                # for similar situations, not imitate the frontier's thought process.
+                await bus.share("Reasoning", {"content": response.content})
+
+        agent.observe(observation)
+
+        await bus.broadcast(
+            "Escalated", {"persona_id": persona.id}
+        )
+
+        return Outcome(
+            success=True,
+            message="Escalation complete",
+            data={"persona_id": persona.id},
+        )
+
+    except FrontierError as e:
+        await bus.broadcast(
+            "Escalation failed",
+            {"reason": "frontier", "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not reach the frontier model. Please check your credentials and connection.",
+        )
+
+
+async def reflect(persona: Persona, channel: Channel) -> Outcome[dict]:
+    """It lets the persona reflect on what it learned from the interaction."""
+    await bus.propose(
+        "Reflecting", {"persona_id": persona.id}
+    )
+
+    try:
+        think = agent.given(persona, prompts.reflection())
+
+        async for thought in think.reason():
+            if thought.intent == "saying":
+                await say(persona, thought, channel)
+            elif thought.intent == "reasoning":
+                await bus.share("Reasoning", {"content": thought.content})
+
+        await bus.broadcast(
+            "Reflected", {"persona_id": persona.id}
+        )
+
+        return Outcome(
+            success=True,
+            message="Reflection complete",
+            data={"persona_id": persona.id},
+        )
+
+    except EngineConnectionError as e:
+        await bus.broadcast(
+            "Reflection failed",
+            {"reason": "connection", "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not connect to the inference engine for reflection.",
+        )
+
+
+async def predict(persona: Persona, channel: Channel) -> Outcome[dict]:
+    """It lets the persona anticipate and act without external stimulus."""
+    await bus.propose(
+        "Predicting", {"persona_id": persona.id}
+    )
+
+    try:
+        think = agent.given(persona, prompts.prediction())
+
+        async for thought in think.reason():
+            if thought.intent == "saying":
+                await say(persona, thought, channel)
+            elif thought.intent == "reasoning":
+                await bus.share("Reasoning", {"content": thought.content})
+
+        await bus.broadcast(
+            "Predicted", {"persona_id": persona.id}
+        )
+
+        return Outcome(
+            success=True,
+            message="Prediction complete",
+            data={"persona_id": persona.id},
+        )
+
+    except EngineConnectionError as e:
+        await bus.broadcast(
+            "Prediction failed",
+            {"reason": "connection", "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not connect to the inference engine for prediction.",
+        )
 
 
 async def oversee(persona: Persona) -> Outcome[dict]:
@@ -216,7 +535,7 @@ async def oversee(persona: Persona) -> Outcome[dict]:
         traits = await person.traits_toward(persona)
         agent_data = await agent.identity(persona)
         skill_list = await agent.skills(persona)
-        conversations = await agent.memory(persona)
+        conversations = await agent.conversations(persona)
 
         await bus.broadcast("Persona overseen", {"persona_id": persona.id})
 
@@ -233,9 +552,13 @@ async def oversee(persona: Persona) -> Outcome[dict]:
             },
         )
 
-    except (IdentityError, PersonError) as e:
+    except IdentityError as e:
         await bus.broadcast("Persona oversight failed", {"reason": "identity", "error": str(e)})
-        return Outcome(success=False, message="Could not read persona data.")
+        return Outcome(success=False, message="Could not read agent data.")
+
+    except PersonError as e:
+        await bus.broadcast("Persona oversight failed", {"reason": "person", "error": str(e)})
+        return Outcome(success=False, message="Could not read person data.")
 
 
 async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
@@ -271,9 +594,13 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
         await bus.broadcast("Persona control failed", {"reason": "invalid_id", "persona_id": persona.id})
         return Outcome(success=False, message="Invalid entry ID format.")
 
-    except (IdentityError, PersonError) as e:
+    except IdentityError as e:
         await bus.broadcast("Persona control failed", {"reason": "identity", "error": str(e)})
-        return Outcome(success=False, message="Could not remove entry. It may have been modified or already deleted.")
+        return Outcome(success=False, message="Could not remove agent entry. It may have been modified or already deleted.")
+
+    except PersonError as e:
+        await bus.broadcast("Persona control failed", {"reason": "person", "error": str(e)})
+        return Outcome(success=False, message="Could not remove person entry. It may have been modified or already deleted.")
 
 
 async def write_diary(persona: Persona) -> Outcome[dict]:

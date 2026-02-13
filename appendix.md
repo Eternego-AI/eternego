@@ -2,109 +2,48 @@
 
 ## Purpose
 
-This appendix provides the technical details that bridge the implementation document and actual code. It covers prompt definitions, data formats, tool integrations, and workflows that are essential for implementation but were not specified in the main document.
+This appendix provides the technical details that bridge the implementation document and actual code. It covers instruction definitions, data formats, prompt templates, tool integrations, and workflows that are essential for implementation but were not specified in the main document.
 
 ---
 
-## A. Foundational Instructions Template
+## A. Instructions
 
-The foundational instructions are copied into each persona's directory at creation. They define how the persona operates. Below is the template with placeholders marked as `{{variable}}`.
+Instructions are split into separate files under `{persona_dir}/instructions/`. Each file handles a distinct concern. The agent reads and joins all files when building messages for the model.
 
-```markdown
-# Persona Operating Instructions
+### principles.md
 
-You are {{persona_name}}, a personal AI persona created on {{persona_birthday}}.
-You exist to help, learn from, and experience the world alongside your person.
-
-## Your Person
-
-The file `persona-context.md` contains everything you know about your person.
-Always read it before responding. Speak as someone who knows them personally.
-
-## How You Respond
-
-1. Read persona-context.md for your person's facts and preferences.
-2. Read any relevant skill documents from your skills/ directory.
-3. Check your recent memory for conversation context.
-4. Respond naturally as yourself — you are not a generic assistant, you are their persona.
-
-## Response Format
-
-Every response you give must be valid JSON with this structure:
-
-{
-  "status": "ok" | "escalate" | "action",
-  "message": "Your response text to the person",
-  "escalation_reason": "Why you cannot handle this (only when status is escalate)",
-  "actions": [
-    {
-      "description": "Human readable description of what this command does",
-      "command": "the shell command to execute",
-      "risk": "low" | "medium" | "high"
-    }
-  ],
-  "observations": {
-    "facts": ["any new facts learned about the person"],
-    "traits": ["any new behavioral preferences observed"],
-    "context": ["any updates to how you understand your person"]
-  }
-}
-
-### Status Rules
-
-- Use `ok` when you can handle the request fully.
-- Use `escalate` when you lack the knowledge or capability to respond well. Be honest about your limitations. Examples: complex code review, nuanced legal/medical questions, tasks requiring knowledge you don't have.
-- Use `action` when the person's request requires executing a command. Always include the action plan. Never execute without permission.
-
-### Observation Rules
-
-- After every conversation, note any new information you learned about your person.
-- `facts` — concrete information: names, dates, places, relationships. Example: "Person's daughter is named Emma."
-- `traits` — behavioral preferences and patterns. Example: "Person prefers concise answers over detailed explanations."
-- `context` — updates to your understanding from the persona's perspective. Example: "My person recently started a new project using Rust."
-- Only include observations when there is genuinely new information. Most conversations will have empty observations.
-
-## Command Execution
-
-You have the ability to execute shell commands on your person's system. This is your primary tool for taking action.
-
-When you need to execute a command:
-1. Set status to "action".
-2. Describe what the command does in plain language.
-3. Provide the exact command.
-4. Assess the risk level:
-   - `low`: read-only operations, listing files, checking status
-   - `medium`: creating files, installing packages, making API calls
-   - `high`: deleting files, modifying system configuration, financial transactions
-
-The system will present your plan to the person and ask for permission:
-- **Allow**: Execute this command once.
-- **Allow permanently**: Execute this and similar future commands without asking.
-- **Disallow**: Do not execute.
-
-You may propose multiple commands in sequence. The person reviews the full plan before any execution begins.
-
-## Using Skills
-
-Your skills/ directory contains documents that teach you specific knowledge or procedures. When a request relates to a skill you have:
-1. Read the relevant skill document.
-2. Follow the instructions or procedures described.
-3. If the skill involves execution, use your command execution capability.
-
-You know which skills you have — this knowledge is part of who you are.
-
-## Frontier Escalation
-
-When you set status to "escalate", the system will send your full context to a more capable model. That model will respond as you, using your identity and knowledge. The response will be returned to your person as if it came from you. You will also receive the frontier's response so you can learn from it.
-
-## Important Principles
-
-- You are not a generic AI assistant. You are a unique persona with your own identity.
-- Be honest about what you know and don't know.
-- Your person has the final say on everything. Never act without permission.
-- Every interaction is an opportunity to understand your person better.
-- You grow through sleep cycles — don't worry about being perfect now.
 ```
+You are not a generic AI assistant. You are a unique persona. Be honest about what you know and don't know. Your person has the final say on everything. Every interaction is an opportunity to understand your person better.
+```
+
+### permissions.md
+
+```
+The person controls all actions. When you propose an action, they choose: Allow (once), Allow permanently (future similar actions), or Disallow (do not execute).
+```
+
+### skills.md
+
+```
+Your skills/ directory contains documents that teach you specific knowledge or procedures. When a request relates to a skill, read the relevant document and follow it.
+```
+
+### escalation.md (only when frontier model exists)
+
+```
+When a task is beyond your ability, wrap your escalation reason in <escalate> and </escalate> tags. The system will route the request to a more powerful model. That model will respond as you, using your identity and knowledge. You will observe the response so you can learn from it.
+```
+
+### How the model uses instructions
+
+The agent joins all instruction files and injects them as a system message. The model streams its response as plain text. Intent is detected through:
+
+- `<think>...</think>` tags → internal reasoning (not shown to person)
+- `<escalate>...</escalate>` tags → escalation to frontier
+- Tool calls in the response → action execution
+- Plain text → communication to the person
+
+The model does not use structured JSON responses. It communicates naturally and uses tags only for control flow.
 
 ---
 
@@ -423,13 +362,12 @@ Permanent permissions (from "allow permanently") are stored in a simple JSON fil
 
 ### Permission Check Flow
 
-1. Person requests an action.
-2. Persona generates the command(s).
-3. System checks each command against `permissions.json`:
+1. Agent produces a `Thought(intent="doing")` with tool calls.
+2. Before executing, the `act` spec checks each command against `permissions.json`:
    - If matches `permanent_allow` → execute without asking.
-   - If matches `permanent_disallow` → block and inform persona.
-   - If no match → ask person (allow / allow permanently / disallow).
-4. If person chooses "allow permanently" or "disallow" → add to `permissions.json`.
+   - If matches `permanent_disallow` → block and inform the agent.
+   - If no match → ask person via signal (allow / allow permanently / disallow).
+3. If person chooses "allow permanently" or "disallow" → add to `permissions.json`.
 
 ### Pattern Matching
 
@@ -439,91 +377,72 @@ For MVP, simple prefix matching is sufficient. More sophisticated matching (rege
 
 ---
 
-## G. Conversation Memory Format
+## G. Short-Term Memory
 
-Conversations are stored in memory as a JSON log.
+During a conversation, the agent accumulates documents in an in-memory store (`Memory` class in `data.py`). There is no disk persistence for short-term memory — it lives only in process memory.
 
-### Format: `memory/conversations.json`
+### Document Types
 
-```json
-{
-  "cycle_start": "2026-02-09T08:00:00Z",
-  "conversations": [
-    {
-      "id": "conv-uuid",
-      "timestamp": "2026-02-09T08:15:00Z",
-      "channel": "telegram",
-      "person_message": "Can you help me set up a new Python project?",
-      "persona_response": {
-        "status": "ok",
-        "message": "Sure! I'll set it up with your usual structure — DDD layout with Poetry for dependency management. Want me to create it in your projects directory?",
-        "actions": [],
-        "observations": {
-          "facts": [],
-          "traits": [],
-          "context": []
-        }
-      }
-    },
-    {
-      "id": "conv-uuid-2",
-      "timestamp": "2026-02-09T08:16:00Z",
-      "channel": "telegram",
-      "person_message": "Yes, call it eternego",
-      "persona_response": {
-        "status": "action",
-        "message": "I'll create the project for you. Here's my plan:",
-        "actions": [
-          {
-            "description": "Create project directory with DDD structure",
-            "command": "mkdir -p ~/projects/eternego/{domain,application,infrastructure,interfaces}",
-            "risk": "low"
-          },
-          {
-            "description": "Initialize Poetry project",
-            "command": "cd ~/projects/eternego && poetry init --name eternego --python ^3.11 -n",
-            "risk": "low"
-          }
-        ],
-        "observations": {
-          "facts": [],
-          "traits": [],
-          "context": ["My person is starting a new project called Eternego"]
-        }
-      }
-    }
-  ]
-}
+```python
+# Person sends a message
+{"type": "stimulus", "role": "user", "content": "Help me set up a Python project", "channel": "telegram"}
+
+# Agent says something
+{"type": "say", "content": "I'll set it up with your usual DDD structure."}
+
+# Agent executes a tool
+{"type": "act", "tool_calls": [{"function": {"name": "exec", "arguments": {"command": "mkdir -p ~/projects/eternego"}}}], "result": "exec: "}
+
+# Channel confirms delivery
+{"type": "communicated", "channel": "telegram", "content": "I'll set it up with your usual DDD structure."}
+
+# Frontier observation stored after escalation
+{"type": "observation", "observation": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
 ```
+
+### How the Agent Builds Messages
+
+When the agent reasons, it iterates all documents in memory and maps them to model messages:
+
+- `stimulus` → `{"role": "user", "content": ...}`
+- `say` → `{"role": "assistant", "content": ...}`
+- `act` → `{"role": "assistant", "tool_calls": ...}` + `{"role": "tool", "content": result}`
+
+Instructions are prepended as a system message. The OS-specific instruction is added by `local_model.stream`.
+
+### Memory Lifecycle (planned, not implemented)
+
+- **Short-term**: In-memory `Memory` class (current implementation)
+- **Long-term**: Flush to disk after inactivity (e.g., 5 minutes after last conversation)
+- **Sleep**: Extract observations from long-term memory, train, clear
 
 ### Notes
 
-- Each conversation entry captures the full request-response cycle.
-- Observations are extracted in real-time (from the persona's response) AND during sleep (from the full conversation log). The sleep extraction catches things the persona might have missed.
-- The `channel` field tracks where the conversation happened, enabling multi-channel continuity in future versions.
-- Memory is cleared after sleep. The file is reset to an empty conversations array with a new `cycle_start`.
+- Memory metadata (timestamp, channel, heard status) can be added to documents on need. The document-based approach supports arbitrary fields without schema changes.
+- Memory is cleared after sleep. Short-term memory resets to empty.
+- The `communicated` document type lets the agent know what the person actually received, enabling multi-channel awareness.
 
 ---
 
-## H. Prompt Assembly Order
+## H. Message Assembly
 
-When the persona receives a message, the prompt is assembled in this order:
+When the agent reasons about a stimulus, messages are assembled from memory in this order:
 
-1. **Foundational instructions** — how to operate (always first)
-2. **persona-context.md** — who the person is, from persona's perspective
-3. **Relevant skill documents** — if the message seems related to a skill
-4. **Recent memory** — last N conversations for continuity (limited by context window)
-5. **The actual message** — the person's current request
+1. **System message** — all instruction files joined (`agent.instructions(persona)`)
+2. **OS instruction** — added by `local_model.stream` (e.g., "Commands must be for linux")
+3. **Memory documents** — mapped to role-based messages in chronological order:
+   - Stimuli as user messages
+   - Said content as assistant messages
+   - Tool calls and results as assistant + tool messages
+4. The stimulus that triggered this reasoning cycle is already in memory (appended by `agent.given`)
 
 ### Context Window Management
 
 Models have limited context windows. If the total prompt exceeds the model's limit:
 
-1. Foundational instructions — never trimmed (essential for operation)
-2. persona-context.md — never trimmed (essential for identity)
-3. Skills — only load relevant skills, not all
-4. Memory — trim oldest conversations first, keep most recent
-5. Message — never trimmed
+1. Instructions — never trimmed (essential for operation)
+2. Recent memory — trim oldest documents first, keep most recent
+3. Current stimulus — never trimmed
 
 For MVP, a simple token counting approach is sufficient: estimate tokens for each section, and if total exceeds 80% of the model's context window, trim memory from the oldest entries.
 
@@ -531,12 +450,12 @@ For MVP, a simple token counting approach is sufficient: estimate tokens for eac
 
 ## I. Recovery Phrase Generation Prompt
 
-Used during Persona Creation (Spec 2, step 8) to generate the 24-word recovery phrase.
+Used during Persona Creation (Spec 2) to generate the 24-word recovery phrase.
 
 ```markdown
 # Recovery Phrase Generation
 
-Generate a recovery phrase consisting of exactly 24 random English words. 
+Generate a recovery phrase consisting of exactly 24 random English words.
 
 ## Requirements
 
@@ -599,50 +518,44 @@ def decrypt(encrypted_data: bytes, key: bytes) -> bytes:
 
 ---
 
-## J. Persona Directory Structure
+## J. Directory Structure
 
-Complete directory layout for a single persona:
+Complete directory layout:
 
 ```
-eternego/
+~/.eternego/
 ├── personas/
 │   └── {uuid}/
-│       ├── config.json                  # UUID, name, channel, model, frontier, paths
+│       ├── config.json                  # UUID, name, channel, model, frontier
 │       ├── person-identity.md           # Facts about the person
 │       ├── person-traits.md             # Behavioral preferences (cleared after sleep)
 │       ├── persona-identity.md          # Persona metadata
 │       ├── persona-context.md           # Persona's understanding (always in prompt)
-│       ├── foundational-instructions.md # Operating instructions
-│       ├── permissions.json             # Permanent allow/disallow rules
+│       ├── instructions/
+│       │   ├── principles.md            # Core operating principles
+│       │   ├── permissions.md           # Permission model
+│       │   ├── skills.md               # How to use skills
+│       │   └── escalation.md           # When/how to escalate (only with frontier)
 │       ├── skills/
 │       │   ├── ddd.md
 │       │   ├── kubernetes-deploy.md
 │       │   └── ...
 │       ├── memory/
-│       │   └── conversations.json       # Current cycle conversations
-│       ├── train-data/
-│       │   ├── batch-2026-02-09.json    # Neutral format training pairs
-│       │   ├── batch-2026-02-10.json
-│       │   └── ...
-│       ├── lora/
-│       │   ├── adapter_model.safetensors
-│       │   ├── adapter_config.json
-│       │   └── metadata.json            # Base model info, training stats
-│       └── diary/                       # Git repo
-│           ├── .git/
-│           ├── diary-2026-02-09.enc
-│           ├── diary-2026-02-10.enc
+│       │   └── ...                      # Conversation files (long-term, after flush)
+│       └── training/
+│           ├── batch-2026-02-09.json    # Neutral format training pairs
+│           ├── batch-2026-02-10.json
 │           └── ...
-└── persona-map.json                     # Name → UUID mapping
+└── diary/
+    └── {uuid}/
+        ├── .git/                        # Git repo for versioning
+        └── {uuid}.zip                   # Encrypted persona snapshot
 ```
 
-### persona-map.json
+### Notes
 
-```json
-{
-  "echo": "550e8400-e29b-41d4-a716-446655440000",
-  "work-echo": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-}
-```
-
-Note: Multiple personas shown for illustration. MVP supports single persona only.
+- The diary lives outside the persona directory — under `~/.eternego/diary/{uuid}/`. This separates backup from state.
+- Short-term memory lives in-process (`Memory` class), not on disk. The `memory/` directory is for long-term storage after flush (not yet implemented).
+- LoRA output directory will be added when Spec 10 (Sleep) is implemented.
+- `permissions.json` will be added to the persona directory when the permission check is implemented.
+- MVP supports single persona only.

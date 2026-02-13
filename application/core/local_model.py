@@ -1,9 +1,10 @@
 """Local model — communicating with the local model."""
 
 import json
+from collections.abc import AsyncIterator
 from urllib.error import URLError
 
-from application.platform import logger, ollama
+from application.platform import logger, ollama, OS
 from application.core import prompts
 from application.core.data import Observation, Persona
 from application.core.exceptions import EngineConnectionError
@@ -28,6 +29,24 @@ async def digest(model: str, conversations: str) -> Observation:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except (json.JSONDecodeError, KeyError) as e:
         raise EngineConnectionError("Model returned an invalid response") from e
+
+
+async def stream(model: str, messages: list[dict]) -> AsyncIterator[dict]:
+    """Stream a chat response from the local model, yielding raw Ollama responses."""
+    logger.info("Streaming response", {"model": model})
+    try:
+        current_os = OS.get_supported()
+        if current_os:
+            messages = [{"role": "system", "content": f"When running tools, commands must be for {current_os}."}] + messages
+
+        for raw in ollama.stream_post("/api/chat", {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+        }):
+            yield raw
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
 
 
 async def generate_encryption_phrase(persona: Persona) -> str:

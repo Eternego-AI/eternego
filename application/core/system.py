@@ -5,7 +5,37 @@ import subprocess
 from application.platform import logger, crypto, OS, linux, mac, windows
 from application.core import local_model
 from application.core.data import Persona
-from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError
+from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError, ExecutionError
+
+
+async def execute(tool_calls: list[dict]) -> str:
+    """Execute approved tool calls and return combined results."""
+    logger.info("Executing tool calls", {"count": len(tool_calls)})
+    platform = OS.get_supported()
+
+    if platform is None:
+        raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
+
+    results = []
+    for call in tool_calls:
+        func = call.get("function", {})
+        name = func.get("name", "")
+        args = func.get("arguments", {})
+        command = args.get("command", "")
+        logger.info("Running tool", {"name": name, "command": command})
+
+        if platform == "linux":
+            code, output = await linux.execute_on_sub_process(command)
+        elif platform == "mac":
+            code, output = await mac.execute_on_sub_process(command)
+        elif platform == "windows":
+            code, output = await windows.execute_on_sub_process(command)
+
+        if code != 0:
+            raise ExecutionError(f"{name}: {output}")
+
+        results.append(f"{name}: {output}")
+    return "\n".join(results)
 
 
 def make_rows_traceable(rows: list[str], prefix: str) -> list[dict]:

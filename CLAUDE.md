@@ -1,0 +1,207 @@
+# Eternego — Claude Code Instructions
+
+## What This Project Is
+
+Eternego creates AI personas that live on the person's hardware, learn from every interaction, and are never locked into any vendor. The persona's knowledge is stored as human-readable files that can be applied to any model.
+
+## Documentation
+
+Read these documents before making changes:
+
+- `README.md` — Business specifications (what the system does)
+- `architecture.md` — Layer principles, cognitive architecture, patterns, and rules
+- `implementation.md` — Technical solutions for each spec
+- `appendix.md` — Data formats, prompts, LoRA workflow, permission storage
+
+**Appendix note:** `appendix.md` is up to date. It covers data formats, prompts, LoRA workflow, permission storage, and directory structure that match the current codebase.
+
+## Architecture Rules
+
+### Three layers, dependencies flow down only
+
+```
+business/    WHY — reads like the README, calls core
+core/        HOW — engineering, calls platform
+platform/    WHAT — thin wrappers around external tools
+```
+
+Business imports core. Core imports platform. Never upward. Presentation (`telegram/` for MVP) sits outside `application/` and only calls business.
+
+### Business layer conventions
+
+- Every function is `async`, returns `Outcome[T]`
+- Starts with `bus.propose`, ends with `bus.broadcast`
+- Catches domain exceptions, returns user-friendly messages
+- Never contains engineering logic — that belongs in core
+- Docstring comes from the README spec description
+
+### Core layer conventions
+
+- Every function starts with `logger.info`
+- Raises domain exceptions from `application/core/exceptions.py`
+- Never sends signals (no bus calls)
+- Never returns `Outcome` — returns data or raises
+- Uses platform modules for all infrastructure — never imports external libraries directly
+
+### Platform layer conventions
+
+- Exposes only what the external tool provides
+- No project-specific logic
+- Portable across projects
+
+## Cognitive Architecture
+
+The interaction system uses a cognitive model. Understand this before touching Spec 7 code.
+
+### Flow
+
+```
+sense → agent.given(persona, stimulus) → think.reason() → yields Thought objects
+  thought.intent == "saying"     → say spec → bus.order("Say") → channel delivers
+  thought.intent == "doing"      → act spec → system.execute → agent.note(result)
+  thought.intent == "consulting"  → escalate spec → frontier.consulting → agent.observe
+  thought.intent == "reasoning"   → bus.share (internal, not shown to person)
+```
+
+### Key classes (application/core/data.py)
+
+- `Thought(intent, content, tool_calls)` — single unit of reasoning output
+- `Thinking(reason_by)` — wraps any async generator, exposes `.reason()`
+- `Memory` — in-memory document store, accessed via `agent.memory()`
+
+### Fluent API
+
+```python
+# Local model thinking
+think = agent.given(persona, {"type": "stimulus", "role": "user", "content": prompt})
+async for thought in think.reason():
+    ...
+
+# Frontier model thinking — same pattern
+async for thought in frontier.consulting(model, prompt).reason():
+    ...
+```
+
+### Tag detection in agent.reason()
+
+- `<think>...</think>` → reasoning intent
+- `<escalate>...</escalate>` → consulting intent
+- Tool calls → doing intent
+- Plain text → saying intent
+
+### Memory document types
+
+| Type | Created by | Contains |
+|---|---|---|
+| `stimulus` | `agent.given()` | role, content, channel |
+| `say` | `agent.reason()` internally | content |
+| `act` | `agent.note()` | tool_calls, result |
+| `observation` | `agent.observe()` | frontier conversation (minus reasoning) |
+| `communicated` | `person.heard()` | channel, content |
+
+### Action loop
+
+Inside `agent.py`'s `_reason()` closure (the function wrapped by `Thinking`), a `while True` loop rebuilds messages from memory and re-streams from the local model after each tool execution. When a cycle produces no tool calls, the loop breaks. This means the agent can chain tool calls naturally — think, act, see result, think again — without the business layer needing to re-call `sense`.
+
+### Escalation
+
+Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai platform modules → thoughts routed through same say/act specs → frontier reasoning is NOT observed (agent develops its own reasoning path).
+
+## Module Map
+
+### Business (application/business/)
+
+| Module | Functions |
+|---|---|
+| `environment.py` | prepare, check_model |
+| `persona.py` | create, migrate, feed, grow, sense, say, act, escalate, reflect, predict, oversee, control, write_diary |
+| `gateway.py` | verify_channel |
+| `outcome.py` | Outcome dataclass |
+
+### Core (application/core/)
+
+| Module | Role |
+|---|---|
+| `agent.py` | Memory accessor, given(), note(), observe(), instructions(), initialize, save, identity CRUD |
+| `person.py` | Person facts/traits CRUD, heard() |
+| `frontier.py` | allow_escalation(), consulting() → returns Thinking |
+| `local_model.py` | stream() async generator, digest(), generate_encryption_phrase() |
+| `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model() |
+| `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
+| `system.py` | execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
+| `data.py` | Channel, Model, Thought, Thinking, Memory, Observation, Persona |
+| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, RECOVERY_PHRASE |
+| `exceptions.py` | All domain exceptions |
+| `diary.py` | open_for(), open(), record() |
+| `external_llms.py` | read() — parses OpenAI/Anthropic exports |
+| `channel.py` | send(), assert_receives() |
+| `conversation.py` | **UNUSED** — superseded by Memory class, candidate for removal |
+
+### Platform (application/platform/)
+
+| Module | Wraps |
+|---|---|
+| `ollama.py` | Ollama HTTP API (get, post, stream_post) |
+| `anthropic.py` | Anthropic Messages API streaming + export parsing |
+| `openai.py` | OpenAI Chat API streaming + export parsing |
+| `telegram.py` | Telegram Bot API |
+| `filesystem.py` | File/directory operations |
+| `crypto.py` | Key derivation, encryption, hashing |
+| `logger.py` | Structured logging |
+| `observer.py` | Pub/sub signal system (Signal, Plan, Event, Message, Inquiry, Command) |
+| `OS.py` | OS detection |
+| `linux.py`, `mac.py`, `windows.py` | OS-specific shell and secure storage |
+| `git.py` | Git operations (init, add, commit) |
+
+## Current State of Specs
+
+### Implemented:
+- Spec 1: Environment Preparation
+- Spec 2: Persona Creation (with escalation instruction)
+- Spec 3: Persona Migration
+- Spec 4: Persona Feeding / Growth
+- Spec 5: Persona Oversight
+- Spec 6: Persona Control
+- Spec 7a: Sense (reactive loop)
+- Spec 7b: Say (channel communication with confirmation)
+- Spec 7c: Act (tool execution, **no permission check yet**)
+- Spec 7d: Escalate (frontier routing with observation)
+- Spec 9: Persona Diary
+
+### Draft (signature + signals only):
+- Spec 7e: Reflect
+- Spec 7f: Predict
+
+### Not started:
+- Spec 8: Persona Equipment
+- Spec 10: Persona Sleep (fine-tuning)
+- Permission check for act (allow / allow permanently / disallow)
+- Memory lifecycle (short-term → long-term flush, clearing after sleep)
+- Circuit breaker for continuous tool failures
+
+## What to Work On Next
+
+1. **Permission check for act** — person should approve tool execution before it runs. See `appendix.md` section F for the permissions.json pattern. Needs adaptation for streaming (no JSON status field).
+
+2. **Reflect spec** — send memory to agent for self-assessment after each interaction.
+
+3. **Predict spec** — proactive behavior triggered by inactivity or schedule.
+
+4. **Memory lifecycle** — flush to disk after inactivity, clear after sleep.
+
+5. **Remove conversation.py** — unused, replaced by Memory class.
+
+6. **Spec 8: Equipment** — skill document loading.
+
+7. **Spec 10: Sleep** — observation extraction, training data generation, LoRA fine-tuning.
+
+## Code Style
+
+- Naming: gerund intents ("saying", "doing", "consulting", "reasoning")
+- Memory access: always through `agent.memory()`, never `_memory` directly
+- Person feedback: `person.heard()` for delivery, `agent.note()` for tool results
+- Frontier learning: `agent.observe()` stores conversation minus reasoning
+- Disk-based memory listing: `agent.conversations(persona)` (not `agent.memory(persona)`)
+- Instructions: split files under `instructions/` dir, joined by `agent.instructions(persona)`
+- Signals: plan at start, event at end, every business function
+- Exceptions: domain-specific, defined in `exceptions.py`, caught at business layer

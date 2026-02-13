@@ -28,11 +28,10 @@ Each persona is stored under a UUID-based directory. The following files define 
 | `person-traits.md` | Behavioral preferences (prefers DDD, likes GitLab, etc.) | No (source for training) | Yes | Yes |
 | `persona-identity.md` | Persona metadata (name, birthday, model, host, etc.) | No (technical reference) | No | No |
 | `persona-context.md` | Everything the persona needs in prompt, from persona's perspective | Yes (always in prompt) | No | No |
-| `foundational-instructions.md` | Operating instructions: how to use tools, escalate, learn, signal actions | Yes (always in prompt) | No | No |
+| `instructions/` | Operating instructions split by concern (principles, permissions, skills, escalation) | Yes (joined and injected as system message) | No | No |
 | `skills/` | Directory of skill documents (markdown files) | Yes (loaded into context) | No (but observation is) | No |
 | `memory/` | Conversations since last sleep | Yes (recent context) | No | Yes (cleared after sleep) |
-| `train-data/` | Raw training pairs in neutral format | No | Used by LoRA | No (accumulates) |
-| `lora/` | LoRA adapter output + model metadata | No | Is the output | Replaced each sleep |
+| `training/` | Raw training pairs in neutral format | No | Used by LoRA | No (accumulates) |
 | `config.json` | UUID, name, channel type, credentials, model, frontier provider + key, paths | No | No | No |
 
 ### Identity vs. Traits vs. Context
@@ -42,10 +41,23 @@ Each persona is stored under a UUID-based directory. The following files define 
 - **persona-context.md** — The persona's working knowledge, written from its perspective. "I am male, I am a developer, my wife's name is Jane." Always in the prompt because facts cannot be trained into a model.
 - **Skills** — Knowledge and procedural documents. Adding a skill also generates an observation in person-traits.md (e.g., "I know DDD") which gets trained into the model, giving it the instinct to use the skill.
 
+### Instructions Architecture
+
+Instructions are split into separate files under `instructions/`, each handling a distinct concern:
+
+| File | Content |
+|------|---------|
+| `principles.md` | Core operating principles — unique persona, honesty, person has final say |
+| `permissions.md` | Permission model — allow, allow permanently, disallow |
+| `skills.md` | How to read and follow skill documents |
+| `escalation.md` | When and how to escalate (only present when frontier model exists) |
+
+The agent reads and joins all instruction files when building messages. This split allows adding or removing capabilities without touching other instructions.
+
 ### Learning Lifecycle
 
-1. Person interacts with persona → conversations accumulate in memory.
-2. Sleep triggers → model extracts observations from conversations.
+1. Person interacts with persona → thoughts accumulate in short-term memory.
+2. Sleep triggers → model extracts observations from memory.
 3. Observations split: facts → person-identity.md, traits → person-traits.md, persona perspective → persona-context.md.
 4. Raw training data generated from traits (by frontier or local model) in neutral format.
 5. Training data formatted for current model's template.
@@ -72,26 +84,20 @@ Each persona is stored under a UUID-based directory. The following files define 
 ### Solution
 
 1. Detect OS.
-2. Check if Ollama is installed:
-    - Windows: `windows.shell('where ollama')`
-    - Linux: `linux.shell('which ollama')`
-    - macOS: `mac.shell('which ollama')`
-3. If already installed, skip to step 6.
-4. If not installed:
-    - Linux: `linux.shell.pipe(curl.silent_follow('https://ollama.com/install.sh'))`
-    - macOS: `mac.shell('brew install ollama')`
-    - Windows: Show message "Please install Ollama from ollama.com" and wait for confirmation.
-    - Other OS: Show message "Eternego requires Linux, macOS, or Windows" and stop.
-5. Verify installation by repeating step 2.
-6. Check if Ollama server is running by hitting `localhost:11434`. If not, start it via `ollama serve`.
-7. Check available RAM via `os.ram()`, check GPU and VRAM via `os.gpu()`.
-8. From a curated model list, filter by hardware specs, select best fit, present pre-filled but editable.
-9. Pull the selected model via `ollama pull <model>`.
-10. Send a request to `/api/generate` with a simple prompt, verify successful response.
+2. Check if git is installed. If not, install it via the OS-specific module.
+3. Check if Ollama is installed:
+    - Windows: `windows.is_installed('ollama')`
+    - Linux: `linux.is_installed('ollama')`
+    - macOS: `mac.is_installed('ollama')`
+4. If not installed, install via the OS-specific module.
+5. If no model specified, query the engine for the default (first pulled model).
+6. If no model available at all, fail and ask the person to provide a model name.
+7. Check if the model is pulled and responding. If not pulled, pull it.
+8. Verify the model responds to a test prompt.
 
 ### Platform Modules Used
 
-`os`, `linux`, `mac`, `windows`, `curl`
+`OS`, `linux`, `mac`, `windows`, `ollama`
 
 ---
 
@@ -101,33 +107,23 @@ Each persona is stored under a UUID-based directory. The following files define 
 
 ### Solution
 
-1. Receive persona name, communication channel type, channel credentials (for Telegram: bot token), and optionally frontier provider name + API key.
-2. Verify channel is alive:
-    - Telegram: send a test message using bot token, verify send and receive works.
-3. Generate a UUID for the persona.
-4. Save persona name → UUID mapping.
-5. Create persona directory under that UUID with subdirectories for identity, memory, config, skills, train-data, and lora.
-6. Copy foundational instructions into the persona's directory.
-    - 6.a. If frontier API key is provided, test it with a simple request to the appropriate provider module. If valid, add instruction to the persona for when to use the frontier model (low confidence, lack of capability, explicit person request) and how to learn from frontier responses.
-7. Save persona configuration (name, UUID, channel type, channel credentials, model name, frontier provider + API key if provided, paths).
-8. Send a prompt to the persona's model asking it to generate a 24-word recovery phrase.
-9. Show recovery phrase to person, require confirmation they saved it.
-10. Derive encryption key from the phrase.
-11. Save encryption key to OS secure storage (via the appropriate OS module).
-12. Trigger Persona Diary (Spec 10) to save initial state.
-
-### Foundational Instructions Include
-
-- How to signal escalation via structured payload when the persona cannot handle a request.
-- How to signal action requests that require command execution.
-- Permission model explanation (allow / allow permanently / disallow).
-- Command execution capability: the persona can execute shell commands.
-- How to learn from frontier model responses.
-- How to extract observations from conversations.
+1. Receive persona name, model, communication channel, and optionally a frontier model.
+2. Verify channel is alive by sending a test message and checking the response.
+3. Generate a UUID for the persona via `agent.initialize`.
+4. Prepare person buckets: `person-identity.md`, `person-traits.md`.
+5. Prepare agent buckets: `persona-identity.md`, `persona-context.md`, `training/`, `memory/`.
+6. Write instruction files: `principles.md`, `permissions.md`, `skills.md`.
+7. Prepare the skills directory.
+8. If frontier model provided, write `escalation.md` instruction — tells the agent to wrap escalation reasons in `<escalate>` tags.
+9. Save persona configuration as `config.json`.
+10. Ask the local model to generate a 24-word recovery phrase.
+11. Save encryption key (derived from phrase) to OS secure storage.
+12. Initialize diary directory with git.
+13. Encrypt persona data and write the initial diary entry.
 
 ### Platform Modules Used
 
-`os`, `linux`, `mac`, `windows`, `telegram`, `ollama`, `uuid`, `filesystem`, `crypto`, `anthropic`, `openai`
+`OS`, `linux`, `mac`, `windows`, `telegram`, `ollama`, `filesystem`, `crypto`, `git`
 
 ---
 
@@ -138,20 +134,19 @@ Each persona is stored under a UUID-based directory. The following files define 
 ### Solution
 
 1. Receive encrypted diary file path and 24-word recovery phrase.
-2. Verify environment is ready (Ollama installed, model running). If not, stop and ask person to run Spec 1 first.
-3. Detect the running model name.
-4. Derive encryption key from the phrase.
-5. Decrypt the diary file.
-6. Unzip the archive.
-7. Restore persona directory with original UUID and all files.
+2. Verify environment is ready (Ollama installed, model running). If not, fail.
+3. Derive encryption key from the phrase.
+4. Decrypt the diary file and unzip the archive.
+5. Restore persona directory with original UUID and all files via `agent.distill`.
+6. Update the persona's model to the currently running model.
+7. Save persona configuration.
 8. Save encryption key to OS secure storage.
-9. Initialize diary directory as git repo with restored data as first commit.
-10. Format raw train data for the detected model and run LoRA training.
-11. Verify all connections (channel, frontier API). Report what works and what doesn't with instructions to update.
+9. Initialize diary directory and write a new diary entry.
+10. Verify all communication channels. Report what works and what doesn't.
 
 ### Platform Modules Used
 
-`os`, `linux`, `mac`, `windows`, `ollama`, `filesystem`, `crypto`, `lora`, `formatter`, `git`, `telegram`, `anthropic`, `openai`
+`OS`, `linux`, `mac`, `windows`, `ollama`, `filesystem`, `crypto`, `git`, `telegram`
 
 ---
 
@@ -161,19 +156,21 @@ Each persona is stored under a UUID-based directory. The following files define 
 
 ### Solution
 
-1. Receive external data and source type (OpenAI, Anthropic, etc.).
-2. Parse the data using the appropriate module (openai, anthropic) into a common format.
-3. Send to frontier model for analysis if available, otherwise use local model.
-4. Extract observations: facts → person-identity.md, preferences/traits → person-traits.md.
-5. Transform person data into persona perspective → persona-context.md.
-6. Generate raw train data from extracted traits in neutral format.
-7. Save raw train data for next sleep cycle.
+1. Receive external data and source type (OpenAI, Anthropic/Claude).
+2. Parse the data using the appropriate platform module into role-based text:
+    - Claude exports: `anthropic.role_based_text(data)` — extracts from `chat_messages` array.
+    - OpenAI exports: `openai.role_based_text(data)` — extracts from `mapping` structure.
+3. Send parsed conversations to the local model with the extraction prompt.
+4. Model analyzes and returns structured observations (facts, traits, context).
+5. Grow the persona with extracted observations:
+    - Facts → `person-identity.md`
+    - Traits → `person-traits.md`
+    - Context → `persona-context.md`
 
 ### Notes
 
-- Feeding is immediately effective: observations saved to persona-context.md are available in the very next conversation (like giving an employee a cheat sheet).
-- Deep learning happens after sleep: raw train data gets fine-tuned into the model during the next sleep cycle (like the employee internalizing the knowledge).
-- Different export formats are handled by the existing frontier provider modules (openai, anthropic).
+- Feeding is immediately effective: observations saved to persona-context.md are available in the very next conversation.
+- Deep learning happens after sleep: raw train data gets fine-tuned into the model during the next sleep cycle.
 
 ### Platform Modules Used
 
@@ -183,33 +180,34 @@ Each persona is stored under a UUID-based directory. The following files define 
 
 ## Spec 5: Persona Oversight
 
-*It lets you see into your persona's mind — what it knows, what it learned, and how it sees you.*
+*It lets you look into your persona's mind — what it knows, what it learned, and how it sees you.*
 
 ### Solution
 
-1. Load all persona files, skills, and current memory.
-2. Assign trackable IDs (source prefix + content hash) to each entry including skills.
-3. Return separate objects:
-    - Person identity (`pi-*`)
-    - Person traits (`pt-*`)
-    - Persona identity (`pai-*`)
-    - Persona context (`pc-*`)
-    - Skills (`sk-*`)
-    - Memory (`mem-*`)
-4. Return persona age (calculated from persona-identity.md birthday).
+1. Read person identity (`person-identity.md`) and person traits (`person-traits.md`).
+2. Read agent identity (`persona-identity.md`) and context (`persona-context.md`).
+3. Read skill names from the `skills/` directory.
+4. Read conversation names from the `memory/` directory.
+5. Assign trackable IDs to each entry using a prefix and content hash:
+    - `pi-*` for person identity
+    - `pt-*` for person traits
+    - `pai-*` for persona identity
+    - `pc-*` for persona context
+    - `sk-*` for skills
+    - `mem-*` for memory
+6. Return everything organized by category.
 
 ### Trackable ID Format
 
 Each entry gets an ID composed of a source prefix and a short hash of the content (e.g., `pt-a3f8b2`). This ensures:
-
 - IDs don't change when other entries are deleted.
-- If content was already deleted or modified, the hash won't match — we know the ID is invalid.
+- If content was already deleted or modified, the hash won't match.
 - No re-indexing needed.
 - Works even if a UI page was open for days.
 
 ### Platform Modules Used
 
-`filesystem`
+`filesystem`, `crypto`
 
 ---
 
@@ -219,67 +217,158 @@ Each entry gets an ID composed of a source prefix and a short hash of the conten
 
 ### Solution
 
-1. Receive a trackable ID.
-2. Parse prefix to identify source type.
-3. Search for matching hash in the corresponding file.
-4. If found:
-    - If it's a skill (`sk-*`): delete the skill document from skills/ directory AND remove the corresponding observation from person-traits.md (e.g., remove "I know DDD").
-    - Otherwise: delete the entry from the corresponding file.
-5. If not found, return error: entry no longer exists or has been modified.
+1. Receive one or more trackable entry IDs.
+2. Parse each ID into prefix and hash.
+3. Route to the appropriate deletion function based on prefix:
+    - `pi` → delete from person identity
+    - `pt` → delete from person traits
+    - `pai` → delete from persona identity
+    - `pc` → delete from persona context
+    - `sk` → delete skill file
+    - `mem` → delete memory file
+4. If hash doesn't match any existing entry, report error (entry modified or already deleted).
 
 ### Notes
 
 - Primary use case: the person curates memory before sleep, removing anything they don't want baked into the model.
-- Deleting a skill removes both the skill document and the associated trait observation, ensuring the model won't be trained on a removed skill.
 
 ### Platform Modules Used
 
-`filesystem`
+`filesystem`, `crypto`
 
 ---
 
 ## Spec 7: Persona Interaction
 
-*It will be responsive on any communication channel, communicate through one and continue on others, and act on your behalf using the skills it has.*
+*It gives the persona the ability to sense, think, communicate, act, escalate, and reflect — like a mind.*
 
-*This spec merges the original Persona Interaction (Spec 7) and Persona Action (Spec 9) as the action flow is a natural extension of interaction.*
+The interaction system follows a cognitive architecture with two loops:
 
-### Solution
+- **Reactive**: sense → reason → route thoughts → reflect
+- **Proactive**: predict → reason → act (draft, not yet implemented)
 
-1. Receive message from person through configured channel.
-2. Build prompt: foundational instructions + persona-context.md + skills + current memory + message.
-3. Send to local model.
-4. Parse response. If escalation flag is present → send same context to frontier, get response.
-5. If the response includes a command/action to execute:
-    - Present the plan to the person.
-    - Ask for permission (allow / allow permanently / disallow).
-    - If allowed, execute via appropriate OS shell module.
-    - Return execution result to the model to form final response.
-6. Save conversation (message + response) to memory.
-7. Send response back through the same channel.
+### Cognitive Model
 
-### Escalation
+The agent thinks by streaming tokens from the local model. Each token is accumulated and analyzed for intent using XML-like tags:
 
-The persona self-assesses its ability to handle each request. When it cannot handle something, it returns a structured payload (defined in foundational instructions) that signals escalation. The system then sends the full context to the frontier model, which responds as the persona using the same identity and context.
+- `<think>...</think>` — internal reasoning, not shown to the person
+- `<escalate>...</escalate>` — escalation request, content is sent to frontier
+- Tool calls in the response — action execution
+- Plain text — communication to the person
 
-### Action Permission Model
+Each unit of output is a `Thought` with an `intent`:
 
-Based on the Claude Code approach:
+| Intent | Meaning | Spec |
+|---|---|---|
+| `"saying"` | Text to communicate to the person | say |
+| `"doing"` | Tool call to execute | act |
+| `"consulting"` | Needs a more powerful model | escalate |
+| `"reasoning"` | Internal thinking | shared as context only |
 
-- **Allow**: Execute this action once.
-- **Allow permanently**: Execute this and all future similar actions without asking.
-- **Disallow**: Do not execute this action.
+### The Thinking Pattern
 
-### Notes
+Both agent and frontier produce thoughts through the same `Thinking` class. This is a reusable wrapper around any reasoning function:
 
-- The persona has command execution as a built-in tool (registered at creation).
-- Skills provide the knowledge of what to do; shell execution provides the ability to do it.
-- The frontier model receives full persona context so its responses are consistent with the persona's identity.
-- Every conversation (message + response) is saved to memory for the next sleep cycle.
+```python
+# Agent thinking — uses local model
+think = agent.given(persona, stimulus)
+async for thought in think.reason():
+    # route by thought.intent
+
+# Frontier thinking — uses external API
+async for thought in frontier.consulting(model, prompt).reason():
+    # route by thought.intent
+```
+
+### Memory
+
+Short-term memory is an in-memory document store (`Memory` class). The agent accumulates documents as the conversation progresses:
+
+| Document Type | When Created | Contents |
+|---|---|---|
+| `stimulus` | Person sends a message | role, content, channel |
+| `say` | Agent produces text | content |
+| `act` | Agent executes a tool | tool_calls, result |
+| `observation` | After escalation completes | list of messages from frontier interaction |
+| `communicated` | Channel confirms delivery | channel, content |
+
+The agent builds its message history from memory on each reasoning cycle. This means the agent has full conversational context without file I/O.
+
+### Spec 7a: Sense
+
+*It lets the persona sense a stimulus from a channel and process it.*
+
+1. Receive prompt and channel from person.
+2. Give the stimulus to the agent: `agent.given(persona, {type: "stimulus", role: "user", content: prompt, channel: channel.name})`.
+3. Iterate the thinking process: `think.reason()`.
+4. For each thought:
+    - `"saying"` → call `say(persona, thought, channel)`
+    - `"doing"` → call `act(persona, thought)`
+    - `"consulting"` → call `escalate(persona, thought.content, channel)`
+    - `"reasoning"` → share via bus
+5. After all thoughts processed, call `reflect(persona)`.
+6. Return outcome.
+
+### Spec 7b: Say
+
+*It lets the persona express a thought through a channel.*
+
+1. Determine target channels: the specific channel if provided, otherwise all persona channels.
+2. Send a command signal via bus: `bus.order("Say", {content, channels})`.
+3. Check returned signals for a `"Communicated"` event matching the content.
+4. If confirmed: call `person.heard()` to record in memory, broadcast success.
+5. If no channel confirmed: broadcast failure, return failure outcome.
+
+Channels complete the loop by subscribing to the `"Say"` command and responding with a `"Communicated"` signal.
+
+### Spec 7c: Act
+
+*It lets the persona act on the world by executing a tool call.*
+
+1. Execute the tool calls via `system.execute(thought.tool_calls)`.
+2. Note the result in agent memory: `agent.note({type: "act", tool_calls, result})`.
+3. The agent's reasoning loop sees the result and continues (loop inside `agent.reason`).
+
+The while loop inside `agent.reason` keeps the agent thinking as long as it is acting. When no action is taken in a cycle, the loop breaks naturally.
+
+**Note:** Permission check is not yet implemented. The next task is to add allow/allow permanently/disallow before execution.
+
+### Spec 7d: Escalate
+
+*It lets the persona escalate to a frontier model when the task exceeds its ability.*
+
+1. The local model wraps its escalation reason in `<escalate>` tags.
+2. `agent.reason()` yields `Thought(intent="consulting", content=reason)`.
+3. `sense` routes to `escalate(persona, prompt, channel)`.
+4. Build observation list starting with the user prompt.
+5. Call `frontier.consulting(persona.frontier, prompt).reason()`.
+6. For each frontier thought:
+    - `"saying"` → append to observation, call `say`
+    - `"doing"` → append to observation, call `act`
+    - `"reasoning"` → **not observed**, shared via bus only
+7. After completion, `agent.observe(observation)` stores the interaction for later learning.
+
+The frontier module checks `model.provider` and routes to the appropriate platform module:
+- `"anthropic"` → `anthropic.stream(api_key, model, messages)`
+- `"openai"` → `openai.stream(api_key, model, messages)`
+
+Both platform modules normalize output to `{"message": {"content": ..., "tool_calls": ...}, "done": bool}`.
+
+### Spec 7e: Reflect
+
+*It lets the persona reflect on what it learned from the interaction.*
+
+*(Draft — signature and signals only. Implementation pending.)*
+
+### Spec 7f: Predict
+
+*It lets the persona anticipate and act without external stimulus.*
+
+*(Draft — signature and signals only. Implementation pending.)*
 
 ### Platform Modules Used
 
-`telegram`, `ollama`, `anthropic`, `openai`, `linux`, `mac`, `windows`, `filesystem`
+`ollama`, `anthropic`, `openai`, `telegram`, `linux`, `mac`, `windows`, `filesystem`
 
 ---
 
@@ -296,9 +385,8 @@ Based on the Claude Code approach:
 ### Notes
 
 - Skills are immediately available in the persona's context for the next conversation.
-- The observation gets trained into the model on the next sleep cycle, giving the persona the natural instinct to use the skill.
+- The observation gets trained into the model on the next sleep cycle.
 - A skill can be knowledge ("DDD principles"), procedural ("steps to deploy to AWS"), or API-specific ("how to call the calendar API").
-- The persona doesn't need additional tools beyond shell execution — all actions flow through command execution.
 
 ### Platform Modules Used
 
@@ -306,37 +394,33 @@ Based on the Claude Code approach:
 
 ---
 
-## Spec 10: Persona Diary
+## Spec 9: Persona Diary
 
 *It preserves your persona's life so it survives across time, hardware, and changes.*
 
 ### Solution
 
-1. Initialize diary directory as a git repo (on first diary trigger).
-2. Collect all persona files including configuration with API keys and channel tokens.
-3. Zip them into a single archive.
-4. Encrypt the archive using the encryption key.
-5. Save encrypted file to diary directory.
-6. Git commit with timestamp.
-7. (Post-MVP) Push to remote/host if configured.
+1. Retrieve the encryption phrase from OS secure storage.
+2. Zip all persona files into a single archive.
+3. Encrypt the archive using the key derived from the phrase.
+4. Save the encrypted file to the diary directory.
+5. Git commit with a diary entry message.
 
 ### Diary Contents
 
-- person-identity.md
-- person-traits.md
-- persona-identity.md
-- persona-context.md
-- Foundational instructions
-- Skills directory (all skill documents)
-- Raw train data (neutral format)
-- LoRA output + model metadata
-- Configuration (model name, channel type, frontier provider, API keys, channel tokens)
+Everything needed to restore the persona:
+- person-identity.md, person-traits.md
+- persona-identity.md, persona-context.md
+- Instructions directory
+- Skills directory
+- Raw training data
+- Configuration (model, channels, frontier)
 
 ### Notes
 
-- The diary is encrypted with the key derived from the person's 24-word recovery phrase. This ensures that even if the file is stored on a third-party service (post-MVP), the contents cannot be read without the phrase.
+- The diary is encrypted with the key derived from the person's 24-word recovery phrase.
 - Git provides versioning, history, and rollback for free. Each sleep cycle is a commit.
-- API keys and channel tokens are included because the diary is encrypted and having them means migration restores everything without re-entry.
+- API keys and channel tokens are included because the diary is encrypted.
 
 ### Platform Modules Used
 
@@ -344,24 +428,24 @@ Based on the Claude Code approach:
 
 ---
 
-## Spec 11: Persona Sleep
+## Spec 10: Persona Sleep
 
 *It lets your persona rest, reflect, and grow stronger from everything it experienced.*
 
 ### Solution
 
 1. Sleep is triggered (by person or configured condition).
-2. Load all conversations from memory since last sleep.
+2. Load all documents from memory since last sleep.
 3. Send conversations to the model to extract observations.
-4. Save observations to persona's identity files: facts → person-identity.md, traits → person-traits.md, persona perspective → persona-context.md.
-5. If frontier model is available, send observations to frontier to generate raw train data. If not, use local model.
-6. Save raw train data in neutral format to persona's directory.
-7. Format raw train data using the current model's template.
+4. Save observations: facts → person-identity.md, traits → person-traits.md, persona perspective → persona-context.md.
+5. If frontier model is available, send observations to frontier to generate raw training data. If not, use local model.
+6. Save raw training data in neutral format.
+7. Format raw training data using the current model's template.
 8. Run LoRA fine-tuning on the formatted data.
-9. Save LoRA output with model metadata to persona's directory.
+9. Save LoRA output with model metadata.
 10. Load the updated LoRA adapter into Ollama.
-11. Clear conversations from memory.
-12. Trigger Persona Diary (Spec 10).
+11. Clear memory.
+12. Trigger Persona Diary (Spec 9).
 
 ### Fine-tuning Details
 
@@ -370,14 +454,6 @@ Based on the Claude Code approach:
 - Training time is primarily driven by: number of training pairs > model size > number of epochs.
 - Target: sleep should not exceed 5-6 hours, matching natural human sleep patterns.
 - During sleep, the persona is unavailable (the model is being retrained).
-- LoRA output is only compatible with the exact same model it was trained on. For different models, raw train data is reformatted and retrained.
-
-### Training Data Flow
-
-1. **Conversations** (temporary) → extracted into observations → discarded.
-2. **Observations** (the onboarding package) → used to generate training pairs → persist in identity.
-3. **Raw train data** (neutral format) → formatted per model → used for LoRA → persists for reuse.
-4. **LoRA output** (model-specific) → applied to current model → persists for same-model restore.
 
 ### Platform Modules Used
 
@@ -391,36 +467,26 @@ The platform layer consists of reusable modules that can be shared across projec
 
 | Module | Responsibility |
 |--------|---------------|
-| `os` | Detect operating system, RAM, GPU/VRAM |
+| `OS` | Detect operating system |
 | `linux` | Linux-specific shell operations and secure storage |
 | `mac` | macOS-specific shell operations and secure storage (Keychain) |
 | `windows` | Windows-specific shell operations and secure storage (Credential Manager) |
-| `curl` | HTTP requests |
 | `telegram` | Telegram Bot API communication |
-| `ollama` | All local model communication: serve, pull, generate, model management |
-| `anthropic` | Anthropic Claude API communication and export parsing |
-| `openai` | OpenAI API communication and export parsing |
-| `crypto` | Key derivation (from recovery phrase) and encryption/decryption |
+| `ollama` | All local model communication: serve, pull, generate, stream, model management |
+| `anthropic` | Anthropic Claude API streaming and export parsing |
+| `openai` | OpenAI API streaming and export parsing |
+| `crypto` | Key derivation, encryption/decryption, content hashing |
 | `filesystem` | Directory creation, file read/write, zip/unzip |
-| `uuid` | UUID generation |
-| `git` | Git repository operations (init, commit) |
+| `git` | Git repository operations (init, add, commit) |
+| `logger` | Structured logging |
+| `observer` | Pub/sub signal system (Plan, Event, Message, Inquiry, Command) |
+
+### Modules Not Yet Implemented
+
+| Module | Responsibility |
+|--------|---------------|
 | `lora` | LoRA fine-tuning and adapter loading |
-| `formatter` | Formats neutral train data into model-specific templates |
-
-### Module Dependency Map
-
-```
-Spec 1  → os, linux, mac, windows, curl
-Spec 2  → os, linux, mac, windows, telegram, ollama, uuid, filesystem, crypto, anthropic, openai
-Spec 3  → os, linux, mac, windows, ollama, filesystem, crypto, lora, formatter, git, telegram, anthropic, openai
-Spec 4  → openai, anthropic, ollama, filesystem
-Spec 5  → filesystem
-Spec 6  → filesystem
-Spec 7  → telegram, ollama, anthropic, openai, linux, mac, windows, filesystem
-Spec 8  → filesystem
-Spec 10 → filesystem, crypto, git
-Spec 11 → ollama, anthropic, openai, lora, formatter, filesystem
-```
+| `formatter` | Formats neutral training data into model-specific templates |
 
 ---
 

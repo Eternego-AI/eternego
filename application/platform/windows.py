@@ -16,6 +16,20 @@ async def install(program: str) -> None:
         raise NotImplementedError("Please install Git from git-scm.com")
 
 
+async def execute_on_sub_process(command: str) -> tuple[int, str]:
+    """Execute a command on Windows via PowerShell and return (return_code, output)."""
+    import asyncio
+
+    process = await asyncio.create_subprocess_exec(
+        "powershell", "-Command", command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate()
+    output = stdout.decode() if process.returncode == 0 else stderr.decode()
+    return process.returncode, output.strip()
+
+
 async def store_secret(key: str, value: str) -> None:
     """Store a secret in the Windows Credential Manager."""
     import win32crypt

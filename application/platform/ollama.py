@@ -22,3 +22,16 @@ def post(path: str, data: dict) -> dict:
     )
     with urllib.request.urlopen(request) as response:
         return json.loads(response.read())
+
+
+def stream_post(path: str, data: dict):
+    """Send a POST request and yield JSON chunks as they arrive."""
+    request = urllib.request.Request(
+        f"{BASE_URL}{path}",
+        data=json.dumps(data).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request) as response:
+        for line in response:
+            if line.strip():
+                yield json.loads(line)

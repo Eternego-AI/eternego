@@ -2,6 +2,7 @@
 
 from . import bus
 from . import channel
+from . import conversation
 from . import data
 from . import diary
 from . import exceptions

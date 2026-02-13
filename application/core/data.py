@@ -1,5 +1,6 @@
 """Data models for the application."""
 
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,36 @@ class Model:
     provider: str | None = None
     credentials: dict | None = None
 
+
+@dataclass(kw_only=True)
+class Thought:
+    intent: str
+    content: str = ""
+    tool_calls: list[dict] | None = None
+
+
+
+class Thinking:
+    """The thinking process — wraps a reasoning function to yield thoughts."""
+
+    def __init__(self, reason_by: Callable[[], AsyncIterator["Thought"]]):
+        self._reason = reason_by
+
+    def reason(self) -> AsyncIterator["Thought"]:
+        return self._reason()
+
+
+class Memory:
+    """Short-term memory — holds documents from the current session."""
+
+    def __init__(self):
+        self._documents: list[dict] = []
+
+    def append(self, document: dict) -> None:
+        self._documents.append(document)
+
+    def __iter__(self):
+        return iter(self._documents)
 
 
 @dataclass(kw_only=True)

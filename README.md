@@ -10,8 +10,9 @@ We believe it is time to unite biological and electronic intelligence to make th
 
 It makes it easy to set up and prepare an environment for your persona to grow.
 
-1. Check if a local inference engine is installed, if not install it
-2. Pull at least one model and verify it is available and running
+1. Check if required tools are installed, if not install them
+2. Check if a local inference engine is installed, if not install it
+3. Pull at least one model and verify it is available and running
 
 ### 2. Persona Creation
 
@@ -20,73 +21,123 @@ It gives birth to your persona with minimum but powerful initial abilities.
 1. Receive required data for the new persona
 2. Verify the communication channel is alive and working
 3. Initialize a fresh identity
-4. Load foundational instructions
-5. Save configuration
-6. Ask the persona's model to generate a recovery phrase
-7. Show recovery phrase to person, require confirmation they saved it
-8. Derive encryption key from the phrase and save locally
-9. Trigger Persona Diary to save initial state
+4. Prepare storage for both person and agent knowledge
+5. Load foundational instructions and basic skills
+6. If a frontier model is provided, enable escalation
+7. Save configuration
+8. Ask the persona's model to generate a recovery phrase
+9. Save encryption key to secure storage
+10. Open and write the initial diary entry
 
 ### 3. Persona Migration
 
 It enables you to migrate your persona so nothing is ever lost.
 
-1. Receive a diary entry from our service or from a local path
-2. Decrypt the diary entry using the person's recovery phrase
-3. Save encryption key locally for future use
-4. Load persona from the decrypted data
+1. Receive a diary entry from a local path and the recovery phrase
+2. Verify the environment is ready
+3. Decrypt and restore the persona from the diary
+4. Save encryption key to secure storage
+5. Open and write a new diary entry on the new host
+6. Verify all communication channels and report status
 
 ### 4. Persona Feeding
 
 It lets you feed your persona with your existing AI history so it can know you faster.
 
-1. Person provides external data
-2. System parses the data into a format suitable for analysis
-3. Send to frontier model for analysis if available, otherwise use local model
-4. Model analyzes and extracts observations, patterns, preferences, personality traits
-5. Extracted insights are saved directly to persona's identity
+1. Person provides external data and its source
+2. System parses the data into a common format
+3. Model analyzes and extracts observations
+4. Extracted insights are saved to persona's identity through growth
 
 ### 5. Persona Oversight
 
-It lets you see into your persona's mind — what it knows, what it learned, and how it sees you.
+It lets you look into your persona's mind — what it knows, what it learned, and how it sees you.
 
-1. Show the age of the persona
-2. Show skills that it has
-3. Show what it learned today — everything in memory after the last fine-tuning
-4. Show what it knows — the complete identity
+1. Load all persona knowledge: person facts, person traits, agent identity, agent context, skills, and conversations
+2. Assign trackable IDs to each entry for precise control
+3. Return everything organized by category
 
 ### 6. Persona Control
 
 It gives you full control over what your persona knows — you always have the final say.
 
-1. Person can delete any part of identity data
+1. Receive one or more trackable entry IDs
+2. Identify the source of each entry from its prefix
+3. Remove the entry from the corresponding storage
+4. Report what was removed
 
 ### 7. Persona Interaction
 
-It will be responsive on any communication channel, communicate through one and continue on others, and act on your behalf using the skills it has.
+It gives the persona the ability to sense, think, communicate, act, escalate, and reflect — like a mind.
 
-1. Person sends a message through any configured channel
-2. Persona builds a response using its identity, foundational instructions, and skills
-3. If the persona lacks capability, it signals escalation and the system sends the request to a frontier model
-4. If the response requires action, persona presents the plan and asks for permission (allow / allow permanently / disallow)
-5. If allowed, persona executes the action and includes the result in the response
-6. Conversation is saved to memory
-7. Persona sends the response back through the same channel
+The interaction system follows a cognitive architecture. There are two loops: a reactive loop where the persona senses and responds, and a proactive loop where the persona anticipates and acts on its own.
+
+#### 7a. Sense
+
+It lets the persona sense a stimulus from a channel and process it.
+
+1. Receive a message and channel from the person
+2. Give the stimulus to the agent
+3. The agent thinks, yielding thoughts one by one
+4. Each thought is routed by its intent:
+   - Saying → communicate through the channel
+   - Doing → execute the action
+   - Consulting → escalate to a frontier model
+   - Reasoning → internal process, shared as context only
+5. After all thoughts are processed, reflect
+
+#### 7b. Say
+
+It lets the persona express a thought through a channel.
+
+1. Order all relevant channels to communicate the thought
+2. When a channel confirms delivery, record that the person heard it
+3. If no channel delivered, report failure
+
+#### 7c. Act
+
+It lets the persona act on the world by executing a tool call.
+
+1. Execute the tool call on the person's system
+2. Note the result so the agent can continue
+
+#### 7d. Escalate
+
+It lets the persona escalate to a frontier model when the task exceeds its ability.
+
+1. Send the prompt to the frontier model
+2. The frontier thinks using the same thought pattern
+3. For each frontier thought, route through say and act
+4. After completion, give the agent the full observation to learn from
+
+The agent does not observe the frontier's reasoning process. It should develop its own reasoning for similar situations, not imitate the frontier's thought process.
+
+#### 7e. Reflect
+
+It lets the persona reflect on what it learned from the interaction.
+
+*(Draft — to be implemented)*
+
+#### 7f. Predict
+
+It lets the persona anticipate and act without external stimulus.
+
+*(Draft — to be implemented)*
 
 ### 8. Persona Equipment
 
 It lets you equip your persona with new skills so it can do more for you.
 
-1. Receive data through skill's schema for a persona
+1. Receive a skill document for a persona
 2. Equip the persona with the skill
 
 ### 9. Persona Diary
 
 It preserves your persona's life so it survives across time, hardware, and changes.
 
-1. Create a diary entry with encrypted persona data
-2. Save diary locally to the persona's configured path
-3. If automated backup is configured, push the diary to our host
+1. Retrieve the encryption phrase from secure storage
+2. Create an encrypted diary entry with all persona data
+3. Save diary locally with version control
 
 ### 10. Persona Sleep
 
@@ -106,7 +157,7 @@ The initial release focuses on the core twin experience:
 - Communication channel (Telegram)
 - Skills and actions with confirmation
 - Identity storage (flat files)
-- Frontier escalation (Claude API)
+- Frontier escalation (Claude API or OpenAI API)
 - Learning from interactions
 - Sleep (fine-tuning with LoRA)
 - Diary (local encrypted backup only)

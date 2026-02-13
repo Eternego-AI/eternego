@@ -45,7 +45,7 @@ There are three business modules:
 | Module | Scope |
 |---|---|
 | `environment.py` | Preparing and verifying the environment |
-| `persona.py` | Persona lifecycle: creation, migration, identity, learning, diary, sleep |
+| `persona.py` | Persona lifecycle: creation, migration, identity, learning, interaction, diary |
 | `gateway.py` | Managing communication channels: add, verify, update |
 
 ### Signals
@@ -58,6 +58,18 @@ Every business function sends at least two signals through the bus:
 The bus logs automatically on every call, so signals double as the business layer's log trail.
 
 On failure, broadcast the failure as an event before returning. Include a `reason` key in the details.
+
+The bus supports five signal types, each with a distinct purpose:
+
+| Method | Signal Type | Purpose | Example |
+|---|---|---|---|
+| `bus.propose` | Plan | Announce intent before action | "Sensing", {"persona_id", "channel"} |
+| `bus.broadcast` | Event | Announce result after action | "Sensed", {"persona_id", "channel"} |
+| `bus.share` | Message | Share information passively | "Reasoning", {"content"} |
+| `bus.ask` | Inquiry | Request input from subscribers | Permission check |
+| `bus.order` | Command | Command an action, expect signals back | "Say", {"content", "channels"} |
+
+Commands (`bus.order`) are special — they expect subscribers to perform work and respond with signals. For example, the `say` spec orders channels to communicate, and channels respond with `"Communicated"` signals that the spec checks.
 
 ### Error Handling
 
@@ -81,8 +93,9 @@ README Spec 1 says:
 
 > It makes it easy to set up and prepare an environment for your persona to grow.
 >
-> 1. Check if a local inference engine is installed, if not install it
-> 2. Pull at least one model and verify it is available and running
+> 1. Check if required tools are installed, if not install them
+> 2. Check if a local inference engine is installed, if not install it
+> 3. Pull at least one model and verify it is available and running
 
 Translated to `application/business/environment.py`:
 
@@ -92,6 +105,9 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
     await bus.propose("Preparing environment", {"model": model})
 
     try:
+        if not await system.is_installed("git"):
+            await system.install("git")
+
         if not await local_inference_engine.is_installed():
             await local_inference_engine.install()
 
@@ -115,24 +131,17 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
         return Outcome(success=True, message="Environment is ready", data={"model": model})
 
     except UnsupportedOS as e:
-        await bus.broadcast("Environment preparation failed", {
-            "reason": "unsupported_os",
-            "error": str(e),
-        })
-        return Outcome(success=False, message="Your operating system is not supported. Eternego requires Linux, macOS, or Windows.")
+        await bus.broadcast("Environment preparation failed", {"reason": "unsupported_os", "error": str(e)})
+        return Outcome(success=False, message="Your operating system is not supported.")
 
-    except URLError as e:
-        await bus.broadcast("Environment preparation failed", {
-            "reason": "connection",
-            "model": model,
-            "error": str(e),
-        })
-        return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
+    except InstallationError as e:
+        await bus.broadcast("Environment preparation failed", {"reason": "installation", "error": str(e)})
+        return Outcome(success=False, message=str(e))
+
+    except EngineConnectionError as e:
+        await bus.broadcast("Environment preparation failed", {"reason": "connection", "error": str(e)})
+        return Outcome(success=False, message="Could not connect to the local inference engine.")
 ```
-
-Notice: the business spec called `is_installed`, `install`, `get_default_model`, `check`, and `pull`. Those are the only functions that exist in the core module — because the spec asked for them.
-
-**Note:** The example above uses `URLError` directly. The current codebase has since been updated — core now catches `URLError` and raises `EngineConnectionError`, and business catches that instead.
 
 ---
 
@@ -169,21 +178,125 @@ async def get_default_model() -> str | None:
 
 ### Single ownership of paths and constants
 
-If a path or constant belongs to a module, other modules receive it as a parameter — they don't compute it themselves. For example, the persona directory path lives only in `identity.memory_path(persona)`. The diary module receives the path, it never imports `PERSONAS_DIR`.
+If a path or constant belongs to a module, other modules receive it as a parameter — they don't compute it themselves. For example, the persona directory path lives only in `Persona.storage_dir`. The diary module receives the path, it never imports the base directory.
 
 ### When to merge vs. separate core modules
 
-If two core modules manage the same concept or data, merge them. For example, `config` was merged into `identity` because both managed persona files — identity owns the persona directory. If a module manages a distinct concern, keep it separate. For example, `diary` is separate from `identity` because backup/versioning is a different concern from persona file management.
+If two core modules manage the same concept or data, merge them. If a module manages a distinct concern, keep it separate. For example, `diary` is separate from `agent` because backup/versioning is a different concern from persona identity management.
 
 ### Persona is config, files are state
 
-The `Persona` dataclass holds configuration and metadata: id, name, model, frontier, channels. The files on disk (identity buckets, instructions, skills, training data) are the persona's state, managed by `identity`. When someone asks who I am, I give my name — not my skills or assets. Those are separate and need further authorization.
+The `Persona` dataclass holds configuration and metadata: id, name, model, frontier, channels. The files on disk (identity buckets, instructions, skills, training data) are the persona's state, managed by `agent` and `person`. When someone asks who I am, I give my name — not my skills or assets.
 
 ### Rules
 
 - Core functions use platform modules for all infrastructure — never call external libraries directly.
 - They do not send signals. Signals belong to the business layer.
 - They do not return `Outcome`. They return domain data or raise exceptions. The business layer decides what is a success or failure.
+
+---
+
+## The Cognitive Architecture
+
+The interaction system uses a cognitive model that mirrors human cognition. This is the central design pattern for how the persona processes and responds to the world.
+
+### Thought and Thinking
+
+Every reasoning process — whether from the local model or a frontier model — yields `Thought` objects. Each thought has an `intent` that tells the business layer what to do with it:
+
+```python
+@dataclass(kw_only=True)
+class Thought:
+    intent: str       # "saying", "doing", "consulting", "reasoning"
+    content: str = ""
+    tool_calls: list[dict] | None = None
+
+class Thinking:
+    """The thinking process — wraps a reasoning function to yield thoughts."""
+    def __init__(self, reason_by: Callable[[], AsyncIterator[Thought]]):
+        self._reason = reason_by
+
+    def reason(self) -> AsyncIterator[Thought]:
+        return self._reason()
+```
+
+`Thinking` is reusable. It wraps any async generator that yields thoughts. The business layer doesn't care whether the thoughts come from a local model or a frontier API — it routes them the same way.
+
+### The fluent API
+
+The agent exposes a fluent interface for triggering thought:
+
+```python
+think = agent.given(persona, {"type": "stimulus", "role": "user", "content": prompt})
+async for thought in think.reason():
+    if thought.intent == "saying":
+        await say(persona, thought, channel)
+    elif thought.intent == "doing":
+        await act(persona, thought)
+    elif thought.intent == "consulting":
+        await escalate(persona, thought.content, channel)
+```
+
+`agent.given()` stores the input in memory and returns a `Thinking` object. Calling `.reason()` starts the async generator. The same pattern works for frontier:
+
+```python
+async for thought in frontier.consulting(persona.frontier, prompt).reason():
+    ...
+```
+
+### Intent detection
+
+The local model streams tokens. The agent detects intents through XML-like tags embedded in the stream:
+
+- `<think>...</think>` → `intent="reasoning"` (internal, not shown to person)
+- `<escalate>...</escalate>` → `intent="consulting"` (content sent to frontier)
+- Tool calls in response → `intent="doing"`
+- Plain text → `intent="saying"`
+
+The frontier uses the same `<think>` detection but cannot escalate (no infinite escalation).
+
+### The action loop
+
+When the agent yields a "doing" thought, the business layer executes the tool and notes the result via `agent.note()`. The reasoning loop inside `agent.reason()` uses a `while True` that only breaks when the agent produces no actions in a cycle. This means the agent can chain multiple tool calls naturally — think, act, see result, think again — without recursive calls.
+
+### Memory
+
+`Memory` is an in-memory document store. The agent accumulates documents as the conversation progresses:
+
+```python
+class Memory:
+    """Short-term memory — holds documents from the current session."""
+    def __init__(self):
+        self._documents: list[dict] = []
+
+    def append(self, document: dict) -> None:
+        self._documents.append(document)
+
+    def __iter__(self):
+        return iter(self._documents)
+```
+
+All access goes through `agent.memory()`. The agent, person, and frontier modules all write to the same memory through this accessor:
+
+- `agent.given()` — appends stimulus
+- `agent.note()` — appends tool execution result
+- `agent.observe()` — appends frontier observation
+- `person.heard()` — appends delivery confirmation
+
+When building messages for the model, the agent iterates memory and maps each document type to the appropriate message role (user, assistant, tool).
+
+### Escalation
+
+The escalation flow connects the local model to a more powerful frontier model:
+
+1. The local model detects it can't handle something → wraps reason in `<escalate>` tags.
+2. The agent yields `Thought(intent="consulting")`.
+3. The business layer calls `escalate`, which uses `frontier.consulting()`.
+4. The frontier streams through the same `Thinking` pattern.
+5. Frontier thoughts are routed through `say` and `act`.
+6. After completion, the full interaction (minus reasoning) is stored via `agent.observe()`.
+
+The agent does **not** observe the frontier's reasoning. Like a child learning from a parent, it sees what the parent does and says, but develops its own reasoning path for similar situations.
 
 ---
 
@@ -201,15 +314,59 @@ def get(path: str) -> dict:
         return json.loads(response.read())
 ```
 
+### Normalized output for frontier models
+
+The `anthropic` and `openai` platform modules both stream and normalize their output to the same shape:
+
+```python
+{"message": {"content": "...", "tool_calls": [...]}, "done": bool}
+```
+
+This lets the frontier module (`application/core/frontier.py`) process both providers identically. The platform handles the protocol differences (SSE parsing, different event structures); core sees a uniform stream.
+
 ### Portable
 
-Platform modules are portable across projects. We copied `logger` and `observer` directly from another project. A platform module should never contain project-specific logic — that belongs in core.
+Platform modules are portable across projects. A platform module should never contain project-specific logic — that belongs in core.
 
 This means: no project-specific defaults, no project-specific parameter names. For example, `crypto.derive_key(secret, salt)` takes a generic `secret` string and requires `salt` explicitly — the fact that we use a recovery phrase as the secret and a persona ID as the salt is a core decision, not a platform one.
 
 ### Shared modules
 
 The `logger` and `observer` modules are shared infrastructure. The bus (`application/core/bus.py`) wraps the observer and adds automatic logging on every signal.
+
+---
+
+## Data Models
+
+All shared data types live in `application/core/data.py`:
+
+| Class | Purpose |
+|---|---|
+| `Channel` | Communication channel (name, credentials) |
+| `Model` | AI model reference (name, provider, credentials) |
+| `Thought` | Single unit of reasoning output (intent, content, tool_calls) |
+| `Thinking` | Wraps a reasoning function, exposes `.reason()` |
+| `Memory` | In-memory document store for short-term memory |
+| `Observation` | Extracted observations from conversations (facts, traits, context) |
+| `Persona` | Persona configuration (id, name, model, frontier, channels, storage_dir) |
+
+---
+
+## Domain Exceptions
+
+All domain exceptions live in `application/core/exceptions.py`:
+
+| Exception | Raised By | Meaning |
+|---|---|---|
+| `UnsupportedOS` | system, local_inference_engine | OS is not Linux, macOS, or Windows |
+| `InstallationError` | system | Failed to install a program |
+| `EngineConnectionError` | local_model, local_inference_engine | Cannot reach Ollama |
+| `SecretStorageError` | system | Cannot access OS secure storage |
+| `DiaryError` | diary | Failed to read/write diary |
+| `IdentityError` | agent | Failed to read/write persona files |
+| `PersonError` | person | Failed to read/write person files |
+| `ExternalDataError` | external_llms | Failed to parse external AI export |
+| `FrontierError` | frontier | Failed to reach or parse frontier API |
 
 ---
 
@@ -222,3 +379,12 @@ README spec                    -->  business function (bus.propose, core calls, 
 ```
 
 The README tells you WHAT to build in business. We as developers figure out HOW in core. Platform gives us the raw tools to work with.
+
+For interaction specs, the cognitive architecture adds another dimension:
+
+```
+sense (business) --> agent.given (core) --> local_model.stream (core) --> ollama (platform)
+  thought.intent == "saying"    --> say (business) --> bus.order --> channel (core) --> telegram (platform)
+  thought.intent == "doing"     --> act (business) --> system.execute (core) --> OS modules (platform)
+  thought.intent == "consulting" --> escalate (business) --> frontier.consulting (core) --> anthropic/openai (platform)
+```

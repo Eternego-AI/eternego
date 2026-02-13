@@ -2,13 +2,102 @@
 
 import json
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import asdict
+
 from pathlib import Path
 
 from application.platform import logger, filesystem, crypto
-from application.core import prompts
-from application.core.data import Channel, Model, Persona
+from application.core import prompts, local_model
+from application.core.data import Channel, Memory, Model, Persona, Thinking, Thought
 from application.core.exceptions import IdentityError
+
+
+_memory = Memory()
+
+
+def memory() -> Memory:
+    """Access the agent's short-term memory."""
+    return _memory
+
+
+def given(persona: Persona, document: dict) -> Thinking:
+    """Give the agent external input and return the thinking process."""
+    memory().append(document)
+
+    async def _reason() -> AsyncIterator[Thought]:
+        while True:
+            messages = []
+
+            inst = instructions(persona)
+            if inst:
+                messages.append({"role": "system", "content": inst})
+
+            for doc in memory():
+                if doc["type"] in ("stimulus", "reflection", "prediction"):
+                    messages.append({"role": doc["role"], "content": doc["content"]})
+                elif doc["type"] == "act":
+                    messages.append({"role": "assistant", "content": "", "tool_calls": doc["tool_calls"]})
+                    messages.append({"role": "tool", "content": doc["result"]})
+                elif doc["type"] == "say":
+                    messages.append({"role": "assistant", "content": doc["content"]})
+
+            acted = False
+            said = ""
+            reasoning = False
+            escalating = False
+            escalation = ""
+            async for raw in local_model.stream(persona.model.name, messages):
+                content = raw.get("message", {}).get("content", "")
+                tool_calls = raw.get("message", {}).get("tool_calls")
+                done = raw.get("done", False)
+
+                if tool_calls:
+                    yield Thought(intent="doing", content=content, tool_calls=tool_calls)
+                    acted = True
+                elif not done:
+                    if "<think>" in content:
+                        reasoning = True
+                        content = content.replace("<think>", "")
+                    if "</think>" in content:
+                        reasoning = False
+                        content = content.replace("</think>", "")
+                        continue
+
+                    if "<escalate>" in content:
+                        escalating = True
+                        content = content.replace("<escalate>", "")
+                    if "</escalate>" in content:
+                        escalating = False
+                        escalation += content.replace("</escalate>", "")
+                        yield Thought(intent="consulting", content=escalation)
+                        continue
+
+                    if escalating:
+                        escalation += content
+                    elif reasoning:
+                        yield Thought(intent="reasoning", content=content)
+                    else:
+                        said += content
+                        yield Thought(intent="saying", content=content)
+
+            if said:
+                memory().append({"type": "say", "content": said})
+
+            if not acted:
+                break
+
+    return Thinking(_reason)
+
+
+def note(document: dict) -> None:
+    """Note something that happened during action."""
+    memory().append(document)
+
+
+def observe(observation: list[dict]) -> None:
+    """Give the agent a frontier observation to learn from later."""
+    memory().append({"type": "observation", "observation": observation})
 
 
 async def initialize(
@@ -39,6 +128,17 @@ async def prepare_buckets(persona: Persona) -> None:
         filesystem.ensure_dir(persona.storage_dir / "memory")
     except OSError as e:
         raise IdentityError("Failed to prepare agent buckets") from e
+
+
+def instructions(persona: Persona) -> str:
+    """Read and join all instruction files for a persona."""
+    instructions_dir = persona.storage_dir / "instructions"
+    if not instructions_dir.exists():
+        return ""
+    parts = []
+    for file in sorted(instructions_dir.glob("*.md")):
+        parts.append(filesystem.read(file))
+    return "\n\n".join(parts)
 
 
 async def give_instructions(persona: Persona) -> None:
@@ -100,9 +200,9 @@ async def skills(persona: Persona) -> list[str]:
         raise IdentityError("Failed to read agent skills") from e
 
 
-async def memory(persona: Persona) -> list[str]:
+async def conversations(persona: Persona) -> list[str]:
     """Read the agent's conversation names since last sleep."""
-    logger.info("Reading agent memory", {"persona_id": persona.id})
+    logger.info("Reading agent conversations", {"persona_id": persona.id})
     try:
         names = []
         memory_dir = persona.storage_dir / "memory"
@@ -111,7 +211,7 @@ async def memory(persona: Persona) -> list[str]:
                 names.append(file.stem)
         return names
     except OSError as e:
-        raise IdentityError("Failed to read agent memory") from e
+        raise IdentityError("Failed to read agent conversations") from e
 
 
 async def delete_identity(persona: Persona, hash_part: str) -> None:

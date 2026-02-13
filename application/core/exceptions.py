@@ -31,3 +31,11 @@ class PersonError(Exception):
 
 class ExternalDataError(Exception):
     pass
+
+
+class FrontierError(Exception):
+    pass
+
+
+class ExecutionError(Exception):
+    pass
