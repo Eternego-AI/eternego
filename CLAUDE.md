@@ -114,7 +114,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | Module | Functions |
 |---|---|
 | `environment.py` | prepare, check_model |
-| `persona.py` | create, migrate, feed, grow, sense, say, act, escalate, reflect, predict, oversee, control, write_diary |
+| `persona.py` | create, migrate, feed, grow, equip, sense, say, act, escalate, reflect, predict, oversee, control, write_diary |
 | `gateway.py` | verify_channel |
 | `outcome.py` | Outcome dataclass |
 
@@ -122,15 +122,15 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 | Module | Role |
 |---|---|
-| `agent.py` | Memory accessor, given(), note(), observe(), instructions(), initialize, save, identity CRUD |
+| `agent.py` | Memory accessor, given(), note(), observe(), instructions(), initialize, save, identity CRUD, shelve_skill(), summarize_skill() |
 | `person.py` | Person facts/traits CRUD, heard() |
 | `frontier.py` | allow_escalation(), consulting() → returns Thinking |
-| `local_model.py` | stream() async generator, digest(), generate_encryption_phrase() |
+| `local_model.py` | stream() async generator, digest(), assess_skill(), generate_encryption_phrase() |
 | `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
 | `system.py` | execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
 | `data.py` | Channel, Model, Thought, Thinking, Memory, Observation, Persona |
-| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, RECOVERY_PHRASE |
+| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, SKILL_ASSESSMENT, RECOVERY_PHRASE |
 | `exceptions.py` | All domain exceptions |
 | `diary.py` | open_for(), open(), record() |
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |
@@ -166,6 +166,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 7b: Say (channel communication with confirmation)
 - Spec 7c: Act (tool execution, **no permission check yet**)
 - Spec 7d: Escalate (frontier routing with observation)
+- Spec 8: Persona Equipment (shelve, summarize, grow)
 - Spec 9: Persona Diary
 
 ### Draft (signature + signals only):
@@ -173,7 +174,6 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 7f: Predict
 
 ### Not started:
-- Spec 8: Persona Equipment
 - Spec 10: Persona Sleep (fine-tuning)
 - Permission check for act (allow / allow permanently / disallow)
 - Memory lifecycle (short-term → long-term flush, clearing after sleep)
@@ -191,9 +191,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 5. **Remove conversation.py** — unused, replaced by Memory class.
 
-6. **Spec 8: Equipment** — skill document loading.
-
-7. **Spec 10: Sleep** — observation extraction, training data generation, LoRA fine-tuning.
+6. **Spec 10: Sleep** — observation extraction, training data generation, LoRA fine-tuning.
 
 ## Code Style
 

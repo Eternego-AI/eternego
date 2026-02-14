@@ -58,6 +58,29 @@ PREDICTION = (
 )
 
 
+SKILL_ASSESSMENT = """A skill document has been added to your knowledge.
+
+Skill name: {skill_name}
+
+Skill content:
+{skill_content}
+
+Analyze this skill and extract two things:
+
+1. "traits": What preferences does this skill imply about the person? \
+Only include if the skill genuinely implies a preference or working style. \
+A DDD guide implies "Prefers Domain-Driven Design for software architecture." \
+A command reference like kubectl implies nothing about preferences — return empty.
+
+2. "context": What should you now know about yourself? \
+Always include at least one entry. Write from first person. \
+Examples: "I know Domain-Driven Design and can apply bounded contexts and aggregates." \
+"I can use kubectl for Kubernetes cluster management."
+
+Return ONLY valid JSON:
+{{"traits": [...], "context": [...]}}"""
+
+
 def reflection():
     return {"type": "reflection", "role": "system", "content": REFLECTION}
 

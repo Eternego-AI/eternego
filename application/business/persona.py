@@ -1,6 +1,6 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, agent, person, frontier, diary, system, external_llms, prompts
+from application.core import bus, agent, person, frontier, diary, system, external_llms, local_model, prompts
 from application.core.bus import Message
 from application.core.data import Channel, Model, Observation, Persona, Thought
 from application.core.exceptions import (
@@ -215,6 +215,44 @@ async def grow(persona: Persona, observations: Observation) -> Outcome[dict]:
     except PersonError as e:
         await bus.broadcast("Persona growth failed", {"reason": "person", "error": str(e)})
         return Outcome(success=False, message="Could not save person observations to persona.")
+
+
+async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
+    """It lets you equip your persona with new skills so it can do more for you."""
+    await bus.propose("Equipping persona", {"persona_id": persona.id, "skill_path": skill_path})
+
+    if not skill_path.endswith(".md"):
+        await bus.broadcast("Persona equipping failed", {"reason": "invalid_format", "skill_path": skill_path})
+        return Outcome(success=False, message="Skill must be a markdown (.md) file.")
+
+    try:
+        skill_file = await agent.shelve_skill(persona, skill_path)
+
+        observations = await agent.summarize_skill(persona, skill_file)
+
+        outcome = await grow(persona, observations)
+        if not outcome.success:
+            await bus.broadcast("Persona equipping failed", {"reason": "grow", "persona_id": persona.id})
+            return outcome
+
+        await bus.broadcast("Persona equipped", {
+            "persona_id": persona.id,
+            "skill": skill_file.stem,
+        })
+
+        return Outcome(
+            success=True,
+            message="Skill equipped successfully",
+            data={"persona_id": persona.id, "skill": skill_file.stem},
+        )
+
+    except IdentityError as e:
+        await bus.broadcast("Persona equipping failed", {"reason": "identity", "error": str(e)})
+        return Outcome(success=False, message="Could not equip the skill.")
+
+    except EngineConnectionError as e:
+        await bus.broadcast("Persona equipping failed", {"reason": "connection", "error": str(e)})
+        return Outcome(success=False, message="Could not assess the skill. Please make sure the model is running.")
 
 
 async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict]:

@@ -31,6 +31,30 @@ async def digest(model: str, conversations: str) -> Observation:
         raise EngineConnectionError("Model returned an invalid response") from e
 
 
+async def assess_skill(model: str, skill_name: str, skill_content: str) -> Observation:
+    """Analyze a skill document and extract observations using the given model."""
+    logger.info("Assessing skill", {"model": model, "skill": skill_name})
+    try:
+        response = ollama.post("/api/generate", {
+            "model": model,
+            "prompt": prompts.SKILL_ASSESSMENT.format(
+                skill_name=skill_name,
+                skill_content=skill_content,
+            ),
+            "stream": False,
+        })
+        parsed = json.loads(response["response"])
+        return Observation(
+            facts=[],
+            traits=parsed.get("traits", []),
+            context=parsed.get("context", []),
+        )
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+    except (json.JSONDecodeError, KeyError) as e:
+        raise EngineConnectionError("Model returned an invalid response") from e
+
+
 async def stream(model: str, messages: list[dict]) -> AsyncIterator[dict]:
     """Stream a chat response from the local model, yielding raw Ollama responses."""
     logger.info("Streaming response", {"model": model})

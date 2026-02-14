@@ -9,7 +9,7 @@ from pathlib import Path
 
 from application.platform import logger, filesystem, crypto
 from application.core import prompts, local_model
-from application.core.data import Channel, Memory, Model, Persona, Thinking, Thought
+from application.core.data import Channel, Memory, Model, Observation, Persona, Thinking, Thought
 from application.core.exceptions import IdentityError
 
 
@@ -169,6 +169,31 @@ async def equip_basic_skills(persona: Persona) -> None:
         filesystem.ensure_dir(persona.storage_dir / "skills")
     except OSError as e:
         raise IdentityError("Failed to equip basic skills") from e
+
+
+async def shelve_skill(persona: Persona, skill_path: str) -> Path:
+    """Read a skill document and save it to the persona's skills directory."""
+    logger.info("Shelving skill", {"persona_id": persona.id, "path": skill_path})
+    try:
+        source = Path(skill_path)
+        content = filesystem.read(source)
+        destination = persona.storage_dir / "skills" / source.name
+        if destination.exists():
+            raise IdentityError(f"Skill '{source.stem}' already exists")
+        filesystem.write(destination, content)
+        return destination
+    except OSError as e:
+        raise IdentityError("Failed to shelve skill") from e
+
+
+async def summarize_skill(persona: Persona, skill_path: Path) -> Observation:
+    """Read a skill and assess what it means for person and persona."""
+    logger.info("Summarizing skill", {"persona_id": persona.id, "skill": skill_path.stem})
+    try:
+        content = filesystem.read(skill_path)
+        return await local_model.assess_skill(persona.model.name, skill_path.stem, content)
+    except OSError as e:
+        raise IdentityError("Failed to read skill for summarization") from e
 
 
 async def identity(persona: Persona) -> dict[str, list[str]]:
