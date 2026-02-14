@@ -16,6 +16,50 @@ async def allow_escalation(persona: Persona) -> None:
     await agent.add_instruction(persona, "escalation", prompts.ESCALATION)
 
 
+async def respond(model: Model, prompt: str) -> str:
+    """Send a prompt to a frontier model and return the accumulated text response."""
+    logger.info("Getting frontier response", {"model": model.name, "provider": model.provider})
+
+    messages = [{"role": "user", "content": prompt}]
+    api_key = (model.credentials or {}).get("api_key", "")
+
+    try:
+        if model.provider == "anthropic":
+            raw_stream = anthropic.stream(api_key, model.name, messages)
+        elif model.provider == "openai":
+            raw_stream = openai.stream(api_key, model.name, messages)
+        else:
+            raise FrontierError(f"Unsupported frontier provider: {model.provider}")
+
+        result = ""
+        reasoning = False
+        for raw in raw_stream:
+            content = raw.get("message", {}).get("content", "")
+            tool_calls = raw.get("message", {}).get("tool_calls")
+            done = raw.get("done", False)
+
+            if tool_calls or done:
+                continue
+
+            if "<think>" in content:
+                reasoning = True
+                content = content.replace("<think>", "")
+            if "</think>" in content:
+                reasoning = False
+                content = content.replace("</think>", "")
+                continue
+
+            if not reasoning:
+                result += content
+
+        return result
+
+    except URLError as e:
+        raise FrontierError(f"Could not connect to {model.provider}") from e
+    except (KeyError, ValueError) as e:
+        raise FrontierError(f"Invalid response from {model.provider}") from e
+
+
 def consulting(model: Model, prompt: str) -> Thinking:
     """Consult a frontier model about a prompt."""
     logger.info("Consulting", {"model": model.name, "provider": model.provider})

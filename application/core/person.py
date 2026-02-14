@@ -84,9 +84,3 @@ async def add_traits(persona: Persona, traits: list[str]) -> None:
             filesystem.append(persona.storage_dir / "person-traits.md", "\n".join(traits) + "\n")
     except OSError as e:
         raise PersonError("Failed to save traits") from e
-
-
-def heard(document: dict) -> None:
-    """Record that the person heard a communication."""
-    from application.core import agent
-    agent.memory().append(document)

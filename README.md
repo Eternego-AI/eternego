@@ -21,13 +21,14 @@ It gives birth to your persona with minimum but powerful initial abilities.
 1. Receive required data for the new persona
 2. Verify the communication channel is alive and working
 3. Initialize a fresh identity
-4. Prepare storage for both person and agent knowledge
-5. Load foundational instructions and basic skills
-6. If a frontier model is provided, enable escalation
-7. Save configuration
-8. Ask the persona's model to generate a recovery phrase
-9. Save encryption key to secure storage
-10. Open and write the initial diary entry
+4. Copy the base model into a persona-owned model
+5. Prepare storage for both person and agent knowledge
+6. Load foundational instructions and basic skills
+7. If a frontier model is provided, enable escalation
+8. Save configuration
+9. Ask the persona's model to generate a recovery phrase
+10. Save encryption key to secure storage
+11. Open and write the initial diary entry
 
 ### 3. Persona Migration
 
@@ -36,9 +37,11 @@ It enables you to migrate your persona so nothing is ever lost.
 1. Receive a diary entry from a local path and the recovery phrase
 2. Verify the environment is ready
 3. Decrypt and restore the persona from the diary
-4. Save encryption key to secure storage
-5. Open and write a new diary entry on the new host
-6. Verify all communication channels and report status
+4. Copy the base model into a persona-owned model
+5. Save configuration
+6. Save encryption key to secure storage
+7. Open and write a new diary entry on the new host
+8. Verify all communication channels and report status
 
 ### 4. Persona Feeding
 
@@ -98,8 +101,9 @@ It lets the persona express a thought through a channel.
 
 It lets the persona act on the world by executing a tool call.
 
-1. Execute the tool call on the person's system
-2. Note the result so the agent can continue
+1. Ask the person for permission to execute the tool call
+2. If authorized, execute the tool call on the person's system
+3. Note the result so the agent can continue
 
 #### 7d. Escalate
 
@@ -116,13 +120,17 @@ The agent does not observe the frontier's reasoning process. It should develop i
 
 It lets the persona reflect on what it learned from the interaction.
 
-*(Draft — to be implemented)*
+1. Give the agent a reflection prompt
+2. The agent thinks, yielding thoughts
+3. Route saying and reasoning thoughts
 
 #### 7f. Predict
 
 It lets the persona anticipate and act without external stimulus.
 
-*(Draft — to be implemented)*
+1. Give the agent a prediction prompt
+2. The agent thinks, yielding thoughts
+3. Route saying and reasoning thoughts
 
 ### 8. Persona Equipment
 
@@ -143,26 +151,13 @@ It preserves your persona's life so it survives across time, hardware, and chang
 
 It lets your persona rest, reflect, and grow stronger from everything it experienced.
 
-1. Triggered based on configured conditions or on person's demand
-2. Fine-tune the model using the latest updates in memory
-3. After fine-tuning completes, trigger Persona Diary
-
----
-
-## MVP Scope
-
-The initial release focuses on the core twin experience:
-
-- Local model running via a local inference engine
-- Communication channel (Telegram)
-- Skills and actions with confirmation
-- Identity storage (flat files)
-- Frontier escalation (Claude API or OpenAI API)
-- Learning from interactions
-- Sleep (fine-tuning with LoRA)
-- Diary (local encrypted backup only)
-
-Not in MVP: OAuth, cloud hosting, automated backup service, onboarding wizard, web UI, multiple personas, migration from cloud backup.
+1. Check if there are observations newer than the current model
+2. Extract observations and generate training data
+3. Fine-tune the model
+4. Verify the fine-tuned model responds correctly
+5. Delete the old persona model
+6. Save the new model to persona configuration
+7. Trigger Persona Diary
 
 ---
 

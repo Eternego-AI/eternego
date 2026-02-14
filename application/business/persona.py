@@ -1,6 +1,6 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, agent, person, frontier, diary, system, external_llms, local_model, prompts
+from application.core import bus, agent, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts
 from application.core.bus import Message
 from application.core.data import Channel, Model, Observation, Persona, Thought
 from application.core.exceptions import (
@@ -32,6 +32,10 @@ async def create(
             return Outcome(success=False, message=outcome.message)
 
         persona = await agent.initialize(name, model, frontier_model, channels=[channel])
+
+        persona_model = models.generate_name(model.name, persona.id)
+        await agent.embody(persona, model, persona_model)
+        await local_inference_engine.copy(model.name, persona_model)
 
         await person.prepare_buckets(persona)
         await agent.prepare_buckets(persona)
@@ -109,7 +113,9 @@ async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
 
         persona = await agent.distill(materials)
 
-        persona.model = model
+        persona_model = models.generate_name(model.name, persona.id)
+        await agent.embody(persona, model, persona_model)
+        await local_inference_engine.copy(model.name, persona_model)
         await agent.save_persona(persona)
 
         await system.save_phrases(persona, phrase)
@@ -324,7 +330,7 @@ async def say(persona: Persona, thought: Thought, channel: Channel | None = None
             signal.title == "Communicated"
             and signal.details.get("content") == thought.content
         ):
-            person.heard({
+            agent.note({
                 "type": "communicated",
                 "channel": signal.details.get("channel"),
                 "content": thought.content,
@@ -573,7 +579,7 @@ async def oversee(persona: Persona) -> Outcome[dict]:
         traits = await person.traits_toward(persona)
         agent_data = await agent.identity(persona)
         skill_list = await agent.skills(persona)
-        conversations = await agent.conversations(persona)
+        conversations = await agent.history(persona)
 
         await bus.broadcast("Persona overseen", {"persona_id": persona.id})
 
@@ -586,7 +592,7 @@ async def oversee(persona: Persona) -> Outcome[dict]:
                 "agent": system.make_rows_traceable(agent_data["identity"], "pai")
                     + system.make_rows_traceable(agent_data["context"], "pc"),
                 "skills": system.make_rows_traceable(skill_list, "sk"),
-                "memory": system.make_rows_traceable(conversations, "mem"),
+                "history": system.make_rows_traceable(conversations, "hist"),
             },
         )
 
@@ -617,8 +623,8 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
                 await agent.delete_context(persona, hash_part)
             elif prefix == "sk":
                 await agent.delete_skill(persona, hash_part)
-            elif prefix == "mem":
-                await agent.delete_memory(persona, hash_part)
+            elif prefix == "hist":
+                await agent.delete_history(persona, hash_part)
 
         await bus.broadcast("Persona controlled", {"persona_id": persona.id, "removed": len(entry_ids)})
 
@@ -664,3 +670,67 @@ async def write_diary(persona: Persona) -> Outcome[dict]:
     except DiaryError as e:
         await bus.broadcast("Diary failed", {"reason": "diary", "persona_id": persona.id, "error": str(e)})
         return Outcome(success=False, message="Could not save the persona diary.")
+
+
+async def sleep(persona: Persona) -> Outcome[dict]:
+    """It lets your persona rest, reflect, and grow stronger from everything it experienced."""
+    await bus.propose("Sleeping", {"persona_id": persona.id})
+
+    try:
+        conversations = await agent.recall(persona)
+        if conversations:
+            observations = await local_model.digest(persona.model.name, conversations)
+            await grow(persona, observations)
+
+        prompt = await agent.sleep(persona)
+
+        if persona.frontier:
+            training_set = await frontier.respond(persona.frontier, prompt)
+        else:
+            training_set = await local_model.respond(persona.model.name, prompt)
+
+        await agent.save_training_set(persona, training_set)
+
+        old_model = persona.model.name
+        new_model = models.generate_name(persona.base_model, persona.id)
+        await local_inference_engine.fine_tune(persona.base_model, training_set, new_model)
+
+        if not await local_inference_engine.check(new_model):
+            await bus.broadcast("Sleep failed", {"reason": "fine_tune", "persona_id": persona.id})
+            return Outcome(success=False, message="Fine-tuned model failed verification. Previous model is still available.")
+
+        try:
+            await local_inference_engine.delete(old_model)
+        except EngineConnectionError:
+            pass
+
+        await agent.wake_up(persona, new_model)
+
+        outcome = await write_diary(persona)
+        if not outcome.success:
+            await bus.broadcast("Sleep failed", {"reason": "diary", "persona_id": persona.id})
+            return outcome
+
+        await bus.broadcast("Slept", {
+            "persona_id": persona.id,
+            "model": new_model,
+            "channels": [ch.name for ch in (persona.channels or [])],
+        })
+
+        return Outcome(
+            success=True,
+            message="Persona slept and grew stronger",
+            data={"persona_id": persona.id, "model": new_model},
+        )
+
+    except IdentityError as e:
+        await bus.broadcast("Sleep failed", {"reason": "identity", "error": str(e)})
+        return Outcome(success=False, message="Could not process persona files during sleep.")
+
+    except EngineConnectionError as e:
+        await bus.broadcast("Sleep failed", {"reason": "connection", "error": str(e)})
+        return Outcome(success=False, message="Could not connect to the inference engine. Please make sure it is running.")
+
+    except FrontierError as e:
+        await bus.broadcast("Sleep failed", {"reason": "frontier", "error": str(e)})
+        return Outcome(success=False, message="Could not reach the frontier model. Please check your credentials and connection.")

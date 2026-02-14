@@ -259,9 +259,9 @@ The frontier uses the same `<think>` detection but cannot escalate (no infinite 
 
 When the agent yields a "doing" thought, the business layer executes the tool and notes the result via `agent.note()`. The reasoning loop inside `agent.reason()` uses a `while True` that only breaks when the agent produces no actions in a cycle. This means the agent can chain multiple tool calls naturally — think, act, see result, think again — without recursive calls.
 
-### Memory
+### Memory vs History
 
-`Memory` is an in-memory document store. The agent accumulates documents as the conversation progresses:
+**Memory** is short-term, in-process. The `Memory` class holds documents from the current session:
 
 ```python
 class Memory:
@@ -272,18 +272,22 @@ class Memory:
     def append(self, document: dict) -> None:
         self._documents.append(document)
 
+    def clear(self) -> None:
+        self._documents.clear()
+
     def __iter__(self):
         return iter(self._documents)
 ```
 
-All access goes through `agent.memory()`. The agent, person, and frontier modules all write to the same memory through this accessor:
+All access goes through `agent.memory()`. The agent writes to memory through this accessor:
 
 - `agent.given()` — appends stimulus
-- `agent.note()` — appends tool execution result
+- `agent.note()` — appends tool execution result, delivery confirmation
 - `agent.observe()` — appends frontier observation
-- `person.heard()` — appends delivery confirmation
 
 When building messages for the model, the agent iterates memory and maps each document type to the appropriate message role (user, assistant, tool).
+
+**History** is long-term, on disk. The `history/` directory stores conversation files that persist across sessions. Used for oversight (listing), control (deletion), and sleep (observation extraction via `agent.recall()`).
 
 ### Escalation
 
@@ -348,7 +352,7 @@ All shared data types live in `application/core/data.py`:
 | `Thinking` | Wraps a reasoning function, exposes `.reason()` |
 | `Memory` | In-memory document store for short-term memory |
 | `Observation` | Extracted observations from conversations (facts, traits, context) |
-| `Persona` | Persona configuration (id, name, model, frontier, channels, storage_dir) |
+| `Persona` | Persona configuration (id, name, model, base_model, frontier, channels, storage_dir) |
 
 ---
 
@@ -367,6 +371,7 @@ All domain exceptions live in `application/core/exceptions.py`:
 | `PersonError` | person | Failed to read/write person files |
 | `ExternalDataError` | external_llms | Failed to parse external AI export |
 | `FrontierError` | frontier | Failed to reach or parse frontier API |
+| `ExecutionError` | system | Failed to execute a tool call |
 
 ---
 

@@ -1,9 +1,12 @@
 """Local inference engine — installation, availability, and model management."""
 
+import json
 import subprocess
+import tempfile
+from pathlib import Path
 from urllib.error import URLError
 
-from application.platform import logger, OS, linux, mac, windows, ollama
+from application.platform import logger, OS, linux, mac, windows, ollama, lora, filesystem
 from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError
 
 
@@ -61,6 +64,51 @@ async def pull(model: str) -> None:
     logger.info("Pulling model", {"model": model})
     try:
         ollama.post("/api/pull", {"name": model, "stream": False})
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+
+
+async def copy(source: str, destination: str) -> None:
+    """Copy a model under a new name in the local inference engine."""
+    logger.info("Copying model", {"source": source, "destination": destination})
+    try:
+        ollama.post("/api/copy", {"source": source, "destination": destination})
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+
+
+async def delete(model: str) -> None:
+    """Delete a model from the local inference engine."""
+    logger.info("Deleting model", {"model": model})
+    try:
+        ollama.delete("/api/delete", {"name": model})
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+
+
+async def fine_tune(model: str, training_set: str, new_model: str) -> None:
+    """Fine-tune a model using LoRA and create a new Ollama model."""
+    try:
+        parsed = json.loads(training_set)
+        training_pairs = parsed.get("training_pairs", [])
+        logger.info("Fine-tuning model", {"model": model, "new_model": new_model, "training_set": parsed})
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            formatted = lora.format(training_pairs)
+            formatted_path = f"{tmp_dir}/training.json"
+            filesystem.write(Path(formatted_path), json.dumps(formatted))
+
+            adapter_path = lora.train(model, formatted_path, f"{tmp_dir}/lora_output")
+
+            modelfile_content = f"FROM {model}\nADAPTER {adapter_path}"
+
+            ollama.post("/api/create", {
+                "name": new_model,
+                "modelfile": modelfile_content,
+            })
+
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        raise EngineConnectionError("Training data is malformed") from e
     except URLError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 

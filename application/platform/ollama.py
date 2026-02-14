@@ -24,6 +24,18 @@ def post(path: str, data: dict) -> dict:
         return json.loads(response.read())
 
 
+def delete(path: str, data: dict) -> dict:
+    """Send a DELETE request to the Ollama API."""
+    request = urllib.request.Request(
+        f"{BASE_URL}{path}",
+        data=json.dumps(data).encode(),
+        headers={"Content-Type": "application/json"},
+        method="DELETE",
+    )
+    with urllib.request.urlopen(request) as response:
+        return json.loads(response.read())
+
+
 def stream_post(path: str, data: dict):
     """Send a POST request and yield JSON chunks as they arrive."""
     request = urllib.request.Request(

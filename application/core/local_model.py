@@ -73,6 +73,20 @@ async def stream(model: str, messages: list[dict]) -> AsyncIterator[dict]:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
 
+async def respond(model: str, prompt: str) -> str:
+    """Send a prompt to the local model and return the response text."""
+    logger.info("Generating response", {"model": model})
+    try:
+        response = ollama.post("/api/generate", {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+        })
+        return response["response"]
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+
+
 async def generate_encryption_phrase(persona: Persona) -> str:
     """Ask the local model to generate a recovery phrase."""
     logger.info("Generating encryption phrase", {"persona_id": persona.id, "model": persona.model.name})

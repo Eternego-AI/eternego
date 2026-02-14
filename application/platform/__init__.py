@@ -1,5 +1,6 @@
 # Platform modules - infrastructure abstractions
 
+from . import datetimes
 from . import crypto
 from . import filesystem
 from . import git

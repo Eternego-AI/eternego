@@ -67,7 +67,7 @@ sense → agent.given(persona, stimulus) → think.reason() → yields Thought o
 
 - `Thought(intent, content, tool_calls)` — single unit of reasoning output
 - `Thinking(reason_by)` — wraps any async generator, exposes `.reason()`
-- `Memory` — in-memory document store, accessed via `agent.memory()`
+- `Memory` — short-term in-memory document store, accessed via `agent.memory()`
 
 ### Fluent API
 
@@ -89,6 +89,11 @@ async for thought in frontier.consulting(model, prompt).reason():
 - Tool calls → doing intent
 - Plain text → saying intent
 
+### Memory vs History
+
+- **Memory** — short-term, in-process (`Memory` class). Holds documents from the current session. Accessed via `agent.memory()`. Cleared on wake up.
+- **History** — long-term, on disk (`history/` directory). Persists across sessions. Used for oversight, control, and sleep observation extraction.
+
 ### Memory document types
 
 | Type | Created by | Contains |
@@ -97,7 +102,7 @@ async for thought in frontier.consulting(model, prompt).reason():
 | `say` | `agent.reason()` internally | content |
 | `act` | `agent.note()` | tool_calls, result |
 | `observation` | `agent.observe()` | frontier conversation (minus reasoning) |
-| `communicated` | `person.heard()` | channel, content |
+| `communicated` | `agent.note()` | channel, content |
 
 ### Action loop
 
@@ -114,7 +119,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | Module | Functions |
 |---|---|
 | `environment.py` | prepare, check_model |
-| `persona.py` | create, migrate, feed, grow, equip, sense, say, act, escalate, reflect, predict, oversee, control, write_diary |
+| `persona.py` | create, migrate, feed, grow, equip, sense, say, act, escalate, reflect, predict, oversee, control, write_diary, sleep |
 | `gateway.py` | verify_channel |
 | `outcome.py` | Outcome dataclass |
 
@@ -122,84 +127,76 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 | Module | Role |
 |---|---|
-| `agent.py` | Memory accessor, given(), note(), observe(), instructions(), initialize, save, identity CRUD, shelve_skill(), summarize_skill() |
-| `person.py` | Person facts/traits CRUD, heard() |
-| `frontier.py` | allow_escalation(), consulting() → returns Thinking |
-| `local_model.py` | stream() async generator, digest(), assess_skill(), generate_encryption_phrase() |
-| `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model() |
+| `agent.py` | Memory accessor, given(), note(), observe(), instructions(), initialize, embody(), save, identity CRUD, shelve_skill(), summarize_skill(), recall(), sleep(), save_training_set(), wake_up() |
+| `person.py` | Person facts/traits CRUD |
+| `frontier.py` | allow_escalation(), consulting() → returns Thinking, respond() |
+| `local_model.py` | stream() async generator, digest(), assess_skill(), generate_encryption_phrase(), respond() |
+| `models.py` | generate_name() |
+| `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model(), copy(), delete(), fine_tune() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
 | `system.py` | execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
 | `data.py` | Channel, Model, Thought, Thinking, Memory, Observation, Persona |
-| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, SKILL_ASSESSMENT, RECOVERY_PHRASE |
+| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP |
 | `exceptions.py` | All domain exceptions |
 | `diary.py` | open_for(), open(), record() |
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |
 | `channel.py` | send(), assert_receives() |
-| `conversation.py` | **UNUSED** — superseded by Memory class, candidate for removal |
 
 ### Platform (application/platform/)
 
 | Module | Wraps |
 |---|---|
-| `ollama.py` | Ollama HTTP API (get, post, stream_post) |
+| `ollama.py` | Ollama HTTP API (get, post, delete, stream_post) |
 | `anthropic.py` | Anthropic Messages API streaming + export parsing |
 | `openai.py` | OpenAI Chat API streaming + export parsing |
 | `telegram.py` | Telegram Bot API |
 | `filesystem.py` | File/directory operations |
 | `crypto.py` | Key derivation, encryption, hashing |
+| `datetimes.py` | Date/time operations (now, iso_8601, stamp, date_stamp, from_stamp) |
 | `logger.py` | Structured logging |
 | `observer.py` | Pub/sub signal system (Signal, Plan, Event, Message, Inquiry, Command) |
 | `OS.py` | OS detection |
 | `linux.py`, `mac.py`, `windows.py` | OS-specific shell and secure storage |
 | `git.py` | Git operations (init, add, commit) |
+| `lora.py` | LoRA fine-tuning and training data formatting via Unsloth (lazy imports) |
 
 ## Current State of Specs
 
 ### Implemented:
 - Spec 1: Environment Preparation
-- Spec 2: Persona Creation (with escalation instruction)
-- Spec 3: Persona Migration
+- Spec 2: Persona Creation (with escalation instruction, per-persona model copy)
+- Spec 3: Persona Migration (with per-persona model copy)
 - Spec 4: Persona Feeding / Growth
 - Spec 5: Persona Oversight
 - Spec 6: Persona Control
 - Spec 7a: Sense (reactive loop)
 - Spec 7b: Say (channel communication with confirmation)
-- Spec 7c: Act (tool execution, **no permission check yet**)
+- Spec 7c: Act (tool execution with permission check via bus.ask)
 - Spec 7d: Escalate (frontier routing with observation)
+- Spec 7e: Reflect (reflection prompt after each sense cycle)
+- Spec 7f: Predict (prediction prompt for proactive behavior)
 - Spec 8: Persona Equipment (shelve, summarize, grow)
 - Spec 9: Persona Diary
-
-### Draft (signature + signals only):
-- Spec 7e: Reflect
-- Spec 7f: Predict
+- Spec 10: Persona Sleep (recall history, digest observations, generate training, LoRA fine-tuning, wake up)
 
 ### Not started:
-- Spec 10: Persona Sleep (fine-tuning)
-- Permission check for act (allow / allow permanently / disallow)
-- Memory lifecycle (short-term → long-term flush, clearing after sleep)
+- History lifecycle (short-term memory flush to history/)
 - Circuit breaker for continuous tool failures
 
 ## What to Work On Next
 
-1. **Permission check for act** — person should approve tool execution before it runs. See `appendix.md` section F for the permissions.json pattern. Needs adaptation for streaming (no JSON status field).
+1. **History lifecycle** — flush short-term memory to `history/` after inactivity.
 
-2. **Reflect spec** — send memory to agent for self-assessment after each interaction.
-
-3. **Predict spec** — proactive behavior triggered by inactivity or schedule.
-
-4. **Memory lifecycle** — flush to disk after inactivity, clear after sleep.
-
-5. **Remove conversation.py** — unused, replaced by Memory class.
-
-6. **Spec 10: Sleep** — observation extraction, training data generation, LoRA fine-tuning.
+2. **Channel implementation** — Telegram presentation layer.
 
 ## Code Style
 
 - Naming: gerund intents ("saying", "doing", "consulting", "reasoning")
 - Memory access: always through `agent.memory()`, never `_memory` directly
-- Person feedback: `person.heard()` for delivery, `agent.note()` for tool results
+- All feedback goes through `agent.note()` — delivery confirmation, tool results
 - Frontier learning: `agent.observe()` stores conversation minus reasoning
-- Disk-based memory listing: `agent.conversations(persona)` (not `agent.memory(persona)`)
+- Disk-based history listing: `agent.history(persona)` (long-term, on disk)
+- Model naming: `models.generate_name(base_model, persona_id)` — used in create, migrate, sleep
 - Instructions: split files under `instructions/` dir, joined by `agent.instructions(persona)`
 - Signals: plan at start, event at end, every business function
 - Exceptions: domain-specific, defined in `exceptions.py`, caught at business layer

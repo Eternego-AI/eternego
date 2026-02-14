@@ -7,7 +7,7 @@ from dataclasses import asdict
 
 from pathlib import Path
 
-from application.platform import logger, filesystem, crypto
+from application.platform import logger, filesystem, crypto, datetimes
 from application.core import prompts, local_model
 from application.core.data import Channel, Memory, Model, Observation, Persona, Thinking, Thought
 from application.core.exceptions import IdentityError
@@ -118,6 +118,13 @@ async def initialize(
     )
 
 
+async def embody(persona: Persona, model: Model, name: str) -> None:
+    """Set the base model and assign the persona-owned model name."""
+    logger.info("Embodying persona with model", {"persona_id": persona.id, "model": model.name, "name": name})
+    persona.base_model = model.name
+    persona.model = Model(name=name)
+
+
 async def prepare_buckets(persona: Persona) -> None:
     """Prepare the agent's identity, context, and training buckets."""
     logger.info("Preparing agent buckets", {"persona_id": persona.id})
@@ -125,7 +132,7 @@ async def prepare_buckets(persona: Persona) -> None:
         filesystem.write(persona.storage_dir / "persona-identity.md", "")
         filesystem.write(persona.storage_dir / "persona-context.md", "")
         filesystem.ensure_dir(persona.storage_dir / "training")
-        filesystem.ensure_dir(persona.storage_dir / "memory")
+        filesystem.ensure_dir(persona.storage_dir / "history")
     except OSError as e:
         raise IdentityError("Failed to prepare agent buckets") from e
 
@@ -225,18 +232,18 @@ async def skills(persona: Persona) -> list[str]:
         raise IdentityError("Failed to read agent skills") from e
 
 
-async def conversations(persona: Persona) -> list[str]:
-    """Read the agent's conversation names since last sleep."""
-    logger.info("Reading agent conversations", {"persona_id": persona.id})
+async def history(persona: Persona) -> list[str]:
+    """Read the agent's conversation history names."""
+    logger.info("Reading agent history", {"persona_id": persona.id})
     try:
         names = []
-        memory_dir = persona.storage_dir / "memory"
-        if memory_dir.exists():
-            for file in sorted(memory_dir.glob("*")):
+        history_dir = persona.storage_dir / "history"
+        if history_dir.exists():
+            for file in sorted(history_dir.glob("*")):
                 names.append(file.stem)
         return names
     except OSError as e:
-        raise IdentityError("Failed to read agent conversations") from e
+        raise IdentityError("Failed to read agent history") from e
 
 
 async def delete_identity(persona: Persona, hash_part: str) -> None:
@@ -283,18 +290,18 @@ async def delete_skill(persona: Persona, hash_part: str) -> None:
         raise IdentityError("Failed to delete skill") from e
 
 
-async def delete_memory(persona: Persona, hash_part: str) -> None:
-    """Remove a conversation file by its name hash."""
-    logger.info("Deleting memory", {"persona_id": persona.id, "hash": hash_part})
+async def delete_history(persona: Persona, hash_part: str) -> None:
+    """Remove a conversation file from history by its name hash."""
+    logger.info("Deleting history entry", {"persona_id": persona.id, "hash": hash_part})
     try:
-        memory_dir = persona.storage_dir / "memory"
-        for file in memory_dir.glob("*"):
+        history_dir = persona.storage_dir / "history"
+        for file in history_dir.glob("*"):
             if crypto.generate_unique_id(file.stem) == hash_part:
                 filesystem.delete(file)
                 return
-        raise IdentityError("Memory entry not found or already removed")
+        raise IdentityError("History entry not found or already removed")
     except OSError as e:
-        raise IdentityError("Failed to delete memory entry") from e
+        raise IdentityError("Failed to delete history entry") from e
 
 
 async def learn(persona: Persona, context: list[str]) -> None:
@@ -316,6 +323,7 @@ async def distill(materials: Path) -> Persona:
             id=config["id"],
             name=config["name"],
             model=Model(**config["model"]),
+            base_model=config.get("base_model", config["model"]["name"]),
             frontier=Model(**config["frontier"]) if config.get("frontier") else None,
             channels=[Channel(**ch) for ch in config["channels"]] if config.get("channels") else None,
         )
@@ -325,6 +333,66 @@ async def distill(materials: Path) -> Persona:
         raise IdentityError("Persona data is malformed") from e
     except OSError as e:
         raise IdentityError("Failed to restore persona files") from e
+
+
+async def recall(persona: Persona) -> str:
+    """Read all history files and return concatenated conversations."""
+    logger.info("Recalling history", {"persona_id": persona.id})
+    try:
+        parts = []
+        history_dir = persona.storage_dir / "history"
+        if history_dir.exists():
+            for file in sorted(history_dir.glob("*")):
+                parts.append(filesystem.read(file))
+        return "\n\n---\n\n".join(parts)
+    except OSError as e:
+        raise IdentityError("Failed to read history") from e
+
+
+async def sleep(persona: Persona) -> str:
+    """Assemble all persona knowledge into a sleep prompt for observation extraction and training."""
+    logger.info("Preparing sleep prompt", {"persona_id": persona.id})
+    try:
+        traits_path = persona.storage_dir / "person-traits.md"
+        person_traits = filesystem.read(traits_path) if traits_path.exists() else ""
+
+        context_path = persona.storage_dir / "persona-context.md"
+        persona_context = filesystem.read(context_path) if context_path.exists() else ""
+
+        return prompts.sleep(
+            person_traits=person_traits,
+            persona_context=persona_context,
+        )
+    except OSError as e:
+        raise IdentityError("Failed to read persona files for sleep") from e
+
+
+async def save_training_set(persona: Persona, training_set: str) -> None:
+    """Save a training set to the persona's training directory."""
+    logger.info("Saving training set", {"persona_id": persona.id})
+    try:
+        now = datetimes.date_stamp(datetimes.now())
+        path = persona.storage_dir / "training" / f"batch-{now}.json"
+        filesystem.write(path, training_set)
+    except OSError as e:
+        raise IdentityError("Failed to save training set") from e
+
+
+async def wake_up(persona: Persona, new_model: str) -> None:
+    """Update the persona after sleep: new model, clear traits and short-term memory."""
+    logger.info("Waking up persona", {"persona_id": persona.id, "new_model": new_model})
+    try:
+        persona.model = Model(name=new_model)
+
+        traits_path = persona.storage_dir / "person-traits.md"
+        if traits_path.exists():
+            filesystem.write(traits_path, "")
+
+        memory().clear()
+
+        await save_persona(persona)
+    except OSError as e:
+        raise IdentityError("Failed to wake up persona") from e
 
 
 async def save_persona(persona: Persona) -> None:

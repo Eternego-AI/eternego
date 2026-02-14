@@ -3,10 +3,11 @@
 import json
 import time
 import uuid
-from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
+
+from application.platform import datetimes
 
 
 class Level(Enum):
@@ -47,7 +48,7 @@ def file_media(path: str | Path) -> Callable[[Message], None]:
     def media(message: Message) -> None:
         log_entry = {
             "id": message.id,
-            "time": datetime.now(timezone.utc).isoformat(),
+            "time": datetimes.iso_8601(datetimes.now()),
             "level": message.level.value,
             "title": message.title,
             "context": message.context,

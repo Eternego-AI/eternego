@@ -526,7 +526,7 @@ Complete directory layout:
 ~/.eternego/
 ├── personas/
 │   └── {uuid}/
-│       ├── config.json                  # UUID, name, channel, model, frontier
+│       ├── config.json                  # UUID, name, channel, model, base_model, frontier
 │       ├── person-identity.md           # Facts about the person
 │       ├── person-traits.md             # Behavioral preferences (cleared after sleep)
 │       ├── persona-identity.md          # Persona metadata
@@ -540,8 +540,8 @@ Complete directory layout:
 │       │   ├── ddd.md
 │       │   ├── kubernetes-deploy.md
 │       │   └── ...
-│       ├── memory/
-│       │   └── ...                      # Conversation files (long-term, after flush)
+│       ├── history/
+│       │   └── ...                      # Long-term conversation files
 │       └── training/
 │           ├── batch-2026-02-09.json    # Neutral format training pairs
 │           ├── batch-2026-02-10.json
@@ -555,7 +555,6 @@ Complete directory layout:
 ### Notes
 
 - The diary lives outside the persona directory — under `~/.eternego/diary/{uuid}/`. This separates backup from state.
-- Short-term memory lives in-process (`Memory` class), not on disk. The `memory/` directory is for long-term storage after flush (not yet implemented).
-- LoRA output directory will be added when Spec 10 (Sleep) is implemented.
+- Short-term memory lives in-process (`Memory` class). The `history/` directory is for long-term storage after flush (not yet implemented).
 - `permissions.json` will be added to the persona directory when the permission check is implemented.
 - MVP supports single persona only.

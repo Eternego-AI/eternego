@@ -45,6 +45,9 @@ class Memory:
     def append(self, document: dict) -> None:
         self._documents.append(document)
 
+    def clear(self) -> None:
+        self._documents.clear()
+
     def __iter__(self):
         return iter(self._documents)
 
@@ -61,6 +64,7 @@ class Persona:
     id: str
     name: str
     model: Model
+    base_model: str = ""
     frontier: Model | None = None
     channels: list[Channel] | None = None
 

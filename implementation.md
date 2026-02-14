@@ -30,7 +30,7 @@ Each persona is stored under a UUID-based directory. The following files define 
 | `persona-context.md` | Everything the persona needs in prompt, from persona's perspective | Yes (always in prompt) | No | No |
 | `instructions/` | Operating instructions split by concern (principles, permissions, skills, escalation) | Yes (joined and injected as system message) | No | No |
 | `skills/` | Directory of skill documents (markdown files) | Yes (loaded into context) | No (but observation is) | No |
-| `memory/` | Conversations since last sleep | Yes (recent context) | No | Yes (cleared after sleep) |
+| `history/` | Long-term conversation history | Yes (recent context) | No | No |
 | `training/` | Raw training pairs in neutral format | No | Used by LoRA | No (accumulates) |
 | `config.json` | UUID, name, channel type, credentials, model, frontier provider + key, paths | No | No | No |
 
@@ -56,16 +56,17 @@ The agent reads and joins all instruction files when building messages. This spl
 
 ### Learning Lifecycle
 
-1. Person interacts with persona → thoughts accumulate in short-term memory.
-2. Sleep triggers → model extracts observations from memory.
-3. Observations split: facts → person-identity.md, traits → person-traits.md, persona perspective → persona-context.md.
-4. Raw training data generated from traits (by frontier or local model) in neutral format.
-5. Training data formatted for current model's template.
-6. LoRA fine-tuning produces adapter weights.
-7. person-traits.md cleared (now baked into model).
-8. Memory cleared (conversations consumed).
-9. Diary triggered (snapshot saved).
-10. Next day: persona is smarter, identity file is fresh for new observations.
+1. Person interacts with persona → thoughts accumulate in short-term memory (RAM).
+2. Memory flushed to `history/` (long-term, on disk) after inactivity.
+3. Sleep triggers → history digested → observations extracted.
+4. Observations split: facts → person-identity.md, traits → person-traits.md, persona perspective → persona-context.md.
+5. Raw training data generated from traits and context (by frontier or local model).
+6. Training data formatted for LoRA (ChatML template).
+7. LoRA fine-tuning produces adapter weights.
+8. person-traits.md cleared (now baked into model).
+9. Short-term memory cleared (RAM).
+10. Diary triggered (snapshot saved).
+11. Next day: persona is smarter, identity file is fresh for new observations.
 
 ### Training Data Philosophy
 
@@ -110,16 +111,17 @@ The agent reads and joins all instruction files when building messages. This spl
 1. Receive persona name, model, communication channel, and optionally a frontier model.
 2. Verify channel is alive by sending a test message and checking the response.
 3. Generate a UUID for the persona via `agent.initialize`.
-4. Prepare person buckets: `person-identity.md`, `person-traits.md`.
-5. Prepare agent buckets: `persona-identity.md`, `persona-context.md`, `training/`, `memory/`.
-6. Write instruction files: `principles.md`, `permissions.md`, `skills.md`.
-7. Prepare the skills directory.
-8. If frontier model provided, write `escalation.md` instruction — tells the agent to wrap escalation reasons in `<escalate>` tags.
-9. Save persona configuration as `config.json`.
-10. Ask the local model to generate a 24-word recovery phrase.
-11. Save encryption key (derived from phrase) to OS secure storage.
-12. Initialize diary directory with git.
-13. Encrypt persona data and write the initial diary entry.
+4. Copy the base model into a persona-owned model via `agent.embody`. The new model is named `{base_model}-{persona_id}-{datetime}`. The base model name is stored in `persona.base_model`.
+5. Prepare person buckets: `person-identity.md`, `person-traits.md`.
+6. Prepare agent buckets: `persona-identity.md`, `persona-context.md`, `training/`, `history/`.
+7. Write instruction files: `principles.md`, `permissions.md`, `skills.md`.
+8. Prepare the skills directory.
+9. If frontier model provided, write `escalation.md` instruction — tells the agent to wrap escalation reasons in `<escalate>` tags.
+10. Save persona configuration as `config.json`.
+11. Ask the local model to generate a 24-word recovery phrase.
+12. Save encryption key (derived from phrase) to OS secure storage.
+13. Initialize diary directory with git.
+14. Encrypt persona data and write the initial diary entry.
 
 ### Platform Modules Used
 
@@ -137,8 +139,8 @@ The agent reads and joins all instruction files when building messages. This spl
 2. Verify environment is ready (Ollama installed, model running). If not, fail.
 3. Derive encryption key from the phrase.
 4. Decrypt the diary file and unzip the archive.
-5. Restore persona directory with original UUID and all files via `agent.distill`.
-6. Update the persona's model to the currently running model.
+5. Restore persona directory with original UUID and all files via `agent.distill`. The `base_model` field is read from config with fallback to the current model name for old configs.
+6. Copy the base model into a persona-owned model via `agent.embody`.
 7. Save persona configuration.
 8. Save encryption key to OS secure storage.
 9. Initialize diary directory and write a new diary entry.
@@ -187,7 +189,7 @@ The agent reads and joins all instruction files when building messages. This spl
 1. Read person identity (`person-identity.md`) and person traits (`person-traits.md`).
 2. Read agent identity (`persona-identity.md`) and context (`persona-context.md`).
 3. Read skill names from the `skills/` directory.
-4. Read conversation names from the `memory/` directory.
+4. Read conversation names from the `history/` directory.
 5. Assign trackable IDs to each entry using a prefix and content hash:
     - `pi-*` for person identity
     - `pt-*` for person traits
@@ -325,13 +327,16 @@ Channels complete the loop by subscribing to the `"Say"` command and responding 
 
 *It lets the persona act on the world by executing a tool call.*
 
-1. Execute the tool calls via `system.execute(thought.tool_calls)`.
-2. Note the result in agent memory: `agent.note({type: "act", tool_calls, result})`.
-3. The agent's reasoning loop sees the result and continues (loop inside `agent.reason`).
+1. Ask the person for permission via `bus.ask("Can I run this command?", {tool_calls})`.
+2. Check returned signals for a `"Run command authorized"` message matching the tool calls.
+3. If not authorized: note rejection in agent memory, return failure.
+4. If authorized: execute the tool calls via `system.execute(thought.tool_calls)`.
+5. Note the result in agent memory: `agent.note({type: "act", tool_calls, result})`.
+6. The agent's reasoning loop sees the result and continues (loop inside `agent.reason`).
 
 The while loop inside `agent.reason` keeps the agent thinking as long as it is acting. When no action is taken in a cycle, the loop breaks naturally.
 
-**Note:** Permission check is not yet implemented. The next task is to add allow/allow permanently/disallow before execution.
+In the `sense` spec, if a tool call fails, all subsequent tool calls in the same interaction are skipped to prevent cascading failures.
 
 ### Spec 7d: Escalate
 
@@ -358,13 +363,21 @@ Both platform modules normalize output to `{"message": {"content": ..., "tool_ca
 
 *It lets the persona reflect on what it learned from the interaction.*
 
-*(Draft — signature and signals only. Implementation pending.)*
+1. Give the agent a reflection prompt via `agent.given(persona, prompts.reflection())`.
+2. Iterate the thinking process.
+3. Route saying thoughts through `say`.
+4. Route reasoning thoughts through `bus.share`.
+
+Called automatically at the end of every `sense` cycle.
 
 ### Spec 7f: Predict
 
 *It lets the persona anticipate and act without external stimulus.*
 
-*(Draft — signature and signals only. Implementation pending.)*
+1. Give the agent a prediction prompt via `agent.given(persona, prompts.prediction())`.
+2. Iterate the thinking process.
+3. Route saying thoughts through `say`.
+4. Route reasoning thoughts through `bus.share`.
 
 ### Platform Modules Used
 
@@ -434,30 +447,29 @@ Everything needed to restore the persona:
 
 ### Solution
 
-1. Sleep is triggered (by person or configured condition).
-2. Load all documents from memory since last sleep.
-3. Send conversations to the model to extract observations.
-4. Save observations: facts → person-identity.md, traits → person-traits.md, persona perspective → persona-context.md.
-5. If frontier model is available, send observations to frontier to generate raw training data. If not, use local model.
-6. Save raw training data in neutral format.
-7. Format raw training data using the current model's template.
-8. Run LoRA fine-tuning on the formatted data.
-9. Save LoRA output with model metadata.
-10. Load the updated LoRA adapter into Ollama.
-11. Clear memory.
-12. Trigger Persona Diary (Spec 9).
+1. Recall conversation history from disk (`agent.recall`).
+2. If there is history, digest it to extract observations and grow the persona (facts, traits, context saved to files).
+3. Read current traits and context, send to the model (or frontier if available) to generate training data.
+4. Save training data to `training/` directory.
+5. Generate a new model name via `models.generate_name`.
+6. Fine-tune the base model using LoRA. The new model gets the generated name.
+7. Verify the fine-tuned model responds correctly.
+8. Delete the old persona model. Failure is non-breaking (logged but does not stop sleep).
+9. Wake up: save the new model name, clear person-traits.md (baked into model), clear short-term memory.
+10. Trigger Persona Diary (Spec 9).
 
 ### Fine-tuning Details
 
 - **LoRA (Low-Rank Adaptation)** adds a small layer of parameters on top of the base model. Only this layer is trained, making it feasible on consumer hardware.
 - The base model stays untouched. The LoRA adapter is a small file (megabytes, not gigabytes).
+- Training data is formatted using ChatML template by `lora.format()` before training.
 - Training time is primarily driven by: number of training pairs > model size > number of epochs.
 - Target: sleep should not exceed 5-6 hours, matching natural human sleep patterns.
 - During sleep, the persona is unavailable (the model is being retrained).
 
 ### Platform Modules Used
 
-`ollama`, `anthropic`, `openai`, `lora`, `formatter`, `filesystem`
+`ollama`, `anthropic`, `openai`, `lora`, `filesystem`
 
 ---
 
@@ -472,47 +484,15 @@ The platform layer consists of reusable modules that can be shared across projec
 | `mac` | macOS-specific shell operations and secure storage (Keychain) |
 | `windows` | Windows-specific shell operations and secure storage (Credential Manager) |
 | `telegram` | Telegram Bot API communication |
-| `ollama` | All local model communication: serve, pull, generate, stream, model management |
+| `ollama` | All local model communication: serve, pull, generate, stream, copy, delete, model management |
 | `anthropic` | Anthropic Claude API streaming and export parsing |
 | `openai` | OpenAI API streaming and export parsing |
 | `crypto` | Key derivation, encryption/decryption, content hashing |
 | `filesystem` | Directory creation, file read/write, zip/unzip |
 | `git` | Git repository operations (init, add, commit) |
+| `datetimes` | Date/time operations |
 | `logger` | Structured logging |
 | `observer` | Pub/sub signal system (Plan, Event, Message, Inquiry, Command) |
+| `lora` | LoRA fine-tuning and training data formatting (lazy imports) |
 
-### Modules Not Yet Implemented
 
-| Module | Responsibility |
-|--------|---------------|
-| `lora` | LoRA fine-tuning and adapter loading |
-| `formatter` | Formats neutral training data into model-specific templates |
-
----
-
-## MVP Scope
-
-The initial release includes:
-
-- Local model running via Ollama
-- Communication via Telegram
-- Skills and actions with permission confirmation
-- Identity storage via flat files
-- Frontier escalation via Claude API or OpenAI API
-- Learning from interactions
-- Sleep (fine-tuning with LoRA)
-- Diary (local encrypted backup with git versioning)
-
-Not in MVP:
-
-- OAuth
-- Cloud hosting
-- Automated backup service
-- Onboarding wizard
-- Web UI
-- Multiple personas
-- Migration from cloud backup
-- Training data caps or chunking
-- Nap cycles
-- Emergency wake up
-- Channel beyond Telegram (Discord is an easy second addition)
