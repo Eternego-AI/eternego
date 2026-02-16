@@ -1,8 +1,10 @@
 # Core modules - implementation logic
 
 from . import bus
-from . import channel
+from . import channels
 from . import data
+from . import memories
+from . import paths
 from . import diary
 from . import exceptions
 from . import frontier

@@ -7,6 +7,11 @@ import zipfile
 from pathlib import Path
 
 
+def leaf(path: Path) -> str:
+    """Last component of the path."""
+    return path.name
+
+
 def ensure_dir(path: Path) -> None:
     """Create directory and parents if they don't exist."""
     path.mkdir(parents=True, exist_ok=True)

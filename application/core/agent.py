@@ -4,26 +4,17 @@ import json
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import asdict
-
 from pathlib import Path
 
 from application.platform import logger, filesystem, crypto, datetimes
-from application.core import prompts, local_model
-from application.core.data import Channel, Memory, Model, Observation, Persona, Thinking, Thought
+from application.core import memories, paths, prompts, local_model
+from application.core.data import Channel, Model, Observation, Persona, Thinking, Thought
 from application.core.exceptions import IdentityError
-
-
-_memory = Memory()
-
-
-def memory() -> Memory:
-    """Access the agent's short-term memory."""
-    return _memory
 
 
 def given(persona: Persona, document: dict) -> Thinking:
     """Give the agent external input and return the thinking process."""
-    memory().append(document)
+    memories.agent(persona).remember(document)
 
     async def _reason() -> AsyncIterator[Thought]:
         while True:
@@ -33,7 +24,7 @@ def given(persona: Persona, document: dict) -> Thinking:
             if inst:
                 messages.append({"role": "system", "content": inst})
 
-            for doc in memory():
+            for doc in memories.agent(persona).recall():
                 if doc["type"] in ("stimulus", "reflection", "prediction"):
                     messages.append({"role": doc["role"], "content": doc["content"]})
                 elif doc["type"] == "act":
@@ -82,22 +73,12 @@ def given(persona: Persona, document: dict) -> Thinking:
                         yield Thought(intent="saying", content=content)
 
             if said:
-                memory().append({"type": "say", "content": said})
+                memories.agent(persona).remember({"type": "say", "content": said})
 
             if not acted:
                 break
 
     return Thinking(_reason)
-
-
-def note(document: dict) -> None:
-    """Note something that happened during action."""
-    memory().append(document)
-
-
-def observe(observation: list[dict]) -> None:
-    """Give the agent a frontier observation to learn from later."""
-    memory().append({"type": "observation", "observation": observation})
 
 
 async def initialize(
@@ -314,12 +295,15 @@ async def learn(persona: Persona, context: list[str]) -> None:
         raise IdentityError("Failed to save context") from e
 
 
-async def distill(materials: Path) -> Persona:
-    """Restore a persona from diary materials into the personas directory."""
-    logger.info("Distilling persona from materials", {"path": str(materials)})
+def find(persona_id: str) -> Persona:
+    """Load the persona for the given persona_id from its identity file."""
+    logger.info("Loading persona", {"persona_id": persona_id})
+    config_path = paths.agent_identity(persona_id)
     try:
-        config = filesystem.read_json(materials / "config.json")
-        persona = Persona(
+        if not config_path.exists():
+            raise IdentityError("Persona not found")
+        config = filesystem.read_json(config_path)
+        return Persona(
             id=config["id"],
             name=config["name"],
             model=Model(**config["model"]),
@@ -327,10 +311,41 @@ async def distill(materials: Path) -> Persona:
             frontier=Model(**config["frontier"]) if config.get("frontier") else None,
             channels=[Channel(**ch) for ch in config["channels"]] if config.get("channels") else None,
         )
-        filesystem.copy_dir(materials, persona.storage_dir)
-        return persona
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise IdentityError("Persona data is malformed") from e
+    except OSError as e:
+        raise IdentityError("Failed to load persona") from e
+
+
+async def personas() -> list[Persona]:
+    """Load all personas by checking the personas directory and loading each config."""
+    logger.info("Loading personas")
+    root = paths.agents_home()
+    if not root.exists():
+        return []
+    try:
+        persona_ids = [d.name for d in root.iterdir() if d.is_dir() and (d / "config.json").exists()]
+    except OSError as e:
+        raise IdentityError("Failed to list personas") from e
+    result = []
+    for persona_id in persona_ids:
+        try:
+            persona = find(persona_id)
+            result.append(persona)
+        except (IdentityError, OSError):
+            continue
+    return result
+
+
+async def distill(materials: Path) -> Persona:
+    """Restore a persona from diary materials into the personas directory."""
+    logger.info("Distilling persona from materials", {"path": str(materials)})
+    try:
+        persona_id = filesystem.leaf(materials)
+        filesystem.copy_dir(materials, paths.agents_home() / persona_id)
+        return find(persona_id)
+    except IdentityError:
+        raise
     except OSError as e:
         raise IdentityError("Failed to restore persona files") from e
 
@@ -388,7 +403,7 @@ async def wake_up(persona: Persona, new_model: str) -> None:
         if traits_path.exists():
             filesystem.write(traits_path, "")
 
-        memory().clear()
+        memories.agent(persona).forget_everything()
 
         await save_persona(persona)
     except OSError as e:

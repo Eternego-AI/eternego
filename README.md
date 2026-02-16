@@ -159,6 +159,21 @@ It lets your persona rest, reflect, and grow stronger from everything it experie
 6. Save the new model to persona configuration
 7. Trigger Persona Diary
 
+### 11. List Personas
+
+It returns all personas in the system.
+
+1. Load all personas from the agents home directory (each subdirectory that has a config file)
+2. Return an outcome with the list of personas in the payload
+
+### 12. Find Persona by Channel
+
+It finds the persona that owns a given communication channel.
+
+1. Get all personas (via list personas)
+2. For each persona, check if any of its channels matches the given channel (same name and credentials)
+3. Return the first matching persona in the outcome payload, or failure if none matches
+
 ---
 
 ## License

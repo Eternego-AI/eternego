@@ -4,6 +4,8 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from application.core import paths
+
 
 @dataclass(kw_only=True)
 class Channel:
@@ -36,22 +38,6 @@ class Thinking:
         return self._reason()
 
 
-class Memory:
-    """Short-term memory — holds documents from the current session."""
-
-    def __init__(self):
-        self._documents: list[dict] = []
-
-    def append(self, document: dict) -> None:
-        self._documents.append(document)
-
-    def clear(self) -> None:
-        self._documents.clear()
-
-    def __iter__(self):
-        return iter(self._documents)
-
-
 @dataclass(kw_only=True)
 class Observation:
     facts: list[str]
@@ -70,4 +56,4 @@ class Persona:
 
     @property
     def storage_dir(self) -> Path:
-        return Path.home() / ".eternego" / "personas" / self.id
+        return paths.agents_home() / self.id

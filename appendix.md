@@ -379,7 +379,7 @@ For MVP, simple prefix matching is sufficient. More sophisticated matching (rege
 
 ## G. Short-Term Memory
 
-During a conversation, the agent accumulates documents in an in-memory store (`Memory` class in `data.py`). There is no disk persistence for short-term memory — it lives only in process memory.
+During a conversation, the agent accumulates documents in an in-memory store provided by the `memories` module (`application/core/memories.py`). Memory is per persona: `memories.agent(persona).remember(document)`, `.recall()`, `.forget_everything()`. There is no disk persistence for short-term memory — it lives only in process memory.
 
 ### Document Types
 
@@ -402,7 +402,7 @@ During a conversation, the agent accumulates documents in an in-memory store (`M
 
 ### How the Agent Builds Messages
 
-When the agent reasons, it iterates all documents in memory and maps them to model messages:
+When the agent reasons, it iterates all documents from `memories.agent(persona).recall()` and maps them to model messages:
 
 - `stimulus` → `{"role": "user", "content": ...}`
 - `say` → `{"role": "assistant", "content": ...}`
@@ -412,14 +412,14 @@ Instructions are prepended as a system message. The OS-specific instruction is a
 
 ### Memory Lifecycle (planned, not implemented)
 
-- **Short-term**: In-memory `Memory` class (current implementation)
+- **Short-term**: In-memory, per-persona via `memories.agent(persona)` (current implementation)
 - **Long-term**: Flush to disk after inactivity (e.g., 5 minutes after last conversation)
 - **Sleep**: Extract observations from long-term memory, train, clear
 
 ### Notes
 
 - Memory metadata (timestamp, channel, heard status) can be added to documents on need. The document-based approach supports arbitrary fields without schema changes.
-- Memory is cleared after sleep. Short-term memory resets to empty.
+- Memory is cleared after sleep via `memories.agent(persona).forget_everything()`. Short-term memory resets to empty.
 - The `communicated` document type lets the agent know what the person actually received, enabling multi-channel awareness.
 
 ---
@@ -434,7 +434,7 @@ When the agent reasons about a stimulus, messages are assembled from memory in t
    - Stimuli as user messages
    - Said content as assistant messages
    - Tool calls and results as assistant + tool messages
-4. The stimulus that triggered this reasoning cycle is already in memory (appended by `agent.given`)
+4. The stimulus that triggered this reasoning cycle is already in memory (appended by `agent.given` via `memories.agent(persona).remember()`)
 
 ### Context Window Management
 
@@ -472,48 +472,42 @@ Return ONLY the 24 words separated by spaces. No additional text, explanation, o
 
 ### Key Derivation
 
-Once the person confirms they saved the phrase:
+The platform module `crypto.derive_key(secret, salt)` derives a Fernet-compatible key. The diary uses the recovery phrase as the secret and the persona ID as the salt (so each persona has a distinct key from the same phrase).
 
 ```python
-import hashlib
+# application/platform/crypto.py
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+import base64
 
-def derive_key(phrase: str) -> bytes:
-    """Derive a 256-bit encryption key from the recovery phrase using scrypt."""
-    salt = b"eternego-v1"  # Fixed salt — the phrase itself provides entropy
-    key = hashlib.scrypt(
-        phrase.encode('utf-8'),
+def derive_key(secret: str, salt: bytes) -> bytes:
+    """Derive an encryption key from a string using PBKDF2."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
         salt=salt,
-        n=2**14,   # CPU/memory cost
-        r=8,       # Block size
-        p=1,       # Parallelism
-        dklen=32   # 256-bit key
+        iterations=480000,
     )
-    return key
+    return base64.urlsafe_b64encode(kdf.derive(secret.encode()))
 ```
+
+Usage in diary: `crypto.derive_key(phrase, salt=persona_id.encode())`.
 
 ### Encryption/Decryption
 
-Using AES-256-GCM for authenticated encryption:
+The platform uses Fernet (symmetric authenticated encryption):
 
 ```python
+# application/platform/crypto.py
 from cryptography.fernet import Fernet
-# Or more specifically:
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-import os
 
 def encrypt(data: bytes, key: bytes) -> bytes:
-    """Encrypt data using AES-256-GCM."""
-    aesgcm = AESGCM(key)
-    nonce = os.urandom(12)
-    ciphertext = aesgcm.encrypt(nonce, data, None)
-    return nonce + ciphertext  # prepend nonce for decryption
+    """Encrypt data using a Fernet key."""
+    return Fernet(key).encrypt(data)
 
-def decrypt(encrypted_data: bytes, key: bytes) -> bytes:
-    """Decrypt data using AES-256-GCM."""
-    aesgcm = AESGCM(key)
-    nonce = encrypted_data[:12]
-    ciphertext = encrypted_data[12:]
-    return aesgcm.decrypt(nonce, ciphertext, None)
+def decrypt(data: bytes, key: bytes) -> bytes:
+    """Decrypt data using a Fernet key."""
+    return Fernet(key).decrypt(data)
 ```
 
 ---

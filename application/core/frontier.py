@@ -4,9 +4,8 @@ from collections.abc import AsyncIterator
 from urllib.error import URLError
 
 from application.platform import logger, anthropic, openai
-from application.core import prompts
+from application.core import agent, memories, prompts
 from application.core.data import Model, Persona, Thinking, Thought
-from application.core import agent
 from application.core.exceptions import FrontierError
 
 
@@ -60,9 +59,10 @@ async def respond(model: Model, prompt: str) -> str:
         raise FrontierError(f"Invalid response from {model.provider}") from e
 
 
-def consulting(model: Model, prompt: str) -> Thinking:
-    """Consult a frontier model about a prompt."""
-    logger.info("Consulting", {"model": model.name, "provider": model.provider})
+def consulting(persona: Persona, prompt: str) -> Thinking:
+    """Consult a frontier model about a prompt for this persona."""
+    model = persona.frontier
+    logger.info("Consulting", {"persona_id": persona.id, "model": model.name, "provider": model.provider})
 
     async def _reason() -> AsyncIterator[Thought]:
         messages = [{"role": "user", "content": prompt}]
@@ -101,7 +101,7 @@ def consulting(model: Model, prompt: str) -> Thinking:
                         yield Thought(intent="saying", content=content)
 
             if said:
-                agent.memory().append({"type": "say", "content": said})
+                memories.agent(persona).remember({"type": "say", "content": said})
 
         except URLError as e:
             raise FrontierError(f"Could not connect to {model.provider}") from e

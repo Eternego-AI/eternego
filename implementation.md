@@ -329,9 +329,9 @@ Channels complete the loop by subscribing to the `"Say"` command and responding 
 
 1. Ask the person for permission via `bus.ask("Can I run this command?", {tool_calls})`.
 2. Check returned signals for a `"Run command authorized"` message matching the tool calls.
-3. If not authorized: note rejection in agent memory, return failure.
+3. If not authorized: note rejection in persona memory via `memories.agent(persona).remember({...})`, return failure.
 4. If authorized: execute the tool calls via `system.execute(thought.tool_calls)`.
-5. Note the result in agent memory: `agent.note({type: "act", tool_calls, result})`.
+5. Note the result in persona memory: `memories.agent(persona).remember({type: "act", tool_calls, result})`.
 6. The agent's reasoning loop sees the result and continues (loop inside `agent.reason`).
 
 The while loop inside `agent.reason` keeps the agent thinking as long as it is acting. When no action is taken in a cycle, the loop breaks naturally.
@@ -346,12 +346,12 @@ In the `sense` spec, if a tool call fails, all subsequent tool calls in the same
 2. `agent.reason()` yields `Thought(intent="consulting", content=reason)`.
 3. `sense` routes to `escalate(persona, prompt, channel)`.
 4. Build observation list starting with the user prompt.
-5. Call `frontier.consulting(persona.frontier, prompt).reason()`.
+5. Call `frontier.consulting(persona, prompt).reason()`.
 6. For each frontier thought:
     - `"saying"` → append to observation, call `say`
     - `"doing"` → append to observation, call `act`
     - `"reasoning"` → **not observed**, shared via bus only
-7. After completion, `agent.observe(observation)` stores the interaction for later learning.
+7. After completion, `memories.agent(persona).remember({"type": "observation", "observation": observation})` stores the interaction for later learning.
 
 The frontier module checks `model.provider` and routes to the appropriate platform module:
 - `"anthropic"` → `anthropic.stream(api_key, model, messages)`

@@ -57,9 +57,9 @@ The interaction system uses a cognitive model. Understand this before touching S
 
 ```
 sense → agent.given(persona, stimulus) → think.reason() → yields Thought objects
-  thought.intent == "saying"     → say spec → bus.order("Say") → channel delivers
-  thought.intent == "doing"      → act spec → system.execute → agent.note(result)
-  thought.intent == "consulting"  → escalate spec → frontier.consulting → agent.observe
+  thought.intent == "saying"     → say spec → bus.order("Say") → channels delivers
+  thought.intent == "doing"      → act spec → system.execute → memories.agent(persona).remember(result)
+  thought.intent == "consulting"  → escalate spec → frontier.consulting(persona) → memories.agent(persona).remember(observation)
   thought.intent == "reasoning"   → bus.share (internal, not shown to person)
 ```
 
@@ -67,7 +67,8 @@ sense → agent.given(persona, stimulus) → think.reason() → yields Thought o
 
 - `Thought(intent, content, tool_calls)` — single unit of reasoning output
 - `Thinking(reason_by)` — wraps any async generator, exposes `.reason()`
-- `Memory` — short-term in-memory document store, accessed via `agent.memory()`
+
+Short-term memory is in `memories` module: `memories.agent(persona).remember()`, `.recall()`, `.forget_everything()`.
 
 ### Fluent API
 
@@ -78,7 +79,7 @@ async for thought in think.reason():
     ...
 
 # Frontier model thinking — same pattern
-async for thought in frontier.consulting(model, prompt).reason():
+async for thought in frontier.consulting(persona, prompt).reason():
     ...
 ```
 
@@ -91,22 +92,22 @@ async for thought in frontier.consulting(model, prompt).reason():
 
 ### Memory vs History
 
-- **Memory** — short-term, in-process (`Memory` class). Holds documents from the current session. Accessed via `agent.memory()`. Cleared on wake up.
+- **Memory** — short-term, in-process, per persona. Accessed via `memories.agent(persona).remember()`, `.recall()`, `.forget_everything()`. Cleared on wake up.
 - **History** — long-term, on disk (`history/` directory). Persists across sessions. Used for oversight, control, and sleep observation extraction.
 
 ### Memory document types
 
 | Type | Created by | Contains |
 |---|---|---|
-| `stimulus` | `agent.given()` | role, content, channel |
-| `say` | `agent.reason()` internally | content |
-| `act` | `agent.note()` | tool_calls, result |
-| `observation` | `agent.observe()` | frontier conversation (minus reasoning) |
-| `communicated` | `agent.note()` | channel, content |
+| `stimulus` | `agent.given()` (writes via memories) | role, content, channel |
+| `say` | `agent.reason()` internally (writes via memories) | content |
+| `act` | business/frontier: `memories.agent(persona).remember()` | tool_calls, result |
+| `observation` | business escalate: `memories.agent(persona).remember()` | frontier conversation (minus reasoning) |
+| `communicated` | business say: `memories.agent(persona).remember()` | channel, content |
 
 ### Action loop
 
-Inside `agent.py`'s `_reason()` closure (the function wrapped by `Thinking`), a `while True` loop rebuilds messages from memory and re-streams from the local model after each tool execution. When a cycle produces no tool calls, the loop breaks. This means the agent can chain tool calls naturally — think, act, see result, think again — without the business layer needing to re-call `sense`.
+Inside `agent.py`'s `_reason()` closure (the function wrapped by `Thinking`), a `while True` loop rebuilds messages from `memories.agent(persona).recall()` and re-streams from the local model after each tool execution. When a cycle produces no tool calls, the loop breaks. This means the agent can chain tool calls naturally — think, act, see result, think again — without the business layer needing to re-call `sense`.
 
 ### Escalation
 
@@ -119,7 +120,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | Module | Functions |
 |---|---|
 | `environment.py` | prepare, check_model |
-| `persona.py` | create, migrate, feed, grow, equip, sense, say, act, escalate, reflect, predict, oversee, control, write_diary, sleep |
+| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, sense, say, act, escalate, reflect, predict, oversee, control, write_diary, sleep |
 | `gateway.py` | verify_channel |
 | `outcome.py` | Outcome dataclass |
 
@@ -127,20 +128,22 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 | Module | Role |
 |---|---|
-| `agent.py` | Memory accessor, given(), note(), observe(), instructions(), initialize, embody(), save, identity CRUD, shelve_skill(), summarize_skill(), recall(), sleep(), save_training_set(), wake_up() |
+| `agent.py` | given(), instructions(), initialize, embody(), save, identity CRUD, shelve_skill(), summarize_skill(), recall(), sleep(), save_training_set(), wake_up(), personas(), find() |
 | `person.py` | Person facts/traits CRUD |
-| `frontier.py` | allow_escalation(), consulting() → returns Thinking, respond() |
+| `frontier.py` | allow_escalation(), consulting(persona, prompt) → returns Thinking, respond() |
 | `local_model.py` | stream() async generator, digest(), assess_skill(), generate_encryption_phrase(), respond() |
 | `models.py` | generate_name() |
 | `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model(), copy(), delete(), fine_tune() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
 | `system.py` | execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
-| `data.py` | Channel, Model, Thought, Thinking, Memory, Observation, Persona |
+| `data.py` | Channel, Model, Thought, Thinking, Observation, Persona |
+| `memories.py` | agent(persona) → remember(), recall(), forget_everything() — per-persona short-term memory |
+| `paths.py` | agents_home(), agent_identity(agent_id) |
 | `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP |
 | `exceptions.py` | All domain exceptions |
 | `diary.py` | open_for(), open(), record() |
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |
-| `channel.py` | send(), assert_receives() |
+| `channels.py` | matches(), send(), assert_receives() |
 
 ### Platform (application/platform/)
 
@@ -169,6 +172,8 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 4: Persona Feeding / Growth
 - Spec 5: Persona Oversight
 - Spec 6: Persona Control
+- Spec 11: List Personas (agents)
+- Spec 12: Find Persona by Channel (find_by_channel)
 - Spec 7a: Sense (reactive loop)
 - Spec 7b: Say (channel communication with confirmation)
 - Spec 7c: Act (tool execution with permission check via bus.ask)
@@ -192,9 +197,8 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 ## Code Style
 
 - Naming: gerund intents ("saying", "doing", "consulting", "reasoning")
-- Memory access: always through `agent.memory()`, never `_memory` directly
-- All feedback goes through `agent.note()` — delivery confirmation, tool results
-- Frontier learning: `agent.observe()` stores conversation minus reasoning
+- Memory access: always through `memories.agent(persona).remember()`, `.recall()`, `.forget_everything()` — per-persona, no global memory
+- All feedback (delivery confirmation, tool results, observations) goes through `memories.agent(persona).remember()` from business or frontier
 - Disk-based history listing: `agent.history(persona)` (long-term, on disk)
 - Model naming: `models.generate_name(base_model, persona_id)` — used in create, migrate, sleep
 - Instructions: split files under `instructions/` dir, joined by `agent.instructions(persona)`

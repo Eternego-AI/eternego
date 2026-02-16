@@ -240,7 +240,7 @@ async for thought in think.reason():
 `agent.given()` stores the input in memory and returns a `Thinking` object. Calling `.reason()` starts the async generator. The same pattern works for frontier:
 
 ```python
-async for thought in frontier.consulting(persona.frontier, prompt).reason():
+async for thought in frontier.consulting(persona, prompt).reason():
     ...
 ```
 
@@ -257,35 +257,18 @@ The frontier uses the same `<think>` detection but cannot escalate (no infinite 
 
 ### The action loop
 
-When the agent yields a "doing" thought, the business layer executes the tool and notes the result via `agent.note()`. The reasoning loop inside `agent.reason()` uses a `while True` that only breaks when the agent produces no actions in a cycle. This means the agent can chain multiple tool calls naturally — think, act, see result, think again — without recursive calls.
+When the agent yields a "doing" thought, the business layer executes the tool and notes the result via `memories.agent(persona).remember()`. The reasoning loop inside `agent.reason()` uses a `while True` that only breaks when the agent produces no actions in a cycle. This means the agent can chain multiple tool calls naturally — think, act, see result, think again — without recursive calls.
 
 ### Memory vs History
 
-**Memory** is short-term, in-process. The `Memory` class holds documents from the current session:
+**Memory** is short-term, in-process, per persona. The `memories` module (`application/core/memories.py`) holds documents for the current session:
 
-```python
-class Memory:
-    """Short-term memory — holds documents from the current session."""
-    def __init__(self):
-        self._documents: list[dict] = []
+- `memories.agent(persona)` — returns a handle for that persona's memory
+- `memories.agent(persona).remember(document)` — append a document (creates memory if needed)
+- `memories.agent(persona).recall()` — return all documents (a copy)
+- `memories.agent(persona).forget_everything()` — clear that persona's memory
 
-    def append(self, document: dict) -> None:
-        self._documents.append(document)
-
-    def clear(self) -> None:
-        self._documents.clear()
-
-    def __iter__(self):
-        return iter(self._documents)
-```
-
-All access goes through `agent.memory()`. The agent writes to memory through this accessor:
-
-- `agent.given()` — appends stimulus
-- `agent.note()` — appends tool execution result, delivery confirmation
-- `agent.observe()` — appends frontier observation
-
-When building messages for the model, the agent iterates memory and maps each document type to the appropriate message role (user, assistant, tool).
+The agent writes to memory via `memories.agent(persona).remember()`: `agent.given()` appends the stimulus; the business layer appends act results, delivery confirmations, and frontier observations. When building messages for the model, the agent iterates `memories.agent(persona).recall()` and maps each document type to the appropriate message role (user, assistant, tool).
 
 **History** is long-term, on disk. The `history/` directory stores conversation files that persist across sessions. Used for oversight (listing), control (deletion), and sleep (observation extraction via `agent.recall()`).
 
@@ -298,7 +281,7 @@ The escalation flow connects the local model to a more powerful frontier model:
 3. The business layer calls `escalate`, which uses `frontier.consulting()`.
 4. The frontier streams through the same `Thinking` pattern.
 5. Frontier thoughts are routed through `say` and `act`.
-6. After completion, the full interaction (minus reasoning) is stored via `agent.observe()`.
+6. After completion, the full interaction (minus reasoning) is stored via `memories.agent(persona).remember({"type": "observation", "observation": ...})` in the business layer.
 
 The agent does **not** observe the frontier's reasoning. Like a child learning from a parent, it sees what the parent does and says, but develops its own reasoning path for similar situations.
 
@@ -350,9 +333,10 @@ All shared data types live in `application/core/data.py`:
 | `Model` | AI model reference (name, provider, credentials) |
 | `Thought` | Single unit of reasoning output (intent, content, tool_calls) |
 | `Thinking` | Wraps a reasoning function, exposes `.reason()` |
-| `Memory` | In-memory document store for short-term memory |
 | `Observation` | Extracted observations from conversations (facts, traits, context) |
 | `Persona` | Persona configuration (id, name, model, base_model, frontier, channels, storage_dir) |
+
+Short-term memory is per-persona and lives in the `memories` module (`memories.agent(persona).remember()`, `.recall()`, `.forget_everything()`), not in `data.py`.
 
 ---
 
@@ -389,7 +373,7 @@ For interaction specs, the cognitive architecture adds another dimension:
 
 ```
 sense (business) --> agent.given (core) --> local_model.stream (core) --> ollama (platform)
-  thought.intent == "saying"    --> say (business) --> bus.order --> channel (core) --> telegram (platform)
+  thought.intent == "saying"    --> say (business) --> bus.order --> channels (core) --> telegram (platform)
   thought.intent == "doing"     --> act (business) --> system.execute (core) --> OS modules (platform)
   thought.intent == "consulting" --> escalate (business) --> frontier.consulting (core) --> anthropic/openai (platform)
 ```

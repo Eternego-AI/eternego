@@ -1,6 +1,6 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, agent, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts
+from application.core import bus, agent, channels, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts
 from application.core.bus import Message
 from application.core.data import Channel, Model, Observation, Persona, Thought
 from application.core.exceptions import (
@@ -12,6 +12,32 @@ from application.business import environment, gateway
 from application.business.outcome import Outcome
 
 
+async def agents() -> Outcome[dict]:
+    """Return all personas."""
+    await bus.propose("Listing personas", {})
+
+    try:
+        personas = await agent.personas()
+        await bus.broadcast("Personas listed", {"count": len(personas)})
+        return Outcome(success=True, message="", data={"personas": personas})
+    except IdentityError as e:
+        await bus.broadcast("List personas failed", {"reason": "identity", "error": str(e)})
+        return Outcome(success=False, message="Could not list personas. Please check the persona data.")
+
+
+async def find_by_channel(channel: Channel) -> Outcome[dict]:
+    """Find the persona that owns the given channel."""
+    outcome = await agents()
+    if not outcome.success:
+        return outcome
+    personas = (outcome.data or {}).get("personas", [])
+    for persona in personas:
+        for ch in persona.channels or []:
+            if channels.matches(ch, channel):
+                return Outcome(success=True, message="", data={"persona": persona})
+    return Outcome(success=False, message="No persona found for channel.", data=None)
+
+
 async def create(
     name: str,
     model: Model,
@@ -20,14 +46,14 @@ async def create(
 ) -> Outcome[dict]:
     """It gives birth to your persona with minimum but powerful initial abilities."""
     await bus.propose(
-        "Creating persona", {"name": name, "model": model.name, "channel": channel.name}
+        "Creating persona", {"name": name, "model": model, "channel": channel}
     )
 
     try:
         outcome = await gateway.verify_channel(channel)
         if not outcome.success:
             await bus.broadcast(
-                "Persona creation failed", {"reason": "channel", "name": name}
+                "Persona creation failed", {"reason": "channel", "name": name, "channel": channel}
             )
             return Outcome(success=False, message=outcome.message)
 
@@ -56,12 +82,12 @@ async def create(
         outcome = await write_diary(persona)
         if not outcome.success:
             await bus.broadcast(
-                "Persona creation failed", {"reason": "diary", "persona_id": persona.id}
+                "Persona creation failed", {"reason": "diary", "persona": persona}
             )
             return Outcome(success=False, message=outcome.message)
 
         await bus.broadcast(
-            "Persona created", {"persona_id": persona.id, "name": persona.name}
+            "Persona created", {"persona": persona}
         )
 
         return Outcome(
@@ -101,7 +127,7 @@ async def create(
 
 async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
     """It enables you to migrate your persona so nothing is ever lost."""
-    await bus.propose("Migrating persona", {"diary_path": diary_path, "model": model.name})
+    await bus.propose("Migrating persona", {"diary_path": diary_path, "model": model})
 
     try:
         materials = await diary.open(diary_path, phrase)
@@ -125,7 +151,7 @@ async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
         outcome = await write_diary(persona)
         if not outcome.success:
             await bus.broadcast(
-                "Persona migration failed", {"reason": "diary", "persona_id": persona.id}
+                "Persona migration failed", {"reason": "diary", "persona": persona}
             )
             return Outcome(success=False, message=outcome.message)
 
@@ -135,8 +161,7 @@ async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
             verification[ch.name] = result.success
 
         await bus.broadcast("Persona migrated", {
-            "persona_id": persona.id,
-            "name": persona.name,
+            "persona": persona,
             "verification": verification,
         })
 
@@ -169,7 +194,7 @@ async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
 
 async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     """It lets you feed your persona with your existing AI history so it can know you faster."""
-    await bus.propose("Feeding persona", {"persona_id": persona.id, "source": source})
+    await bus.propose("Feeding persona", {"persona": persona, "source": source})
 
     try:
         conversations = await external_llms.read(data, source)
@@ -178,11 +203,11 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
 
         outcome = await grow(persona, observations)
         if not outcome.success:
-            await bus.broadcast("Persona feeding failed", {"reason": "grow", "persona_id": persona.id})
+            await bus.broadcast("Persona feeding failed", {"reason": "grow", "persona": persona})
             return outcome
 
         await bus.broadcast("Persona fed", {
-            "persona_id": persona.id,
+            "persona": persona,
             "source": source,
         })
 
@@ -199,14 +224,14 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
 
 async def grow(persona: Persona, observations: Observation) -> Outcome[dict]:
     """It lets your persona grow from what it observed."""
-    await bus.propose("Growing persona", {"persona_id": persona.id})
+    await bus.propose("Growing persona", {"persona": persona})
 
     try:
         await person.add_facts(persona, observations.facts)
         await person.add_traits(persona, observations.traits)
         await agent.learn(persona, observations.context)
 
-        await bus.broadcast("Persona grew", {"persona_id": persona.id})
+        await bus.broadcast("Persona grew", {"persona": persona})
 
         return Outcome(
             success=True,
@@ -225,7 +250,7 @@ async def grow(persona: Persona, observations: Observation) -> Outcome[dict]:
 
 async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
     """It lets you equip your persona with new skills so it can do more for you."""
-    await bus.propose("Equipping persona", {"persona_id": persona.id, "skill_path": skill_path})
+    await bus.propose("Equipping persona", {"persona": persona, "skill_path": skill_path})
 
     if not skill_path.endswith(".md"):
         await bus.broadcast("Persona equipping failed", {"reason": "invalid_format", "skill_path": skill_path})
@@ -238,11 +263,11 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
 
         outcome = await grow(persona, observations)
         if not outcome.success:
-            await bus.broadcast("Persona equipping failed", {"reason": "grow", "persona_id": persona.id})
+            await bus.broadcast("Persona equipping failed", {"reason": "grow", "persona": persona})
             return outcome
 
         await bus.broadcast("Persona equipped", {
-            "persona_id": persona.id,
+            "persona": persona,
             "skill": skill_file.stem,
         })
 
@@ -264,7 +289,7 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
 async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict]:
     """It lets the persona sense a stimulus from a channel and process it."""
     await bus.propose(
-        "Sensing", {"persona_id": persona.id, "channel": channel.name}
+        "Sensing", {"persona": persona, "channel": channel}
     )
 
     try:
@@ -276,7 +301,7 @@ async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict
                 await say(persona, thought, channel)
             elif thought.intent == "doing":
                 if failed:
-                    agent.note({
+                    memories.agent(persona).remember({
                         "type": "act",
                         "tool_calls": thought.tool_calls,
                         "result": "Skipped — a previous tool call failed in this interaction.",
@@ -293,7 +318,7 @@ async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict
         await reflect(persona, channel)
 
         await bus.broadcast(
-            "Sensed", {"persona_id": persona.id, "channel": channel.name}
+            "Sensed", {"persona": persona, "channel": channel}
         )
 
         return Outcome(
@@ -316,43 +341,29 @@ async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict
 async def say(persona: Persona, thought: Thought, channel: Channel | None = None) -> Outcome[dict]:
     """It lets the persona express a thought through a channel."""
     await bus.propose(
-        "Saying", {"persona_id": persona.id}
+        "Saying", {"persona": persona}
     )
 
-    channels = [channel] if channel else persona.channels or []
+    if not ([channel] if channel else (persona.channels or [])):
+        await bus.broadcast("Saying failed", {"persona": persona})
+        return Outcome(
+            success=False,
+            message="No channel to communicate the thought.",
+            data={"persona_id": persona.id},
+        )
 
-    signals = await bus.order(
-        "Say", {"content": thought.content, "channels": [ch.name for ch in channels]}
-    )
-
-    for signal in signals:
-        if (
-            signal.title == "Communicated"
-            and signal.details.get("content") == thought.content
-        ):
-            agent.note({
-                "type": "communicated",
-                "channel": signal.details.get("channel"),
-                "content": thought.content,
-            })
-
-            await bus.broadcast(
-                "Said", {"persona_id": persona.id, "channel": signal.details.get("channel")}
-            )
-
-            return Outcome(
-                success=True,
-                message="Thought expressed",
-                data={"persona_id": persona.id},
-            )
-
-    await bus.broadcast(
-        "Saying failed", {"persona_id": persona.id}
-    )
+    for channel in ([channel] if channel else (persona.channels or [])):
+        await channels.send(channel, thought.content)
+        memories.agent(persona).remember({
+            "type": "communicated",
+            "channel": channel.name,
+            "content": thought.content,
+        })
+        await bus.broadcast("Said", {"persona": persona, "channel": channel})
 
     return Outcome(
-        success=False,
-        message="No channel communicated the thought.",
+        success=True,
+        message="Thought expressed",
         data={"persona_id": persona.id},
     )
 
@@ -360,7 +371,7 @@ async def say(persona: Persona, thought: Thought, channel: Channel | None = None
 async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
     """It lets the persona act on the world by executing a tool call."""
     await bus.propose(
-        "Acting", {"persona_id": persona.id, "tool": thought.tool_calls}
+        "Acting", {"persona": persona, "tool": thought.tool_calls}
     )
 
     signals = await bus.ask(
@@ -375,7 +386,7 @@ async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
     )
 
     if not authorized:
-        agent.note({
+        memories.agent(persona).remember({
             "type": "act",
             "tool_calls": thought.tool_calls,
             "result": "Rejected — the person declined to run this command.",
@@ -383,7 +394,7 @@ async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
 
         await bus.broadcast(
             "Acting rejected",
-            {"persona_id": persona.id, "tool": thought.tool_calls},
+            {"persona": persona, "tool": thought.tool_calls},
         )
 
         return Outcome(
@@ -395,10 +406,10 @@ async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
     try:
         result = await system.execute(thought.tool_calls)
 
-        agent.note({"type": "act", "tool_calls": thought.tool_calls, "result": result})
+        memories.agent(persona).remember({"type": "act", "tool_calls": thought.tool_calls, "result": result})
 
         await bus.broadcast(
-            "Acted", {"persona_id": persona.id, "tool": thought.tool_calls}
+            "Acted", {"persona": persona, "tool": thought.tool_calls}
         )
 
         return Outcome(
@@ -408,7 +419,7 @@ async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
         )
 
     except ExecutionError as e:
-        agent.note({
+        memories.agent(persona).remember({
             "type": "act",
             "tool_calls": thought.tool_calls,
             "result": f"Failed: {e}",
@@ -416,7 +427,7 @@ async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
 
         await bus.broadcast(
             "Acting failed",
-            {"persona_id": persona.id, "tool": thought.tool_calls, "error": str(e)},
+            {"persona": persona, "tool": thought.tool_calls, "error": str(e)},
         )
 
         return Outcome(
@@ -426,7 +437,7 @@ async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
         )
 
     except UnsupportedOS as e:
-        agent.note({
+        memories.agent(persona).remember({
             "type": "act",
             "tool_calls": thought.tool_calls,
             "result": f"Failed: {e}",
@@ -434,7 +445,7 @@ async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
 
         await bus.broadcast(
             "Acting failed",
-            {"persona_id": persona.id, "tool": thought.tool_calls, "error": str(e)},
+            {"persona": persona, "tool": thought.tool_calls, "error": str(e)},
         )
 
         return Outcome(
@@ -447,21 +458,21 @@ async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
 async def escalate(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict]:
     """It lets the persona escalate to a frontier model when the task exceeds its ability."""
     await bus.propose(
-        "Escalating", {"persona_id": persona.id}
+        "Escalating", {"persona": persona, "channel": channel}
     )
 
     try:
         observation = [{"role": "user", "content": prompt}]
 
         failed = False
-        async for response in frontier.consulting(persona.frontier, prompt).reason():
+        async for response in frontier.consulting(persona, prompt).reason():
             if response.intent == "saying":
                 observation.append({"role": "assistant", "content": response.content})
                 await say(persona, response, channel)
             elif response.intent == "doing":
                 observation.append({"role": "assistant", "tool_calls": response.tool_calls})
                 if failed:
-                    agent.note({
+                    memories.agent(persona).remember({
                         "type": "act",
                         "tool_calls": response.tool_calls,
                         "result": "Skipped — a previous tool call failed in this interaction.",
@@ -475,10 +486,10 @@ async def escalate(persona: Persona, prompt: str, channel: Channel) -> Outcome[d
                 # for similar situations, not imitate the frontier's thought process.
                 await bus.share("Reasoning", {"content": response.content})
 
-        agent.observe(observation)
+        memories.agent(persona).remember({"type": "observation", "observation": observation})
 
         await bus.broadcast(
-            "Escalated", {"persona_id": persona.id}
+            "Escalated", {"persona": persona}
         )
 
         return Outcome(
@@ -501,7 +512,7 @@ async def escalate(persona: Persona, prompt: str, channel: Channel) -> Outcome[d
 async def reflect(persona: Persona, channel: Channel) -> Outcome[dict]:
     """It lets the persona reflect on what it learned from the interaction."""
     await bus.propose(
-        "Reflecting", {"persona_id": persona.id}
+        "Reflecting", {"persona": persona, "channel": channel}
     )
 
     try:
@@ -514,7 +525,7 @@ async def reflect(persona: Persona, channel: Channel) -> Outcome[dict]:
                 await bus.share("Reasoning", {"content": thought.content})
 
         await bus.broadcast(
-            "Reflected", {"persona_id": persona.id}
+            "Reflected", {"persona": persona}
         )
 
         return Outcome(
@@ -537,7 +548,7 @@ async def reflect(persona: Persona, channel: Channel) -> Outcome[dict]:
 async def predict(persona: Persona, channel: Channel) -> Outcome[dict]:
     """It lets the persona anticipate and act without external stimulus."""
     await bus.propose(
-        "Predicting", {"persona_id": persona.id}
+        "Predicting", {"persona": persona, "channel": channel}
     )
 
     try:
@@ -550,7 +561,7 @@ async def predict(persona: Persona, channel: Channel) -> Outcome[dict]:
                 await bus.share("Reasoning", {"content": thought.content})
 
         await bus.broadcast(
-            "Predicted", {"persona_id": persona.id}
+            "Predicted", {"persona": persona}
         )
 
         return Outcome(
@@ -571,8 +582,8 @@ async def predict(persona: Persona, channel: Channel) -> Outcome[dict]:
 
 
 async def oversee(persona: Persona) -> Outcome[dict]:
-    """It lets you look into your persona's mind — what it knows, what it learned, and how it sees you."""
-    await bus.propose("Overseeing persona", {"persona_id": persona.id})
+    """It lets you look into your persona's mind — what it knows what it learned, and how it sees you."""
+    await bus.propose("Overseeing persona", {"persona": persona})
 
     try:
         facts = await person.identified_by(persona)
@@ -581,7 +592,7 @@ async def oversee(persona: Persona) -> Outcome[dict]:
         skill_list = await agent.skills(persona)
         conversations = await agent.history(persona)
 
-        await bus.broadcast("Persona overseen", {"persona_id": persona.id})
+        await bus.broadcast("Persona overseen", {"persona": persona})
 
         return Outcome(
             success=True,
@@ -607,7 +618,7 @@ async def oversee(persona: Persona) -> Outcome[dict]:
 
 async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
     """It gives you full control over what your persona knows — you always have the final say."""
-    await bus.propose("Controlling persona", {"persona_id": persona.id, "count": len(entry_ids)})
+    await bus.propose("Controlling persona", {"persona": persona, "count": len(entry_ids)})
 
     try:
         for entry_id in entry_ids:
@@ -626,7 +637,7 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
             elif prefix == "hist":
                 await agent.delete_history(persona, hash_part)
 
-        await bus.broadcast("Persona controlled", {"persona_id": persona.id, "removed": len(entry_ids)})
+        await bus.broadcast("Persona controlled", {"persona": persona, "removed": len(entry_ids)})
 
         return Outcome(
             success=True,
@@ -635,7 +646,7 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
         )
 
     except ValueError:
-        await bus.broadcast("Persona control failed", {"reason": "invalid_id", "persona_id": persona.id})
+        await bus.broadcast("Persona control failed", {"reason": "invalid_id", "persona": persona})
         return Outcome(success=False, message="Invalid entry ID format.")
 
     except IdentityError as e:
@@ -649,32 +660,32 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
 
 async def write_diary(persona: Persona) -> Outcome[dict]:
     """It preserves your persona's life so it survives across time, hardware, and changes."""
-    await bus.propose("Saving diary", {"persona_id": persona.id})
+    await bus.propose("Saving diary", {"persona": persona})
 
     try:
         phrase = await system.get_phrases(persona)
         await diary.record(persona.storage_dir, phrase)
 
-        await bus.broadcast("Diary saved", {"persona_id": persona.id})
+        await bus.broadcast("Diary saved", {"persona": persona})
 
         return Outcome(success=True, message="Diary saved successfully")
 
     except UnsupportedOS as e:
-        await bus.broadcast("Diary failed", {"reason": "unsupported_os", "persona_id": persona.id, "error": str(e)})
+        await bus.broadcast("Diary failed", {"reason": "unsupported_os", "persona": persona, "error": str(e)})
         return Outcome(success=False, message="Your operating system is not supported.")
 
     except SecretStorageError as e:
-        await bus.broadcast("Diary failed", {"reason": "secret_storage", "persona_id": persona.id, "error": str(e)})
+        await bus.broadcast("Diary failed", {"reason": "secret_storage", "persona": persona, "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")
 
     except DiaryError as e:
-        await bus.broadcast("Diary failed", {"reason": "diary", "persona_id": persona.id, "error": str(e)})
+        await bus.broadcast("Diary failed", {"reason": "diary", "persona": persona, "error": str(e)})
         return Outcome(success=False, message="Could not save the persona diary.")
 
 
 async def sleep(persona: Persona) -> Outcome[dict]:
     """It lets your persona rest, reflect, and grow stronger from everything it experienced."""
-    await bus.propose("Sleeping", {"persona_id": persona.id})
+    await bus.propose("Sleeping", {"persona": persona})
 
     try:
         conversations = await agent.recall(persona)
@@ -696,7 +707,7 @@ async def sleep(persona: Persona) -> Outcome[dict]:
         await local_inference_engine.fine_tune(persona.base_model, training_set, new_model)
 
         if not await local_inference_engine.check(new_model):
-            await bus.broadcast("Sleep failed", {"reason": "fine_tune", "persona_id": persona.id})
+            await bus.broadcast("Sleep failed", {"reason": "fine_tune", "persona": persona})
             return Outcome(success=False, message="Fine-tuned model failed verification. Previous model is still available.")
 
         try:
@@ -708,13 +719,13 @@ async def sleep(persona: Persona) -> Outcome[dict]:
 
         outcome = await write_diary(persona)
         if not outcome.success:
-            await bus.broadcast("Sleep failed", {"reason": "diary", "persona_id": persona.id})
+            await bus.broadcast("Sleep failed", {"reason": "diary", "persona": persona})
             return outcome
 
         await bus.broadcast("Slept", {
-            "persona_id": persona.id,
+            "persona": persona,
             "model": new_model,
-            "channels": [ch.name for ch in (persona.channels or [])],
+            "channels": [ch for ch in (persona.channels or [])],
         })
 
         return Outcome(

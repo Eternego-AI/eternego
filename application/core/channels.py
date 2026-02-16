@@ -1,7 +1,15 @@
-"""Channel — channel communication."""
+"""Channels — channel communication."""
 
 from application.platform import logger, telegram
 from application.core.data import Channel
+
+
+def matches(ch: Channel, other: Channel) -> bool:
+    """True if the two channels refer to the same channel."""
+    logger.info("Matching channels", {"name": ch.name, "other_name": other.name})
+    if ch.name != other.name:
+        return False
+    return (ch.credentials or {}) == (other.credentials or {})
 
 
 async def send(ch: Channel, message: str) -> dict:
