@@ -1,8 +1,8 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, agent, channels, gateways, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, instructions, skills, history
+from application.core import bus, agent, channels, gateways, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, instructions, skills, history, observations
 from application.core.bus import Message
-from application.core.data import Channel, Model, Observation, Persona, Thought
+from application.core.data import Channel, Model, Persona, Thought
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
     DiaryError, IdentityError, PersonError, ExternalDataError, FrontierError,
@@ -161,8 +161,8 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
         await agent.save_persona(persona)
 
         dna_structure = dna.read(persona)
-        observations = await local_model.study(persona.model.name, dna_structure)
-        await grow(persona, observations)
+        observed = await local_model.study(persona.model.name, dna_structure)
+        await observations.effect(persona, observed)
 
         await system.save_phrases(persona, phrase)
 
@@ -202,6 +202,10 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
         await bus.broadcast("Persona migration failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not restore persona. The diary data may be corrupted.")
 
+    except PersonError as e:
+        await bus.broadcast("Persona migration failed", {"reason": "person", "error": str(e)})
+        return Outcome(success=False, message="Could not save person observations during migration.")
+
     except DNAError as e:
         await bus.broadcast("Persona migration failed", {"reason": "dna", "error": str(e)})
         return Outcome(success=False, message="Could not read persona DNA. The diary may be from an older version.")
@@ -226,53 +230,35 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     try:
         conversations = await external_llms.read(data, source)
 
-        observations = await local_model.observe(persona.model.name, conversations)
-
-        outcome = await grow(persona, observations)
-        if not outcome.success:
-            await bus.broadcast("Persona feeding failed", {"reason": "grow", "persona": persona})
-            return outcome
+        observation = await local_model.observe(persona.model.name, conversations)
+        await observations.effect(persona, observation)
 
         await bus.broadcast("Persona fed", {
             "persona": persona,
             "source": source,
         })
 
-        return outcome
+        return Outcome(
+            success=True,
+            message="Persona fed successfully",
+            data={"persona_id": persona.id},
+        )
 
     except ExternalDataError as e:
         await bus.broadcast("Persona feeding failed", {"reason": "external_data", "error": str(e)})
         return Outcome(success=False, message="Could not parse the external data. Please check the file format.")
 
+    except IdentityError as e:
+        await bus.broadcast("Persona feeding failed", {"reason": "identity", "error": str(e)})
+        return Outcome(success=False, message="Could not save observations to persona.")
+
+    except PersonError as e:
+        await bus.broadcast("Persona feeding failed", {"reason": "person", "error": str(e)})
+        return Outcome(success=False, message="Could not save person observations to persona.")
+
     except EngineConnectionError as e:
         await bus.broadcast("Persona feeding failed", {"reason": "connection", "error": str(e)})
         return Outcome(success=False, message="Could not analyze the conversations. Please make sure the model is running.")
-
-
-async def grow(persona: Persona, observations: Observation) -> Outcome[dict]:
-    """It lets your persona grow from what it observed."""
-    await bus.propose("Growing persona", {"persona": persona})
-
-    try:
-        await person.add_facts(persona, observations.facts)
-        await person.add_traits(persona, observations.traits)
-        await agent.learn(persona, observations.context)
-
-        await bus.broadcast("Persona grew", {"persona": persona})
-
-        return Outcome(
-            success=True,
-            message="Persona grew successfully",
-            data={"persona_id": persona.id},
-        )
-
-    except IdentityError as e:
-        await bus.broadcast("Persona growth failed", {"reason": "identity", "error": str(e)})
-        return Outcome(success=False, message="Could not save context observations to persona.")
-
-    except PersonError as e:
-        await bus.broadcast("Persona growth failed", {"reason": "person", "error": str(e)})
-        return Outcome(success=False, message="Could not save person observations to persona.")
 
 
 async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
@@ -286,12 +272,8 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
     try:
         skill_file = await skills.shelve(persona, skill_path)
 
-        observations = await skills.summarize(persona, skill_file)
-
-        outcome = await grow(persona, observations)
-        if not outcome.success:
-            await bus.broadcast("Persona equipping failed", {"reason": "grow", "persona": persona})
-            return outcome
+        observed = await skills.summarize(persona, skill_file)
+        await observations.effect(persona, observed)
 
         await bus.broadcast("Persona equipped", {
             "persona": persona,
@@ -307,6 +289,10 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
     except IdentityError as e:
         await bus.broadcast("Persona equipping failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not equip the skill.")
+
+    except PersonError as e:
+        await bus.broadcast("Persona equipping failed", {"reason": "person", "error": str(e)})
+        return Outcome(success=False, message="Could not save person observations from skill.")
 
     except EngineConnectionError as e:
         await bus.broadcast("Persona equipping failed", {"reason": "connection", "error": str(e)})
@@ -726,8 +712,8 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     try:
         conversations = await history.recall(persona)
         if conversations:
-            observations = await local_model.observe(persona.model.name, conversations)
-            await grow(persona, observations)
+            observed = await local_model.observe(persona.model.name, conversations)
+            await observations.effect(persona, observed)
 
         synthesis = dna.assemble_synthesis(persona)
         if persona.frontier:
@@ -780,6 +766,10 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     except IdentityError as e:
         await bus.broadcast("Sleep failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not process persona files during sleep.")
+
+    except PersonError as e:
+        await bus.broadcast("Sleep failed", {"reason": "person", "error": str(e)})
+        return Outcome(success=False, message="Could not save person observations during sleep.")
 
     except EngineConnectionError as e:
         await bus.broadcast("Sleep failed", {"reason": "connection", "error": str(e)})
