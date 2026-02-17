@@ -54,7 +54,7 @@ Every business function sends at least two signals through the bus:
 1. **Plan** at the start — announces intent (`bus.propose`)
 2. **Event** at the end — announces result (`bus.broadcast`)
 
-The bus logs automatically on every call, so signals double as the business layer's log trail.
+The service subscriber (`log_signal` in `service.py`) prints signals and writes them to the log file.
 
 On failure, broadcast the failure as an event before returning. Include a `reason` key in the details.
 
@@ -66,9 +66,9 @@ The bus supports five signal types, each with a distinct purpose:
 | `bus.broadcast` | Event | Announce result after action | "Sensed", {"persona_id", "channel"} |
 | `bus.share` | Message | Share information passively | "Reasoning", {"content"} |
 | `bus.ask` | Inquiry | Request input from subscribers | Permission check |
-| `bus.order` | Command | Command an action, expect signals back | "Say", {"content", "channels"} |
+| `bus.order` | Command | Command an action, expect signals back | "Restart gateway", {"persona"} |
 
-Commands (`bus.order`) are special — they expect subscribers to perform work and respond with signals. For example, the `say` spec orders channels to communicate, and channels respond with `"Communicated"` signals that the spec checks.
+Commands (`bus.order`) are special — they expect subscribers to perform work and respond with signals. For example, the service subscribes to `"Restart gateway"` commands and stops then starts the persona's gateway.
 
 ### Error Handling
 
@@ -318,7 +318,7 @@ This means: no project-specific defaults, no project-specific parameter names. F
 
 ### Shared modules
 
-The `logger` and `observer` modules are shared infrastructure. The bus (`application/core/bus.py`) wraps the observer and adds automatic logging on every signal.
+The `logger` and `observer` modules are shared infrastructure. The bus (`application/core/bus.py`) wraps the observer for signal dispatch. Logging is handled by the `log_signal` subscriber in `service.py`.
 
 ---
 

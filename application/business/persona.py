@@ -40,27 +40,41 @@ async def find_by_channel(channel: Channel) -> Outcome[dict]:
 
 async def create(
     name: str,
-    model: Model,
-    channel: Channel,
-    frontier_model: Model | None = None,
+    model: str,
+    channel_name: str,
+    channel_credentials: dict,
+    frontier_model: str | None = None,
+    frontier_provider: str | None = None,
+    frontier_credentials: dict | None = None,
 ) -> Outcome[dict]:
     """It gives birth to your persona with minimum but powerful initial abilities."""
     await bus.propose(
-        "Creating persona", {"name": name, "model": model, "channel": channel}
+        "Creating persona", {"name": name, "model": model, "channel": channel_name, "frontier_model": frontier_model, "frontier_provider": frontier_provider}
     )
 
     try:
+        channel = Channel(name=channel_name, credentials=channel_credentials)
+
         if not await channels.assert_receives(channel, "Welcome to Eternego!"):
             await bus.broadcast(
-                "Persona creation failed", {"reason": "channel", "name": name, "channel": channel}
+                "Persona creation failed", {"reason": "channel", "name": name, "channel": channel_name}
             )
-            return Outcome(success=False, message=f"Could not connect to {channel.name}. Please check your credentials.")
+            return Outcome(success=False, message=f"Could not connect to {channel_name}. Please check your credentials.")
 
-        persona = await agent.initialize(name, model, frontier_model, channels=[channel])
+        local_model_obj = Model(name=model)
+        frontier_model_obj = None
+        if frontier_model:
+            frontier_model_obj = Model(
+                name=frontier_model,
+                provider=frontier_provider,
+                credentials=frontier_credentials,
+            )
 
-        persona_model = models.generate_name(model.name, persona.id)
-        await agent.embody(persona, model, persona_model)
-        await local_inference_engine.copy(model.name, persona_model)
+        persona = await agent.initialize(name, local_model_obj, frontier_model_obj, channels=[channel])
+
+        persona_model = models.generate_name(model, persona.id)
+        await agent.embody(persona, local_model_obj, persona_model)
+        await local_inference_engine.copy(model, persona_model)
 
         await agent.build(persona)
         await dna.make(persona)
@@ -69,7 +83,7 @@ async def create(
         await skills.equip(persona)
         await person.bond(persona)
 
-        if frontier_model:
+        if frontier_model_obj:
             await frontier.allow_escalation(persona)
 
         await agent.save_persona(persona)
@@ -126,23 +140,24 @@ async def create(
         return Outcome(success=False, message="Could not save the persona diary.")
 
 
-async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
+async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
     """It enables you to migrate your persona so nothing is ever lost."""
     await bus.propose("Migrating persona", {"diary_path": diary_path, "model": model})
 
     try:
         materials = await diary.open(diary_path, phrase)
 
-        outcome = await environment.prepare(model.name)
+        outcome = await environment.prepare(model)
         if not outcome.success:
             await bus.broadcast("Persona migration failed", {"reason": "environment"})
             return Outcome(success=False, message=outcome.message)
 
         persona = await agent.distill(materials)
 
-        persona_model = models.generate_name(model.name, persona.id)
-        await agent.embody(persona, model, persona_model)
-        await local_inference_engine.copy(model.name, persona_model)
+        model_obj = Model(name=model)
+        persona_model = models.generate_name(model, persona.id)
+        await agent.embody(persona, model_obj, persona_model)
+        await local_inference_engine.copy(model, persona_model)
         await agent.save_persona(persona)
 
         dna_structure = dna.read(persona)

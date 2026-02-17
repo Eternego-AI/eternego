@@ -321,12 +321,10 @@ The agent builds its message history from memory on each reasoning cycle. This m
 *It lets the persona express a thought through a channel.*
 
 1. Determine target channels: the specific channel if provided, otherwise all persona channels.
-2. Send a command signal via bus: `bus.order("Say", {content, channels})`.
-3. Check returned signals for a `"Communicated"` event matching the content.
-4. If confirmed: call `person.heard()` to record in memory, broadcast success.
-5. If no channel confirmed: broadcast failure, return failure outcome.
-
-Channels complete the loop by subscribing to the `"Say"` command and responding with a `"Communicated"` signal.
+2. If no channels available, broadcast failure and return.
+3. For each channel, send the message via `channels.send(channel, thought.content)`.
+4. Record delivery in memory via `memories.agent(persona).remember({type: "communicated", channel, content})`.
+5. Broadcast success per channel.
 
 ### Spec 7c: Act
 
@@ -526,7 +524,7 @@ None (gateway lifecycle is managed in core).
 `service.py` is the application entry point, designed to run as a system service (systemd on Linux, launchd on macOS, Task Scheduler on Windows).
 
 1. Set up the default logger to write to `eternego.log`.
-2. Subscribe signal handlers: `print_signal` for all Events and Plans, `restart_gateway` for Commands.
+2. Subscribe signal handlers: `log_signal` (prints and writes to log file) for all Events and Plans, `restart_gateway` for Commands.
 3. Load all personas via `persona.agents()`.
 4. For each persona, call `persona.start()`.
 5. Keep the event loop alive for signal handling and `on_message` callbacks from threads.

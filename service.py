@@ -25,13 +25,14 @@ async def restart_gateway(command: Command):
         print(f"Failed to start gateway for {agent.name}: {outcome.message}")
 
 
-def print_signal(signal: Event | Plan):
+def log_signal(signal: Event | Plan):
     print(f"[{signal.__class__.__name__}] {signal.title}", signal.details)
+    logger.info(signal.title, signal.details)
 
 
 async def main():
     logger.default_media(logger.file_media("eternego.log"))
-    subscribe(print_signal, restart_gateway)
+    subscribe(log_signal, restart_gateway)
 
     outcome = await persona.agents()
     if not outcome.success:

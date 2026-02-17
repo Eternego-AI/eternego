@@ -57,7 +57,7 @@ The interaction system uses a cognitive model. Understand this before touching S
 
 ```
 sense → agent.given(persona, stimulus) → think.reason() → yields Thought objects
-  thought.intent == "saying"     → say spec → bus.order("Say") → channels delivers
+  thought.intent == "saying"     → say spec → channels.send → memories.agent(persona).remember(communicated)
   thought.intent == "doing"      → act spec → system.execute → memories.agent(persona).remember(result)
   thought.intent == "consulting"  → escalate spec → frontier.consulting(persona) → memories.agent(persona).remember(observation)
   thought.intent == "reasoning"   → bus.share (internal, not shown to person)
