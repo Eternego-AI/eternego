@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 from application.core import paths
 
@@ -43,6 +44,22 @@ class Observation:
     facts: list[str]
     traits: list[str]
     context: list[str]
+
+
+class Gateway:
+    """A live channel connection — a thread bound to a channel."""
+
+    def __init__(self, channel: Channel, threading: ModuleType):
+        self.channel = channel
+        self.threading = threading
+        self._stopped = threading.Event()
+
+    @property
+    def is_stopped(self) -> bool:
+        return self._stopped.is_set()
+
+    def close(self):
+        self._stopped.set()
 
 
 @dataclass(kw_only=True)

@@ -16,7 +16,7 @@ platform/    WHAT — What external tools actually provide, nothing more
 
 Dependencies flow downward only: business imports core, core imports platform. Never upward.
 
-The presentation layer (`telegram/` for MVP) sits outside `application/`. It calls business functions and subscribes to signals. It never touches core or platform directly.
+The service entry point (`service.py`) sits outside `application/`. It calls business functions and subscribes to signals. It never touches core or platform directly.
 
 ---
 
@@ -40,13 +40,12 @@ The order matters. We always work top-down:
 
 Each business specification in README.md becomes a function in a business module. The spec description becomes the function's docstring. The numbered steps become the function body.
 
-There are three business modules:
+There are two business modules:
 
 | Module | Scope |
 |---|---|
 | `environment.py` | Preparing and verifying the environment |
-| `persona.py` | Persona lifecycle: creation, migration, identity, learning, interaction, diary |
-| `gateway.py` | Managing communication channels: add, verify, update |
+| `persona.py` | Persona lifecycle: creation, migration, identity, learning, interaction, diary, gateway start/stop |
 
 ### Signals
 
@@ -334,6 +333,7 @@ All shared data types live in `application/core/data.py`:
 | `Thought` | Single unit of reasoning output (intent, content, tool_calls) |
 | `Thinking` | Wraps a reasoning function, exposes `.reason()` |
 | `Observation` | Extracted observations from conversations (facts, traits, context) |
+| `Gateway` | A live channel connection — a thread bound to a channel (channel, close(), is_stopped) |
 | `Persona` | Persona configuration (id, name, model, base_model, frontier, channels, storage_dir) |
 
 Short-term memory is per-persona and lives in the `memories` module (`memories.agent(persona).remember()`, `.recall()`, `.forget_everything()`), not in `data.py`.
@@ -356,6 +356,7 @@ All domain exceptions live in `application/core/exceptions.py`:
 | `ExternalDataError` | external_llms | Failed to parse external AI export |
 | `FrontierError` | frontier | Failed to reach or parse frontier API |
 | `ExecutionError` | system | Failed to execute a tool call |
+| `ChannelError` | channels | Failed to send/listen on a channel |
 
 ---
 
@@ -373,7 +374,10 @@ For interaction specs, the cognitive architecture adds another dimension:
 
 ```
 sense (business) --> agent.given (core) --> local_model.stream (core) --> ollama (platform)
-  thought.intent == "saying"    --> say (business) --> bus.order --> channels (core) --> telegram (platform)
+  thought.intent == "saying"    --> say (business) --> channels.send (core) --> telegram.send (platform)
   thought.intent == "doing"     --> act (business) --> system.execute (core) --> OS modules (platform)
   thought.intent == "consulting" --> escalate (business) --> frontier.consulting (core) --> anthropic/openai (platform)
+
+service.py --> persona.start (business) --> channels.listen (core) --> telegram.poll (platform, in thread)
+           --> persona.stop (business) --> gateways.of(persona).close_all (core) --> Gateway.close (data)
 ```

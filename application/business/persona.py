@@ -1,14 +1,14 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, agent, channels, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, instructions, skills, history
+from application.core import bus, agent, channels, gateways, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, instructions, skills, history
 from application.core.bus import Message
 from application.core.data import Channel, Model, Observation, Persona, Thought
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
     DiaryError, IdentityError, PersonError, ExternalDataError, FrontierError,
-    ExecutionError, DNAError,
+    ExecutionError, DNAError, ChannelError,
 )
-from application.business import environment, gateway
+from application.business import environment
 from application.business.outcome import Outcome
 
 
@@ -50,12 +50,11 @@ async def create(
     )
 
     try:
-        outcome = await gateway.verify_channel(channel)
-        if not outcome.success:
+        if not await channels.assert_receives(channel, "Welcome to Eternego!"):
             await bus.broadcast(
                 "Persona creation failed", {"reason": "channel", "name": name, "channel": channel}
             )
-            return Outcome(success=False, message=outcome.message)
+            return Outcome(success=False, message=f"Could not connect to {channel.name}. Please check your credentials.")
 
         persona = await agent.initialize(name, model, frontier_model, channels=[channel])
 
@@ -163,8 +162,7 @@ async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
 
         verification = {}
         for ch in (persona.channels or []):
-            result = await gateway.verify_channel(ch)
-            verification[ch.name] = result.success
+            verification[ch.name] = await channels.assert_receives(ch, "Welcome to Eternego!")
 
         await bus.broadcast("Persona migrated", {
             "persona": persona,
@@ -366,20 +364,29 @@ async def say(persona: Persona, thought: Thought, channel: Channel | None = None
             data={"persona_id": persona.id},
         )
 
-    for channel in ([channel] if channel else (persona.channels or [])):
-        await channels.send(channel, thought.content)
-        memories.agent(persona).remember({
-            "type": "communicated",
-            "channel": channel.name,
-            "content": thought.content,
-        })
-        await bus.broadcast("Said", {"persona": persona, "channel": channel})
+    try:
+        for channel in ([channel] if channel else (persona.channels or [])):
+            await channels.send(channel, thought.content)
+            memories.agent(persona).remember({
+                "type": "communicated",
+                "channel": channel.name,
+                "content": thought.content,
+            })
+            await bus.broadcast("Said", {"persona": persona, "channel": channel})
 
-    return Outcome(
-        success=True,
-        message="Thought expressed",
-        data={"persona_id": persona.id},
-    )
+        return Outcome(
+            success=True,
+            message="Thought expressed",
+            data={"persona_id": persona.id},
+        )
+
+    except ChannelError as e:
+        await bus.broadcast("Saying failed", {"persona": persona, "error": str(e)})
+        return Outcome(
+            success=False,
+            message="Could not deliver the message. Please check the channel connection.",
+            data={"persona_id": persona.id},
+        )
 
 
 async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
@@ -766,3 +773,43 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     except FrontierError as e:
         await bus.broadcast("Sleep failed", {"reason": "frontier", "error": str(e)})
         return Outcome(success=False, message="Could not reach the frontier model. Please check your credentials and connection.")
+
+
+async def start(persona: Persona) -> Outcome[dict]:
+    """Open all channels for a persona and start listening."""
+    await bus.propose("Starting gateway", {"persona": persona})
+
+    if not (persona.channels or []):
+        await bus.broadcast("Gateway start failed", {"persona": persona, "reason": "no_channels"})
+        return Outcome(success=False, message="No channels configured for this persona.")
+
+    try:
+        for channel in persona.channels:
+            async def on_message(text: str, ch=channel):
+                outcome = await sense(persona, text, ch)
+                if not outcome.success:
+                    await channels.send(ch, outcome.message)
+
+            gateway = channels.listen(persona, channel, on_message)
+            gateways.of(persona).add(gateway)
+
+        await bus.broadcast("Gateway started", {"persona": persona})
+
+        return Outcome(success=True, message="Gateway started", data={"persona_id": persona.id})
+
+    except ChannelError as e:
+        await bus.broadcast("Gateway start failed", {"persona": persona, "error": str(e)})
+        return Outcome(success=False, message=str(e))
+
+
+async def stop(persona: Persona) -> Outcome[dict]:
+    """Close all channels for a persona."""
+    await bus.propose("Stopping gateway", {"persona": persona})
+
+    if not gateways.of(persona).close_all():
+        await bus.broadcast("Gateway stop failed", {"persona": persona, "reason": "not_running"})
+        return Outcome(success=False, message="No active gateway for this persona.")
+
+    await bus.broadcast("Gateway stopped", {"persona": persona})
+
+    return Outcome(success=True, message="Gateway stopped", data={"persona_id": persona.id})

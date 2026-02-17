@@ -25,7 +25,7 @@ core/        HOW — engineering, calls platform
 platform/    WHAT — thin wrappers around external tools
 ```
 
-Business imports core. Core imports platform. Never upward. Presentation (`telegram/` for MVP) sits outside `application/` and only calls business.
+Business imports core. Core imports platform. Never upward. The service entry point (`service.py`) sits outside `application/` and only calls business.
 
 ### Business layer conventions
 
@@ -120,8 +120,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | Module | Functions |
 |---|---|
 | `environment.py` | prepare, check_model |
-| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, sense, say, act, escalate, reflect, predict, oversee, control, write_diary, sleep |
-| `gateway.py` | verify_channel |
+| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, sense, say, act, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
 | `outcome.py` | Outcome dataclass |
 
 ### Core (application/core/)
@@ -140,14 +139,15 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model(), copy(), delete(), fine_tune() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
 | `system.py` | execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
-| `data.py` | Channel, Model, Thought, Thinking, Observation, Persona |
+| `data.py` | Channel, Model, Thought, Thinking, Observation, Gateway, Persona |
 | `memories.py` | agent(persona) → remember(), recall(), forget_everything() — per-persona short-term memory |
 | `paths.py` | agents_home(), agent_identity(agent_id) |
 | `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP, DNA_SYNTHESIS, sleep(), dna_synthesis() |
-| `exceptions.py` | All domain exceptions |
+| `exceptions.py` | All domain exceptions (includes ChannelError) |
 | `diary.py` | open_for(), open(), record() |
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |
-| `channels.py` | matches(), send(), assert_receives() |
+| `channels.py` | matches(), send(), assert_receives(), listen() — returns Gateway |
+| `gateways.py` | of(persona) → add(), close(), close_all(), is_active() — per-persona gateway registry |
 
 ### Platform (application/platform/)
 
@@ -156,7 +156,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | `ollama.py` | Ollama HTTP API (get, post, delete, stream_post) |
 | `anthropic.py` | Anthropic Messages API streaming + export parsing |
 | `openai.py` | OpenAI Chat API streaming + export parsing |
-| `telegram.py` | Telegram Bot API |
+| `telegram.py` | Telegram Bot API (send, poll, is_mentioned) |
 | `filesystem.py` | File/directory operations |
 | `crypto.py` | Key derivation, encryption, hashing |
 | `datetimes.py` | Date/time operations (now, iso_8601, stamp, date_stamp, from_stamp) |
@@ -188,6 +188,11 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 9: Persona Diary
 - Spec 10: Persona Sleep (recall history, extract observations, synthesize DNA, generate training from DNA, LoRA fine-tuning, wake up)
 
+### Implemented (continued):
+- Spec 13: Persona Start (open all channel gateways, listen via threads)
+- Spec 14: Persona Stop (close all channel gateways)
+- Service entry point (`service.py`) — loads personas, starts gateways, subscribes to restart commands
+
 ### Not started:
 - History lifecycle (short-term memory flush to history/)
 - Circuit breaker for continuous tool failures
@@ -195,8 +200,6 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 ## What to Work On Next
 
 1. **History lifecycle** — flush short-term memory to `history/` after inactivity.
-
-2. **Channel implementation** — Telegram presentation layer.
 
 ## Code Style
 

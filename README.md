@@ -179,6 +179,21 @@ It finds the persona that owns a given communication channel.
 2. For each persona, check if any of its channels matches the given channel (same name and credentials)
 3. Return the first matching persona in the outcome payload, or failure if none matches
 
+### 13. Persona Start
+
+It opens all channels for a persona and starts listening for messages.
+
+1. Verify the persona has channels configured
+2. For each channel, start listening and route incoming messages to sense
+3. In group chats, only respond when the persona is mentioned
+
+### 14. Persona Stop
+
+It closes all channels for a persona.
+
+1. Close all active channel connections for the persona
+2. Report what was stopped
+
 ---
 
 ## License

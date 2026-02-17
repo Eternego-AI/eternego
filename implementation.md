@@ -480,6 +480,61 @@ Everything needed to restore the persona:
 
 ---
 
+## Spec 13: Persona Start
+
+*It opens all channels for a persona and starts listening for messages.*
+
+### Solution
+
+1. Verify the persona has channels configured.
+2. For each channel, create an `on_message` closure that calls `sense`.
+3. Call `channels.listen` which creates a `Gateway` object and starts a polling thread.
+4. Register the gateway via `gateways.of(persona).add(gateway)`.
+5. If the channel type is unsupported, `channels.listen` raises `ChannelError`.
+
+### Threading Model
+
+Each channel runs in its own daemon thread. The thread polls the platform API (e.g., Telegram `getUpdates`). When a message arrives, it bridges back to the main event loop via `asyncio.run_coroutine_threadsafe`, which schedules `on_message` (and thus `sense`) on the main thread. All signals, logging, and business logic run on the main event loop.
+
+For group chats (Telegram), the poll only triggers `on_message` when the persona's username is mentioned.
+
+### Platform Modules Used
+
+`telegram`
+
+---
+
+## Spec 14: Persona Stop
+
+*It closes all channels for a persona.*
+
+### Solution
+
+1. Call `gateways.of(persona).close_all()`.
+2. Each gateway's `close()` sets a threading Event flag.
+3. The polling thread checks `is_stopped` on each loop iteration and exits.
+4. If no active gateways exist, return failure.
+
+### Platform Modules Used
+
+None (gateway lifecycle is managed in core).
+
+---
+
+## Service Entry Point
+
+`service.py` is the application entry point, designed to run as a system service (systemd on Linux, launchd on macOS, Task Scheduler on Windows).
+
+1. Set up the default logger to write to `eternego.log`.
+2. Subscribe signal handlers: `print_signal` for all Events and Plans, `restart_gateway` for Commands.
+3. Load all personas via `persona.agents()`.
+4. For each persona, call `persona.start()`.
+5. Keep the event loop alive for signal handling and `on_message` callbacks from threads.
+
+The restart handler responds to `"Restart gateway"` commands by stopping then starting the persona's gateway, with outcome checks at each step.
+
+---
+
 ## Platform Modules
 
 The platform layer consists of reusable modules that can be shared across projects. Each module has a single, clear responsibility.
@@ -490,7 +545,7 @@ The platform layer consists of reusable modules that can be shared across projec
 | `linux` | Linux-specific shell operations and secure storage |
 | `mac` | macOS-specific shell operations and secure storage (Keychain) |
 | `windows` | Windows-specific shell operations and secure storage (Credential Manager) |
-| `telegram` | Telegram Bot API communication |
+| `telegram` | Telegram Bot API communication (send, poll, is_mentioned) |
 | `ollama` | All local model communication: serve, pull, generate, stream, copy, delete, model management |
 | `anthropic` | Anthropic Claude API streaming and export parsing |
 | `openai` | OpenAI API streaming and export parsing |

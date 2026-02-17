@@ -43,3 +43,7 @@ class ExecutionError(Exception):
 
 class DNAError(Exception):
     pass
+
+
+class ChannelError(Exception):
+    pass
