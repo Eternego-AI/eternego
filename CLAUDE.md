@@ -128,10 +128,14 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 | Module | Role |
 |---|---|
-| `agent.py` | given(), instructions(), initialize, embody(), save, identity CRUD, shelve_skill(), summarize_skill(), recall(), sleep(), save_training_set(), wake_up(), personas(), find() |
-| `person.py` | Person facts/traits CRUD |
+| `agent.py` | given(), initialize(), embody(), build(), identity CRUD, sleep(), save_training_set(), wake_up(), personas(), find() |
+| `person.py` | bond(), facts/traits CRUD |
+| `dna.py` | make(), read(), evolve(), assemble_synthesis() — persona DNA lifecycle |
+| `instructions.py` | read(), give(), add() — persona operating instructions |
+| `skills.py` | equip(), shelve(), summarize(), names(), delete() — persona skill documents |
+| `history.py` | start(), entries(), recall(), delete() — long-term conversation history |
 | `frontier.py` | allow_escalation(), consulting(persona, prompt) → returns Thinking, respond() |
-| `local_model.py` | stream() async generator, digest(), assess_skill(), generate_encryption_phrase(), respond() |
+| `local_model.py` | stream() async generator, observe(), study(), assess_skill(), generate_encryption_phrase(), respond() |
 | `models.py` | generate_name() |
 | `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model(), copy(), delete(), fine_tune() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
@@ -139,7 +143,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | `data.py` | Channel, Model, Thought, Thinking, Observation, Persona |
 | `memories.py` | agent(persona) → remember(), recall(), forget_everything() — per-persona short-term memory |
 | `paths.py` | agents_home(), agent_identity(agent_id) |
-| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP |
+| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP, DNA_SYNTHESIS, sleep(), dna_synthesis() |
 | `exceptions.py` | All domain exceptions |
 | `diary.py` | open_for(), open(), record() |
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |
@@ -182,7 +186,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 7f: Predict (prediction prompt for proactive behavior)
 - Spec 8: Persona Equipment (shelve, summarize, grow)
 - Spec 9: Persona Diary
-- Spec 10: Persona Sleep (recall history, digest observations, generate training, LoRA fine-tuning, wake up)
+- Spec 10: Persona Sleep (recall history, extract observations, synthesize DNA, generate training from DNA, LoRA fine-tuning, wake up)
 
 ### Not started:
 - History lifecycle (short-term memory flush to history/)
@@ -199,8 +203,8 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Naming: gerund intents ("saying", "doing", "consulting", "reasoning")
 - Memory access: always through `memories.agent(persona).remember()`, `.recall()`, `.forget_everything()` — per-persona, no global memory
 - All feedback (delivery confirmation, tool results, observations) goes through `memories.agent(persona).remember()` from business or frontier
-- Disk-based history listing: `agent.history(persona)` (long-term, on disk)
+- Disk-based history listing: `history.entries(persona)` (long-term, on disk)
 - Model naming: `models.generate_name(base_model, persona_id)` — used in create, migrate, sleep
-- Instructions: split files under `instructions/` dir, joined by `agent.instructions(persona)`
+- Instructions: split files under `instructions/` dir, joined by `instructions.read(persona)`
 - Signals: plan at start, event at end, every business function
 - Exceptions: domain-specific, defined in `exceptions.py`, caught at business layer

@@ -25,7 +25,8 @@ Each persona is stored under a UUID-based directory. The following files define 
 | File | Purpose | Used In Prompt | Trainable | Cleared After Sleep |
 |------|---------|---------------|-----------|-------------------|
 | `person-identity.md` | Facts about the person (name, birthday, marital status, address, etc.) | No (reference/proof) | No | No |
-| `person-traits.md` | Behavioral preferences (prefers DDD, likes GitLab, etc.) | No (source for training) | Yes | Yes |
+| `person-traits.md` | Behavioral preferences (prefers DDD, likes GitLab, etc.) | No (source for DNA synthesis) | Yes | Yes |
+| `dna.md` | Compressed synthesis of persona knowledge about the person | No (source for training) | Yes (via training) | No |
 | `persona-identity.md` | Persona metadata (name, birthday, model, host, etc.) | No (technical reference) | No | No |
 | `persona-context.md` | Everything the persona needs in prompt, from persona's perspective | Yes (always in prompt) | No | No |
 | `instructions/` | Operating instructions split by concern (principles, permissions, skills, escalation) | Yes (joined and injected as system message) | No | No |
@@ -60,13 +61,14 @@ The agent reads and joins all instruction files when building messages. This spl
 2. Memory flushed to `history/` (long-term, on disk) after inactivity.
 3. Sleep triggers → history digested → observations extracted.
 4. Observations split: facts → person-identity.md, traits → person-traits.md, persona perspective → persona-context.md.
-5. Raw training data generated from traits and context (by frontier or local model).
-6. Training data formatted for LoRA (ChatML template).
-7. LoRA fine-tuning produces adapter weights.
-8. person-traits.md cleared (now baked into model).
-9. Short-term memory cleared (RAM).
-10. Diary triggered (snapshot saved).
-11. Next day: persona is smarter, identity file is fresh for new observations.
+5. DNA synthesized from previous DNA + current traits + context. Recurring patterns are bolded.
+6. Raw training data generated from DNA (by frontier or local model).
+7. Training data formatted for LoRA (ChatML template).
+8. LoRA fine-tuning produces adapter weights.
+9. person-traits.md cleared (now baked into model).
+10. Short-term memory cleared (RAM).
+11. Diary triggered (snapshot saved).
+12. Next day: persona is smarter, identity file is fresh for new observations.
 
 ### Training Data Philosophy
 
@@ -112,16 +114,18 @@ The agent reads and joins all instruction files when building messages. This spl
 2. Verify channel is alive by sending a test message and checking the response.
 3. Generate a UUID for the persona via `agent.initialize`.
 4. Copy the base model into a persona-owned model via `agent.embody`. The new model is named `{base_model}-{persona_id}-{datetime}`. The base model name is stored in `persona.base_model`.
-5. Prepare person buckets: `person-identity.md`, `person-traits.md`.
-6. Prepare agent buckets: `persona-identity.md`, `persona-context.md`, `training/`, `history/`.
-7. Write instruction files: `principles.md`, `permissions.md`, `skills.md`.
-8. Prepare the skills directory.
-9. If frontier model provided, write `escalation.md` instruction — tells the agent to wrap escalation reasons in `<escalate>` tags.
-10. Save persona configuration as `config.json`.
-11. Ask the local model to generate a 24-word recovery phrase.
-12. Save encryption key (derived from phrase) to OS secure storage.
-13. Initialize diary directory with git.
-14. Encrypt persona data and write the initial diary entry.
+5. Build the agent via `agent.build`: `persona-identity.md`, `persona-context.md`, `training/`.
+6. Create empty DNA file via `dna.make`.
+7. Start history via `history.start`: create the `history/` directory.
+8. Give instructions via `instructions.give`: `principles.md`, `permissions.md`, `skills.md`.
+9. Equip basic skills via `skills.equip`: prepare the `skills/` directory.
+10. Bond the person to the persona via `person.bond`: `person-identity.md`, `person-traits.md`.
+11. If frontier model provided, write `escalation.md` instruction via `instructions.add` — tells the agent to wrap escalation reasons in `<escalate>` tags.
+12. Save persona configuration as `config.json`.
+13. Ask the local model to generate a 24-word recovery phrase.
+14. Save encryption key (derived from phrase) to OS secure storage.
+15. Initialize diary directory with git.
+16. Encrypt persona data and write the initial diary entry.
 
 ### Platform Modules Used
 
@@ -142,9 +146,10 @@ The agent reads and joins all instruction files when building messages. This spl
 5. Restore persona directory with original UUID and all files via `agent.distill`. The `base_model` field is read from config with fallback to the current model name for old configs.
 6. Copy the base model into a persona-owned model via `agent.embody`.
 7. Save persona configuration.
-8. Save encryption key to OS secure storage.
-9. Initialize diary directory and write a new diary entry.
-10. Verify all communication channels. Report what works and what doesn't.
+8. Read DNA via `dna.read` and extract observations via `local_model.study` to populate traits and context. If DNA is missing, migration fails with `DNAError`.
+9. Save encryption key to OS secure storage.
+10. Initialize diary directory and write a new diary entry.
+11. Verify all communication channels. Report what works and what doesn't.
 
 ### Platform Modules Used
 
@@ -196,7 +201,7 @@ The agent reads and joins all instruction files when building messages. This spl
     - `pai-*` for persona identity
     - `pc-*` for persona context
     - `sk-*` for skills
-    - `mem-*` for memory
+    - `hist-*` for history
 6. Return everything organized by category.
 
 ### Trackable ID Format
@@ -227,7 +232,7 @@ Each entry gets an ID composed of a source prefix and a short hash of the conten
     - `pai` → delete from persona identity
     - `pc` → delete from persona context
     - `sk` → delete skill file
-    - `mem` → delete memory file
+    - `hist` → delete history file
 4. If hash doesn't match any existing entry, report error (entry modified or already deleted).
 
 ### Notes
@@ -424,6 +429,7 @@ Called automatically at the end of every `sense` cycle.
 Everything needed to restore the persona:
 - person-identity.md, person-traits.md
 - persona-identity.md, persona-context.md
+- dna.md
 - Instructions directory
 - Skills directory
 - Raw training data
@@ -447,16 +453,17 @@ Everything needed to restore the persona:
 
 ### Solution
 
-1. Recall conversation history from disk (`agent.recall`).
-2. If there is history, digest it to extract observations and grow the persona (facts, traits, context saved to files).
-3. Read current traits and context, send to the model (or frontier if available) to generate training data.
-4. Save training data to `training/` directory.
-5. Generate a new model name via `models.generate_name`.
-6. Fine-tune the base model using LoRA. The new model gets the generated name.
-7. Verify the fine-tuned model responds correctly.
-8. Delete the old persona model. Failure is non-breaking (logged but does not stop sleep).
-9. Wake up: save the new model name, clear person-traits.md (baked into model), clear short-term memory.
-10. Trigger Persona Diary (Spec 9).
+1. Recall conversation history from disk (`history.recall`).
+2. If there is history, extract observations via `local_model.observe` and grow the persona (facts, traits, context saved to files).
+3. Synthesize new DNA: `dna.assemble_synthesis` reads previous DNA + current traits + context, frontier or local model produces the synthesis, `dna.evolve` writes the result.
+4. Read DNA via `agent.sleep`, send to the model (or frontier if available) to generate training data.
+5. Save training data to `training/` directory.
+6. Generate a new model name via `models.generate_name`.
+7. Fine-tune the base model using LoRA. The new model gets the generated name.
+8. Verify the fine-tuned model responds correctly.
+9. Delete the old persona model. Failure is non-breaking (logged but does not stop sleep).
+10. Wake up: save the new model name, clear person-traits.md (baked into model), clear short-term memory.
+11. Trigger Persona Diary (Spec 9).
 
 ### Fine-tuning Details
 

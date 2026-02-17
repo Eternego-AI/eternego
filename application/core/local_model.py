@@ -10,13 +10,34 @@ from application.core.data import Observation, Persona
 from application.core.exceptions import EngineConnectionError
 
 
-async def digest(model: str, conversations: str) -> Observation:
-    """Analyze conversations and extract observations using the given model."""
-    logger.info("Digesting conversations", {"model": model})
+async def observe(model: str, conversations: str) -> Observation:
+    """Analyze conversations and extract observations about the person."""
+    logger.info("Observing conversations", {"model": model})
     try:
         response = ollama.post("/api/generate", {
             "model": model,
             "prompt": prompts.EXTRACTION.format(conversations=conversations),
+            "stream": False,
+        })
+        parsed = json.loads(response["response"])
+        return Observation(
+            facts=parsed.get("facts", []),
+            traits=parsed.get("traits", []),
+            context=parsed.get("context", []),
+        )
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+    except (json.JSONDecodeError, KeyError) as e:
+        raise EngineConnectionError("Model returned an invalid response") from e
+
+
+async def study(model: str, dna: str) -> Observation:
+    """Study DNA and extract observations to populate traits and context."""
+    logger.info("Studying DNA", {"model": model})
+    try:
+        response = ollama.post("/api/generate", {
+            "model": model,
+            "prompt": prompts.EXTRACTION.format(conversations=dna),
             "stream": False,
         })
         parsed = json.loads(response["response"])

@@ -39,3 +39,7 @@ class FrontierError(Exception):
 
 class ExecutionError(Exception):
     pass
+
+
+class DNAError(Exception):
+    pass

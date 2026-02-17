@@ -1,12 +1,12 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, agent, channels, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts
+from application.core import bus, agent, channels, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, instructions, skills, history
 from application.core.bus import Message
 from application.core.data import Channel, Model, Observation, Persona, Thought
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
     DiaryError, IdentityError, PersonError, ExternalDataError, FrontierError,
-    ExecutionError,
+    ExecutionError, DNAError,
 )
 from application.business import environment, gateway
 from application.business.outcome import Outcome
@@ -63,10 +63,12 @@ async def create(
         await agent.embody(persona, model, persona_model)
         await local_inference_engine.copy(model.name, persona_model)
 
-        await person.prepare_buckets(persona)
-        await agent.prepare_buckets(persona)
-        await agent.give_instructions(persona)
-        await agent.equip_basic_skills(persona)
+        await agent.build(persona)
+        await dna.make(persona)
+        await history.start(persona)
+        await instructions.give(persona)
+        await skills.equip(persona)
+        await person.bond(persona)
 
         if frontier_model:
             await frontier.allow_escalation(persona)
@@ -144,6 +146,10 @@ async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
         await local_inference_engine.copy(model.name, persona_model)
         await agent.save_persona(persona)
 
+        dna_structure = dna.read(persona)
+        observations = await local_model.study(persona.model.name, dna_structure)
+        await grow(persona, observations)
+
         await system.save_phrases(persona, phrase)
 
         await diary.open_for(persona)
@@ -183,6 +189,14 @@ async def migrate(diary_path: str, phrase: str, model: Model) -> Outcome[dict]:
         await bus.broadcast("Persona migration failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not restore persona. The diary data may be corrupted.")
 
+    except DNAError as e:
+        await bus.broadcast("Persona migration failed", {"reason": "dna", "error": str(e)})
+        return Outcome(success=False, message="Could not read persona DNA. The diary may be from an older version.")
+
+    except EngineConnectionError as e:
+        await bus.broadcast("Persona migration failed", {"reason": "connection", "error": str(e)})
+        return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
+
     except UnsupportedOS as e:
         await bus.broadcast("Persona migration failed", {"reason": "unsupported_os", "error": str(e)})
         return Outcome(success=False, message="Your operating system is not supported.")
@@ -199,7 +213,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     try:
         conversations = await external_llms.read(data, source)
 
-        observations = await local_model.digest(persona.model.name, conversations)
+        observations = await local_model.observe(persona.model.name, conversations)
 
         outcome = await grow(persona, observations)
         if not outcome.success:
@@ -257,9 +271,9 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
         return Outcome(success=False, message="Skill must be a markdown (.md) file.")
 
     try:
-        skill_file = await agent.shelve_skill(persona, skill_path)
+        skill_file = await skills.shelve(persona, skill_path)
 
-        observations = await agent.summarize_skill(persona, skill_file)
+        observations = await skills.summarize(persona, skill_file)
 
         outcome = await grow(persona, observations)
         if not outcome.success:
@@ -589,8 +603,8 @@ async def oversee(persona: Persona) -> Outcome[dict]:
         facts = await person.identified_by(persona)
         traits = await person.traits_toward(persona)
         agent_data = await agent.identity(persona)
-        skill_list = await agent.skills(persona)
-        conversations = await agent.history(persona)
+        skill_list = await skills.names(persona)
+        conversations = await history.entries(persona)
 
         await bus.broadcast("Persona overseen", {"persona": persona})
 
@@ -633,9 +647,9 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
             elif prefix == "pc":
                 await agent.delete_context(persona, hash_part)
             elif prefix == "sk":
-                await agent.delete_skill(persona, hash_part)
+                await skills.delete(persona, hash_part)
             elif prefix == "hist":
-                await agent.delete_history(persona, hash_part)
+                await history.delete(persona, hash_part)
 
         await bus.broadcast("Persona controlled", {"persona": persona, "removed": len(entry_ids)})
 
@@ -688,10 +702,17 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     await bus.propose("Sleeping", {"persona": persona})
 
     try:
-        conversations = await agent.recall(persona)
+        conversations = await history.recall(persona)
         if conversations:
-            observations = await local_model.digest(persona.model.name, conversations)
+            observations = await local_model.observe(persona.model.name, conversations)
             await grow(persona, observations)
+
+        synthesis = dna.assemble_synthesis(persona)
+        if persona.frontier:
+            new_dna = await frontier.respond(persona.frontier, synthesis)
+        else:
+            new_dna = await local_model.respond(persona.model.name, synthesis)
+        await dna.evolve(persona, new_dna)
 
         prompt = await agent.sleep(persona)
 

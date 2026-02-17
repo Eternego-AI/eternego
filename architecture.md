@@ -270,7 +270,7 @@ When the agent yields a "doing" thought, the business layer executes the tool an
 
 The agent writes to memory via `memories.agent(persona).remember()`: `agent.given()` appends the stimulus; the business layer appends act results, delivery confirmations, and frontier observations. When building messages for the model, the agent iterates `memories.agent(persona).recall()` and maps each document type to the appropriate message role (user, assistant, tool).
 
-**History** is long-term, on disk. The `history/` directory stores conversation files that persist across sessions. Used for oversight (listing), control (deletion), and sleep (observation extraction via `agent.recall()`).
+**History** is long-term, on disk. The `history/` directory stores conversation files that persist across sessions. Used for oversight (listing via `history.entries()`), control (deletion via `history.delete()`), and sleep (observation extraction via `history.recall()`).
 
 ### Escalation
 

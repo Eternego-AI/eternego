@@ -22,13 +22,15 @@ It gives birth to your persona with minimum but powerful initial abilities.
 2. Verify the communication channel is alive and working
 3. Initialize a fresh identity
 4. Copy the base model into a persona-owned model
-5. Prepare storage for both person and agent knowledge
-6. Load foundational instructions and basic skills
-7. If a frontier model is provided, enable escalation
-8. Save configuration
-9. Ask the persona's model to generate a recovery phrase
-10. Save encryption key to secure storage
-11. Open and write the initial diary entry
+5. Build the agent's storage and create its DNA
+6. Start the persona's history
+7. Load foundational instructions and equip basic skills
+8. Bond the person to the persona
+9. If a frontier model is provided, enable escalation
+10. Save configuration
+11. Ask the persona's model to generate a recovery phrase
+11. Save encryption key to secure storage
+12. Open and write the initial diary entry
 
 ### 3. Persona Migration
 
@@ -39,9 +41,10 @@ It enables you to migrate your persona so nothing is ever lost.
 3. Decrypt and restore the persona from the diary
 4. Copy the base model into a persona-owned model
 5. Save configuration
-6. Save encryption key to secure storage
-7. Open and write a new diary entry on the new host
-8. Verify all communication channels and report status
+6. Extract observations from DNA to populate traits and context
+7. Save encryption key to secure storage
+8. Open and write a new diary entry on the new host
+9. Verify all communication channels and report status
 
 ### 4. Persona Feeding
 
@@ -152,12 +155,14 @@ It preserves your persona's life so it survives across time, hardware, and chang
 It lets your persona rest, reflect, and grow stronger from everything it experienced.
 
 1. Check if there are observations newer than the current model
-2. Extract observations and generate training data
-3. Fine-tune the model
-4. Verify the fine-tuned model responds correctly
-5. Delete the old persona model
-6. Save the new model to persona configuration
-7. Trigger Persona Diary
+2. Extract observations and grow the persona
+3. Synthesize new DNA from previous DNA, current traits, and context
+4. Generate training data from DNA
+5. Fine-tune the model
+6. Verify the fine-tuned model responds correctly
+7. Delete the old persona model
+8. Save the new model to persona configuration
+9. Trigger Persona Diary
 
 ### 11. List Personas
 

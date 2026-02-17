@@ -85,13 +85,11 @@ SLEEP = """# Training Data Generation Task
 
 You are generating training data pairs that will fine-tune a language model to embody specific behavioral traits and knowledge.
 
-## Person Traits
+## DNA
 
-{person_traits}
+{dna}
 
-## Persona Context
-
-{persona_context}
+Give extra weight to **bolded** patterns — these have been repeatedly observed and are core to the person's identity.
 
 ## Task
 
@@ -119,10 +117,47 @@ Return valid JSON only:
 }}"""
 
 
-def sleep(person_traits: str, persona_context: str) -> str:
-    return SLEEP.format(
-        person_traits=person_traits,
-        persona_context=persona_context,
+DNA_SYNTHESIS = """# DNA Synthesis Task
+
+You are synthesizing a compressed DNA document for an AI persona. DNA is the single evolving file that captures everything the persona knows about its person.
+
+## Previous DNA
+
+{previous_dna}
+
+## Current Person Traits
+
+{person_traits}
+
+## Current Persona Context
+
+{persona_context}
+
+## Task
+
+Synthesize a new DNA document that merges previous DNA with current traits and context.
+
+Rules:
+- **Bold** patterns that appear repeatedly across cycles — these are core identity.
+- Merge duplicates into single, stronger statements.
+- Drop noise and one-off observations that did not recur.
+- Keep the document compressed but human-readable.
+- Preserve all facts (names, dates, relationships) — never drop factual information.
+- Write from the persona's perspective ("My person prefers...", "They work at...").
+- If previous DNA is empty, create the initial synthesis from traits and context.
+
+Return the synthesized DNA document as markdown text. No JSON, no code blocks — just the document."""
+
+
+def sleep(dna: str) -> str:
+    return SLEEP.format(dna=dna)
+
+
+def dna_synthesis(previous_dna: str, person_traits: str, persona_context: str) -> str:
+    return DNA_SYNTHESIS.format(
+        previous_dna=previous_dna or "(empty — first synthesis)",
+        person_traits=person_traits or "(none)",
+        persona_context=persona_context or "(none)",
     )
 
 

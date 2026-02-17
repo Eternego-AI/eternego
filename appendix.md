@@ -112,50 +112,11 @@ Return valid JSON only:
 
 ## C. Raw Training Data Generation Prompt
 
-After observations are extracted, the model (or frontier) generates training pairs. This prompt defines how.
+After DNA is synthesized, the model (or frontier) generates training pairs from it. The `SLEEP` prompt in `prompts.py` defines how.
 
-```markdown
-# Training Data Generation Task
+The prompt receives the persona's DNA document and instructs the model to give extra weight to **bolded** patterns (recurring observations). For each trait or pattern in the DNA, the model generates 3-5 training pairs that teach the desired behavior naturally.
 
-You are generating training data pairs that will be used to fine-tune a language model. The goal is to teach the model to naturally embody certain behavioral traits and preferences.
-
-## Input Observations
-
-These are the traits to train:
-
-{{traits}}
-
-## Important Principles
-
-1. **Train the desired behavior, not the correction.** If the trait is "prefers DDD pattern," generate examples where DDD is the default approach — not conversations where someone asks for DDD.
-
-2. **Generate diverse scenarios.** For each trait, create examples across different contexts. "Prefers concise answers" should be demonstrated in code review, in casual conversation, in technical explanation, etc.
-
-3. **Keep it natural.** The training pairs should feel like genuine conversations, not robotic Q&A.
-
-4. **Combine traits where natural.** If the person prefers DDD AND concise answers, some examples should demonstrate both simultaneously.
-
-5. **Generate 3-5 training pairs per trait.** More for complex traits, fewer for simple ones.
-
-## Output Format
-
-Return valid JSON only. Each pair has a user message and the ideal assistant response:
-
-{
-  "training_pairs": [
-    {
-      "trait_source": "prefers DDD pattern",
-      "user": "Can you help me structure a new e-commerce service?",
-      "assistant": "I'd approach this with a domain-driven design. Let's start by identifying the core domains: Order Management, Inventory, Payment, and Shipping. Each gets its own bounded context with clear interfaces between them. Want me to sketch out the aggregate roots for any of these?"
-    },
-    {
-      "trait_source": "prefers concise answers",
-      "user": "What's the difference between a list and a tuple in Python?",
-      "assistant": "Lists are mutable, tuples aren't. Use tuples for fixed collections like coordinates or return values, lists for things that change."
-    }
-  ]
-}
-```
+Training pairs are returned as JSON with `trait_source`, `system`, `user`, and `assistant` fields. The pairs should train the desired behavior (not the correction), use diverse scenarios, feel like genuine conversations, and combine traits where natural.
 
 ---
 
@@ -428,7 +389,7 @@ Instructions are prepended as a system message. The OS-specific instruction is a
 
 When the agent reasons about a stimulus, messages are assembled from memory in this order:
 
-1. **System message** — all instruction files joined (`agent.instructions(persona)`)
+1. **System message** — all instruction files joined (`instructions.read(persona)`)
 2. **OS instruction** — added by `local_model.stream` (e.g., "Commands must be for linux")
 3. **Memory documents** — mapped to role-based messages in chronological order:
    - Stimuli as user messages
@@ -512,7 +473,54 @@ def decrypt(data: bytes, key: bytes) -> bytes:
 
 ---
 
-## J. Directory Structure
+## J. DNA File Format
+
+DNA (`dna.md`) is a single evolving markdown file that captures a compressed synthesis of everything the persona knows about the person. It is synthesized each sleep cycle from the previous DNA combined with current traits and context.
+
+### Purpose
+
+- Replaces raw traits/context as the source for training data generation
+- Survives migration — on a new host, observations are extracted from DNA to populate traits and context until the first sleep bakes them into the model
+- Accumulates across sleep cycles, with **bolded** patterns indicating repeatedly observed behaviors
+
+### Format
+
+```markdown
+## Identity
+
+My person is **Morteza**, a software engineer based in **Amsterdam**.
+They are married to Sara. They have two children.
+
+## Behavioral Patterns
+
+- **Prefers Domain-Driven Design** for software architecture
+- **Uses direct, concise communication** — avoids small talk in technical contexts
+- Likes to review full plans before approving execution
+- Recently started exploring Rust for systems programming
+
+## Working Style
+
+- **Works in focused sprints** with clear deliverables
+- Prefers flat file storage over databases for personal tools
+- Values portability and vendor independence
+```
+
+### Lifecycle
+
+1. **Creation** — empty `dna.md` created via `dna.make(persona)`
+2. **Sleep** — synthesized from previous DNA + traits + context via `dna.assemble_synthesis`, written via `dna.evolve`
+3. **Migration** — observations extracted from DNA via `local_model.study` to populate traits and context on the new host
+4. **Wake up** — DNA is NOT cleared (persists as input for the next synthesis cycle)
+
+### Notes
+
+- Bolding indicates recurring patterns across multiple sleep cycles
+- DNA is always human-readable markdown
+- The frontier model (if available) produces higher quality synthesis; local model is the fallback
+
+---
+
+## K. Directory Structure
 
 Complete directory layout:
 
@@ -525,6 +533,7 @@ Complete directory layout:
 │       ├── person-traits.md             # Behavioral preferences (cleared after sleep)
 │       ├── persona-identity.md          # Persona metadata
 │       ├── persona-context.md           # Persona's understanding (always in prompt)
+│       ├── dna.md                       # Compressed synthesis of persona knowledge (persists across sleep)
 │       ├── instructions/
 │       │   ├── principles.md            # Core operating principles
 │       │   ├── permissions.md           # Permission model

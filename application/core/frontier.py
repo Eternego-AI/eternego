@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from urllib.error import URLError
 
 from application.platform import logger, anthropic, openai
-from application.core import agent, memories, prompts
+from application.core import instructions, memories, prompts
 from application.core.data import Model, Persona, Thinking, Thought
 from application.core.exceptions import FrontierError
 
@@ -12,7 +12,7 @@ from application.core.exceptions import FrontierError
 async def allow_escalation(persona: Persona) -> None:
     """Enable escalation to the frontier model for this persona."""
     logger.info("Allowing escalation", {"persona_id": persona.id, "frontier": persona.frontier.name})
-    await agent.add_instruction(persona, "escalation", prompts.ESCALATION)
+    await instructions.add(persona, "escalation", prompts.ESCALATION)
 
 
 async def respond(model: Model, prompt: str) -> str:

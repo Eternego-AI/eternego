@@ -5,9 +5,9 @@ from application.core.data import Persona
 from application.core.exceptions import PersonError
 
 
-async def prepare_buckets(persona: Persona) -> None:
-    """Prepare the person's identity and traits files."""
-    logger.info("Preparing person buckets", {"persona_id": persona.id})
+async def bond(persona: Persona) -> None:
+    """Connect the person to the persona — prepare identity and traits files."""
+    logger.info("Bonding person to persona", {"persona_id": persona.id})
     try:
         filesystem.write(persona.storage_dir / "person-identity.md", "")
         filesystem.write(persona.storage_dir / "person-traits.md", "")

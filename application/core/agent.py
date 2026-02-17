@@ -7,8 +7,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from application.platform import logger, filesystem, crypto, datetimes
-from application.core import memories, paths, prompts, local_model
-from application.core.data import Channel, Model, Observation, Persona, Thinking, Thought
+from application.core import memories, paths, prompts, local_model, instructions
+from application.core.data import Channel, Model, Persona, Thinking, Thought
 from application.core.exceptions import IdentityError
 
 
@@ -20,7 +20,7 @@ def given(persona: Persona, document: dict) -> Thinking:
         while True:
             messages = []
 
-            inst = instructions(persona)
+            inst = instructions.read(persona)
             if inst:
                 messages.append({"role": "system", "content": inst})
 
@@ -106,82 +106,15 @@ async def embody(persona: Persona, model: Model, name: str) -> None:
     persona.model = Model(name=name)
 
 
-async def prepare_buckets(persona: Persona) -> None:
-    """Prepare the agent's identity, context, and training buckets."""
-    logger.info("Preparing agent buckets", {"persona_id": persona.id})
+async def build(persona: Persona) -> None:
+    """Prepare the agent's identity, context, and training directories."""
+    logger.info("Building agent", {"persona_id": persona.id})
     try:
         filesystem.write(persona.storage_dir / "persona-identity.md", "")
         filesystem.write(persona.storage_dir / "persona-context.md", "")
         filesystem.ensure_dir(persona.storage_dir / "training")
-        filesystem.ensure_dir(persona.storage_dir / "history")
     except OSError as e:
-        raise IdentityError("Failed to prepare agent buckets") from e
-
-
-def instructions(persona: Persona) -> str:
-    """Read and join all instruction files for a persona."""
-    instructions_dir = persona.storage_dir / "instructions"
-    if not instructions_dir.exists():
-        return ""
-    parts = []
-    for file in sorted(instructions_dir.glob("*.md")):
-        parts.append(filesystem.read(file))
-    return "\n\n".join(parts)
-
-
-async def give_instructions(persona: Persona) -> None:
-    """Load instructions into a persona."""
-    logger.info("Giving instructions", {"persona_id": persona.id})
-    try:
-        path = persona.storage_dir / "instructions"
-        for key, content in prompts.BASIC_INSTRUCTIONS.items():
-            filesystem.write(path / f"{key}.md", content)
-    except OSError as e:
-        raise IdentityError("Failed to give instructions") from e
-
-
-async def add_instruction(persona: Persona, name: str, content: str) -> None:
-    """Add a single instruction to a persona."""
-    logger.info("Adding instruction", {"persona_id": persona.id, "name": name})
-    try:
-        path = persona.storage_dir / "instructions"
-        filesystem.write(path / f"{name}.md", content)
-    except OSError as e:
-        raise IdentityError("Failed to add instruction") from e
-
-
-async def equip_basic_skills(persona: Persona) -> None:
-    """Prepare the skills directory for a persona."""
-    logger.info("Equipping basic skills", {"persona_id": persona.id})
-    try:
-        filesystem.ensure_dir(persona.storage_dir / "skills")
-    except OSError as e:
-        raise IdentityError("Failed to equip basic skills") from e
-
-
-async def shelve_skill(persona: Persona, skill_path: str) -> Path:
-    """Read a skill document and save it to the persona's skills directory."""
-    logger.info("Shelving skill", {"persona_id": persona.id, "path": skill_path})
-    try:
-        source = Path(skill_path)
-        content = filesystem.read(source)
-        destination = persona.storage_dir / "skills" / source.name
-        if destination.exists():
-            raise IdentityError(f"Skill '{source.stem}' already exists")
-        filesystem.write(destination, content)
-        return destination
-    except OSError as e:
-        raise IdentityError("Failed to shelve skill") from e
-
-
-async def summarize_skill(persona: Persona, skill_path: Path) -> Observation:
-    """Read a skill and assess what it means for person and persona."""
-    logger.info("Summarizing skill", {"persona_id": persona.id, "skill": skill_path.stem})
-    try:
-        content = filesystem.read(skill_path)
-        return await local_model.assess_skill(persona.model.name, skill_path.stem, content)
-    except OSError as e:
-        raise IdentityError("Failed to read skill for summarization") from e
+        raise IdentityError("Failed to build agent") from e
 
 
 async def identity(persona: Persona) -> dict[str, list[str]]:
@@ -197,34 +130,6 @@ async def identity(persona: Persona) -> dict[str, list[str]]:
         }
     except OSError as e:
         raise IdentityError("Failed to read agent identity") from e
-
-
-async def skills(persona: Persona) -> list[str]:
-    """Read the agent's skill names."""
-    logger.info("Reading agent skills", {"persona_id": persona.id})
-    try:
-        names = []
-        skills_dir = persona.storage_dir / "skills"
-        if skills_dir.exists():
-            for file in sorted(skills_dir.glob("*.md")):
-                names.append(file.stem)
-        return names
-    except OSError as e:
-        raise IdentityError("Failed to read agent skills") from e
-
-
-async def history(persona: Persona) -> list[str]:
-    """Read the agent's conversation history names."""
-    logger.info("Reading agent history", {"persona_id": persona.id})
-    try:
-        names = []
-        history_dir = persona.storage_dir / "history"
-        if history_dir.exists():
-            for file in sorted(history_dir.glob("*")):
-                names.append(file.stem)
-        return names
-    except OSError as e:
-        raise IdentityError("Failed to read agent history") from e
 
 
 async def delete_identity(persona: Persona, hash_part: str) -> None:
@@ -255,34 +160,6 @@ async def delete_context(persona: Persona, hash_part: str) -> None:
         filesystem.write(path, "\n".join(remaining) + "\n" if remaining else "")
     except OSError as e:
         raise IdentityError("Failed to delete context entry") from e
-
-
-async def delete_skill(persona: Persona, hash_part: str) -> None:
-    """Remove a skill file by its name hash."""
-    logger.info("Deleting skill", {"persona_id": persona.id, "hash": hash_part})
-    try:
-        skills_dir = persona.storage_dir / "skills"
-        for file in skills_dir.glob("*.md"):
-            if crypto.generate_unique_id(file.stem) == hash_part:
-                filesystem.delete(file)
-                return
-        raise IdentityError("Skill not found or already removed")
-    except OSError as e:
-        raise IdentityError("Failed to delete skill") from e
-
-
-async def delete_history(persona: Persona, hash_part: str) -> None:
-    """Remove a conversation file from history by its name hash."""
-    logger.info("Deleting history entry", {"persona_id": persona.id, "hash": hash_part})
-    try:
-        history_dir = persona.storage_dir / "history"
-        for file in history_dir.glob("*"):
-            if crypto.generate_unique_id(file.stem) == hash_part:
-                filesystem.delete(file)
-                return
-        raise IdentityError("History entry not found or already removed")
-    except OSError as e:
-        raise IdentityError("Failed to delete history entry") from e
 
 
 async def learn(persona: Persona, context: list[str]) -> None:
@@ -350,34 +227,14 @@ async def distill(materials: Path) -> Persona:
         raise IdentityError("Failed to restore persona files") from e
 
 
-async def recall(persona: Persona) -> str:
-    """Read all history files and return concatenated conversations."""
-    logger.info("Recalling history", {"persona_id": persona.id})
-    try:
-        parts = []
-        history_dir = persona.storage_dir / "history"
-        if history_dir.exists():
-            for file in sorted(history_dir.glob("*")):
-                parts.append(filesystem.read(file))
-        return "\n\n---\n\n".join(parts)
-    except OSError as e:
-        raise IdentityError("Failed to read history") from e
-
-
 async def sleep(persona: Persona) -> str:
-    """Assemble all persona knowledge into a sleep prompt for observation extraction and training."""
+    """Assemble DNA into a sleep prompt for training data generation."""
     logger.info("Preparing sleep prompt", {"persona_id": persona.id})
     try:
-        traits_path = persona.storage_dir / "person-traits.md"
-        person_traits = filesystem.read(traits_path) if traits_path.exists() else ""
+        dna_path = persona.storage_dir / "dna.md"
+        dna = filesystem.read(dna_path) if dna_path.exists() else ""
 
-        context_path = persona.storage_dir / "persona-context.md"
-        persona_context = filesystem.read(context_path) if context_path.exists() else ""
-
-        return prompts.sleep(
-            person_traits=person_traits,
-            persona_context=persona_context,
-        )
+        return prompts.sleep(dna=dna)
     except OSError as e:
         raise IdentityError("Failed to read persona files for sleep") from e
 
