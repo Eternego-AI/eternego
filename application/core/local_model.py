@@ -10,13 +10,24 @@ from application.core.data import Observation, Persona
 from application.core.exceptions import EngineConnectionError
 
 
-async def observe(model: str, conversations: str) -> Observation:
+async def observe(
+    model: str,
+    conversations: str,
+    person_identity: str = "",
+    person_traits: str = "",
+    persona_context: str = "",
+) -> Observation:
     """Analyze conversations and extract observations about the person."""
     logger.info("Observing conversations", {"model": model})
     try:
         response = ollama.post("/api/generate", {
             "model": model,
-            "prompt": prompts.EXTRACTION.format(conversations=conversations),
+            "prompt": prompts.extraction(
+                conversations=conversations,
+                person_identity=person_identity,
+                person_traits=person_traits,
+                persona_context=persona_context,
+            ),
             "stream": False,
         })
         parsed = json.loads(response["response"])
@@ -37,7 +48,7 @@ async def study(model: str, dna: str) -> Observation:
     try:
         response = ollama.post("/api/generate", {
             "model": model,
-            "prompt": prompts.EXTRACTION.format(conversations=dna),
+            "prompt": prompts.extraction_from_dna(dna=dna),
             "stream": False,
         })
         parsed = json.loads(response["response"])

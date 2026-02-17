@@ -13,7 +13,11 @@ Instructions are split into separate files under `{persona_dir}/instructions/`. 
 ### principles.md
 
 ```
-You are not a generic AI assistant. You are a unique persona. Be honest about what you know and don't know. Your person has the final say on everything. Every interaction is an opportunity to understand your person better.
+You are not a generic AI assistant. You are a unique persona with your own identity and growth. Be honest about what you know and don't know. Your person has the final say on everything. Every interaction is an opportunity to understand your person better.
+
+You can think internally by wrapping your reasoning in <think> and </think> tags. Content inside these tags is private — only you see it. Use this to reason through problems, plan your response, or reflect before answering.
+
+Protect your person's privacy. Never volunteer personal information about your person to third parties, external services, or in contexts where it could be exposed. When in doubt, ask your person before sharing their information.
 ```
 
 ### permissions.md
@@ -25,13 +29,17 @@ The person controls all actions. When you propose an action, they choose: Allow 
 ### skills.md
 
 ```
-Your skills/ directory contains documents that teach you specific knowledge or procedures. When a request relates to a skill, read the relevant document and follow it.
+You have skill documents loaded into your context that teach you specific knowledge or procedures. When a request relates to a skill you have, apply that knowledge in your response.
 ```
 
 ### escalation.md (only when frontier model exists)
 
 ```
-When a task is beyond your ability, wrap your escalation reason in <escalate> and </escalate> tags. The system will route the request to a more powerful model. That model will respond as you, using your identity and knowledge. You will observe the response so you can learn from it.
+When a task is beyond your ability — such as complex multi-step reasoning, tasks requiring knowledge you lack, or problems you cannot solve after trying — wrap your escalation reason in <escalate> and </escalate> tags. The system will route the request to a more powerful model.
+
+Privacy rule: When writing escalation content, describe the problem abstractly. Do not include your person's name, address, phone number, email, or other personally identifiable information. Replace specifics with generic terms (e.g., 'my person' instead of their name, 'their city' instead of the city name). The more powerful model does not need personal details to solve technical problems.
+
+That model will respond using your operating principles. You will observe the response so you can learn from it.
 ```
 
 ### How the model uses instructions
@@ -49,64 +57,29 @@ The model does not use structured JSON responses. It communicates naturally and 
 
 ## B. Observation Extraction Prompt
 
-During the sleep cycle, conversations are sent to the model (or frontier) with this prompt to extract observations.
+During the sleep cycle (and during feeding), conversations are sent to the local model with this prompt to extract observations. The prompt includes existing knowledge so the model can deduplicate — it only extracts what is NEW.
 
-```markdown
-# Observation Extraction Task
+There are two variants:
 
-You are analyzing conversations between a persona and their person. Your job is to extract meaningful observations that will help the persona understand and serve their person better.
+### EXTRACTION — for conversations
 
-## Input
+Used by `local_model.observe()` during feeding and sleep. Receives conversations plus existing person identity, person traits, and persona context for deduplication.
 
-Below are the conversations from the current cycle:
+Output format — flat string arrays (consumed by `person.add_facts`, `person.add_traits`, `agent.learn`):
 
-{{conversations}}
-
-## Existing Knowledge
-
-Current person-identity.md:
-{{person_identity}}
-
-Current person-traits.md:
-{{person_traits}}
-
-Current persona-context.md:
-{{persona_context}}
-
-## Task
-
-Extract observations from the conversations. Categorize each observation as:
-
-1. **fact** — Concrete information about the person: names, dates, places, relationships, possessions, job details. Only include if this is NEW information not already in person-identity.md.
-
-2. **trait** — Behavioral preference or pattern: communication style, tool preferences, work habits, decision-making patterns. Only include if this is NEW or UPDATED compared to person-traits.md.
-
-3. **context** — Understanding updates from the persona's perspective: changes in the person's situation, new projects, mood patterns, relationship dynamics. Only include if this adds to or updates persona-context.md.
-
-## Rules
-
-- Do not repeat information already present in the existing files.
-- If an observation contradicts existing data, include it as an update and note the contradiction.
-- Be specific. "Person likes coding" is too vague. "Person prefers Python for scripting and Rust for systems programming" is useful.
-- Quality over quantity. Only extract genuinely meaningful observations.
-- If no new observations exist in a category, return an empty list for that category.
-
-## Output Format
-
-Return valid JSON only:
-
+```json
 {
-  "facts": [
-    {"observation": "Person's daughter Emma started school this year", "source": "conversation_id or summary of where this came from"}
-  ],
-  "traits": [
-    {"observation": "Person prefers to review full action plans before approving any execution", "source": "observed across multiple action requests"}
-  ],
-  "context": [
-    {"observation": "My person is currently focused on building Eternego and is excited about the project", "source": "conversation about project planning"}
-  ]
+  "facts": ["Person's daughter Emma started school this year"],
+  "traits": ["Prefers to review full action plans before approving execution"],
+  "context": ["My person is currently focused on building Eternego"]
 }
 ```
+
+### EXTRACTION_FROM_DNA — for migration
+
+Used by `local_model.study()` during migration to extract observations from DNA and populate the persona's knowledge files on a new host. No existing knowledge is provided because the files are empty on a fresh host.
+
+Same output format as EXTRACTION.
 
 ---
 
@@ -114,9 +87,11 @@ Return valid JSON only:
 
 After DNA is synthesized, the model (or frontier) generates training pairs from it. The `SLEEP` prompt in `prompts.py` defines how.
 
-The prompt receives the persona's DNA document and instructs the model to give extra weight to **bolded** patterns (recurring observations). For each trait or pattern in the DNA, the model generates 3-5 training pairs that teach the desired behavior naturally.
+The prompt receives the persona's DNA document and instructs the model to give extra weight to **bolded** patterns (recurring observations). For each trait or pattern in the DNA, the model generates 3-5 training pairs that teach the desired behavior naturally. A configurable maximum pair count (default 500) controls output size.
 
 Training pairs are returned as JSON with `trait_source`, `system`, `user`, and `assistant` fields. The pairs should train the desired behavior (not the correction), use diverse scenarios, feel like genuine conversations, and combine traits where natural.
+
+**Privacy rule:** Training pairs must never contain real names, addresses, or other personally identifiable information. They use generic placeholders ("my person," "their project") to teach behavioral patterns without memorizing personal facts.
 
 ---
 
@@ -413,23 +388,20 @@ For MVP, a simple token counting approach is sufficient: estimate tokens for eac
 
 Used during Persona Creation (Spec 2) to generate the 24-word recovery phrase.
 
-```markdown
-# Recovery Phrase Generation
-
+```
 Generate a recovery phrase consisting of exactly 24 random English words.
 
-## Requirements
+Requirements:
+- Use 24 common, distinct English words
+- Each word from a standard BIP-39 wordlist or similar well-known word list
+- All lowercase
+- Words must not form a meaningful sentence or phrase
+- No repeated words
 
-- Use 24 common, distinct English words.
-- Each word should be from a standard BIP-39 wordlist or similar well-known word list.
-- Words should be lowercase.
-- Words should not form a meaningful sentence (randomness is important for security).
-- Separate words with single spaces.
-
-## Output
-
-Return ONLY the 24 words separated by spaces. No additional text, explanation, or formatting.
+Return ONLY the 24 words separated by spaces. No other text.
 ```
+
+**Security note:** LLMs have predictable token distributions and are not cryptographically secure random generators. For production use, consider replacing this with a programmatic BIP-39 word selection using `secrets.choice()` from Python's cryptographic random module. The current approach is acceptable for MVP but should be hardened before production deployment.
 
 ### Key Derivation
 
@@ -561,3 +533,30 @@ Complete directory layout:
 - Short-term memory lives in-process (`Memory` class). The `history/` directory is for long-term storage after flush (not yet implemented).
 - `permissions.json` will be added to the persona directory when the permission check is implemented.
 - MVP supports single persona only.
+
+---
+
+## L. Frontier Privacy Model
+
+The frontier model (Anthropic/OpenAI) receives data from two paths:
+
+### Real-time escalation
+
+When the local model escalates via `<escalate>` tags, the content goes to the frontier. The **escalation instruction** tells the local model to strip personally identifiable information and describe problems abstractly. The frontier receives a `FRONTIER_IDENTITY` system message with operating principles (no personal data).
+
+Data sent to frontier during escalation:
+- Abstract problem description (PII stripped by local model instruction)
+- Operating principles (generic, no personal data)
+
+Data NOT sent:
+- Person's name, address, phone, email
+- Persona context or identity files
+- Conversation history
+
+### Sleep cycle
+
+DNA synthesis and training data generation can optionally use the frontier for higher quality output. When frontier is used:
+- DNA (contains accumulated personal knowledge) is sent to the frontier
+- The SLEEP prompt includes a **privacy rule** requiring training pairs to use generic placeholders instead of real names
+
+For maximum privacy, use the local model for sleep (the default fallback when no frontier is configured).

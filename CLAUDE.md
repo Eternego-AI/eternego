@@ -127,7 +127,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 | Module | Role |
 |---|---|
-| `agent.py` | given(), initialize(), embody(), build(), identity CRUD, sleep(), save_training_set(), wake_up(), personas(), find() |
+| `agent.py` | given(), initialize(), embody(), build(), identity CRUD, knowledge(), sleep(), save_training_set(), wake_up(), personas(), find() |
 | `person.py` | bond(), facts/traits CRUD |
 | `dna.py` | make(), read(), evolve(), assemble_synthesis() — persona DNA lifecycle |
 | `instructions.py` | read(), give(), add() — persona operating instructions |
@@ -142,7 +142,8 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | `data.py` | Channel, Model, Thought, Thinking, Observation, Gateway, Persona |
 | `memories.py` | agent(persona) → remember(), recall(), forget_everything() — per-persona short-term memory |
 | `paths.py` | agents_home(), agent_identity(agent_id) |
-| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP, DNA_SYNTHESIS, sleep(), dna_synthesis() |
+| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, EXTRACTION_FROM_DNA, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP, DNA_SYNTHESIS, FRONTIER_IDENTITY, REFLECTION, PREDICTION, extraction(), extraction_from_dna(), sleep(), dna_synthesis(), reflection(), prediction() |
+| `observations.py` | effect() — applies observations (facts, traits, context) to persona files |
 | `exceptions.py` | All domain exceptions (includes ChannelError) |
 | `diary.py` | open_for(), open(), record() |
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |

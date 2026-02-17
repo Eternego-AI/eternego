@@ -230,7 +230,8 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     try:
         conversations = await external_llms.read(data, source)
 
-        observation = await local_model.observe(persona.model.name, conversations)
+        knowledge = await agent.knowledge(persona)
+        observation = await local_model.observe(persona.model.name, conversations, **knowledge)
         await observations.effect(persona, observation)
 
         await bus.broadcast("Persona fed", {
@@ -712,7 +713,8 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     try:
         conversations = await history.recall(persona)
         if conversations:
-            observed = await local_model.observe(persona.model.name, conversations)
+            knowledge = await agent.knowledge(persona)
+            observed = await local_model.observe(persona.model.name, conversations, **knowledge)
             await observations.effect(persona, observed)
 
         synthesis = dna.assemble_synthesis(persona)

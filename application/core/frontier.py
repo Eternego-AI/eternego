@@ -65,13 +65,17 @@ def consulting(persona: Persona, prompt: str) -> Thinking:
     logger.info("Consulting", {"persona_id": persona.id, "model": model.name, "provider": model.provider})
 
     async def _reason() -> AsyncIterator[Thought]:
-        messages = [{"role": "user", "content": prompt}]
         api_key = (model.credentials or {}).get("api_key", "")
 
         try:
             if model.provider == "anthropic":
+                messages = [{"role": "user", "content": f"{prompts.FRONTIER_IDENTITY}\n\n{prompt}"}]
                 raw_stream = anthropic.stream(api_key, model.name, messages)
             elif model.provider == "openai":
+                messages = [
+                    {"role": "system", "content": prompts.FRONTIER_IDENTITY},
+                    {"role": "user", "content": prompt},
+                ]
                 raw_stream = openai.stream(api_key, model.name, messages)
             else:
                 raise FrontierError(f"Unsupported frontier provider: {model.provider}")

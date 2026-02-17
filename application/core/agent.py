@@ -16,13 +16,29 @@ def given(persona: Persona, document: dict) -> Thinking:
     """Give the agent external input and return the thinking process."""
     memories.agent(persona).remember(document)
 
+    system_parts = []
+
+    inst = instructions.read(persona)
+    if inst:
+        system_parts.append(inst)
+
+    identity_path = persona.storage_dir / "persona-identity.md"
+    if identity_path.exists():
+        who_i_am = filesystem.read(identity_path).strip()
+        if who_i_am:
+            system_parts.append(who_i_am)
+
+    context_path = persona.storage_dir / "persona-context.md"
+    if context_path.exists():
+        what_i_know = filesystem.read(context_path).strip()
+        if what_i_know:
+            system_parts.append(what_i_know)
+
+    system_message = "\n\n".join(system_parts)
+
     async def _reason() -> AsyncIterator[Thought]:
         while True:
-            messages = []
-
-            inst = instructions.read(persona)
-            if inst:
-                messages.append({"role": "system", "content": inst})
+            messages = [{"role": "system", "content": system_message}]
 
             for doc in memories.agent(persona).recall():
                 if doc["type"] in ("stimulus", "reflection", "prediction"):
@@ -110,7 +126,9 @@ async def build(persona: Persona) -> None:
     """Prepare the agent's identity, context, and training directories."""
     logger.info("Building agent", {"persona_id": persona.id})
     try:
-        filesystem.write(persona.storage_dir / "persona-identity.md", "")
+        birthday = datetimes.now().date()
+        persona_identity = f"Name: {persona.name}\nBirthday: {birthday}\n"
+        filesystem.write(persona.storage_dir / "persona-identity.md", persona_identity)
         filesystem.write(persona.storage_dir / "persona-context.md", "")
         filesystem.ensure_dir(persona.storage_dir / "training")
     except OSError as e:
@@ -130,6 +148,19 @@ async def identity(persona: Persona) -> dict[str, list[str]]:
         }
     except OSError as e:
         raise IdentityError("Failed to read agent identity") from e
+
+
+async def knowledge(persona: Persona) -> dict:
+    """Read existing knowledge for observation deduplication. Returns empty strings on failure."""
+    logger.info("Reading existing knowledge", {"persona_id": persona.id})
+    try:
+        return {
+            "person_identity": filesystem.read(persona.storage_dir / "person-identity.md").strip(),
+            "person_traits": filesystem.read(persona.storage_dir / "person-traits.md").strip(),
+            "persona_context": filesystem.read(persona.storage_dir / "persona-context.md").strip(),
+        }
+    except OSError:
+        return {"person_identity": "", "person_traits": "", "persona_context": ""}
 
 
 async def delete_identity(persona: Persona, hash_part: str) -> None:
