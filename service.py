@@ -9,6 +9,7 @@ from application.business import persona
 from application.platform import logger
 from application.platform.observer import Command, Event, Plan, Signal, subscribe
 from web.app import app as web_app
+from web.socket import on_signal
 
 
 async def start_web(host: str, port: int) -> None:
@@ -78,7 +79,7 @@ async def main():
             print(f"[{signal.__class__.__name__}] {signal.title}", signal.details)
 
     logger.default_media(log_media)
-    subscribe(log_signal, restart_gateway)
+    subscribe(log_signal, restart_gateway, on_signal)
 
     outcome = await persona.agents()
     if not outcome.success:

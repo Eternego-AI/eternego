@@ -11,3 +11,19 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     model: str
     messages: list[Message]
+
+
+class PersonaCreateRequest(BaseModel):
+    name: str
+    model: str
+    channel_name: str
+    channel_credentials: dict
+    frontier_model: str | None = None
+    frontier_provider: str | None = None
+    frontier_credentials: dict | None = None
+
+
+class PersonaMigrateRequest(BaseModel):
+    diary_path: str
+    phrase: str
+    model: str
