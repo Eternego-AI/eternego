@@ -24,6 +24,18 @@ async def agents() -> Outcome[dict]:
         return Outcome(success=False, message="Could not list personas. Please check the persona data.")
 
 
+async def find(persona_id: str) -> Outcome[dict]:
+    """Find a persona by its ID."""
+    await bus.propose("Finding persona", {"persona_id": persona_id})
+    try:
+        found = agent.find(persona_id)
+        await bus.broadcast("Persona found", {"persona": found})
+        return Outcome(success=True, message="", data={"persona": found})
+    except IdentityError as e:
+        await bus.broadcast("Persona not found", {"persona_id": persona_id, "error": str(e)})
+        return Outcome(success=False, message="Persona not found.")
+
+
 async def find_by_channel(channel: Channel) -> Outcome[dict]:
     """Find the persona that owns the given channel."""
     outcome = await agents()
