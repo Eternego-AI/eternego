@@ -29,10 +29,23 @@ def given(persona: Persona, document: dict) -> Thinking:
             system_parts.append(who_i_am)
 
     context_path = persona.storage_dir / "persona-context.md"
-    if context_path.exists():
-        what_i_know = filesystem.read(context_path).strip()
-        if what_i_know:
-            system_parts.append(what_i_know)
+    what_i_know = filesystem.read(context_path).strip() if context_path.exists() else ""
+    if what_i_know:
+        system_parts.append(what_i_know)
+
+    person_identity_path = persona.storage_dir / "person-identity.md"
+    person_known = person_identity_path.exists() and filesystem.read(person_identity_path).strip()
+    if not person_known:
+        system_parts.append(
+            "You do not know your person yet — not their name or anything about them. "
+            "Learn who they are naturally through this conversation."
+        )
+
+    if not what_i_know:
+        system_parts.append(
+            "Your own context and purpose have not yet been shaped. "
+            "Ask your person what role they want you to play in their life."
+        )
 
     system_message = "\n\n".join(system_parts)
 
