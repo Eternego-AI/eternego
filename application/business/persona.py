@@ -190,22 +190,43 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
         persona_model = models.generate_name(model, persona.id)
         await agent.embody(persona, model_obj, persona_model)
         await local_inference_engine.copy(model, persona_model)
-        await agent.save_persona(persona)
 
-        dna_structure = dna.read(persona)
-        observed = await local_model.study(persona.model.name, dna_structure)
-        await observations.effect(persona, observed)
+        try:
+            await agent.save_persona(persona)
 
-        await system.save_phrases(persona, phrase)
+            dna_structure = dna.read(persona)
+            observed = await local_model.study(persona.model.name, dna_structure)
+            await observations.effect(persona, observed)
 
-        await diary.open_for(persona)
+            await system.save_phrases(persona, phrase)
 
-        outcome = await write_diary(persona)
-        if not outcome.success:
-            await bus.broadcast(
-                "Persona migration failed", {"reason": "diary", "persona": persona}
-            )
-            return Outcome(success=False, message=outcome.message)
+            await diary.open_for(persona)
+
+            outcome = await write_diary(persona)
+            if not outcome.success:
+                await bus.broadcast(
+                    "Persona migration failed", {"reason": "diary", "persona": persona}
+                )
+                try:
+                    await agent.remove(persona)
+                except Exception:
+                    pass
+                try:
+                    await local_inference_engine.delete(persona_model)
+                except Exception:
+                    pass
+                return Outcome(success=False, message=outcome.message)
+
+        except Exception:
+            try:
+                await agent.remove(persona)
+            except Exception:
+                pass
+            try:
+                await local_inference_engine.delete(persona_model)
+            except Exception:
+                pass
+            raise
 
         verification = {}
         for ch in (persona.channels or []):
