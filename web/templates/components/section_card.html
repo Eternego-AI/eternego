@@ -1,0 +1,22 @@
+<div class="bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col {{ section_span }}">
+
+  <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800 flex-shrink-0">
+    <div class="flex items-baseline gap-2 min-w-0">
+      <span class="text-xs font-bold tracking-widest uppercase text-zinc-500 shrink-0">{{ section_meta.label }}</span>
+      <span class="text-xs text-zinc-700 truncate">{{ section_meta.desc }}</span>
+    </div>
+    <span class="text-xs font-mono text-zinc-700 ml-3 shrink-0" id="count-{{ section_key }}">{{ section_items | length }}</span>
+  </div>
+
+  <ul id="list-{{ section_key }}"
+      class="feed-scroll overflow-y-auto divide-y divide-zinc-800/50 max-h-80">
+    {% if section_items %}
+      {% for item in section_items %}
+        {% include "components/entry.html" %}
+      {% endfor %}
+    {% else %}
+      <li class="px-4 py-8 text-xs text-zinc-700 font-mono text-center">empty</li>
+    {% endif %}
+  </ul>
+
+</div>

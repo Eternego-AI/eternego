@@ -1,0 +1,17 @@
+<li class="flex items-start gap-3 px-4 py-3 group" data-entry-id="{{ item.id }}">
+  <span class="flex-1 text-xs text-zinc-300 leading-relaxed">{{ item.content }}</span>
+
+  <div data-idle class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
+    <button onclick="showConfirm(this)"
+            class="text-zinc-600 hover:text-red-400 transition-colors text-base leading-none"
+            title="Delete">×</button>
+  </div>
+
+  <div data-confirming class="hidden shrink-0 items-center gap-2 mt-0.5">
+    <span class="text-xs text-zinc-600">delete?</span>
+    <button onclick="doDelete('{{ persona.id }}', '{{ item.id }}', this)"
+            class="text-xs text-red-400 hover:text-red-300 font-medium transition-colors">yes</button>
+    <button onclick="cancelConfirm(this)"
+            class="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">no</button>
+  </div>
+</li>
