@@ -24,8 +24,10 @@
 
       <div>
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Channel</label>
-        <input name="channel_name" required type="text" placeholder="e.g. telegram"
-               class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-violet-600 transition-colors">
+        <select name="channel_name" required
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-violet-600 transition-colors">
+          <option value="telegram">Telegram</option>
+        </select>
       </div>
 
       <div>
@@ -34,7 +36,7 @@
         </label>
         <textarea name="channel_credentials" required rows="3" placeholder='{"token": "123456:ABCdef..."}'
                   class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-600 transition-colors resize-none"></textarea>
-        <p class="text-xs text-zinc-700 mt-1.5">Telegram: create a bot via <span class="font-mono">@BotFather</span> and paste its token above.</p>
+        <p class="text-xs text-zinc-500 mt-1.5">Create a Telegram bot via <a href="https://t.me/botfather" target="_blank" class="text-violet-400 hover:text-violet-300 font-mono">@BotFather</a> and paste the token as <span class="font-mono text-zinc-400">{"token": "..."}</span></p>
       </div>
 
       <div id="create-error"

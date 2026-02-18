@@ -18,6 +18,8 @@ def given(persona: Persona, document: dict) -> Thinking:
 
     system_parts = []
 
+    system_parts.append(f"Current date and time: {datetimes.iso_8601(datetimes.now())}")
+
     inst = instructions.read(persona)
     if inst:
         system_parts.append(inst)
