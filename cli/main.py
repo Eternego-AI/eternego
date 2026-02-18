@@ -67,11 +67,14 @@ def cmd_service_status(_):
         ])
 
 def cmd_service_logs(_):
-    if _OS == "Linux":
-        subprocess.run(["journalctl", "--user", "-u", "eternego", "-f"])
-    elif _OS == "Darwin":
-        log = os.path.expanduser("~/Library/Logs/eternego.log")
-        subprocess.run(["tail", "-f", log])
+    try:
+        if _OS == "Linux":
+            subprocess.run(["journalctl", "--user", "-u", "eternego", "-f"])
+        elif _OS == "Darwin":
+            log = os.path.expanduser("~/Library/Logs/eternego.log")
+            subprocess.run(["tail", "-f", log])
+    except KeyboardInterrupt:
+        pass
     elif _OS == "Windows":
         log = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "eternego.log")
         subprocess.run(["powershell", "-Command", f"Get-Content -Wait -Path '{log}'"])
