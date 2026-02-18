@@ -6,7 +6,7 @@ We believe it is time to unite biological and electronic intelligence to make th
 
 ## Installation
 
-**Prerequisites:** Python 3.11+, [Ollama](https://ollama.com), Git
+**Prerequisites:** Python 3.11+
 
 Clone the repository and run the installer for your platform. It installs the `eternego` command and registers a background service that starts automatically on login/boot.
 
@@ -32,7 +32,7 @@ After installation, follow these steps to run your first persona.
 eternego env prepare --model llama3.2
 ```
 
-This installs Ollama if needed and pulls the model. Run once per machine.
+This installs Git and Ollama if needed, then pulls the model. Run once per machine.
 
 ### 2. Start the service
 
