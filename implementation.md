@@ -496,6 +496,10 @@ Each channel runs in its own daemon thread. The thread polls the platform API (e
 
 For group chats (Telegram), the poll only triggers `on_message` when the persona's username is mentioned.
 
+### Polling Error Handling
+
+`channels.listen` defines an `on_error` closure internally (core layer, where `logger` is available) and passes it to `telegram.poll`. Errors are logged at WARNING level with channel name, persona ID, and the exception. The polling thread sleeps one second and resumes. The business layer passes no `on_error` — error handling is a core concern at this stage.
+
 ### Platform Modules Used
 
 `telegram`
@@ -547,10 +551,10 @@ None (gateway lifecycle is managed in core).
 1. Parse flags: `-v` (verbosity), `--predict-interval` (default 60s, 0 to disable), `--port` (default 5001), `--host` (default 127.0.0.1).
 2. Set up the default logger to write to `eternego.log`.
 3. Subscribe signal handlers: `log_signal` (prints and writes to log file) for all Events and Plans, `restart_gateway` for Commands.
-4. Load all personas via `persona.agents()`.
-5. For each persona, call `persona.start()`.
-6. If `--predict-interval > 0`, start the predict loop as a background asyncio task — calls `persona.predict(persona, channel)` for each persona every N seconds.
-7. Start the FastAPI web server as a background asyncio task via uvicorn on `--host:--port`.
+4. Start the FastAPI web server as a background asyncio task via uvicorn on `--host:--port`. A done_callback surfaces any web server exceptions to stdout. **The web server always starts, even if no personas exist** — this allows the user to reach the dashboard to create their first persona.
+5. Load all personas via `persona.agents()`.
+6. For each persona, call `persona.start()`.
+7. If personas exist and `--predict-interval > 0`, start the predict loop as a background asyncio task — calls `persona.predict(persona, channel)` for each persona every N seconds.
 8. Keep the event loop alive for signal handling and `on_message` callbacks from threads.
 
 The restart handler responds to `"Restart gateway"` commands by stopping then starting the persona's gateway, with outcome checks at each step.
@@ -559,7 +563,7 @@ The restart handler responds to `"Restart gateway"` commands by stopping then st
 
 ## Web Layer
 
-The web layer (`web/`) sits outside `application/` alongside `service.py`. It is started by the service on startup and provides two interfaces:
+The web layer (`web/`) sits outside `application/` alongside `service.py`. It is started by the service on startup and provides three interfaces:
 
 ### OpenAI-Compatible API
 
@@ -575,22 +579,52 @@ The `model` field in all responses contains the persona ID. Clients use `GET /v1
 
 ### Dashboard
 
-`GET /dashboard` renders an HTML page listing all personas with their name, ID, and local model. Served at `http://localhost:5001/dashboard`.
+Jinja2 templates (Tailwind CDN via JIT runtime). WebSocket broadcasts all bus signals to every connected browser tab; JS routes by `details.persona.id` to the correct card.
+
+| Route | Template | Description |
+|---|---|---|
+| `GET /dashboard` | `pages/dashboard.html` | Per-persona cards with live signal feed; Create and Migrate modals |
+| `GET /dashboard/persona/{id}` | `pages/persona.html` | 5 oversight sections (Person, Traits, Skills, Agent, History) with inline delete |
+| `GET /dashboard/persona/{id}/chat` | `pages/chat.html` | Chat UI — sends full conversation history to `/v1/chat/completions` |
+| `WebSocket /ws` | — | Streams all bus signals (Plan/Event/Message/Inquiry/Command) to all tabs |
+
+Each persona card is a fixed-height `div` (25rem) with a scrollable signal feed. Badge and text color are reactive to signal type: Plan → blue, Event → green, Message → violet, Inquiry → amber, Command → red. `Persona created` / `Persona migrated` Event signals trigger live card creation in JS.
+
+The oversight page avoids Jinja2 variable-shadowing: loop variables are named `section_key`/`section_info` (not `section_meta`) to prevent outer dict from being overwritten across iterations.
 
 ### Internal API
 
-`GET /api/*` — reserved for internal Eternego endpoints (persona creation, migration, etc.). Currently a placeholder, routes will be added as the TUI and management layer are built.
+| Endpoint | Business Call | Description |
+|---|---|---|
+| `POST /api/persona/create` | `persona.create()` | Create a new persona |
+| `POST /api/persona/migrate` | `persona.migrate()` | Migrate a persona from an encrypted diary |
+| `POST /api/persona/{id}/control` | `persona.find()` → `persona.control()` | Delete oversight entries by trackable ID |
 
 ### Structure
 
 ```
 web/
-├── app.py          # FastAPI app, mounts all routers
-├── requests.py     # Pydantic request validation models
-└── routes/
-    ├── openai.py   # /v1/* endpoints
-    ├── pages.py    # /dashboard
-    └── api.py      # /api/* (internal)
+├── app.py                      # FastAPI app, mounts all routers
+├── requests.py                 # Pydantic models: ChatRequest, PersonaCreateRequest,
+│                               #   PersonaMigrateRequest, PersonaControlRequest
+├── socket.py                   # ConnectionManager (broadcast to WS clients), on_signal
+├── routes/
+│   ├── openai.py               # /v1/* endpoints
+│   ├── pages.py                # /dashboard and sub-pages
+│   ├── api.py                  # /api/* internal endpoints
+│   └── websocket.py            # /ws WebSocket endpoint
+└── templates/
+    ├── base.html               # Layout, Tailwind CDN, WebSocket client, modal utilities
+    ├── pages/
+    │   ├── dashboard.html      # Persona grid, live signal feed, create/migrate modals
+    │   ├── persona.html        # Oversight sections with per-item delete
+    │   └── chat.html           # Chat UI using /v1/chat/completions
+    └── components/
+        ├── persona_card.html   # Card with signal feed, settings and chat icon links
+        ├── create_modal.html   # Create persona form
+        ├── migrate_modal.html  # Migrate persona form
+        ├── section_card.html   # Oversight section card shell with entry list
+        └── entry.html          # Single entry with two-step inline delete confirmation
 ```
 
 Routes call `application/business/` only — same rule as `service.py`.
@@ -606,7 +640,7 @@ The platform layer consists of reusable modules that can be shared across projec
 | `OS` | Detect operating system |
 | `linux` | Linux-specific shell operations and secure storage |
 | `mac` | macOS-specific shell operations and secure storage (Keychain) |
-| `windows` | Windows-specific shell operations and secure storage (Credential Manager) |
+| `windows` | Windows-specific shell operations and secure storage (Credential Manager); `install()` uses `winget` for Ollama and Git |
 | `telegram` | Telegram Bot API communication (send, poll, is_mentioned) |
 | `ollama` | All local model communication: serve, pull, generate, stream, copy, delete, model management |
 | `anthropic` | Anthropic Claude API streaming and export parsing |

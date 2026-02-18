@@ -155,10 +155,21 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | Module | Role |
 |---|---|
 | `app.py` | FastAPI app, mounts all routers |
-| `requests.py` | Pydantic request validation models |
-| `routes/openai.py` | OpenAI-compatible API: GET /v1/models, GET /v1/models/{id}, POST /v1/chat/completions |
-| `routes/pages.py` | Server-rendered HTML: GET /dashboard |
-| `routes/api.py` | Internal Eternego API: /api/* (persona management, future) |
+| `requests.py` | Pydantic models: Message, ChatRequest, PersonaCreateRequest, PersonaMigrateRequest, PersonaControlRequest |
+| `socket.py` | ConnectionManager (broadcast to all WS clients), on_signal subscriber, _safe() serializer |
+| `routes/openai.py` | GET /v1/models, GET /v1/models/{id}, POST /v1/chat/completions |
+| `routes/pages.py` | GET /dashboard, GET /dashboard/persona/{id}, GET /dashboard/persona/{id}/chat |
+| `routes/api.py` | POST /api/persona/create, POST /api/persona/migrate, POST /api/persona/{id}/control |
+| `routes/websocket.py` | WebSocket /ws — streams all bus signals to connected browser tabs |
+| `templates/base.html` | Layout, Tailwind CDN, WebSocket client, modal utilities |
+| `templates/pages/dashboard.html` | Persona grid, live signal feed per card, create/migrate modals |
+| `templates/pages/persona.html` | Oversight sections (Person, Traits, Skills, Agent, History) with per-item delete |
+| `templates/pages/chat.html` | Chat UI — POSTs to /v1/chat/completions with full conversation history |
+| `templates/components/persona_card.html` | Card with status orb, signal feed, settings and chat icon links |
+| `templates/components/create_modal.html` | Create persona form — POSTs to /api/persona/create |
+| `templates/components/migrate_modal.html` | Migrate persona form — POSTs to /api/persona/migrate |
+| `templates/components/section_card.html` | Oversight section card shell with entry list |
+| `templates/components/entry.html` | Single oversight entry with two-step inline delete confirmation |
 
 ### CLI (cli/)
 
@@ -205,19 +216,24 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 10: Persona Sleep (recall history, extract observations, synthesize DNA, generate training from DNA, LoRA fine-tuning, wake up)
 
 ### Implemented (continued):
-- Spec 13: Persona Start (open all channel gateways, listen via threads)
+- Spec 13: Persona Start (open all channel gateways, listen via threads; polling errors logged via on_error callback in core)
 - Spec 14: Persona Stop (close all channel gateways)
 - Spec 15: Find Persona (by ID, used by web API)
-- Service entry point (`service.py`) — loads personas, starts gateways, runs predict loop (60s default), starts web server
-- Web layer (`web/`) — FastAPI server: OpenAI-compatible API (`/v1/models`, `/v1/chat/completions`), dashboard (`/dashboard`), internal API placeholder (`/api`)
+- Service entry point (`service.py`) — always starts web server (even with no personas); starts predict loop and gateways only when personas exist; web task errors surface via done_callback
+- Web layer (`web/`) — FastAPI server with Jinja2 templates (Tailwind CDN):
+  - OpenAI-compatible API: `GET /v1/models`, `GET /v1/models/{id}`, `POST /v1/chat/completions`
+  - Dashboard: `GET /dashboard` — per-persona cards with live WebSocket signal feed, Create and Migrate modals
+  - Persona detail: `GET /dashboard/persona/{id}` — 5 oversight sections (Person, Traits, Skills, Agent, History) with inline two-step delete confirmation
+  - Chat: `GET /dashboard/persona/{id}/chat` — full chat UI using the OpenAI-compatible API
+  - Internal API: `POST /api/persona/create`, `POST /api/persona/migrate`, `POST /api/persona/{id}/control`
+  - WebSocket: `/ws` — broadcasts all bus signals to connected browser tabs
 - CLI (`cli/`) — `eternego` command installed via `pyproject.toml`: `daemon`, `service`, `env` subcommands
 - Install scripts (`install.sh`, `install.ps1`) — one-command setup for Linux/macOS/Windows, registers system service
+- Windows platform: `winget` used for Ollama and Git installation; `pywin32` added as conditional platform dependency
 
 ### Not started:
 - History lifecycle (short-term memory flush to history/)
 - Circuit breaker for continuous tool failures
-- TUI for persona management (create, migrate, oversee, control)
-- Internal API endpoints (`/api/persona/*`) for programmatic persona management
 
 ## Code Style
 
