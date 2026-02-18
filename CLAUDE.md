@@ -25,7 +25,7 @@ core/        HOW — engineering, calls platform
 platform/    WHAT — thin wrappers around external tools
 ```
 
-Business imports core. Core imports platform. Never upward. The service entry point (`service.py`) sits outside `application/` and only calls business.
+Business imports core. Core imports platform. Never upward. The service entry point (`service.py`), the web layer (`web/`), and the CLI (`cli/`) sit outside `application/` and only call business.
 
 ### Business layer conventions
 
@@ -120,7 +120,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | Module | Functions |
 |---|---|
 | `environment.py` | prepare, check_model |
-| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, chat, sense, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
+| `persona.py` | agents, find, find_by_channel, create, migrate, feed, grow, equip, chat, sense, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
 | `outcome.py` | Outcome dataclass |
 
 ### Core (application/core/)
@@ -149,6 +149,22 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |
 | `channels.py` | matches(), send(), assert_receives(), listen() — returns Gateway |
 | `gateways.py` | of(persona) → add(), close(), close_all(), is_active() — per-persona gateway registry |
+
+### Web (web/)
+
+| Module | Role |
+|---|---|
+| `app.py` | FastAPI app, mounts all routers |
+| `requests.py` | Pydantic request validation models |
+| `routes/openai.py` | OpenAI-compatible API: GET /v1/models, GET /v1/models/{id}, POST /v1/chat/completions |
+| `routes/pages.py` | Server-rendered HTML: GET /dashboard |
+| `routes/api.py` | Internal Eternego API: /api/* (persona management, future) |
+
+### CLI (cli/)
+
+| Module | Role |
+|---|---|
+| `main.py` | `eternego` entry point: daemon, service start/stop/restart/status/logs, env check/prepare |
 
 ### Platform (application/platform/)
 
@@ -191,15 +207,17 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 ### Implemented (continued):
 - Spec 13: Persona Start (open all channel gateways, listen via threads)
 - Spec 14: Persona Stop (close all channel gateways)
-- Service entry point (`service.py`) — loads personas, starts gateways, subscribes to restart commands
+- Spec 15: Find Persona (by ID, used by web API)
+- Service entry point (`service.py`) — loads personas, starts gateways, runs predict loop (60s default), starts web server
+- Web layer (`web/`) — FastAPI server: OpenAI-compatible API (`/v1/models`, `/v1/chat/completions`), dashboard (`/dashboard`), internal API placeholder (`/api`)
+- CLI (`cli/`) — `eternego` command installed via `pyproject.toml`: `daemon`, `service`, `env` subcommands
+- Install scripts (`install.sh`, `install.ps1`) — one-command setup for Linux/macOS/Windows, registers system service
 
 ### Not started:
 - History lifecycle (short-term memory flush to history/)
 - Circuit breaker for continuous tool failures
-
-## What to Work On Next
-
-1. **History lifecycle** — flush short-term memory to `history/` after inactivity.
+- TUI for persona management (create, migrate, oversee, control)
+- Internal API endpoints (`/api/persona/*`) for programmatic persona management
 
 ## Code Style
 

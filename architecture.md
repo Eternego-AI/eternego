@@ -16,7 +16,7 @@ platform/    WHAT — What external tools actually provide, nothing more
 
 Dependencies flow downward only: business imports core, core imports platform. Never upward.
 
-The service entry point (`service.py`) sits outside `application/`. It calls business functions and subscribes to signals. It never touches core or platform directly.
+The service entry point (`service.py`) and the web layer (`web/`) sit outside `application/`. They call business functions only and never touch core or platform directly. The `cli/` directory is also outside `application/` — it is the user-facing command-line interface that delegates to the service manager and business layer.
 
 ---
 
@@ -383,4 +383,10 @@ sense (business) --> agent.given (core) --> local_model.stream (core) --> ollama
 
 service.py --> persona.start (business) --> channels.listen (core) --> telegram.poll (platform, in thread)
            --> persona.stop (business) --> gateways.of(persona).close_all (core) --> Gateway.close (data)
+           --> predict_loop (every N seconds) --> persona.predict (business) --> agent.given (core)
+           --> start_web (uvicorn) --> web/routes --> persona.* (business)
+
+web/routes/openai.py --> persona.agents / persona.find / persona.chat (business)
+web/routes/pages.py  --> persona.agents (business)
+web/routes/api.py    --> persona.* (business) [internal management endpoints]
 ```

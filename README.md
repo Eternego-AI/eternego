@@ -4,6 +4,57 @@ We believe it is time to unite biological and electronic intelligence to make th
 
 ---
 
+## Installation
+
+**Prerequisites:** Python 3.11+, [Ollama](https://ollama.com), Git
+
+Clone the repository and run the installer for your platform. It installs the `eternego` command and registers a background service that starts automatically on login/boot.
+
+**Linux**
+```bash
+bash install.sh
+```
+
+**macOS**
+```bash
+bash install.sh
+```
+
+**Windows** (PowerShell)
+```powershell
+pwsh install.ps1
+```
+
+---
+
+## Usage
+
+### Environment
+
+```bash
+# Install dependencies (git, Ollama) and pull a model
+eternego env prepare [--model llama3.2]
+
+# Check that a specific model is available and running
+eternego env check --model llama3.2
+```
+
+### Service
+
+```bash
+eternego service start    # start the background service
+eternego service stop     # stop it
+eternego service restart  # restart it
+eternego service status   # show current status
+eternego service logs     # follow live output
+```
+
+### OpenAI-compatible API
+
+When the service is running, each persona is reachable through the OpenAI-compatible HTTP API. Use any OpenAI client pointed at `http://localhost:PORT` with the persona name as the model name.
+
+---
+
 ## Business Specifications
 
 ### 1. Environment Preparation
@@ -193,6 +244,14 @@ It closes all channels for a persona.
 
 1. Close all active channel connections for the persona
 2. Report what was stopped
+
+### 15. Find Persona
+
+It finds a persona by its unique ID so other systems can locate and interact with it.
+
+1. Receive a persona ID
+2. Load the persona from its identity storage
+3. Return the persona
 
 ---
 

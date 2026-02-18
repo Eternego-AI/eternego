@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eternego"
+version = "0.1.0"
+description = "AI personas that live on your hardware"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+]
+
+[project.scripts]
+eternego = "cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["application*", "cli*"]
