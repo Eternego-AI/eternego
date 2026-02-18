@@ -1,5 +1,5 @@
 <div id="card-{{ p.id }}"
-     class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3 transition-all duration-300 hover:-translate-y-0.5">
+     class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3 h-[25rem] overflow-hidden transition-all duration-300 hover:-translate-y-0.5">
 
   <div class="flex items-center gap-2">
     <span data-orb class="w-2 h-2 rounded-full bg-zinc-700 transition-colors duration-300"></span>
@@ -15,7 +15,7 @@
 
   <div class="text-xs font-mono text-zinc-500">{{ p.model.name }}</div>
 
-  <div id="feed-{{ p.id }}" class="flex flex-col">
+  <div id="feed-{{ p.id }}" class="feed-scroll flex-1 min-h-0 overflow-y-auto flex flex-col">
     <div data-empty class="text-xs text-zinc-700 font-mono py-1">no signals yet</div>
   </div>
 </div>

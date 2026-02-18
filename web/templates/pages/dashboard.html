@@ -33,12 +33,19 @@
   const MAX_FEED = 20;
   const timers = {};
 
-  const SIG_COLORS = {
+  const SIG_BADGE = {
     Plan:    'bg-blue-900/50 text-blue-400',
     Event:   'bg-emerald-900/50 text-emerald-400',
     Message: 'bg-violet-900/50 text-violet-400',
     Inquiry: 'bg-amber-900/50 text-amber-400',
     Command: 'bg-red-900/50 text-red-400',
+  };
+  const SIG_TEXT = {
+    Plan:    'text-blue-300',
+    Event:   'text-emerald-300',
+    Message: 'text-violet-300',
+    Inquiry: 'text-amber-300',
+    Command: 'text-red-300',
   };
 
   // ── Card status ──────────────────────────────────────────────────────────
@@ -77,12 +84,13 @@
 
     feed.querySelector('[data-empty]')?.remove();
 
-    const color = SIG_COLORS[sig.type] || 'bg-zinc-800 text-zinc-400';
+    const badge = SIG_BADGE[sig.type] || 'bg-zinc-800 text-zinc-400';
+    const text  = SIG_TEXT[sig.type]  || 'text-zinc-400';
     const row = document.createElement('div');
     row.className = 'sig-row flex items-start gap-2 py-1.5 border-b border-zinc-800/50 last:border-0';
     row.innerHTML =
-      `<span class="shrink-0 text-xs font-mono font-medium px-1.5 py-0.5 rounded ${color}">${sig.type}</span>` +
-      `<span class="text-xs text-zinc-400 leading-5 truncate">${sig.title}</span>`;
+      `<span class="shrink-0 text-xs font-mono font-medium px-1.5 py-0.5 rounded ${badge}">${sig.type}</span>` +
+      `<span class="text-xs leading-5 truncate ${text}">${sig.title}</span>`;
 
     feed.prepend(row);
     const rows = feed.querySelectorAll(':scope > .sig-row');
@@ -98,7 +106,7 @@
     const modelName = p.model?.name ?? p.model ?? '';
     const card = document.createElement('div');
     card.id        = 'card-' + p.id;
-    card.className = 'bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3 transition-all duration-300 hover:-translate-y-0.5';
+    card.className = 'bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3 h-[25rem] overflow-hidden transition-all duration-300 hover:-translate-y-0.5';
     card.innerHTML =
       `<div class="flex items-center gap-2">` +
         `<span data-orb class="w-2 h-2 rounded-full bg-zinc-700 transition-colors duration-300"></span>` +
@@ -110,7 +118,7 @@
       `</div>` +
       `<div class="h-px bg-zinc-800"></div>` +
       `<div class="text-xs font-mono text-zinc-500">${modelName}</div>` +
-      `<div id="feed-${p.id}" class="flex flex-col">` +
+      `<div id="feed-${p.id}" class="feed-scroll flex-1 min-h-0 overflow-y-auto flex flex-col">` +
         `<div data-empty class="text-xs text-zinc-700 font-mono py-1">no signals yet</div>` +
       `</div>`;
 
