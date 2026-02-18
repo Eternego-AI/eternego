@@ -46,7 +46,11 @@ async def assert_receives(ch: Channel, message: str) -> bool:
     return False
 
 
-def listen(persona: Persona, ch: Channel, on_message: Callable[[str], Coroutine[None, None, None]]) -> Gateway:
+def listen(
+    persona: Persona,
+    ch: Channel,
+    on_message: Callable[[str], Coroutine[None, None, None]],
+) -> Gateway:
     """Listen for incoming messages on a channel. Returns a gateway."""
     logger.info("Listening on channel", {"name": ch.name, "persona": persona.id})
     loop = asyncio.get_running_loop()
@@ -55,6 +59,12 @@ def listen(persona: Persona, ch: Channel, on_message: Callable[[str], Coroutine[
 
     if ch.name != "telegram":
         raise ChannelError(f"Unsupported channel: {ch.name}")
+
+    def on_error(exc: Exception):
+        logger.warning(
+            f"Polling error on {ch.name} for {persona.name}",
+            {"channel": ch.name, "persona": persona.id, "error": str(exc)},
+        )
 
     gw = Gateway(channel=ch, threading=threading)
 
@@ -66,6 +76,7 @@ def listen(persona: Persona, ch: Channel, on_message: Callable[[str], Coroutine[
             "username": persona.name,
             "on_message": bridge,
             "stop": lambda: gw.is_stopped,
+            "on_error": on_error,
         },
         daemon=True,
     )

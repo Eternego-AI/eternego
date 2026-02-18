@@ -30,6 +30,7 @@ def poll(
     username: str,
     on_message: Callable[[str], None],
     stop: Callable[[], bool],
+    on_error: Callable[[Exception], None] | None = None,
 ) -> None:
     """Long-poll for incoming messages. Runs in a thread."""
     offset = 0
@@ -44,7 +45,9 @@ def poll(
             with urllib.request.urlopen(request, timeout=POLL_TIMEOUT + 5) as response:
                 data = json.loads(response.read())
 
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as e:
+            if on_error:
+                on_error(e)
             time.sleep(POLL_INTERVAL)
             continue
 
