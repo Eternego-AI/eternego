@@ -89,8 +89,11 @@ async def consolidate(persona: Persona, knowledge: dict, transcript: str) -> Non
             else:
                 filesystem.write(path, cluster_text)
 
-            observed = await local_model.observe(persona.model.name, cluster_text, **knowledge)
-            await observations.effect(persona, observed)
+            try:
+                observed = await local_model.observe(persona.model.name, cluster_text, **knowledge)
+                await observations.effect(persona, observed)
+            except EngineConnectionError:
+                logger.info("Skipping observation for cluster", {"topic": topic})
 
     except OSError as e:
         raise IdentityError("Failed to write history during consolidation") from e

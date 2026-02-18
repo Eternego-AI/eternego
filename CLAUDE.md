@@ -128,7 +128,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 | Module | Role |
 |---|---|
-| `agent.py` | given(), initialize(), embody(), build(), identity CRUD, knowledge(), sleep(), save_training_set(), wake_up(), personas(), find() — `knowledge()` now includes `person_struggles` key; `build()` no longer creates `person-struggles.md` (that is `struggles.be_mindful()`'s job) |
+| `agent.py` | given(), initialize(), embody(), build(), identity CRUD, knowledge(), sleep(), save_training_set(), wake_up(), personas(), find(), remove() — `given()` injects skill documents into system message; `remove()` deletes storage dir on failed creation |
 | `person.py` | bond(), facts/traits CRUD |
 | `dna.py` | make(), read(), evolve() — persona DNA lifecycle |
 | `instructions.py` | read(), give(), add() — persona operating instructions |

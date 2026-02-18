@@ -79,6 +79,11 @@ def delete(path: Path) -> None:
     path.unlink()
 
 
+def delete_dir(path: Path) -> None:
+    """Delete a directory tree."""
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def copy_dir(source: Path, destination: Path) -> None:
     """Copy a directory tree to a new location."""
     shutil.copytree(source, destination, dirs_exist_ok=True)

@@ -33,6 +33,16 @@ def given(persona: Persona, document: dict) -> Thinking:
     if what_i_know:
         system_parts.append(what_i_know)
 
+    skills_dir = persona.storage_dir / "skills"
+    if skills_dir.exists():
+        skill_parts = []
+        for skill_file in sorted(skills_dir.glob("*.md")):
+            content = filesystem.read(skill_file).strip()
+            if content:
+                skill_parts.append(f"## {skill_file.stem}\n\n{content}")
+        if skill_parts:
+            system_parts.append("# Skill Documents\n\n" + "\n\n---\n\n".join(skill_parts))
+
     person_identity_path = persona.storage_dir / "person-identity.md"
     person_known = person_identity_path.exists() and filesystem.read(person_identity_path).strip()
     if not person_known:
@@ -311,3 +321,9 @@ async def save_persona(persona: Persona) -> None:
         filesystem.write_json(persona.storage_dir / "config.json", asdict(persona))
     except OSError as e:
         raise IdentityError("Failed to save persona") from e
+
+
+async def remove(persona: Persona) -> None:
+    """Delete the persona's storage directory."""
+    logger.info("Removing persona storage", {"persona_id": persona.id})
+    filesystem.delete_dir(persona.storage_dir)

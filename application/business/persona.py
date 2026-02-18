@@ -87,31 +87,51 @@ async def create(
         await agent.embody(persona, local_model_obj, persona_model)
         await local_inference_engine.copy(model, persona_model)
 
-        await agent.build(persona)
-        await dna.make(persona)
-        await history.start(persona)
-        await struggles.be_mindful(persona)
-        await instructions.give(persona)
-        await skills.equip(persona)
-        await person.bond(persona)
+        try:
+            await agent.build(persona)
+            await dna.make(persona)
+            await history.start(persona)
+            await struggles.be_mindful(persona)
+            await instructions.give(persona)
+            await skills.equip(persona)
+            await person.bond(persona)
 
-        if frontier_model_obj:
-            await frontier.allow_escalation(persona)
+            if frontier_model_obj:
+                await frontier.allow_escalation(persona)
 
-        await agent.save_persona(persona)
+            await agent.save_persona(persona)
 
-        phrase = await system.generate_encryption_phrase(persona)
+            phrase = await system.generate_encryption_phrase(persona)
 
-        await system.save_phrases(persona, phrase)
+            await system.save_phrases(persona, phrase)
 
-        await diary.open_for(persona)
+            await diary.open_for(persona)
 
-        outcome = await write_diary(persona)
-        if not outcome.success:
-            await bus.broadcast(
-                "Persona creation failed", {"reason": "diary", "persona": persona}
-            )
-            return Outcome(success=False, message=outcome.message)
+            outcome = await write_diary(persona)
+            if not outcome.success:
+                await bus.broadcast(
+                    "Persona creation failed", {"reason": "diary", "persona": persona}
+                )
+                try:
+                    await agent.remove(persona)
+                except Exception:
+                    pass
+                try:
+                    await local_inference_engine.delete(persona_model)
+                except Exception:
+                    pass
+                return Outcome(success=False, message=outcome.message)
+
+        except Exception:
+            try:
+                await agent.remove(persona)
+            except Exception:
+                pass
+            try:
+                await local_inference_engine.delete(persona_model)
+            except Exception:
+                pass
+            raise
 
         await bus.broadcast(
             "Persona created", {"persona": persona}
