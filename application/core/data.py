@@ -44,6 +44,7 @@ class Observation:
     facts: list[str]
     traits: list[str]
     context: list[str]
+    struggles: list[str]
 
 
 class Gateway:

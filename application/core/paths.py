@@ -11,3 +11,8 @@ def agents_home() -> Path:
 def agent_identity(agent_id: str) -> Path:
     """Path to the config.json file for that agent."""
     return agents_home() / agent_id / "config.json"
+
+
+def struggles(agent_id: str) -> Path:
+    """Path to the person-struggles.md file for that agent."""
+    return agents_home() / agent_id / "person-struggles.md"

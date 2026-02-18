@@ -16,6 +16,7 @@ async def observe(
     person_identity: str = "",
     person_traits: str = "",
     persona_context: str = "",
+    person_struggles: str = "",
 ) -> Observation:
     """Analyze conversations and extract observations about the person."""
     logger.info("Observing conversations", {"model": model})
@@ -27,6 +28,7 @@ async def observe(
                 person_identity=person_identity,
                 person_traits=person_traits,
                 persona_context=persona_context,
+                person_struggles=person_struggles,
             ),
             "stream": False,
         })
@@ -35,6 +37,7 @@ async def observe(
             facts=parsed.get("facts", []),
             traits=parsed.get("traits", []),
             context=parsed.get("context", []),
+            struggles=parsed.get("struggles", []),
         )
     except URLError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
@@ -56,6 +59,7 @@ async def study(model: str, dna: str) -> Observation:
             facts=parsed.get("facts", []),
             traits=parsed.get("traits", []),
             context=parsed.get("context", []),
+            struggles=[],
         )
     except URLError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
@@ -97,6 +101,7 @@ async def assess_skill(model: str, skill_name: str, skill_content: str) -> Obser
             facts=[],
             traits=parsed.get("traits", []),
             context=parsed.get("context", []),
+            struggles=[],
         )
     except URLError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e

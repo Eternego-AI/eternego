@@ -28,15 +28,16 @@
 </div>
 
 {% set layout = {
-  "person":  {"span": ""},
-  "traits":  {"span": ""},
-  "skills":  {"span": ""},
-  "agent":   {"span": "xl:col-span-2"},
-  "history": {"span": "xl:col-span-3"},
+  "person":    {"span": ""},
+  "traits":    {"span": ""},
+  "struggles": {"span": ""},
+  "skills":    {"span": ""},
+  "agent":     {"span": "xl:col-span-2"},
+  "history":   {"span": "xl:col-span-3"},
 } %}
 
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-  {% for key in ["person", "traits", "skills", "agent", "history"] %}
+  {% for key in ["person", "traits", "struggles", "skills", "agent", "history"] %}
     {% set section_key   = key %}
     {% set section_info  = section_meta[key] %}
     {% set section_items = sections.get(key, []) %}

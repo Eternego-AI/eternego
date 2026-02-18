@@ -1,6 +1,6 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, agent, channels, gateways, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, instructions, skills, history, observations
+from application.core import bus, agent, channels, gateways, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, instructions, skills, history, observations, struggles
 from application.core.data import Channel, Model, Persona
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
@@ -90,6 +90,7 @@ async def create(
         await agent.build(persona)
         await dna.make(persona)
         await history.start(persona)
+        await struggles.be_mindful(persona)
         await instructions.give(persona)
         await skills.equip(persona)
         await person.bond(persona)
@@ -565,7 +566,9 @@ async def predict(persona: Persona, channel: Channel) -> Outcome[dict]:
     )
 
     try:
-        think = agent.given(persona, prompts.prediction())
+        skill_names = await skills.names(persona)
+        person_struggles = await struggles.identified_by(persona)
+        think = agent.given(persona, prompts.prediction(skill_names, person_struggles))
 
         async for thought in think.reason():
             if thought.intent == "saying":
@@ -619,6 +622,7 @@ async def oversee(persona: Persona) -> Outcome[dict]:
         agent_data = await agent.identity(persona)
         skill_list = await skills.names(persona)
         conversations = await history.entries(persona)
+        struggle_list = await struggles.as_list(persona)
 
         await bus.broadcast("Persona overseen", {"persona": persona})
 
@@ -632,6 +636,7 @@ async def oversee(persona: Persona) -> Outcome[dict]:
                     + system.make_rows_traceable(agent_data["context"], "pc"),
                 "skills": system.make_rows_traceable(skill_list, "sk"),
                 "history": system.make_rows_traceable(conversations, "hist"),
+                "struggles": system.make_rows_traceable(struggle_list, "ps"),
             },
         )
 
@@ -664,6 +669,8 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
                 await skills.delete(persona, hash_part)
             elif prefix == "hist":
                 await history.delete(persona, hash_part)
+            elif prefix == "ps":
+                await struggles.delete(persona, hash_part)
 
         await bus.broadcast("Persona controlled", {"persona": persona, "removed": len(entry_ids)})
 

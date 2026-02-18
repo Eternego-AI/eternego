@@ -67,6 +67,7 @@ sense → agent.given(persona, stimulus) → think.reason() → yields Thought o
 
 - `Thought(intent, content, tool_calls)` — single unit of reasoning output
 - `Thinking(reason_by)` — wraps any async generator, exposes `.reason()`
+- `Observation(facts, traits, context, struggles)` — all four fields required, no defaults
 
 Short-term memory is in `memories` module: `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`.
 
@@ -92,7 +93,7 @@ async for thought in frontier.consulting(persona, prompt).reason():
 
 ### Memory vs History
 
-- **Memory** — short-term, in-process, per persona. Accessed via `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`.
+- **Memory** — short-term, in-process, per persona. Accessed via `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`. Struggles are NOT in memory — they persist to disk via `struggles.identify()`.
 - **History** — long-term, on disk (`history/` directory). Persists across sessions. Used for oversight, control, and consolidated conversation storage.
 
 ### Memory document types
@@ -127,7 +128,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 | Module | Role |
 |---|---|
-| `agent.py` | given(), initialize(), embody(), build(), identity CRUD, knowledge(), sleep(), save_training_set(), wake_up(), personas(), find() |
+| `agent.py` | given(), initialize(), embody(), build(), identity CRUD, knowledge(), sleep(), save_training_set(), wake_up(), personas(), find() — `knowledge()` now includes `person_struggles` key; `build()` no longer creates `person-struggles.md` (that is `struggles.be_mindful()`'s job) |
 | `person.py` | bond(), facts/traits CRUD |
 | `dna.py` | make(), read(), evolve() — persona DNA lifecycle |
 | `instructions.py` | read(), give(), add() — persona operating instructions |
@@ -135,16 +136,17 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | `history.py` | start(), entries(), recall(), delete(), consolidate() — long-term conversation history |
 | `transcripts.py` | as_list(), extract() — conversation transcript parsing and extraction |
 | `frontier.py` | allow_escalation(), consulting(persona, prompt) → returns Thinking, respond() |
-| `local_model.py` | stream() async generator, observe(), study(), cluster(), assess_skill(), generate_encryption_phrase(), respond() |
+| `local_model.py` | stream() async generator, observe(person_struggles), study(), cluster(), assess_skill(), generate_encryption_phrase(), respond() — `observe()` accepts `person_struggles` parameter; `study()` and `assess_skill()` pass `struggles=[]` explicitly |
 | `models.py` | generate_name() |
 | `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model(), copy(), delete(), fine_tune() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
 | `system.py` | is_authorized(), execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
-| `data.py` | Channel, Model, Thought, Thinking, Observation, Gateway, Persona |
+| `data.py` | Channel, Model, Thought, Thinking, Observation(facts, traits, context, struggles — all required), Gateway, Persona |
 | `memories.py` | agent(persona) → remember(), as_messages(), as_transcript(), forget_everything() — per-persona short-term memory |
-| `paths.py` | agents_home(), agent_identity(agent_id) |
-| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, EXTRACTION_FROM_DNA, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP, DNA_SYNTHESIS, CONSOLIDATION, FRONTIER_IDENTITY, REFLECTION, PREDICTION, extraction(), extraction_from_dna(), sleep(), dna_synthesis(), consolidation(), reflection(), prediction() |
-| `observations.py` | effect() — applies observations (facts, traits, context) to persona files |
+| `paths.py` | agents_home(), agent_identity(agent_id), struggles(agent_id) → path to `person-struggles.md` |
+| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION (now includes `struggle` category and `{person_struggles}` in Already Known), EXTRACTION_FROM_DNA, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP, DNA_SYNTHESIS, CONSOLIDATION, FRONTIER_IDENTITY, REFLECTION, PREDICTION (now includes `{skill_names}` and `{person_struggles}`), extraction(person_struggles), extraction_from_dna(), sleep(), dna_synthesis(), consolidation(), reflection(), prediction(skill_names, person_struggles) |
+| `observations.py` | effect() — applies observations (facts, traits, context, struggles) to persona files; now calls `struggles.identify()` |
+| `struggles.py` | be_mindful(persona) — create empty `person-struggles.md`; identify(persona, observed) — append new struggles; identified_by(persona) — read as string; as_list(persona) — read as list (for oversight); delete(persona, hash_part) — remove by hash (for control) |
 | `exceptions.py` | All domain exceptions (includes ChannelError) |
 | `diary.py` | open_for(), open(), record() |
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |
@@ -164,7 +166,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | `routes/websocket.py` | WebSocket /ws — streams all bus signals to connected browser tabs |
 | `templates/base.html` | Layout, Tailwind CDN, WebSocket client, modal utilities |
 | `templates/pages/dashboard.html` | Persona grid, live signal feed per card, create/migrate modals |
-| `templates/pages/persona.html` | Oversight sections (Person, Traits, Skills, Agent, History) with per-item delete |
+| `templates/pages/persona.html` | Oversight sections (Person, Traits, Struggles, Skills, Agent, History) with per-item delete |
 | `templates/pages/chat.html` | Chat UI — POSTs to /v1/chat/completions with full conversation history |
 | `templates/components/persona_card.html` | Card with status orb, signal feed, settings and chat icon links |
 | `templates/components/create_modal.html` | Create persona form — POSTs to /api/persona/create |
@@ -200,7 +202,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 ### Implemented:
 - Spec 1: Environment Preparation
-- Spec 2: Persona Creation (with escalation instruction, per-persona model copy)
+- Spec 2: Persona Creation (with escalation instruction, per-persona model copy; `struggles.be_mindful()` called alongside `dna.make`, `history.start`, `person.bond`)
 - Spec 3: Persona Migration (with per-persona model copy)
 - Spec 4: Persona Feeding / Growth
 - Spec 5: Persona Oversight
@@ -211,11 +213,12 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 7b: Sense (reactive loop)
 - Spec 7d: Escalate (frontier routing with observation)
 - Spec 7e: Reflect (reflection prompt after each sense cycle)
-- Spec 7f: Predict (prediction prompt for proactive behavior)
+- Spec 7f: Predict (proactive prediction — reads known struggles via `struggles.identified_by()` and skill names via `skills.names()`, passes both to `prompts.prediction()`; the persona reasons about known struggles and skill gaps and may propose acquiring skills or building solutions, then initiates a conversation with the person for confirmation)
 - Spec 8: Persona Equipment (shelve, summarize, grow)
 - Spec 9: Persona Diary
 - Spec 10: Persona Sleep (consolidate memory to history, synthesize DNA, generate training from DNA, LoRA fine-tuning, wake up)
-- History lifecycle: short-term memory flushed to `history/` via `history.consolidate()` — clusters transcript by topic, extracts observations per cluster, writes each cluster as a history file
+- History lifecycle: short-term memory flushed to `history/` via `history.consolidate()` — clusters transcript by topic, extracts observations per cluster (including struggles), writes each cluster as a history file
+- Struggles system: `struggles.py` manages `person-struggles.md` per persona; extracted during consolidation via `local_model.observe(person_struggles=...)`; accumulated at `observations.effect()`; read during `predict` to inform proactive proposals
 
 ### Implemented (continued):
 - Spec 13: Persona Start (open all channel gateways, listen via threads; polling errors logged via on_error callback in core)
@@ -225,7 +228,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Web layer (`web/`) — FastAPI server with Jinja2 templates (Tailwind CDN):
   - OpenAI-compatible API: `GET /v1/models`, `GET /v1/models/{id}`, `POST /v1/chat/completions`
   - Dashboard: `GET /dashboard` — per-persona cards with live WebSocket signal feed, Create and Migrate modals
-  - Persona detail: `GET /dashboard/persona/{id}` — 5 oversight sections (Person, Traits, Skills, Agent, History) with inline two-step delete confirmation
+  - Persona detail: `GET /dashboard/persona/{id}` — 6 oversight sections (Person, Traits, Struggles, Skills, Agent, History) with inline two-step delete confirmation
   - Chat: `GET /dashboard/persona/{id}/chat` — full chat UI using the OpenAI-compatible API
   - Internal API: `POST /api/persona/create`, `POST /api/persona/migrate`, `POST /api/persona/{id}/control`
   - WebSocket: `/ws` — broadcasts all bus signals to connected browser tabs
@@ -239,7 +242,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 ## Code Style
 
 - Naming: gerund intents ("saying", "doing", "consulting", "reasoning")
-- Memory access: always through `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()` — per-persona, no global memory
+- Memory access: always through `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()` — per-persona, no global memory; struggles are disk-based via `struggles.identified_by()` / `struggles.identify()`, not in short-term memory
 - All feedback (delivery confirmation, tool results, observations) goes through `memories.agent(persona).remember()` from business or frontier
 - Disk-based history listing: `history.entries(persona)` (long-term, on disk)
 - Model naming: `models.generate_name(base_model, persona_id)` — used in create, migrate, sleep

@@ -26,6 +26,7 @@ Each persona is stored under a UUID-based directory. The following files define 
 |------|---------|---------------|-----------|-------------------|
 | `person-identity.md` | Facts about the person (name, birthday, marital status, address, etc.) | No (reference/proof) | No | No |
 | `person-traits.md` | Behavioral preferences (prefers DDD, likes GitLab, etc.) | No (source for DNA synthesis) | Yes | Yes |
+| `person-struggles.md` | Recurring obstacles or unmet needs observed across conversations | No (used in predict and extraction deduplication) | No | No (accumulates) |
 | `dna.md` | Compressed synthesis of persona knowledge about the person | No (source for training) | Yes (via training) | No |
 | `persona-identity.md` | Persona metadata (name, birthday, model, host, etc.) | No (technical reference) | No | No |
 | `persona-context.md` | Everything the persona needs in prompt, from persona's perspective | Yes (always in prompt) | No | No |
@@ -117,15 +118,16 @@ The agent reads and joins all instruction files when building messages. This spl
 5. Build the agent via `agent.build`: `persona-identity.md`, `persona-context.md`, `training/`.
 6. Create empty DNA file via `dna.make`.
 7. Start history via `history.start`: create the `history/` directory.
-8. Give instructions via `instructions.give`: `principles.md`, `permissions.md`, `skills.md`.
-9. Equip basic skills via `skills.equip`: prepare the `skills/` directory.
-10. Bond the person to the persona via `person.bond`: `person-identity.md`, `person-traits.md`.
-11. If frontier model provided, write `escalation.md` instruction via `instructions.add` — tells the agent to wrap escalation reasons in `<escalate>` tags.
-12. Save persona configuration as `config.json`.
-13. Ask the local model to generate a 24-word recovery phrase.
-14. Save encryption key (derived from phrase) to OS secure storage.
-15. Initialize diary directory with git.
-16. Encrypt persona data and write the initial diary entry.
+8. Create empty struggles file via `struggles.be_mindful`: `person-struggles.md`.
+9. Give instructions via `instructions.give`: `principles.md`, `permissions.md`, `skills.md`.
+10. Equip basic skills via `skills.equip`: prepare the `skills/` directory.
+11. Bond the person to the persona via `person.bond`: `person-identity.md`, `person-traits.md`.
+12. If frontier model provided, write `escalation.md` instruction via `instructions.add` — tells the agent to wrap escalation reasons in `<escalate>` tags.
+13. Save persona configuration as `config.json`.
+14. Ask the local model to generate a 24-word recovery phrase.
+15. Save encryption key (derived from phrase) to OS secure storage.
+16. Initialize diary directory with git.
+17. Encrypt persona data and write the initial diary entry.
 
 ### Platform Modules Used
 
@@ -377,10 +379,14 @@ Called automatically at the end of every `sense` cycle.
 
 *It lets the persona anticipate and act without external stimulus.*
 
-1. Give the agent a prediction prompt via `agent.given(persona, prompts.prediction())`.
-2. Iterate the thinking process.
-3. Route saying thoughts through `say`.
-4. Route reasoning thoughts through `bus.share`.
+1. Read the persona's known struggles via `struggles.identified_by(persona)`.
+2. Read the persona's current skill names via `skills.names(persona)`.
+3. Give the agent a prediction prompt via `agent.given(persona, prompts.prediction(skill_names, person_struggles))`.
+4. Iterate the thinking process.
+5. Route saying thoughts through `say`.
+6. Route reasoning thoughts through `bus.share`.
+
+The prediction prompt includes the current skill list and known struggles, allowing the persona to reason proactively: if a recurring need cannot be served by existing skills, it can propose acquiring a relevant skill, or suggest a tool or solution that would resolve a known struggle. All proposals are framed as suggestions for the person to accept or decline — the persona does not assume or act unilaterally.
 
 ### Platform Modules Used
 
@@ -452,7 +458,7 @@ Everything needed to restore the persona:
 ### Solution
 
 1. Capture the current session as a numbered transcript via `memories.agent(persona).as_transcript()`.
-2. Consolidate to long-term history via `history.consolidate(persona, knowledge, transcript)`: cluster the transcript by topic using `local_model.cluster`, extract observations per cluster via `local_model.observe`, apply them to persona files via `observations.effect`, and write each cluster as a dated history file. Falls back to a single cluster if the model returns invalid JSON.
+2. Consolidate to long-term history via `history.consolidate(persona, knowledge, transcript)`: cluster the transcript by topic using `local_model.cluster`, extract observations per cluster via `local_model.observe` (passing existing `person_struggles` for deduplication), apply them to persona files via `observations.effect` (which now also calls `struggles.identify()`), and write each cluster as a dated history file. Falls back to a single cluster if the model returns invalid JSON.
 3. Clear short-term memory via `memories.agent(persona).forget_everything()`.
 4. Synthesize new DNA: call `prompts.dna_synthesis` with previous DNA + current traits + context, send to frontier or local model, write result via `dna.evolve`.
 5. Read DNA via `agent.sleep`, send to the model (or frontier if available) to generate training data.

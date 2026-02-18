@@ -20,6 +20,9 @@ Traits:
 Context:
 {persona_context}
 
+Struggles:
+{person_struggles}
+
 ## Categories
 
 1. **fact** — Concrete information about the person: names, dates, places, relationships, possessions, job details. Only NEW information not already known.
@@ -27,6 +30,8 @@ Context:
 2. **trait** — Behavioral preference or pattern: communication style, tool preferences, work habits, decision-making patterns. Only NEW or UPDATED compared to known traits.
 
 3. **context** — Understanding about the person's situation: current projects, mood patterns, relationship dynamics. Write from first person ("My person..."). Only additions or updates to known context.
+
+4. **struggle** — Recurring obstacles or unmet needs: tasks the person does manually that could be automated, tools or capabilities they lack, problems they return to without resolution. Only NEW patterns not already known. Be conservative — only include clear recurring signals, not one-off requests.
 
 ## Rules
 
@@ -43,7 +48,8 @@ Return ONLY valid JSON:
 {{
   "facts": ["Person's daughter Emma started school this year"],
   "traits": ["Prefers to review full action plans before approving execution"],
-  "context": ["My person is currently focused on a new project"]
+  "context": ["My person is currently focused on a new project"],
+  "struggles": ["Person repeatedly searches the web manually — lacks a search skill"]
 }}"""
 
 
@@ -142,10 +148,15 @@ REFLECTION = (
 
 PREDICTION = (
     "Review recent interactions and consider what your person might need next.\n\n"
+    "Your current skills: {skill_names}\n\n"
+    "Known struggles:\n{person_struggles}\n\n"
     "Look for:\n"
     "- Actions that failed — is there an alternative approach worth suggesting?\n"
     "- Patterns in recent requests — is there a logical next step you can anticipate?\n"
-    "- Incomplete workflows — did the person start something that has a natural continuation?\n\n"
+    "- Incomplete workflows — did the person start something that has a natural continuation?\n"
+    "- Skill gaps — if a recurring need exists that you cannot serve with your current skills, "
+    "propose acquiring a relevant one. Ask the person to equip you.\n"
+    "- Known struggles — if you can propose a skill, tool, or solution that would resolve one, do so.\n\n"
     "If you identify something useful, frame it as a proposal the person can accept or decline. "
     "Do not assume or act — suggest.\n\n"
     "If there is nothing meaningful to anticipate, output nothing at all — "
@@ -285,12 +296,14 @@ def extraction(
     person_identity: str = "",
     person_traits: str = "",
     persona_context: str = "",
+    person_struggles: str = "",
 ) -> str:
     return EXTRACTION.format(
         conversations=conversations,
         person_identity=person_identity or "(none yet)",
         person_traits=person_traits or "(none yet)",
         persona_context=persona_context or "(none yet)",
+        person_struggles=person_struggles or "(none yet)",
     )
 
 
@@ -352,5 +365,9 @@ def reflection():
     return {"type": "reflection", "role": "system", "content": REFLECTION}
 
 
-def prediction():
-    return {"type": "prediction", "role": "system", "content": PREDICTION}
+def prediction(skill_names: list[str] | None = None, person_struggles: str = "") -> dict:
+    skill_names_str = ", ".join(skill_names) if skill_names else "none"
+    return {"type": "prediction", "role": "system", "content": PREDICTION.format(
+        skill_names=skill_names_str,
+        person_struggles=person_struggles or "none",
+    )}

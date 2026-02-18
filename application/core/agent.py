@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from application.platform import logger, filesystem, crypto, datetimes
-from application.core import memories, paths, prompts, local_model, instructions
+from application.core import memories, paths, prompts, local_model, instructions, struggles
 from application.core.data import Channel, Model, Persona, Thinking, Thought
 from application.core.exceptions import IdentityError
 
@@ -147,13 +147,15 @@ async def knowledge(persona: Persona) -> dict:
     """Read existing knowledge for observation deduplication. Returns empty strings on failure."""
     logger.info("Reading existing knowledge", {"persona_id": persona.id})
     try:
+        struggles_path = paths.struggles(persona.id)
         return {
             "person_identity": filesystem.read(persona.storage_dir / "person-identity.md").strip(),
             "person_traits": filesystem.read(persona.storage_dir / "person-traits.md").strip(),
             "persona_context": filesystem.read(persona.storage_dir / "persona-context.md").strip(),
+            "person_struggles": filesystem.read(struggles_path).strip() if struggles_path.exists() else "",
         }
     except OSError:
-        return {"person_identity": "", "person_traits": "", "persona_context": ""}
+        return {"person_identity": "", "person_traits": "", "persona_context": "", "person_struggles": ""}
 
 
 async def delete_identity(persona: Persona, hash_part: str) -> None:

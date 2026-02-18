@@ -63,23 +63,38 @@ There are two variants:
 
 ### EXTRACTION — for conversations
 
-Used by `local_model.observe()` during feeding and sleep. Receives conversations plus existing person identity, person traits, and persona context for deduplication.
+Used by `local_model.observe()` during feeding and sleep. Receives conversations plus existing person identity, person traits, persona context, and person struggles for deduplication. The `person_struggles` parameter is passed from `agent.knowledge()` to ensure already-known struggles are not re-extracted.
 
-Output format — flat string arrays (consumed by `person.add_facts`, `person.add_traits`, `agent.learn`):
+Extracts four categories:
+1. **fact** — Concrete personal information (names, dates, places, relationships).
+2. **trait** — Behavioral preferences and patterns.
+3. **context** — Situational understanding, written from first person.
+4. **struggle** — Recurring obstacles or unmet needs: tasks done manually that could be automated, missing tools or capabilities, problems that recur without resolution. Only clear recurring signals are included, not one-off requests.
+
+Output format — flat string arrays (consumed by `person.add_facts`, `person.add_traits`, `agent.learn`, `struggles.identify`):
 
 ```json
 {
   "facts": ["Person's daughter Emma started school this year"],
   "traits": ["Prefers to review full action plans before approving execution"],
-  "context": ["My person is currently focused on building Eternego"]
+  "context": ["My person is currently focused on building Eternego"],
+  "struggles": ["Person repeatedly searches the web manually — lacks a search skill"]
 }
 ```
 
 ### EXTRACTION_FROM_DNA — for migration
 
-Used by `local_model.study()` during migration to extract observations from DNA and populate the persona's knowledge files on a new host. No existing knowledge is provided because the files are empty on a fresh host.
+Used by `local_model.study()` during migration to extract observations from DNA and populate the persona's knowledge files on a new host. No existing knowledge is provided because the files are empty on a fresh host. This variant extracts only `facts`, `traits`, and `context` — not `struggles`. `study()` constructs the `Observation` with `struggles=[]` explicitly.
 
-Same output format as EXTRACTION.
+Output format:
+
+```json
+{
+  "facts": ["Person is a software engineer in Amsterdam"],
+  "traits": ["Prefers Domain-Driven Design for software architecture"],
+  "context": ["My person values portability and vendor independence"]
+}
+```
 
 ---
 
@@ -516,6 +531,7 @@ Complete directory layout:
 │       ├── config.json                  # UUID, name, channel, model, base_model, frontier
 │       ├── person-identity.md           # Facts about the person
 │       ├── person-traits.md             # Behavioral preferences (cleared after sleep)
+│       ├── person-struggles.md          # Recurring obstacles/unmet needs (accumulates across sleep)
 │       ├── persona-identity.md          # Persona metadata
 │       ├── persona-context.md           # Persona's understanding (always in prompt)
 │       ├── dna.md                       # Compressed synthesis of persona knowledge (persists across sleep)
@@ -543,7 +559,8 @@ Complete directory layout:
 ### Notes
 
 - The diary lives outside the persona directory — under `~/.eternego/diary/{uuid}/`. This separates backup from state.
-- Short-term memory lives in-process (`Memory` class). The `history/` directory is for long-term storage after flush (not yet implemented).
+- Short-term memory lives in-process (`Memory` class). The `history/` directory is for long-term storage; it is populated at sleep time via `history.consolidate()`.
+- `person-struggles.md` accumulates across sleep cycles. It is never cleared — it is a running log of recurring obstacles observed by the persona. The model deduplicates at extraction time using the existing struggles as context.
 - `permissions.json` will be added to the persona directory when the permission check is implemented.
 - MVP supports single persona only.
 

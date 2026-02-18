@@ -336,7 +336,7 @@ All shared data types live in `application/core/data.py`:
 | `Model` | AI model reference (name, provider, credentials) |
 | `Thought` | Single unit of reasoning output (intent, content, tool_calls) |
 | `Thinking` | Wraps a reasoning function, exposes `.reason()` |
-| `Observation` | Extracted observations from conversations (facts, traits, context) |
+| `Observation` | Extracted observations from conversations (facts, traits, context, struggles — all required, no defaults) |
 | `Gateway` | A live channel connection — a thread bound to a channel (channel, close(), is_stopped) |
 | `Persona` | Persona configuration (id, name, model, base_model, frontier, channels, storage_dir) |
 

@@ -12,11 +12,12 @@ templates = Jinja2Templates(directory=Path(__file__).parent.parent / "templates"
 
 
 _SECTIONS = {
-    "person":  {"label": "Person",  "desc": "What the persona knows about you"},
-    "traits":  {"label": "Traits",  "desc": "How the persona perceives you"},
-    "agent":   {"label": "Agent",   "desc": "The persona's own identity and context"},
-    "skills":  {"label": "Skills",  "desc": "Equipped skills and documents"},
-    "history": {"label": "History", "desc": "Conversation history entries"},
+    "person":    {"label": "Person",    "desc": "What the persona knows about you"},
+    "traits":    {"label": "Traits",    "desc": "How the persona perceives you"},
+    "struggles": {"label": "Struggles", "desc": "Recurring obstacles and unmet needs"},
+    "agent":     {"label": "Agent",     "desc": "The persona's own identity and context"},
+    "skills":    {"label": "Skills",    "desc": "Equipped skills and documents"},
+    "history":   {"label": "History",   "desc": "Conversation history entries"},
 }
 
 
