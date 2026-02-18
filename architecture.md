@@ -229,7 +229,8 @@ The agent exposes a fluent interface for triggering thought:
 think = agent.given(persona, {"type": "stimulus", "role": "user", "content": prompt})
 async for thought in think.reason():
     if thought.intent == "saying":
-        await say(persona, thought, channel)
+        await channels.send(channel, thought.content)
+        memories.agent(persona).remember({"type": "communicated", ...})
     elif thought.intent == "doing":
         await act(persona, thought)
     elif thought.intent == "consulting":

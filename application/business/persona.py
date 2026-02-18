@@ -312,7 +312,12 @@ async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict
         failed = False
         async for thought in think.reason():
             if thought.intent == "saying":
-                await say(persona, thought, channel)
+                await channels.send(channel, thought.content)
+                memories.agent(persona).remember({
+                    "type": "communicated",
+                    "channel": channel.name,
+                    "content": thought.content,
+                })
             elif thought.intent == "doing":
                 if failed:
                     memories.agent(persona).remember({
@@ -341,6 +346,16 @@ async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict
             data={"persona_id": persona.id},
         )
 
+    except ChannelError as e:
+        await bus.broadcast(
+            "Sensing failed",
+            {"reason": "channel", "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not deliver the message. Please check the channel connection.",
+        )
+
     except EngineConnectionError as e:
         await bus.broadcast(
             "Sensing failed",
@@ -349,45 +364,6 @@ async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict
         return Outcome(
             success=False,
             message="Could not connect to the inference engine. Please make sure it is running.",
-        )
-
-
-async def say(persona: Persona, thought: Thought, channel: Channel | None = None) -> Outcome[dict]:
-    """It lets the persona express a thought through a channel."""
-    await bus.propose(
-        "Saying", {"persona": persona}
-    )
-
-    if not ([channel] if channel else (persona.channels or [])):
-        await bus.broadcast("Saying failed", {"persona": persona})
-        return Outcome(
-            success=False,
-            message="No channel to communicate the thought.",
-            data={"persona_id": persona.id},
-        )
-
-    try:
-        for channel in ([channel] if channel else (persona.channels or [])):
-            await channels.send(channel, thought.content)
-            memories.agent(persona).remember({
-                "type": "communicated",
-                "channel": channel.name,
-                "content": thought.content,
-            })
-            await bus.broadcast("Said", {"persona": persona, "channel": channel})
-
-        return Outcome(
-            success=True,
-            message="Thought expressed",
-            data={"persona_id": persona.id},
-        )
-
-    except ChannelError as e:
-        await bus.broadcast("Saying failed", {"persona": persona, "error": str(e)})
-        return Outcome(
-            success=False,
-            message="Could not deliver the message. Please check the channel connection.",
-            data={"persona_id": persona.id},
         )
 
 
@@ -491,7 +467,12 @@ async def escalate(persona: Persona, prompt: str, channel: Channel) -> Outcome[d
         async for response in frontier.consulting(persona, prompt).reason():
             if response.intent == "saying":
                 observation.append({"role": "assistant", "content": response.content})
-                await say(persona, response, channel)
+                await channels.send(channel, response.content)
+                memories.agent(persona).remember({
+                    "type": "communicated",
+                    "channel": channel.name,
+                    "content": response.content,
+                })
             elif response.intent == "doing":
                 observation.append({"role": "assistant", "tool_calls": response.tool_calls})
                 if failed:
@@ -521,6 +502,16 @@ async def escalate(persona: Persona, prompt: str, channel: Channel) -> Outcome[d
             data={"persona_id": persona.id},
         )
 
+    except ChannelError as e:
+        await bus.broadcast(
+            "Escalation failed",
+            {"reason": "channel", "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not deliver the message. Please check the channel connection.",
+        )
+
     except FrontierError as e:
         await bus.broadcast(
             "Escalation failed",
@@ -543,7 +534,12 @@ async def reflect(persona: Persona, channel: Channel) -> Outcome[dict]:
 
         async for thought in think.reason():
             if thought.intent == "saying":
-                await say(persona, thought, channel)
+                await channels.send(channel, thought.content)
+                memories.agent(persona).remember({
+                    "type": "communicated",
+                    "channel": channel.name,
+                    "content": thought.content,
+                })
             elif thought.intent == "reasoning":
                 await bus.share("Reasoning", {"content": thought.content})
 
@@ -555,6 +551,16 @@ async def reflect(persona: Persona, channel: Channel) -> Outcome[dict]:
             success=True,
             message="Reflection complete",
             data={"persona_id": persona.id},
+        )
+
+    except ChannelError as e:
+        await bus.broadcast(
+            "Reflection failed",
+            {"reason": "channel", "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not deliver the message. Please check the channel connection.",
         )
 
     except EngineConnectionError as e:
@@ -579,7 +585,12 @@ async def predict(persona: Persona, channel: Channel) -> Outcome[dict]:
 
         async for thought in think.reason():
             if thought.intent == "saying":
-                await say(persona, thought, channel)
+                await channels.send(channel, thought.content)
+                memories.agent(persona).remember({
+                    "type": "communicated",
+                    "channel": channel.name,
+                    "content": thought.content,
+                })
             elif thought.intent == "reasoning":
                 await bus.share("Reasoning", {"content": thought.content})
 
@@ -591,6 +602,16 @@ async def predict(persona: Persona, channel: Channel) -> Outcome[dict]:
             success=True,
             message="Prediction complete",
             data={"persona_id": persona.id},
+        )
+
+    except ChannelError as e:
+        await bus.broadcast(
+            "Prediction failed",
+            {"reason": "channel", "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not deliver the message. Please check the channel connection.",
         )
 
     except EngineConnectionError as e:

@@ -57,7 +57,7 @@ The interaction system uses a cognitive model. Understand this before touching S
 
 ```
 sense → agent.given(persona, stimulus) → think.reason() → yields Thought objects
-  thought.intent == "saying"     → say spec → channels.send → memories.agent(persona).remember(communicated)
+  thought.intent == "saying"     → channels.send → memories.agent(persona).remember(communicated)
   thought.intent == "doing"      → act spec → system.execute → memories.agent(persona).remember(result)
   thought.intent == "consulting"  → escalate spec → frontier.consulting(persona) → memories.agent(persona).remember(observation)
   thought.intent == "reasoning"   → bus.share (internal, not shown to person)
@@ -103,7 +103,7 @@ async for thought in frontier.consulting(persona, prompt).reason():
 | `say` | `agent.reason()` internally (writes via memories) | content |
 | `act` | business/frontier: `memories.agent(persona).remember()` | tool_calls, result |
 | `observation` | business escalate: `memories.agent(persona).remember()` | frontier conversation (minus reasoning) |
-| `communicated` | business say: `memories.agent(persona).remember()` | channel, content |
+| `communicated` | business sense/escalate/reflect/predict: `memories.agent(persona).remember()` | channel, content |
 
 ### Action loop
 
@@ -111,7 +111,7 @@ Inside `agent.py`'s `_reason()` closure (the function wrapped by `Thinking`), a 
 
 ### Escalation
 
-Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai platform modules → thoughts routed through same say/act specs → frontier reasoning is NOT observed (agent develops its own reasoning path).
+Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai platform modules → thoughts routed through same channels.send/act pattern → frontier reasoning is NOT observed (agent develops its own reasoning path).
 
 ## Module Map
 
@@ -120,7 +120,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | Module | Functions |
 |---|---|
 | `environment.py` | prepare, check_model |
-| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, sense, say, act, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
+| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, sense, act, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
 | `outcome.py` | Outcome dataclass |
 
 ### Core (application/core/)
@@ -180,7 +180,6 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 11: List Personas (agents)
 - Spec 12: Find Persona by Channel (find_by_channel)
 - Spec 7a: Sense (reactive loop)
-- Spec 7b: Say (channel communication with confirmation)
 - Spec 7c: Act (tool execution with permission check via bus.ask)
 - Spec 7d: Escalate (frontier routing with observation)
 - Spec 7e: Reflect (reflection prompt after each sense cycle)
