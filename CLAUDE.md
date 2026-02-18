@@ -120,7 +120,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | Module | Functions |
 |---|---|
 | `environment.py` | prepare, check_model |
-| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, sense, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
+| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, chat, sense, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
 | `outcome.py` | Outcome dataclass |
 
 ### Core (application/core/)
@@ -179,7 +179,8 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 6: Persona Control
 - Spec 11: List Personas (agents)
 - Spec 12: Find Persona by Channel (find_by_channel)
-- Spec 7a: Sense (reactive loop)
+- Spec 7a: Chat (API conversation, text in/text out)
+- Spec 7b: Sense (reactive loop)
 - Spec 7d: Escalate (frontier routing with observation)
 - Spec 7e: Reflect (reflection prompt after each sense cycle)
 - Spec 7f: Predict (prediction prompt for proactive behavior)

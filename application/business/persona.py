@@ -299,6 +299,46 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
         return Outcome(success=False, message="Could not assess the skill. Please make sure the model is running.")
 
 
+async def chat(persona: Persona, prompt: str) -> Outcome[dict]:
+    """It lets external clients converse with the persona through an API."""
+    await bus.propose("Chatting", {"persona": persona})
+
+    try:
+        think = agent.given(persona, {"type": "stimulus", "role": "user", "content": prompt})
+
+        parts = []
+        async for thought in think.reason():
+            if thought.intent == "saying":
+                parts.append(thought.content)
+            elif thought.intent == "reasoning":
+                await bus.share("Reasoning", {"content": thought.content})
+
+        response = "".join(parts)
+        memories.agent(persona).remember({
+            "type": "communicated",
+            "channel": "api",
+            "content": response,
+        })
+
+        await bus.broadcast("Chatted", {"persona": persona})
+
+        return Outcome(
+            success=True,
+            message="Chat complete",
+            data={"persona_id": persona.id, "response": response},
+        )
+
+    except EngineConnectionError as e:
+        await bus.broadcast(
+            "Chat failed",
+            {"reason": "connection", "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not connect to the inference engine. Please make sure it is running.",
+        )
+
+
 async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict]:
     """It lets the persona sense a stimulus from a channel and process it."""
     await bus.propose(
