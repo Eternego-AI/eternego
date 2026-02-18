@@ -716,13 +716,17 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     await bus.propose("Sleeping", {"persona": persona})
 
     try:
-        conversations = await history.recall(persona)
-        if conversations:
-            knowledge = await agent.knowledge(persona)
-            observed = await local_model.observe(persona.model.name, conversations, **knowledge)
-            await observations.effect(persona, observed)
+        transcript = memories.agent(persona).as_transcript()
+        knowledge = await agent.knowledge(persona)
+        await history.consolidate(persona, knowledge, transcript)
+        memories.agent(persona).forget_everything()
 
-        synthesis = dna.assemble_synthesis(persona)
+        latest_knowledge = await agent.knowledge(persona)
+        synthesis = prompts.dna_synthesis(
+            previous_dna=dna.read(persona),
+            person_traits=latest_knowledge.get("person_traits", ""),
+            persona_context=latest_knowledge.get("persona_context", ""),
+        )
         if persona.frontier:
             new_dna = await frontier.respond(persona.frontier, synthesis)
         else:

@@ -63,6 +63,23 @@ async def study(model: str, dna: str) -> Observation:
         raise EngineConnectionError("Model returned an invalid response") from e
 
 
+async def cluster(model: str, transcript: str) -> list[dict]:
+    """Cluster a conversation transcript into topic groups."""
+    logger.info("Clustering conversation by topic", {"model": model})
+    try:
+        response = ollama.post("/api/generate", {
+            "model": model,
+            "prompt": prompts.consolidation(transcript),
+            "stream": False,
+        })
+        parsed = json.loads(response["response"])
+        return parsed.get("clusters", [])
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+    except (json.JSONDecodeError, KeyError) as e:
+        raise EngineConnectionError("Model returned an invalid response") from e
+
+
 async def assess_skill(model: str, skill_name: str, skill_content: str) -> Observation:
     """Analyze a skill document and extract observations using the given model."""
     logger.info("Assessing skill", {"model": model, "skill": skill_name})

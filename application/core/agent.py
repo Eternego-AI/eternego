@@ -40,14 +40,7 @@ def given(persona: Persona, document: dict) -> Thinking:
         while True:
             messages = [{"role": "system", "content": system_message}]
 
-            for doc in memories.agent(persona).recall():
-                if doc["type"] in ("stimulus", "reflection", "prediction"):
-                    messages.append({"role": doc["role"], "content": doc["content"]})
-                elif doc["type"] == "act":
-                    messages.append({"role": "assistant", "content": "", "tool_calls": doc["tool_calls"]})
-                    messages.append({"role": "tool", "content": doc["result"]})
-                elif doc["type"] == "say":
-                    messages.append({"role": "assistant", "content": doc["content"]})
+            messages.extend(memories.agent(persona).as_messages())
 
             acted = False
             said = ""
@@ -282,7 +275,7 @@ async def save_training_set(persona: Persona, training_set: str) -> None:
 
 
 async def wake_up(persona: Persona, new_model: str) -> None:
-    """Update the persona after sleep: new model, clear traits and short-term memory."""
+    """Set the new model, clear traits, and save persona."""
     logger.info("Waking up persona", {"persona_id": persona.id, "new_model": new_model})
     try:
         persona.model = Model(name=new_model)
@@ -290,8 +283,6 @@ async def wake_up(persona: Persona, new_model: str) -> None:
         traits_path = persona.storage_dir / "person-traits.md"
         if traits_path.exists():
             filesystem.write(traits_path, "")
-
-        memories.agent(persona).forget_everything()
 
         await save_persona(persona)
     except OSError as e:

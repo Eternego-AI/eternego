@@ -315,7 +315,7 @@ For MVP, simple prefix matching is sufficient. More sophisticated matching (rege
 
 ## G. Short-Term Memory
 
-During a conversation, the agent accumulates documents in an in-memory store provided by the `memories` module (`application/core/memories.py`). Memory is per persona: `memories.agent(persona).remember(document)`, `.recall()`, `.forget_everything()`. There is no disk persistence for short-term memory — it lives only in process memory.
+During a conversation, the agent accumulates documents in an in-memory store provided by the `memories` module (`application/core/memories.py`). Memory is per persona: `memories.agent(persona).remember(document)`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`. There is no disk persistence for short-term memory — it lives only in process memory.
 
 ### Document Types
 
@@ -338,19 +338,32 @@ During a conversation, the agent accumulates documents in an in-memory store pro
 
 ### How the Agent Builds Messages
 
-When the agent reasons, it iterates all documents from `memories.agent(persona).recall()` and maps them to model messages:
+When the agent reasons, it calls `memories.agent(persona).as_messages()`, which maps each document to a model message:
 
-- `stimulus` → `{"role": "user", "content": ...}`
+- `stimulus` / `reflection` / `prediction` → `{"role": doc["role"], "content": ...}`
 - `say` → `{"role": "assistant", "content": ...}`
 - `act` → `{"role": "assistant", "tool_calls": ...}` + `{"role": "tool", "content": result}`
 
 Instructions are prepended as a system message. The OS-specific instruction is added by `local_model.stream`.
 
-### Memory Lifecycle (planned, not implemented)
+### How Transcripts Are Built
+
+Before sleep, `memories.agent(persona).as_transcript()` produces a numbered plain-text transcript for consolidation:
+
+- `stimulus` (role=user) → `[N] User: {content}`
+- `say` → `[N] Persona: {content}`
+- `act` → `[N] Action ({tool_name}): {result (truncated to 300 chars)}`
+
+The `core/transcripts.py` module provides two helpers used by `history.consolidate`:
+
+- `transcripts.as_list(text)` — parses the numbered transcript into a list of `{"index": N, "content": ...}` dicts
+- `transcripts.extract(text, indices)` — extracts only the entries at the given indices, returning a plain string
+
+### Memory Lifecycle
 
 - **Short-term**: In-memory, per-persona via `memories.agent(persona)` (current implementation)
-- **Long-term**: Flush to disk after inactivity (e.g., 5 minutes after last conversation)
-- **Sleep**: Extract observations from long-term memory, train, clear
+- **Consolidation**: At sleep time, `memories.agent(persona).as_transcript()` captures the session as a numbered transcript, which `history.consolidate()` clusters by topic, extracts observations from each cluster, and writes as dated history files
+- **Sleep**: Observations extracted during consolidation are applied to persona files; short-term memory is then cleared via `forget_everything()`
 
 ### Notes
 
@@ -480,7 +493,7 @@ They are married to Sara. They have two children.
 ### Lifecycle
 
 1. **Creation** — empty `dna.md` created via `dna.make(persona)`
-2. **Sleep** — synthesized from previous DNA + traits + context via `dna.assemble_synthesis`, written via `dna.evolve`
+2. **Sleep** — synthesized from previous DNA + traits + context via `prompts.dna_synthesis`, sent to frontier or local model, written via `dna.evolve`
 3. **Migration** — observations extracted from DNA via `local_model.study` to populate traits and context on the new host
 4. **Wake up** — DNA is NOT cleared (persists as input for the next synthesis cycle)
 

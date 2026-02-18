@@ -68,7 +68,7 @@ sense → agent.given(persona, stimulus) → think.reason() → yields Thought o
 - `Thought(intent, content, tool_calls)` — single unit of reasoning output
 - `Thinking(reason_by)` — wraps any async generator, exposes `.reason()`
 
-Short-term memory is in `memories` module: `memories.agent(persona).remember()`, `.recall()`, `.forget_everything()`.
+Short-term memory is in `memories` module: `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`.
 
 ### Fluent API
 
@@ -92,8 +92,8 @@ async for thought in frontier.consulting(persona, prompt).reason():
 
 ### Memory vs History
 
-- **Memory** — short-term, in-process, per persona. Accessed via `memories.agent(persona).remember()`, `.recall()`, `.forget_everything()`. Cleared on wake up.
-- **History** — long-term, on disk (`history/` directory). Persists across sessions. Used for oversight, control, and sleep observation extraction.
+- **Memory** — short-term, in-process, per persona. Accessed via `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`.
+- **History** — long-term, on disk (`history/` directory). Persists across sessions. Used for oversight, control, and consolidated conversation storage.
 
 ### Memory document types
 
@@ -107,7 +107,7 @@ async for thought in frontier.consulting(persona, prompt).reason():
 
 ### Action loop
 
-Inside `agent.py`'s `_reason()` closure (the function wrapped by `Thinking`), a `while True` loop rebuilds messages from `memories.agent(persona).recall()` and re-streams from the local model after each tool execution. When a cycle produces no tool calls, the loop breaks. This means the agent can chain tool calls naturally — think, act, see result, think again — without the business layer needing to re-call `sense`.
+Inside `agent.py`'s `_reason()` closure (the function wrapped by `Thinking`), a `while True` loop rebuilds messages from `memories.agent(persona).as_messages()` and re-streams from the local model after each tool execution. When a cycle produces no tool calls, the loop breaks. This means the agent can chain tool calls naturally — think, act, see result, think again — without the business layer needing to re-call `sense`.
 
 ### Escalation
 
@@ -129,20 +129,21 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 |---|---|
 | `agent.py` | given(), initialize(), embody(), build(), identity CRUD, knowledge(), sleep(), save_training_set(), wake_up(), personas(), find() |
 | `person.py` | bond(), facts/traits CRUD |
-| `dna.py` | make(), read(), evolve(), assemble_synthesis() — persona DNA lifecycle |
+| `dna.py` | make(), read(), evolve() — persona DNA lifecycle |
 | `instructions.py` | read(), give(), add() — persona operating instructions |
 | `skills.py` | equip(), shelve(), summarize(), names(), delete() — persona skill documents |
-| `history.py` | start(), entries(), recall(), delete() — long-term conversation history |
+| `history.py` | start(), entries(), recall(), delete(), consolidate() — long-term conversation history |
+| `transcripts.py` | as_list(), extract() — conversation transcript parsing and extraction |
 | `frontier.py` | allow_escalation(), consulting(persona, prompt) → returns Thinking, respond() |
-| `local_model.py` | stream() async generator, observe(), study(), assess_skill(), generate_encryption_phrase(), respond() |
+| `local_model.py` | stream() async generator, observe(), study(), cluster(), assess_skill(), generate_encryption_phrase(), respond() |
 | `models.py` | generate_name() |
 | `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model(), copy(), delete(), fine_tune() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
 | `system.py` | is_authorized(), execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
 | `data.py` | Channel, Model, Thought, Thinking, Observation, Gateway, Persona |
-| `memories.py` | agent(persona) → remember(), recall(), forget_everything() — per-persona short-term memory |
+| `memories.py` | agent(persona) → remember(), as_messages(), as_transcript(), forget_everything() — per-persona short-term memory |
 | `paths.py` | agents_home(), agent_identity(agent_id) |
-| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, EXTRACTION_FROM_DNA, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP, DNA_SYNTHESIS, FRONTIER_IDENTITY, REFLECTION, PREDICTION, extraction(), extraction_from_dna(), sleep(), dna_synthesis(), reflection(), prediction() |
+| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION, EXTRACTION_FROM_DNA, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP, DNA_SYNTHESIS, CONSOLIDATION, FRONTIER_IDENTITY, REFLECTION, PREDICTION, extraction(), extraction_from_dna(), sleep(), dna_synthesis(), consolidation(), reflection(), prediction() |
 | `observations.py` | effect() — applies observations (facts, traits, context) to persona files |
 | `exceptions.py` | All domain exceptions (includes ChannelError) |
 | `diary.py` | open_for(), open(), record() |
@@ -213,7 +214,8 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 7f: Predict (prediction prompt for proactive behavior)
 - Spec 8: Persona Equipment (shelve, summarize, grow)
 - Spec 9: Persona Diary
-- Spec 10: Persona Sleep (recall history, extract observations, synthesize DNA, generate training from DNA, LoRA fine-tuning, wake up)
+- Spec 10: Persona Sleep (consolidate memory to history, synthesize DNA, generate training from DNA, LoRA fine-tuning, wake up)
+- History lifecycle: short-term memory flushed to `history/` via `history.consolidate()` — clusters transcript by topic, extracts observations per cluster, writes each cluster as a history file
 
 ### Implemented (continued):
 - Spec 13: Persona Start (open all channel gateways, listen via threads; polling errors logged via on_error callback in core)
@@ -232,13 +234,12 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Windows platform: `winget` used for Ollama and Git installation; `pywin32` added as conditional platform dependency
 
 ### Not started:
-- History lifecycle (short-term memory flush to history/)
 - Circuit breaker for continuous tool failures
 
 ## Code Style
 
 - Naming: gerund intents ("saying", "doing", "consulting", "reasoning")
-- Memory access: always through `memories.agent(persona).remember()`, `.recall()`, `.forget_everything()` — per-persona, no global memory
+- Memory access: always through `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()` — per-persona, no global memory
 - All feedback (delivery confirmation, tool results, observations) goes through `memories.agent(persona).remember()` from business or frontier
 - Disk-based history listing: `history.entries(persona)` (long-term, on disk)
 - Model naming: `models.generate_name(base_model, persona_id)` — used in create, migrate, sleep

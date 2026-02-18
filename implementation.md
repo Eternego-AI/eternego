@@ -299,7 +299,7 @@ Short-term memory is an in-memory document store (`Memory` class). The agent acc
 | `observation` | After escalation completes | list of messages from frontier interaction |
 | `communicated` | Channel confirms delivery | channel, content |
 
-The agent builds its message history from memory on each reasoning cycle. This means the agent has full conversational context without file I/O.
+The agent builds its message history from memory on each reasoning cycle via `memories.agent(persona).as_messages()`. This means the agent has full conversational context without file I/O.
 
 ### Spec 7a: Sense
 
@@ -451,17 +451,18 @@ Everything needed to restore the persona:
 
 ### Solution
 
-1. Recall conversation history from disk (`history.recall`).
-2. If there is history, extract observations via `local_model.observe` and grow the persona (facts, traits, context saved to files).
-3. Synthesize new DNA: `dna.assemble_synthesis` reads previous DNA + current traits + context, frontier or local model produces the synthesis, `dna.evolve` writes the result.
-4. Read DNA via `agent.sleep`, send to the model (or frontier if available) to generate training data.
-5. Save training data to `training/` directory.
-6. Generate a new model name via `models.generate_name`.
-7. Fine-tune the base model using LoRA. The new model gets the generated name.
-8. Verify the fine-tuned model responds correctly.
-9. Delete the old persona model. Failure is non-breaking (logged but does not stop sleep).
-10. Wake up: save the new model name, clear person-traits.md (baked into model), clear short-term memory.
-11. Trigger Persona Diary (Spec 9).
+1. Capture the current session as a numbered transcript via `memories.agent(persona).as_transcript()`.
+2. Consolidate to long-term history via `history.consolidate(persona, knowledge, transcript)`: cluster the transcript by topic using `local_model.cluster`, extract observations per cluster via `local_model.observe`, apply them to persona files via `observations.effect`, and write each cluster as a dated history file. Falls back to a single cluster if the model returns invalid JSON.
+3. Clear short-term memory via `memories.agent(persona).forget_everything()`.
+4. Synthesize new DNA: call `prompts.dna_synthesis` with previous DNA + current traits + context, send to frontier or local model, write result via `dna.evolve`.
+5. Read DNA via `agent.sleep`, send to the model (or frontier if available) to generate training data.
+6. Save training data to `training/` directory.
+7. Generate a new model name via `models.generate_name`.
+8. Fine-tune the base model using LoRA. The new model gets the generated name.
+9. Verify the fine-tuned model responds correctly.
+10. Delete the old persona model. Failure is non-breaking (logged but does not stop sleep).
+11. Wake up: save the new model name, clear person-traits.md (baked into model). Short-term memory was already cleared in step 3.
+12. Trigger Persona Diary (Spec 9).
 
 ### Fine-tuning Details
 

@@ -310,6 +310,44 @@ def dna_synthesis(previous_dna: str, person_traits: str, persona_context: str) -
     )
 
 
+CONSOLIDATION = """# Conversation Clustering
+
+Group the following numbered messages into distinct topic clusters.
+
+## Messages
+
+{transcript}
+
+## Task
+
+Identify the distinct topics discussed and assign each message number to exactly one cluster.
+A "topic" is a coherent subject of conversation (e.g., "website-project", "dinner-planning").
+If all messages are about the same subject, return one cluster.
+Use short, hyphenated, lowercase topic names.
+
+## Rules
+
+- Every index must appear in exactly one cluster.
+- Topic names: 1-3 words, hyphenated, lowercase.
+- Do not summarize or alter any messages.
+- If a message is too short or ambiguous to determine its topic on its own (e.g. "ok", "go ahead", "thanks"), assign it to the same topic as the previous message.
+
+## Output
+
+Return ONLY valid JSON:
+
+{{
+  "clusters": [
+    {{"topic": "website-project", "indices": [1, 2, 3, 4]}},
+    {{"topic": "dinner-planning", "indices": [5, 6]}}
+  ]
+}}"""
+
+
+def consolidation(transcript: str) -> str:
+    return CONSOLIDATION.format(transcript=transcript)
+
+
 def reflection():
     return {"type": "reflection", "role": "system", "content": REFLECTION}
 

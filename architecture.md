@@ -267,12 +267,13 @@ When the agent yields a "doing" thought, the business layer executes the tool an
 
 - `memories.agent(persona)` — returns a handle for that persona's memory
 - `memories.agent(persona).remember(document)` — append a document (creates memory if needed)
-- `memories.agent(persona).recall()` — return all documents (a copy)
+- `memories.agent(persona).as_messages()` — return memory formatted as LLM chat messages (used by agent._reason())
+- `memories.agent(persona).as_transcript()` — return memory as a numbered conversation transcript (used by sleep before consolidation)
 - `memories.agent(persona).forget_everything()` — clear that persona's memory
 
-The agent writes to memory via `memories.agent(persona).remember()`: `agent.given()` appends the stimulus; the business layer appends act results, delivery confirmations, and frontier observations. When building messages for the model, the agent iterates `memories.agent(persona).recall()` and maps each document type to the appropriate message role (user, assistant, tool).
+The agent writes to memory via `memories.agent(persona).remember()`: `agent.given()` appends the stimulus; the business layer appends act results, delivery confirmations, and frontier observations. When building messages for the model, the agent calls `memories.agent(persona).as_messages()` which maps each document type to the appropriate message role (user, assistant, tool).
 
-**History** is long-term, on disk. The `history/` directory stores conversation files that persist across sessions. Used for oversight (listing via `history.entries()`), control (deletion via `history.delete()`), and sleep (observation extraction via `history.recall()`).
+**History** is long-term, on disk. The `history/` directory stores conversation files that persist across sessions. Used for oversight (listing via `history.entries()`), control (deletion via `history.delete()`), and consolidation at sleep time (via `history.consolidate()`).
 
 ### Escalation
 
@@ -339,7 +340,7 @@ All shared data types live in `application/core/data.py`:
 | `Gateway` | A live channel connection — a thread bound to a channel (channel, close(), is_stopped) |
 | `Persona` | Persona configuration (id, name, model, base_model, frontier, channels, storage_dir) |
 
-Short-term memory is per-persona and lives in the `memories` module (`memories.agent(persona).remember()`, `.recall()`, `.forget_everything()`), not in `data.py`.
+Short-term memory is per-persona and lives in the `memories` module (`memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`), not in `data.py`.
 
 ---
 

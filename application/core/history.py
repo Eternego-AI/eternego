@@ -1,8 +1,9 @@
 """History — long-term conversation history for a persona."""
 
-from application.platform import logger, filesystem, crypto
+from application.platform import logger, filesystem, crypto, datetimes
+from application.core import local_model, observations, transcripts
 from application.core.data import Persona
-from application.core.exceptions import IdentityError
+from application.core.exceptions import EngineConnectionError, IdentityError
 
 
 async def start(persona: Persona) -> None:
@@ -54,3 +55,44 @@ async def delete(persona: Persona, hash_part: str) -> None:
         raise IdentityError("History entry not found or already removed")
     except OSError as e:
         raise IdentityError("Failed to delete history entry") from e
+
+
+async def consolidate(persona: Persona, knowledge: dict, transcript: str) -> None:
+    """Cluster a conversation transcript by topic, extract observations, and commit to long-term history."""
+    logger.info("Consolidating to history", {"persona_id": persona.id})
+
+    if not transcript:
+        return
+
+    try:
+        try:
+            clusters = await local_model.cluster(persona.model.name, transcript)
+        except EngineConnectionError:
+            clusters = []
+
+        if not clusters:
+            all_entries = transcripts.as_list(transcript)
+            clusters = [{"topic": "conversation", "indices": [e["index"] for e in all_entries]}]
+
+        stamp = datetimes.date_stamp(datetimes.now())
+
+        for entry in clusters:
+            topic = entry.get("topic", "conversation")
+            indices = entry.get("indices", [])
+            cluster_text = transcripts.extract(transcript, indices)
+            if not cluster_text:
+                continue
+
+            path = persona.storage_dir / "history" / f"{stamp}-{topic}.md"
+            if path.exists():
+                filesystem.append(path, f"\n\n{cluster_text}")
+            else:
+                filesystem.write(path, cluster_text)
+
+            observed = await local_model.observe(persona.model.name, cluster_text, **knowledge)
+            await observations.effect(persona, observed)
+
+    except OSError as e:
+        raise IdentityError("Failed to write history during consolidation") from e
+
+
