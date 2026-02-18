@@ -1,11 +1,11 @@
 """Eternego service — entry point for running all persona gateways."""
 
+import argparse
 import asyncio
 
 from application.business import persona
 from application.platform import logger
-from application.platform.observer import Command, Event, Plan, subscribe
-
+from application.platform.observer import Command, Event, Plan, Signal, subscribe
 
 async def restart_gateway(command: Command):
     if command.title != "Restart gateway":
@@ -25,13 +25,31 @@ async def restart_gateway(command: Command):
         print(f"Failed to start gateway for {agent.name}: {outcome.message}")
 
 
-def log_signal(signal: Event | Plan):
-    print(f"[{signal.__class__.__name__}] {signal.title}", signal.details)
-    logger.info(signal.title, signal.details)
-
-
 async def main():
-    logger.default_media(logger.file_media("eternego.log"))
+    parser = argparse.ArgumentParser(description="Eternego service")
+    parser.add_argument("-v", "--verbose", action="count", default=0)
+    args = parser.parse_args()
+    verbosity = args.verbose
+
+    levels = list(logger.Level)
+    info_index = levels.index(logger.Level.INFO)
+
+    file_log = logger.file_media("eternego.log")
+    def log_media(message):
+        file_log(message)
+        if verbosity >= 3 or (verbosity >= 2 and levels.index(message.level) <= info_index):
+            print(f"[{message.level.value}] {message.title}", message.context)
+
+    file_signal = logger.file_media("eternego-signals.log")
+    def signal_media(message):
+        file_signal(message)
+
+    def log_signal(signal: Signal):
+        logger.info(signal.title, signal.details, signal_media)
+        if verbosity >= 2 or (verbosity >= 1 and isinstance(signal, (Plan, Event))):
+            print(f"[{signal.__class__.__name__}] {signal.title}", signal.details)
+
+    logger.default_media(log_media)
     subscribe(log_signal, restart_gateway)
 
     outcome = await persona.agents()

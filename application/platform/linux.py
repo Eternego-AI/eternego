@@ -2,6 +2,35 @@
 
 import asyncio
 import shutil
+import subprocess
+
+_INSTALL_CMD = {
+    "debian":  ("sudo", "apt", "install", "-y"),
+    "fedora":  ("sudo", "dnf", "install", "-y"),
+    "arch":    ("sudo", "pacman", "-S", "--noconfirm"),
+    "suse":    ("sudo", "zypper", "install", "-y"),
+    "alpine":  ("sudo", "apk", "add"),
+}
+
+
+def distro() -> str | None:
+    """Return the Linux distro family: 'debian', 'fedora', 'arch', 'suse', 'alpine', or None."""
+    id_like = ""
+    distro_id = ""
+    try:
+        with open("/etc/os-release") as f:
+            for line in f:
+                if line.startswith("ID="):
+                    distro_id = line.strip().split("=", 1)[1].strip('"')
+                elif line.startswith("ID_LIKE="):
+                    id_like = line.strip().split("=", 1)[1].strip('"')
+    except FileNotFoundError:
+        return None
+    ids = f"{distro_id} {id_like}"
+    for family in ("debian", "fedora", "arch", "suse", "alpine"):
+        if family in ids:
+            return family
+    return None
 
 
 async def is_installed(program: str) -> bool:
@@ -18,13 +47,18 @@ async def install(program: str) -> None:
             stderr=asyncio.subprocess.PIPE,
         )
         await process.communicate()
-    elif program == "git":
-        process = await asyncio.create_subprocess_exec(
-            "sudo", "apt", "install", "-y", "git",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await process.communicate()
+        return
+
+    family = distro()
+    if family not in _INSTALL_CMD:
+        raise NotImplementedError(f"Unsupported distro family: {family}")
+
+    process = await asyncio.create_subprocess_exec(
+        *_INSTALL_CMD[family], program,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    await process.communicate()
 
 
 async def execute_on_sub_process(command: str) -> tuple[int, str]:
@@ -40,21 +74,22 @@ async def execute_on_sub_process(command: str) -> tuple[int, str]:
 
 
 async def store_secret(key: str, value: str) -> None:
-    """Store a secret in the Linux Secret Service (GNOME Keyring / KWallet)."""
-    import secretstorage
-
-    connection = secretstorage.dbus_init()
-    collection = secretstorage.get_default_collection(connection)
-    collection.create_item(f"eternego:{key}", {"application": "eternego", "key": key}, value.encode())
+    """Store a secret in the Linux Secret Service via secret-tool CLI."""
+    subprocess.run(
+        ["secret-tool", "store", "--label", f"eternego:{key}",
+         "application", "eternego", "key", key],
+        input=value.encode(),
+        check=True,
+    )
 
 
 async def retrieve_secret(key: str) -> str:
-    """Retrieve a secret from the Linux Secret Service."""
-    import secretstorage
-
-    connection = secretstorage.dbus_init()
-    collection = secretstorage.get_default_collection(connection)
-    for item in collection.get_all_items():
-        if item.get_label() == f"eternego:{key}":
-            return item.get_secret().decode()
-    raise KeyError(f"Secret not found: {key}")
+    """Retrieve a secret from the Linux Secret Service via secret-tool CLI."""
+    result = subprocess.run(
+        ["secret-tool", "lookup", "application", "eternego", "key", key],
+        capture_output=True, text=True, check=True,
+    )
+    value = result.stdout.strip()
+    if not value:
+        raise KeyError(f"Secret not found: {key}")
+    return value
