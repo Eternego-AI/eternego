@@ -6,9 +6,7 @@ We believe it is time to unite biological and electronic intelligence to make th
 
 ## Installation
 
-**Prerequisites:** Python 3.11+
-
-Clone the repository and run the installer for your platform. It installs the `eternego` command and registers a background service that starts automatically on login/boot.
+Clone the repository and run the installer for your platform. It installs Python if needed, then installs the `eternego` command and registers a background service that starts automatically on login/boot.
 
 **Linux / macOS**
 ```bash

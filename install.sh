@@ -7,8 +7,51 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OS_TYPE="$(uname -s)"
 
+# ── Ensure Python 3.11+ ───────────────────────────────────────────────────────
+
+python_ok() {
+    command -v python3 &>/dev/null || return 1
+    python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>/dev/null
+}
+
+if ! python_ok; then
+    echo "Python 3.11+ not found. Installing ..."
+
+    if [ "$OS_TYPE" = "Linux" ]; then
+        if command -v apt-get &>/dev/null; then
+            sudo apt-get update -q && sudo apt-get install -y python3 python3-pip
+        elif command -v dnf &>/dev/null; then
+            sudo dnf install -y python3 python3-pip
+        elif command -v pacman &>/dev/null; then
+            sudo pacman -S --noconfirm python python-pip
+        elif command -v zypper &>/dev/null; then
+            sudo zypper install -y python3 python3-pip
+        else
+            echo "Could not detect a package manager. Please install Python 3.11+ manually."
+            exit 1
+        fi
+
+    elif [ "$OS_TYPE" = "Darwin" ]; then
+        if ! command -v brew &>/dev/null; then
+            echo "Installing Homebrew ..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            # Add Homebrew to PATH for the rest of this script
+            if [ -x "/opt/homebrew/bin/brew" ]; then
+                eval "$(/opt/homebrew/bin/brew shellenv)"
+            else
+                eval "$(/usr/local/bin/brew shellenv)"
+            fi
+        fi
+        echo "Installing Python via Homebrew ..."
+        brew install python@3.11
+        brew link --force python@3.11
+    fi
+fi
+
+# ── Install Eternego ──────────────────────────────────────────────────────────
+
 echo "Installing Eternego from $SCRIPT_DIR ..."
-pip install -q -e "$SCRIPT_DIR"
+python3 -m pip install -q -e "$SCRIPT_DIR"
 
 ETERNEGO_BIN="$(python3 -c 'import sysconfig, os; print(os.path.join(sysconfig.get_path("scripts"), "eternego"))')"
 

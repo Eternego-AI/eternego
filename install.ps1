@@ -5,8 +5,28 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile   = "$env:TEMP\eternego.log"
 
+# ── Ensure Python 3.11+ ───────────────────────────────────────────────────────
+
+$PythonOk = $false
+try {
+    $PyVer = & python --version 2>&1
+    if ($PyVer -match "Python 3\.(1[1-9]|[2-9]\d)") {
+        $PythonOk = $true
+    }
+} catch {}
+
+if (-not $PythonOk) {
+    Write-Host "Python 3.11+ not found. Installing via winget ..."
+    winget install --id Python.Python.3.11 --source winget --accept-source-agreements --accept-package-agreements
+    # Refresh PATH so python is available in this session
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path", "User")
+}
+
+# ── Install Eternego ──────────────────────────────────────────────────────────
+
 Write-Host "Installing Eternego from $ScriptDir ..."
-pip install -q -e $ScriptDir
+python -m pip install -q -e $ScriptDir
 
 $EternegoBin = (Get-Command eternego -ErrorAction Stop).Source
 
