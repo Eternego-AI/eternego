@@ -10,12 +10,7 @@ We believe it is time to unite biological and electronic intelligence to make th
 
 Clone the repository and run the installer for your platform. It installs the `eternego` command and registers a background service that starts automatically on login/boot.
 
-**Linux**
-```bash
-bash install.sh
-```
-
-**macOS**
+**Linux / macOS**
 ```bash
 bash install.sh
 ```
@@ -24,6 +19,64 @@ bash install.sh
 ```powershell
 pwsh install.ps1
 ```
+
+---
+
+## Getting Started
+
+After installation, follow these steps to run your first persona.
+
+### 1. Prepare the environment
+
+```bash
+eternego env prepare --model llama3.2
+```
+
+This installs Ollama if needed and pulls the model. Run once per machine.
+
+### 2. Start the service
+
+```bash
+eternego service start
+```
+
+### 3. Open the dashboard
+
+Navigate to **http://localhost:5001/dashboard** in your browser.
+
+### 4. Create a persona
+
+Click **+ Create** and fill in:
+
+- **Name** — any name, e.g. `Aria`
+- **Base model** — the model you pulled, e.g. `llama3.2`
+- **Channel** — `telegram`
+- **Channel credentials** — your Telegram bot token as JSON: `{"token": "123456:ABCdef..."}`
+  - Create a bot via [@BotFather](https://t.me/botfather) on Telegram to get a token.
+
+The persona will be created and appear on the dashboard. Send it a message on Telegram to start the conversation.
+
+### 5. Chat via the dashboard
+
+Click the chat icon on any persona card to open the built-in chat UI.
+
+### 6. Use the OpenAI-compatible API
+
+When the service is running, each persona is reachable as a model through the OpenAI-compatible HTTP API. The model ID is the persona's UUID (shown on the dashboard card and at the top of the persona detail page).
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:5001/v1", api_key="unused")
+
+response = client.chat.completions.create(
+    model="<persona-uuid>",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+You can also use any OpenAI-compatible tool (Continue, Open WebUI, LM Studio, etc.) by pointing it at `http://localhost:5001` and selecting the persona UUID as the model.
 
 ---
 
@@ -51,7 +104,7 @@ eternego service logs     # follow live output
 
 ### OpenAI-compatible API
 
-When the service is running, each persona is reachable through the OpenAI-compatible HTTP API. Use any OpenAI client pointed at `http://localhost:PORT` with the persona name as the model name.
+When the service is running, each persona is reachable through the OpenAI-compatible HTTP API. Use any OpenAI client pointed at `http://localhost:5001/v1` with the persona's UUID as the model ID.
 
 ---
 

@@ -11,6 +11,12 @@ router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent.parent / "templates")
 
 
+@router.get("/")
+async def root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/dashboard")
+
+
 _SECTIONS = {
     "person":    {"label": "Person",    "desc": "What the persona knows about you"},
     "traits":    {"label": "Traits",    "desc": "How the persona perceives you"},
