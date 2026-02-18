@@ -17,6 +17,9 @@ dependencies = [
 [project.scripts]
 eternego = "cli.main:main"
 
+[tool.setuptools]
+py-modules = ["service"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["application*", "cli*", "web*"]

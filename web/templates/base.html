@@ -44,6 +44,9 @@
     {% block content %}{% endblock %}
   </main>
 
+  {% include "components/create_modal.html" %}
+  {% include "components/migrate_modal.html" %}
+
   {% block modals %}{% endblock %}
 
   <script>

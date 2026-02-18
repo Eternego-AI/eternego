@@ -48,7 +48,7 @@
 <script>
   const PERSONA_ID = {{ persona.id | tojson }};
   const PERSONA_NAME = {{ persona.name | tojson }};
-  const history = [];
+  const messages = [];
 
   // ── Auto-resize textarea ──────────────────────────────────────────────────
   const input = document.getElementById('input');
@@ -131,7 +131,7 @@
     input.style.height = 'auto';
     btn.disabled = true;
 
-    history.push({ role: 'user', content: text });
+    messages.push({ role: 'user', content: text });
     appendMessage('user', text);
     appendThinking();
 
@@ -139,7 +139,7 @@
       const res = await fetch('/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: PERSONA_ID, messages: history }),
+        body: JSON.stringify({ model: PERSONA_ID, messages: messages }),
       });
 
       document.getElementById('thinking')?.remove();
@@ -147,19 +147,19 @@
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         appendMessage('assistant', `Error: ${err.detail || res.statusText}`);
-        history.pop();
+        messages.pop();
         return;
       }
 
       const data = await res.json();
       const reply = data.choices?.[0]?.message?.content ?? '';
-      history.push({ role: 'assistant', content: reply });
+      messages.push({ role: 'assistant', content: reply });
       appendMessage('assistant', reply);
 
     } catch (ex) {
       document.getElementById('thinking')?.remove();
       appendMessage('assistant', `Error: ${ex.message}`);
-      history.pop();
+      messages.pop();
     } finally {
       btn.disabled = false;
       input.focus();

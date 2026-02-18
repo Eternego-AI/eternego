@@ -16,3 +16,11 @@ from . import person
 from . import prompts
 from . import external_llms
 from . import system
+from . import gateways
+from . import dna
+from . import instructions
+from . import skills
+from . import history
+from . import observations
+from . import struggles
+from . import transcripts
