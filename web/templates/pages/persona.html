@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}{{ persona.name }} — Eternego{% endblock %}
+
+{% block content %}
+
+<div class="flex items-center gap-3 mb-6">
+  <a href="/dashboard"
+     class="text-xs font-mono text-zinc-600 hover:text-zinc-300 transition-colors flex items-center gap-1.5">
+    ← dashboard
+  </a>
+  <div class="w-px h-3 bg-zinc-800"></div>
+  <span class="text-xs text-zinc-600">{{ persona.name }}</span>
+</div>
+
+<div class="flex items-start gap-4 mb-8">
+  <div>
+    <h1 class="text-xl font-semibold text-zinc-100">{{ persona.name }}</h1>
+    <div class="text-xs font-mono text-zinc-600 mt-0.5">{{ persona.id }}</div>
+  </div>
+  <div class="ml-auto flex items-center gap-3">
+    <span class="text-xs font-mono text-zinc-500 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-lg">
+      {{ persona.model.name }}
+    </span>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+  {% for key in ["person", "traits", "agent", "skills", "history"] %}
+    {% set meta  = section_meta[key] %}
+    {% set items = sections.get(key, []) %}
+    <div class="bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col
+                {% if key == 'history' %}xl:col-span-2{% endif %}">
+
+      <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-zinc-500">{{ meta.label }}</span>
+          <span class="ml-2 text-xs text-zinc-700">{{ meta.desc }}</span>
+        </div>
+        <span class="text-xs font-mono text-zinc-700" id="count-{{ key }}">{{ items | length }}</span>
+      </div>
+
+      <ul id="list-{{ key }}" class="feed-scroll flex-1 overflow-y-auto divide-y divide-zinc-800/50 max-h-72">
+        {% if items %}
+          {% for item in items %}
+          <li class="flex items-start gap-3 px-4 py-3 group" data-entry-id="{{ item.id }}">
+            <span class="flex-1 text-xs text-zinc-300 leading-relaxed
+                         {% if key == 'history' %}line-clamp-2{% endif %}">
+              {{ item.content }}
+            </span>
+            <button onclick="deleteEntry('{{ persona.id }}', '{{ item.id }}', this)"
+                    class="shrink-0 opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 transition-all text-base leading-none mt-0.5"
+                    title="Delete">×</button>
+          </li>
+          {% endfor %}
+        {% else %}
+          <li class="px-4 py-6 text-xs text-zinc-700 font-mono text-center">empty</li>
+        {% endif %}
+      </ul>
+
+    </div>
+  {% endfor %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function deleteEntry(personaId, entryId, button) {
+    const item = button.closest('[data-entry-id]');
+    const list = item.closest('ul');
+    const key  = list.id.replace('list-', '');
+    button.disabled = true;
+
+    try {
+      const res = await fetch(`/api/persona/${personaId}/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry_ids: [entryId] }),
+      });
+      if (!res.ok) throw new Error();
+
+      item.style.transition = 'opacity 0.2s';
+      item.style.opacity    = '0';
+      setTimeout(() => {
+        item.remove();
+        const count = document.getElementById('count-' + key);
+        count.textContent = Math.max(0, parseInt(count.textContent) - 1);
+        if (!list.querySelector('[data-entry-id]')) {
+          list.innerHTML = '<li class="px-4 py-6 text-xs text-zinc-700 font-mono text-center">empty</li>';
+        }
+      }, 200);
+
+    } catch {
+      button.disabled = false;
+    }
+  }
+</script>
+{% endblock %}

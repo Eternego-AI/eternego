@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from application.business import persona
-from web.requests import PersonaCreateRequest, PersonaMigrateRequest
+from web.requests import PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
 
 router = APIRouter(prefix="/api")
 
@@ -31,6 +31,17 @@ async def migrate_persona(request: PersonaMigrateRequest):
         phrase=request.phrase,
         model=request.model,
     )
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+@router.post("/persona/{persona_id}/control")
+async def control_persona(persona_id: str, request: PersonaControlRequest):
+    find = await persona.find(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona.control(find.data["persona"], request.entry_ids)
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data

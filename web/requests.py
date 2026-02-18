@@ -27,3 +27,7 @@ class PersonaMigrateRequest(BaseModel):
     diary_path: str
     phrase: str
     model: str
+
+
+class PersonaControlRequest(BaseModel):
+    entry_ids: list[str]

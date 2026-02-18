@@ -104,6 +104,9 @@
     if (document.getElementById('card-' + p.id)) return;
 
     const modelName = p.model?.name ?? p.model ?? '';
+    const settingsIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    const chatIcon    = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+
     const card = document.createElement('div');
     card.id        = 'card-' + p.id;
     card.className = 'bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3 h-[25rem] overflow-hidden transition-all duration-300 hover:-translate-y-0.5';
@@ -112,9 +115,15 @@
         `<span data-orb class="w-2 h-2 rounded-full bg-zinc-700 transition-colors duration-300"></span>` +
         `<span data-status-label class="text-xs font-mono text-zinc-500">idle</span>` +
       `</div>` +
-      `<div>` +
-        `<div class="font-semibold text-zinc-100">${p.name}</div>` +
-        `<div class="text-xs font-mono text-zinc-600 mt-0.5 truncate" title="${p.id}">${p.id}</div>` +
+      `<div class="flex items-start justify-between gap-2">` +
+        `<div class="min-w-0">` +
+          `<div class="font-semibold text-zinc-100">${p.name}</div>` +
+          `<div class="text-xs font-mono text-zinc-600 mt-0.5 truncate" title="${p.id}">${p.id}</div>` +
+        `</div>` +
+        `<div class="flex items-center gap-1 shrink-0 mt-0.5">` +
+          `<a href="/dashboard/persona/${p.id}" title="Settings" class="p-1 rounded-md text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800 transition-colors">${settingsIcon}</a>` +
+          `<button title="Chat (coming soon)" disabled class="p-1 rounded-md text-zinc-700 cursor-not-allowed">${chatIcon}</button>` +
+        `</div>` +
       `</div>` +
       `<div class="h-px bg-zinc-800"></div>` +
       `<div class="text-xs font-mono text-zinc-500">${modelName}</div>` +
