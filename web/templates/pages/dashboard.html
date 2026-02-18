@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex items-center gap-3 mb-6">
+  <span class="text-xs font-bold tracking-widest uppercase text-zinc-600">Personas</span>
+  <div class="flex-1 h-px bg-zinc-800"></div>
+  <span class="text-xs text-zinc-600 font-mono" id="persona-count">{{ personas | length }}</span>
+</div>
+
+<div id="persona-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+  {% if personas %}
+    {% for p in personas %}
+      {% include "components/persona_card.html" %}
+    {% endfor %}
+  {% else %}
+    <div id="empty-state"
+         class="col-span-full flex flex-col items-center justify-center py-20 border border-dashed border-zinc-800 rounded-xl text-zinc-600">
+      <p class="text-sm mb-1">No personas yet.</p>
+      <p class="text-xs">Create one to get started.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block modals %}
+  {% include "components/create_modal.html" %}
+  {% include "components/migrate_modal.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const STATUS_TIMEOUT = 30_000;
+  const MAX_FEED = 20;
+  const timers = {};
+
+  const SIG_COLORS = {
+    Plan:    'bg-blue-900/50 text-blue-400',
+    Event:   'bg-emerald-900/50 text-emerald-400',
+    Message: 'bg-violet-900/50 text-violet-400',
+    Inquiry: 'bg-amber-900/50 text-amber-400',
+    Command: 'bg-red-900/50 text-red-400',
+  };
+
+  // ── Card status ──────────────────────────────────────────────────────────
+  function setCardStatus(id, state) {
+    clearTimeout(timers[id]);
+    const card  = document.getElementById('card-' + id);
+    if (!card) return;
+
+    const orb   = card.querySelector('[data-orb]');
+    const label = card.querySelector('[data-status-label]');
+
+    card.classList.remove(
+      'border-emerald-900/50', 'shadow-lg', 'shadow-emerald-950',
+      'border-amber-900/50',   'shadow-amber-950',
+    );
+
+    const cfg = {
+      idle:     { orb: 'bg-zinc-700',    label: 'idle',       border: '' },
+      active:   { orb: 'bg-emerald-400', label: 'listening',  border: 'border-emerald-900/50 shadow-lg shadow-emerald-950' },
+      thinking: { orb: 'bg-amber-400',   label: 'thinking…',  border: 'border-amber-900/50 shadow-lg shadow-amber-950' },
+    }[state] || { orb: 'bg-zinc-700', label: state, border: '' };
+
+    orb.className   = `w-2 h-2 rounded-full transition-colors duration-300 ${cfg.orb}${state === 'thinking' ? ' animate-pulse' : ''}`;
+    label.textContent = cfg.label;
+    cfg.border.split(' ').filter(Boolean).forEach(c => card.classList.add(c));
+
+    if (state !== 'idle') {
+      timers[id] = setTimeout(() => setCardStatus(id, 'idle'), STATUS_TIMEOUT);
+    }
+  }
+
+  // ── Per-card signal feed ─────────────────────────────────────────────────
+  function pushSignalToCard(personaId, sig) {
+    const feed = document.getElementById('feed-' + personaId);
+    if (!feed) return;
+
+    feed.querySelector('[data-empty]')?.remove();
+
+    const color = SIG_COLORS[sig.type] || 'bg-zinc-800 text-zinc-400';
+    const row = document.createElement('div');
+    row.className = 'sig-row flex items-start gap-2 py-1.5 border-b border-zinc-800/50 last:border-0';
+    row.innerHTML =
+      `<span class="shrink-0 text-xs font-mono font-medium px-1.5 py-0.5 rounded ${color}">${sig.type}</span>` +
+      `<span class="text-xs text-zinc-400 leading-5 truncate">${sig.title}</span>`;
+
+    feed.prepend(row);
+    const rows = feed.querySelectorAll(':scope > .sig-row');
+    if (rows.length > MAX_FEED) rows[rows.length - 1].remove();
+  }
+
+  // ── Dynamically add a card (from WS event) ──────────────────────────────
+  function addPersonaCard(p) {
+    document.getElementById('empty-state')?.remove();
+
+    if (document.getElementById('card-' + p.id)) return;
+
+    const modelName = p.model?.name ?? p.model ?? '';
+    const card = document.createElement('div');
+    card.id        = 'card-' + p.id;
+    card.className = 'bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col gap-3 transition-all duration-300 hover:-translate-y-0.5';
+    card.innerHTML =
+      `<div class="flex items-center gap-2">` +
+        `<span data-orb class="w-2 h-2 rounded-full bg-zinc-700 transition-colors duration-300"></span>` +
+        `<span data-status-label class="text-xs font-mono text-zinc-500">idle</span>` +
+      `</div>` +
+      `<div>` +
+        `<div class="font-semibold text-zinc-100">${p.name}</div>` +
+        `<div class="text-xs font-mono text-zinc-600 mt-0.5 truncate" title="${p.id}">${p.id}</div>` +
+      `</div>` +
+      `<div class="h-px bg-zinc-800"></div>` +
+      `<div class="text-xs font-mono text-zinc-500">${modelName}</div>` +
+      `<div id="feed-${p.id}" class="flex flex-col">` +
+        `<div data-empty class="text-xs text-zinc-700 font-mono py-1">no signals yet</div>` +
+      `</div>`;
+
+    document.getElementById('persona-grid').appendChild(card);
+
+    const counter = document.getElementById('persona-count');
+    counter.textContent = (parseInt(counter.textContent) || 0) + 1;
+  }
+
+  // ── Signal handler (called by base.html WS) ──────────────────────────────
+  function onSignal(sig) {
+    const personaId = sig.details?.persona?.id;
+
+    if (personaId) {
+      if (sig.type === 'Plan')  setCardStatus(personaId, 'thinking');
+      if (sig.type === 'Event') setCardStatus(personaId, 'active');
+      pushSignalToCard(personaId, sig);
+    }
+
+    if (sig.type === 'Event' && (sig.title === 'Persona created' || sig.title === 'Persona migrated')) {
+      const p = sig.details?.persona;
+      if (p) addPersonaCard(p);
+    }
+  }
+</script>
+{% endblock %}

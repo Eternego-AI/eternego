@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Eternego{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .sig-row { animation: fadeSlideIn 0.15s ease both; }
+  </style>
+</head>
+<body class="min-h-full bg-zinc-950 text-zinc-100 antialiased">
+
+  <header class="border-b border-zinc-800/60 px-6 h-14 flex items-center gap-4">
+    <div class="flex items-center gap-2.5">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-400 to-violet-700 flex items-center justify-center text-xs shadow-lg shadow-violet-900/40 flex-shrink-0">◈</div>
+      <span class="text-xs font-bold tracking-widest uppercase">Eternego</span>
+    </div>
+    <span class="text-xs text-zinc-700 italic flex-1">the eternal i</span>
+
+    <div id="ws-badge" class="flex items-center gap-1.5 text-xs font-mono px-3 py-1 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 transition-colors duration-300">
+      <span id="ws-dot" class="w-1.5 h-1.5 rounded-full bg-zinc-600 transition-colors duration-300"></span>
+      <span id="ws-label">connecting</span>
+    </div>
+
+    <button onclick="openModal('modal-create')"
+            class="text-xs px-3.5 py-1.5 rounded-lg bg-violet-700 hover:bg-violet-600 text-white font-medium transition-colors">
+      + Create
+    </button>
+    <button onclick="openModal('modal-migrate')"
+            class="text-xs px-3.5 py-1.5 rounded-lg border border-zinc-700 hover:border-zinc-600 text-zinc-400 hover:text-zinc-200 font-medium transition-colors">
+      Migrate
+    </button>
+  </header>
+
+  <main class="p-6">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block modals %}{% endblock %}
+
+  <script>
+    // ── Modals ────────────────────────────────────────────────────────────
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+    document.addEventListener('click', e => {
+      if (e.target.hasAttribute('data-backdrop')) closeModal(e.target.id);
+    });
+
+    // ── WebSocket ─────────────────────────────────────────────────────────
+    function setWsBadge(state) {
+      const badge = document.getElementById('ws-badge');
+      const dot   = document.getElementById('ws-dot');
+      const label = document.getElementById('ws-label');
+      const cfg = {
+        connecting:   { text: 'text-zinc-500',   border: 'border-zinc-800',      dot: 'bg-zinc-600',    label: 'connecting'    },
+        live:         { text: 'text-emerald-400', border: 'border-emerald-900/50', dot: 'bg-emerald-400', label: 'live'          },
+        reconnecting: { text: 'text-red-400',     border: 'border-red-900/50',    dot: 'bg-red-500',     label: 'reconnecting…' },
+      }[state];
+      badge.className = `flex items-center gap-1.5 text-xs font-mono px-3 py-1 rounded-full border bg-zinc-900 transition-colors duration-300 ${cfg.text} ${cfg.border}`;
+      dot.className   = `w-1.5 h-1.5 rounded-full transition-colors duration-300 ${cfg.dot}`;
+      label.textContent = cfg.label;
+    }
+
+    function wsConnect() {
+      const ws = new WebSocket(`ws://${location.host}/ws`);
+      ws.onopen    = () => setWsBadge('live');
+      ws.onclose   = () => { setWsBadge('reconnecting'); setTimeout(wsConnect, 3000); };
+      ws.onerror   = () => ws.close();
+      ws.onmessage = e => { try { if (typeof onSignal === 'function') onSignal(JSON.parse(e.data)); } catch {} };
+    }
+
+    wsConnect();
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
