@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+from datetime import datetime, timedelta
 
 import uvicorn
 
@@ -30,6 +31,15 @@ async def predict_loop(personas: list, interval: int) -> None:
             outcome = await persona.predict(agent, channel)
             if not outcome.success:
                 logger.warning(f"Predict failed for {agent.name}", {"reason": outcome.message})
+
+
+async def sleep_loop(personas: list) -> None:
+    """Run sleep for all personas concurrently every night at midnight."""
+    while True:
+        now = datetime.now()
+        midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        await asyncio.sleep((midnight - now).total_seconds())
+        await asyncio.gather(*[persona.sleep(agent) for agent in personas], return_exceptions=True)
 
 
 async def restart_gateway(command: Command):
@@ -95,6 +105,9 @@ async def main():
 
     if personas and args.predict_interval > 0:
         asyncio.create_task(predict_loop(personas, args.predict_interval))
+
+    if personas:
+        asyncio.create_task(sleep_loop(personas))
 
     web_task = asyncio.create_task(start_web(args.host, args.port))
     web_task.add_done_callback(
