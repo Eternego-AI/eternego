@@ -87,19 +87,19 @@ async def main():
         return
 
     personas = (outcome.data or {}).get("personas", [])
-    if not personas:
-        print("No personas found. Create one first.")
-        return
 
     for agent in personas:
         outcome = await persona.start(agent)
         if not outcome.success:
             print(f"Failed to start gateway for {agent.name}: {outcome.message}")
 
-    if args.predict_interval > 0:
+    if personas and args.predict_interval > 0:
         asyncio.create_task(predict_loop(personas, args.predict_interval))
 
-    asyncio.create_task(start_web(args.host, args.port))
+    web_task = asyncio.create_task(start_web(args.host, args.port))
+    web_task.add_done_callback(
+        lambda t: print(f"Web server stopped: {t.exception()}") if not t.cancelled() and t.exception() else None
+    )
 
     # Keep the event loop alive for signal handling and on_message callbacks
     while True:
