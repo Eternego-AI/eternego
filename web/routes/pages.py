@@ -30,6 +30,20 @@ async def dashboard(request: Request):
     })
 
 
+@router.get("/dashboard/persona/{persona_id}/chat")
+async def persona_chat(request: Request, persona_id: str):
+    find = await persona.find(persona_id)
+    if not find.success:
+        return templates.TemplateResponse("pages/dashboard.html", {
+            "request": request,
+            "personas": [],
+        }, status_code=404)
+    return templates.TemplateResponse("pages/chat.html", {
+        "request": request,
+        "persona": find.data["persona"],
+    })
+
+
 @router.get("/dashboard/persona/{persona_id}")
 async def persona_detail(request: Request, persona_id: str):
     find = await persona.find(persona_id)

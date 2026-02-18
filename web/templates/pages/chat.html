@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Chat · {{ persona.name }} — Eternego{% endblock %}
+
+{% block content %}
+<div class="flex flex-col h-[calc(100vh-56px-48px)]">
+
+  <!-- Breadcrumb + persona info -->
+  <div class="flex items-center gap-3 mb-4 flex-shrink-0">
+    <a href="/dashboard"
+       class="text-xs font-mono text-zinc-600 hover:text-zinc-300 transition-colors">← dashboard</a>
+    <div class="w-px h-3 bg-zinc-800"></div>
+    <a href="/dashboard/persona/{{ persona.id }}"
+       class="text-xs font-mono text-zinc-600 hover:text-zinc-300 transition-colors">{{ persona.name }}</a>
+    <div class="w-px h-3 bg-zinc-800"></div>
+    <span class="text-xs text-zinc-700">chat</span>
+    <span class="ml-auto text-xs font-mono text-zinc-700">{{ persona.model.name }}</span>
+  </div>
+
+  <!-- Message list -->
+  <div id="messages"
+       class="feed-scroll flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 py-2 pr-1">
+    <div id="empty-msg" class="flex items-center justify-center h-full">
+      <p class="text-xs font-mono text-zinc-700">Start a conversation with {{ persona.name }}.</p>
+    </div>
+  </div>
+
+  <!-- Input area -->
+  <div class="flex-shrink-0 pt-4">
+    <form id="chat-form" class="flex gap-3 items-end">
+      <textarea id="input"
+                rows="1"
+                placeholder="Message {{ persona.name }}…"
+                class="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-zinc-600 transition-colors resize-none leading-relaxed"
+                style="max-height: 160px; overflow-y: auto;"></textarea>
+      <button type="submit" id="send-btn"
+              class="shrink-0 px-4 py-3 rounded-xl bg-violet-700 hover:bg-violet-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
+        Send
+      </button>
+    </form>
+    <p class="text-xs text-zinc-700 mt-2 font-mono">Enter to send · Shift+Enter for new line</p>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const PERSONA_ID = {{ persona.id | tojson }};
+  const PERSONA_NAME = {{ persona.name | tojson }};
+  const history = [];
+
+  // ── Auto-resize textarea ──────────────────────────────────────────────────
+  const input = document.getElementById('input');
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+  });
+
+  // ── Enter to send ─────────────────────────────────────────────────────────
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('chat-form').requestSubmit();
+    }
+  });
+
+  // ── Render a message bubble ───────────────────────────────────────────────
+  function appendMessage(role, content) {
+    document.getElementById('empty-msg')?.remove();
+
+    const isUser = role === 'user';
+    const wrap = document.createElement('div');
+    wrap.className = `flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'}`;
+
+    const label = document.createElement('span');
+    label.className = 'text-xs font-mono text-zinc-600 px-1';
+    label.textContent = isUser ? 'you' : PERSONA_NAME;
+
+    const bubble = document.createElement('div');
+    bubble.className = isUser
+      ? 'max-w-[75%] bg-violet-900/40 border border-violet-800/40 text-zinc-100 text-sm px-4 py-2.5 rounded-2xl rounded-tr-sm leading-relaxed whitespace-pre-wrap'
+      : 'max-w-[75%] bg-zinc-900 border border-zinc-800 text-zinc-200 text-sm px-4 py-2.5 rounded-2xl rounded-tl-sm leading-relaxed whitespace-pre-wrap';
+    bubble.textContent = content;
+
+    wrap.appendChild(label);
+    wrap.appendChild(bubble);
+
+    const messages = document.getElementById('messages');
+    messages.appendChild(wrap);
+    messages.scrollTop = messages.scrollHeight;
+
+    return bubble;
+  }
+
+  // ── Thinking indicator ────────────────────────────────────────────────────
+  function appendThinking() {
+    document.getElementById('empty-msg')?.remove();
+
+    const wrap = document.createElement('div');
+    wrap.id = 'thinking';
+    wrap.className = 'flex flex-col gap-1 items-start';
+
+    const label = document.createElement('span');
+    label.className = 'text-xs font-mono text-zinc-600 px-1';
+    label.textContent = PERSONA_NAME;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bg-zinc-900 border border-zinc-800 px-4 py-3 rounded-2xl rounded-tl-sm flex gap-1.5 items-center';
+    bubble.innerHTML =
+      '<span class="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce [animation-delay:0ms]"></span>' +
+      '<span class="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce [animation-delay:150ms]"></span>' +
+      '<span class="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce [animation-delay:300ms]"></span>';
+
+    wrap.appendChild(label);
+    wrap.appendChild(bubble);
+
+    const messages = document.getElementById('messages');
+    messages.appendChild(wrap);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  document.getElementById('chat-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+
+    const btn = document.getElementById('send-btn');
+    input.value = '';
+    input.style.height = 'auto';
+    btn.disabled = true;
+
+    history.push({ role: 'user', content: text });
+    appendMessage('user', text);
+    appendThinking();
+
+    try {
+      const res = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: PERSONA_ID, messages: history }),
+      });
+
+      document.getElementById('thinking')?.remove();
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        appendMessage('assistant', `Error: ${err.detail || res.statusText}`);
+        history.pop();
+        return;
+      }
+
+      const data = await res.json();
+      const reply = data.choices?.[0]?.message?.content ?? '';
+      history.push({ role: 'assistant', content: reply });
+      appendMessage('assistant', reply);
+
+    } catch (ex) {
+      document.getElementById('thinking')?.remove();
+      appendMessage('assistant', `Error: ${ex.message}`);
+      history.pop();
+    } finally {
+      btn.disabled = false;
+      input.focus();
+    }
+  });
+
+  input.focus();
+</script>
+{% endblock %}
