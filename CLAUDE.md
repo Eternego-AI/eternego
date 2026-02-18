@@ -58,7 +58,7 @@ The interaction system uses a cognitive model. Understand this before touching S
 ```
 sense → agent.given(persona, stimulus) → think.reason() → yields Thought objects
   thought.intent == "saying"     → channels.send → memories.agent(persona).remember(communicated)
-  thought.intent == "doing"      → act spec → system.execute → memories.agent(persona).remember(result)
+  thought.intent == "doing"      → system.is_authorized → system.execute → memories.agent(persona).remember(result)
   thought.intent == "consulting"  → escalate spec → frontier.consulting(persona) → memories.agent(persona).remember(observation)
   thought.intent == "reasoning"   → bus.share (internal, not shown to person)
 ```
@@ -111,7 +111,7 @@ Inside `agent.py`'s `_reason()` closure (the function wrapped by `Thinking`), a 
 
 ### Escalation
 
-Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai platform modules → thoughts routed through same channels.send/act pattern → frontier reasoning is NOT observed (agent develops its own reasoning path).
+Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai platform modules → thoughts routed through same channels.send/system.execute pattern → frontier reasoning is NOT observed (agent develops its own reasoning path).
 
 ## Module Map
 
@@ -120,7 +120,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | Module | Functions |
 |---|---|
 | `environment.py` | prepare, check_model |
-| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, sense, act, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
+| `persona.py` | agents, find_by_channel, create, migrate, feed, grow, equip, sense, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
 | `outcome.py` | Outcome dataclass |
 
 ### Core (application/core/)
@@ -138,7 +138,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | `models.py` | generate_name() |
 | `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model(), copy(), delete(), fine_tune() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
-| `system.py` | execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
+| `system.py` | is_authorized(), execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
 | `data.py` | Channel, Model, Thought, Thinking, Observation, Gateway, Persona |
 | `memories.py` | agent(persona) → remember(), recall(), forget_everything() — per-persona short-term memory |
 | `paths.py` | agents_home(), agent_identity(agent_id) |
@@ -180,7 +180,6 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 11: List Personas (agents)
 - Spec 12: Find Persona by Channel (find_by_channel)
 - Spec 7a: Sense (reactive loop)
-- Spec 7c: Act (tool execution with permission check via bus.ask)
 - Spec 7d: Escalate (frontier routing with observation)
 - Spec 7e: Reflect (reflection prompt after each sense cycle)
 - Spec 7f: Predict (prediction prompt for proactive behavior)

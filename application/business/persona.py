@@ -1,8 +1,7 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
 from application.core import bus, agent, channels, gateways, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, instructions, skills, history, observations
-from application.core.bus import Message
-from application.core.data import Channel, Model, Persona, Thought
+from application.core.data import Channel, Model, Persona
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
     DiaryError, IdentityError, PersonError, ExternalDataError, FrontierError,
@@ -325,9 +324,19 @@ async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict
                         "tool_calls": thought.tool_calls,
                         "result": "Skipped — a previous tool call failed in this interaction.",
                     })
+                elif not await system.is_authorized(thought.tool_calls):
+                    memories.agent(persona).remember({
+                        "type": "act",
+                        "tool_calls": thought.tool_calls,
+                        "result": "Rejected — the person declined to run this command.",
+                    })
+                    failed = True
                 else:
-                    outcome = await act(persona, thought)
-                    if not outcome.success:
+                    try:
+                        result = await system.execute(thought.tool_calls)
+                        memories.agent(persona).remember({"type": "act", "tool_calls": thought.tool_calls, "result": result})
+                    except (ExecutionError, UnsupportedOS) as e:
+                        memories.agent(persona).remember({"type": "act", "tool_calls": thought.tool_calls, "result": f"Failed: {e}"})
                         failed = True
             elif thought.intent == "consulting":
                 await escalate(persona, thought.content, channel)
@@ -367,93 +376,6 @@ async def sense(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict
         )
 
 
-async def act(persona: Persona, thought: Thought) -> Outcome[dict]:
-    """It lets the persona act on the world by executing a tool call."""
-    await bus.propose(
-        "Acting", {"persona": persona, "tool": thought.tool_calls}
-    )
-
-    signals = await bus.ask(
-        "Can I run this command?", {"tool_calls": thought.tool_calls}
-    )
-
-    authorized = any(
-        isinstance(signal, Message)
-        and signal.title == "Run command authorized"
-        and signal.details.get("tool_calls") == thought.tool_calls
-        for signal in signals
-    )
-
-    if not authorized:
-        memories.agent(persona).remember({
-            "type": "act",
-            "tool_calls": thought.tool_calls,
-            "result": "Rejected — the person declined to run this command.",
-        })
-
-        await bus.broadcast(
-            "Acting rejected",
-            {"persona": persona, "tool": thought.tool_calls},
-        )
-
-        return Outcome(
-            success=False,
-            message="Command rejected by the person.",
-            data={"persona_id": persona.id},
-        )
-
-    try:
-        result = await system.execute(thought.tool_calls)
-
-        memories.agent(persona).remember({"type": "act", "tool_calls": thought.tool_calls, "result": result})
-
-        await bus.broadcast(
-            "Acted", {"persona": persona, "tool": thought.tool_calls}
-        )
-
-        return Outcome(
-            success=True,
-            message="Action executed",
-            data={"persona_id": persona.id},
-        )
-
-    except ExecutionError as e:
-        memories.agent(persona).remember({
-            "type": "act",
-            "tool_calls": thought.tool_calls,
-            "result": f"Failed: {e}",
-        })
-
-        await bus.broadcast(
-            "Acting failed",
-            {"persona": persona, "tool": thought.tool_calls, "error": str(e)},
-        )
-
-        return Outcome(
-            success=False,
-            message="Command failed to execute.",
-            data={"persona_id": persona.id},
-        )
-
-    except UnsupportedOS as e:
-        memories.agent(persona).remember({
-            "type": "act",
-            "tool_calls": thought.tool_calls,
-            "result": f"Failed: {e}",
-        })
-
-        await bus.broadcast(
-            "Acting failed",
-            {"persona": persona, "tool": thought.tool_calls, "error": str(e)},
-        )
-
-        return Outcome(
-            success=False,
-            message="Your operating system is not supported.",
-            data={"persona_id": persona.id},
-        )
-
-
 async def escalate(persona: Persona, prompt: str, channel: Channel) -> Outcome[dict]:
     """It lets the persona escalate to a frontier model when the task exceeds its ability."""
     await bus.propose(
@@ -481,9 +403,19 @@ async def escalate(persona: Persona, prompt: str, channel: Channel) -> Outcome[d
                         "tool_calls": response.tool_calls,
                         "result": "Skipped — a previous tool call failed in this interaction.",
                     })
+                elif not await system.is_authorized(response.tool_calls):
+                    memories.agent(persona).remember({
+                        "type": "act",
+                        "tool_calls": response.tool_calls,
+                        "result": "Rejected — the person declined to run this command.",
+                    })
+                    failed = True
                 else:
-                    outcome = await act(persona, response)
-                    if not outcome.success:
+                    try:
+                        result = await system.execute(response.tool_calls)
+                        memories.agent(persona).remember({"type": "act", "tool_calls": response.tool_calls, "result": result})
+                    except (ExecutionError, UnsupportedOS) as e:
+                        memories.agent(persona).remember({"type": "act", "tool_calls": response.tool_calls, "result": f"Failed: {e}"})
                         failed = True
             elif response.intent == "reasoning":
                 # Reasoning is not observed. The agent should develop its own reasoning

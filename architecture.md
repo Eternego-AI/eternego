@@ -232,7 +232,9 @@ async for thought in think.reason():
         await channels.send(channel, thought.content)
         memories.agent(persona).remember({"type": "communicated", ...})
     elif thought.intent == "doing":
-        await act(persona, thought)
+        if await system.is_authorized(thought.tool_calls):
+            result = await system.execute(thought.tool_calls)
+            memories.agent(persona).remember({"type": "act", ...})
     elif thought.intent == "consulting":
         await escalate(persona, thought.content, channel)
 ```
