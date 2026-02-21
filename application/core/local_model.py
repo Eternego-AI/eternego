@@ -1,5 +1,6 @@
 """Local model — communicating with the local model."""
 
+import asyncio
 import json
 from urllib.error import URLError
 
@@ -20,7 +21,7 @@ async def observe(
     """Analyze conversations and extract observations about the person."""
     logger.info("Observing conversations", {"model": model})
     try:
-        response = ollama.post("/api/generate", {
+        response = await asyncio.to_thread(ollama.post, "/api/generate", {
             "model": model,
             "prompt": prompts.extraction(
                 conversations=conversations,
@@ -48,7 +49,7 @@ async def study(model: str, dna: str) -> Observation:
     """Study DNA and extract observations to populate traits and context."""
     logger.info("Studying DNA", {"model": model})
     try:
-        response = ollama.post("/api/generate", {
+        response = await asyncio.to_thread(ollama.post, "/api/generate", {
             "model": model,
             "prompt": prompts.extraction_from_dna(dna=dna),
             "stream": False,
@@ -71,7 +72,7 @@ async def assess_skill(model: str, skill_name: str, skill_content: str) -> Obser
     """Analyze a skill document and extract observations using the given model."""
     logger.info("Assessing skill", {"model": model, "skill": skill_name})
     try:
-        response = ollama.post("/api/generate", {
+        response = await asyncio.to_thread(ollama.post, "/api/generate", {
             "model": model,
             "prompt": prompts.skill_assessment(skill_name, skill_content),
             "stream": False,
@@ -100,7 +101,7 @@ async def respond(model: str, messages: list[dict], json_mode: bool = False) -> 
         body = {"model": model, "messages": messages, "stream": False}
         if json_mode:
             body["format"] = "json"
-        response = ollama.post("/api/chat", body)
+        response = await asyncio.to_thread(ollama.post, "/api/chat", body)
         return response["message"]["content"]
     except URLError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
@@ -110,7 +111,7 @@ async def summarize_thread(model: str, messages: list[dict]) -> dict:
     """Generate a title and one-sentence summary for a conversation thread."""
     logger.info("Summarizing thread", {"model": model})
     try:
-        response = ollama.post("/api/generate", {
+        response = await asyncio.to_thread(ollama.post, "/api/generate", {
             "model": model,
             "prompt": prompts.thread_summary(messages),
             "stream": False,
@@ -130,7 +131,7 @@ async def generate_encryption_phrase(persona: Persona) -> str:
     """Ask the local model to generate a recovery phrase."""
     logger.info("Generating encryption phrase", {"persona_id": persona.id, "model": persona.model.name})
     try:
-        response = ollama.post("/api/generate", {
+        response = await asyncio.to_thread(ollama.post, "/api/generate", {
             "model": persona.model.name,
             "prompt": prompts.RECOVERY_PHRASE,
             "stream": False,
