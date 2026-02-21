@@ -20,18 +20,6 @@ async def start_web(host: str, port: int) -> None:
     await server.serve()
 
 
-async def predict_loop(personas: list, interval: int) -> None:
-    """Run predict for every persona with an active channel on a fixed interval."""
-    while True:
-        await asyncio.sleep(interval)
-        for agent in personas:
-            if not (agent.channels or []):
-                continue
-            channel = agent.channels[0]
-            outcome = await persona.predict(agent, channel)
-            if not outcome.success:
-                logger.warning(f"Predict failed for {agent.name}", {"reason": outcome.message})
-
 
 async def sleep_loop(personas: list) -> None:
     """Run sleep for all personas concurrently every night at midnight."""
@@ -63,8 +51,6 @@ async def restart_gateway(command: Command):
 async def main():
     parser = argparse.ArgumentParser(description="Eternego service")
     parser.add_argument("-v", "--verbose", action="count", default=0)
-    parser.add_argument("--predict-interval", type=int, default=60, metavar="SECONDS",
-                        help="How often to run predict for each persona (default: 60, 0 to disable)")
     parser.add_argument("--port", type=int, default=5001, help="Web server port (default: 5001)")
     parser.add_argument("--host", default="127.0.0.1", help="Web server host (default: 127.0.0.1)")
     args = parser.parse_args()
@@ -102,9 +88,6 @@ async def main():
         outcome = await persona.start(agent)
         if not outcome.success:
             print(f"Failed to start gateway for {agent.name}: {outcome.message}")
-
-    if personas and args.predict_interval > 0:
-        asyncio.create_task(predict_loop(personas, args.predict_interval))
 
     if personas:
         asyncio.create_task(sleep_loop(personas))

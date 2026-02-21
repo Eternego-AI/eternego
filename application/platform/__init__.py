@@ -1,13 +1,19 @@
 # Platform modules - infrastructure abstractions
 
+from . import anthropic
+from . import strings
 from . import datetimes
 from . import crypto
 from . import filesystem
 from . import git
+from . import lists
 from . import logger
 from . import observer
 from . import ollama
+from . import openai
 from . import OS
+from . import processes
+from . import reflections
 from . import linux
 from . import mac
 from . import telegram

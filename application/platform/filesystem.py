@@ -23,7 +23,7 @@ def write(path: Path, content: str) -> None:
     path.write_text(content)
 
 
-def write_json(path: Path, data: dict) -> None:
+def write_json(path: Path, data: object) -> None:
     """Write JSON data to a file."""
     ensure_dir(path.parent)
     path.write_text(json.dumps(data, indent=2))

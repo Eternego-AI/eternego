@@ -1,7 +1,7 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
 from application.core import bus, system, local_inference_engine
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError
+from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, IdentityError, NetworkError
 from application.business.outcome import Outcome
 
 
@@ -56,6 +56,27 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
             "error": str(e),
         })
         return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
+
+
+async def pair(code: str) -> Outcome[dict]:
+    """Claim a pairing code and add the verified channel to the persona's known channels."""
+    await bus.propose("Pairing channel", {"code": code})
+    try:
+        from application.core import agent, channels, pairing
+        entry = pairing.claim(code.upper())
+        if not entry:
+            await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid_or_expired"})
+            return Outcome(success=False, message="Pairing code is invalid or has expired. Ask the device to send a new message to get a fresh code.")
+        found = agent.find(entry["persona_id"])
+        channels.add(found, entry["network_id"], entry["chat_id"])
+        await bus.broadcast("Channel paired", {"persona": entry["persona_id"], "network": entry["network_id"]})
+        return Outcome(success=True, message="Channel paired successfully.", data=entry)
+    except IdentityError:
+        await bus.broadcast("Pairing failed", {"code": code, "reason": "persona_not_found"})
+        return Outcome(success=False, message="Persona not found. The service may have restarted — ask the device to send a new message.")
+    except NetworkError:
+        await bus.broadcast("Pairing failed", {"code": code, "reason": "save_failed"})
+        return Outcome(success=False, message="Failed to save the verified channel. Please try again.")
 
 
 async def check_model(model: str) -> Outcome[dict]:

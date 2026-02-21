@@ -1,9 +1,9 @@
 """History — long-term conversation history for a persona."""
 
 from application.platform import logger, filesystem, crypto, datetimes
-from application.core import local_model, observations, transcripts
-from application.core.data import Persona
-from application.core.exceptions import EngineConnectionError, IdentityError
+from application.core import local_model
+from application.core.data import Persona, Thread
+from application.core.exceptions import IdentityError
 
 
 async def start(persona: Persona) -> None:
@@ -29,20 +29,6 @@ async def entries(persona: Persona) -> list[str]:
         raise IdentityError("Failed to read history entries") from e
 
 
-async def recall(persona: Persona) -> str:
-    """Read all history files and return concatenated conversations."""
-    logger.info("Recalling history", {"persona_id": persona.id})
-    try:
-        parts = []
-        history_dir = persona.storage_dir / "history"
-        if history_dir.exists():
-            for file in sorted(history_dir.glob("*")):
-                parts.append(filesystem.read(file))
-        return "\n\n---\n\n".join(parts)
-    except OSError as e:
-        raise IdentityError("Failed to read history") from e
-
-
 async def delete(persona: Persona, hash_part: str) -> None:
     """Remove a conversation file from history by its name hash."""
     logger.info("Deleting history entry", {"persona_id": persona.id, "hash": hash_part})
@@ -57,45 +43,61 @@ async def delete(persona: Persona, hash_part: str) -> None:
         raise IdentityError("Failed to delete history entry") from e
 
 
-async def consolidate(persona: Persona, knowledge: dict, transcript: str) -> None:
-    """Cluster a conversation transcript by topic, extract observations, and commit to long-term history."""
-    logger.info("Consolidating to history", {"persona_id": persona.id})
-
-    if not transcript:
+async def persist(persona: Persona, thread: Thread) -> None:
+    """Summarize a finished thread, write it to disk, and append to the briefing if public."""
+    logger.info("Persisting thread to history", {"persona_id": persona.id, "thread": thread.id})
+    from application.core import memories
+    messages = memories.agent(persona).as_messages(thread.id)
+    if not messages:
         return
-
     try:
-        try:
-            clusters = await local_model.cluster(persona.model.name, transcript)
-        except EngineConnectionError:
-            clusters = []
-
-        if not clusters:
-            all_entries = transcripts.as_list(transcript)
-            clusters = [{"topic": "conversation", "indices": [e["index"] for e in all_entries]}]
+        summary = await local_model.summarize_thread(persona.model.name, messages)
+        title = summary["title"]
+        summary_text = summary["summary"]
 
         stamp = datetimes.date_stamp(datetimes.now())
+        prefix = "" if thread.public else "."
+        filename = f"{prefix}{stamp}-{thread.id[:8]}.md"
+        history_dir = persona.storage_dir / "history"
 
-        for entry in clusters:
-            topic = entry.get("topic", "conversation")
-            indices = entry.get("indices", [])
-            cluster_text = transcripts.extract(transcript, indices)
-            if not cluster_text:
-                continue
+        lines = [f"# {title}\n"]
+        for msg in messages:
+            if msg.get("content"):
+                lines.append(f"**{msg['role'].capitalize()}:** {msg['content']}\n")
+        filesystem.write(history_dir / filename, "\n".join(lines))
 
-            path = persona.storage_dir / "history" / f"{stamp}-{topic}.md"
-            if path.exists():
-                filesystem.append(path, f"\n\n{cluster_text}")
+        if thread.public:
+            briefing_path = history_dir / "briefing.md"
+            row = f"| {title} | {summary_text} | {filename} |\n"
+            if not briefing_path.exists():
+                filesystem.write(briefing_path, "| Title | Summary | File |\n|-------|---------|------|\n" + row)
             else:
-                filesystem.write(path, cluster_text)
-
-            try:
-                observed = await local_model.observe(persona.model.name, cluster_text, **knowledge)
-                await observations.effect(persona, observed)
-            except EngineConnectionError:
-                logger.info("Skipping observation for cluster", {"topic": topic})
+                filesystem.append(briefing_path, row)
 
     except OSError as e:
-        raise IdentityError("Failed to write history during consolidation") from e
+        raise IdentityError("Failed to persist thread to history") from e
+
+
+async def briefing(persona: Persona) -> str:
+    """Read the history briefing index."""
+    logger.info("Reading history briefing", {"persona_id": persona.id})
+    try:
+        path = persona.storage_dir / "history" / "briefing.md"
+        return filesystem.read(path) if path.exists() else "(no history yet)"
+    except OSError as e:
+        raise IdentityError("Failed to read history briefing") from e
+
+
+async def load_conversation(persona: Persona, filename: str) -> str:
+    """Load a specific history conversation file by filename."""
+    logger.info("Loading history conversation", {"persona_id": persona.id, "filename": filename})
+    try:
+        path = persona.storage_dir / "history" / filename
+        if not path.exists():
+            raise IdentityError(f"History file not found: {filename}")
+        return filesystem.read(path)
+    except OSError as e:
+        raise IdentityError("Failed to load history conversation") from e
+
 
 

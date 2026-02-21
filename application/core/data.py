@@ -1,42 +1,67 @@
 """Data models for the application."""
 
-from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+import inspect
+import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
-from types import ModuleType
 
 from application.core import paths
+from application.platform.objects import Data, sensitive
+
+
+@dataclass(kw_only=True)
+class Model(Data):
+    name: str
+    provider: str | None = None
+    credentials: dict | None = sensitive()
+
+
+@dataclass(kw_only=True)
+class Persona(Data):
+    id: str
+    name: str
+    model: Model
+    base_model: str = ""
+    frontier: Model | None = None
+    networks: list[Network] | None = None
+
+    @property
+    def storage_dir(self) -> Path:
+        return paths.agents_home() / self.id
+
+
+@dataclass(kw_only=True)
+class Network(Data):
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    type: str
+    credentials: dict | None = sensitive()
 
 
 @dataclass(kw_only=True)
 class Channel:
-    name: str
-    credentials: dict | None = None
+    type: str
+    name: str  # e.g. chat_id for telegram, uuid for web
 
 
 @dataclass(kw_only=True)
-class Model:
-    name: str
-    provider: str | None = None
-    credentials: dict | None = None
+class Message(Data):
+    channel: Channel
+    content: str
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
 @dataclass(kw_only=True)
-class Thought:
-    intent: str
-    content: str = ""
-    tool_calls: list[dict] | None = None
+class Thread:
+    id: str
+    public: bool = True
 
 
+@dataclass(kw_only=True)
+class Prompt:
+    role: str
+    content: str
 
-class Thinking:
-    """The thinking process — wraps a reasoning function to yield thoughts."""
-
-    def __init__(self, reason_by: Callable[[], AsyncIterator["Thought"]]):
-        self._reason = reason_by
-
-    def reason(self) -> AsyncIterator["Thought"]:
-        return self._reason()
 
 
 @dataclass(kw_only=True)
@@ -48,30 +73,38 @@ class Observation:
 
 
 class Gateway:
-    """A live channel connection — a thread bound to a channel."""
+    """A live conversation channel — routes messages to a specific destination."""
 
-    def __init__(self, channel: Channel, threading: ModuleType):
+    def __init__(
+        self,
+        channel: Channel,
+        *,
+        send: Callable[[str], None] | None = None,
+        stop: Callable[[], None] | None = None,
+        wait: Callable[[], None] | None = None,
+        verify: Callable[[], bool] | None = None,
+    ):
         self.channel = channel
-        self.threading = threading
-        self._stopped = threading.Event()
+        self._send = send or (lambda text: None)
+        self._stop = stop or (lambda: None)
+        self._wait = wait or (lambda: None)
+        self._verify = verify or (lambda: True)
 
-    @property
-    def is_stopped(self) -> bool:
-        return self._stopped.is_set()
+    async def send(self, text: str) -> None:
+        result = self._send(text)
+        if inspect.isawaitable(result):
+            await result
 
-    def close(self):
-        self._stopped.set()
+    async def stop(self) -> None:
+        result = self._stop()
+        if inspect.isawaitable(result):
+            await result
 
+    async def wait(self):
+        result = self._wait()
+        if inspect.isawaitable(result):
+            return await result
 
-@dataclass(kw_only=True)
-class Persona:
-    id: str
-    name: str
-    model: Model
-    base_model: str = ""
-    frontier: Model | None = None
-    channels: list[Channel] | None = None
+    def verify(self) -> bool:
+        return self._verify()
 
-    @property
-    def storage_dir(self) -> Path:
-        return paths.agents_home() / self.id

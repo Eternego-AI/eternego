@@ -25,6 +25,22 @@ async def identify(persona: Persona, observed: list[str]) -> None:
         raise PersonError("Failed to save struggles") from e
 
 
+async def refine(persona: Persona, new_items: list[str]) -> None:
+    """Consolidate new struggles with existing ones using the local model."""
+    logger.info("Refining struggles", {"persona_id": persona.id})
+    try:
+        from application.core import local_model, prompts
+        path = paths.struggles(persona.id)
+        existing = filesystem.read(path).strip() if path.exists() else ""
+        refined = await local_model.respond(
+            persona.model.name,
+            [{"role": "user", "content": prompts.struggle_refinement(existing, new_items)}],
+        )
+        filesystem.write(path, refined.strip() + "\n" if refined.strip() else "")
+    except OSError as e:
+        raise PersonError("Failed to refine struggles") from e
+
+
 async def identified_by(persona: Persona) -> str:
     """Read the person's known struggles."""
     logger.info("Reading struggles", {"persona_id": persona.id})

@@ -3,24 +3,9 @@
 import subprocess
 
 from application.platform import logger, crypto, OS, linux, mac, windows
-from application.core import bus, local_model
-from application.core.bus import Message
+from application.core import local_model
 from application.core.data import Persona
 from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError, ExecutionError
-
-
-async def is_authorized(tool_calls: list[dict]) -> bool:
-    """Ask the person whether the tool calls may run."""
-    logger.info("Requesting authorization", {"count": len(tool_calls)})
-    signals = await bus.ask(
-        "Can I run this command?", {"tool_calls": tool_calls}
-    )
-    return any(
-        isinstance(signal, Message)
-        and signal.title == "Run command authorized"
-        and signal.details.get("tool_calls") == tool_calls
-        for signal in signals
-    )
 
 
 async def execute(tool_calls: list[dict]) -> str:

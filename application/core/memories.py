@@ -1,13 +1,29 @@
-"""Memories — persona-scoped short-term memory, process-lived."""
+"""Memories — persona-scoped short-term memory, persisted to disk."""
 
-from application.core.data import Persona
+import uuid
+from collections.abc import Callable
 
-# Static storage: one dict for the process, created at import.
-_storage: dict[str, list[dict]] = {}
+from application.platform import persistent_memory
+from application.core import paths
+from application.core.data import Persona, Thread
+
+_threads: dict[str, Thread] = {}  # persona_id → current public thread
+
+
+def _current_thread(persona_id: str) -> Thread:
+    if persona_id not in _threads:
+        _threads[persona_id] = Thread(id=str(uuid.uuid4()))
+    return _threads[persona_id]
+
+
+def _rotate_thread(persona_id: str) -> Thread:
+    _threads[persona_id] = Thread(id=str(uuid.uuid4()))
+    return _threads[persona_id]
 
 
 def agent(persona: Persona) -> "AgentMemory":
-    """Return the memory handle for this persona (creates on first use)."""
+    """Return the memory handle for this persona."""
+    persistent_memory.load(persona.id, paths.memory(persona.id))
     return AgentMemory(persona)
 
 
@@ -17,18 +33,63 @@ class AgentMemory:
     def __init__(self, persona: Persona):
         self._persona = persona
 
-    def remember(self, document: dict) -> None:
-        """Append a document. Creates memory for the persona if needed."""
-        _storage.setdefault(self._persona.id, []).append(document)
+    def remember(self, document: dict) -> Thread:
+        """Append a document to the current thread. Returns the Thread."""
+        thread = _current_thread(self._persona.id)
+        persistent_memory.append(self._persona.id, {**document, "thread_id": thread.id})
+        return thread
+
+    def remember_on(self, thread: Thread, document: dict) -> Thread:
+        """Append a document to a specific thread. Returns the Thread."""
+        persistent_memory.append(self._persona.id, {**document, "thread_id": thread.id})
+        return thread
+
+    def remove_from_thread(self, content: str, thread_id: str) -> None:
+        """Remove documents matching content from a specific thread."""
+        persistent_memory.remove_where(
+            self._persona.id,
+            lambda doc: doc.get("thread_id") == thread_id and doc.get("content") == content,
+        )
+
+    def private_thread(self) -> Thread:
+        """Create a new private thread without affecting the current public thread."""
+        return Thread(id=str(uuid.uuid4()), public=False)
+
+    def new_thread(self) -> Thread:
+        """Rotate to a new public thread and return it."""
+        return _rotate_thread(self._persona.id)
+
+    def current_thread(self) -> Thread:
+        """Return the current public thread."""
+        return _current_thread(self._persona.id)
 
     def forget_everything(self) -> None:
-        """Clear all memory for this persona."""
-        _storage[self._persona.id] = []
+        """Clear all memory for this persona and rotate to a fresh thread."""
+        persistent_memory.clear(self._persona.id)
+        _rotate_thread(self._persona.id)
 
-    def as_messages(self) -> list[dict]:
-        """Return memory formatted as LLM chat messages."""
+    def hash(self) -> str:
+        """Return a hash of the current memory state."""
+        return persistent_memory.load(self._persona.id, paths.memory(self._persona.id))
+
+    def verify(self, current_hash: str) -> bool:
+        """Return True if memory is unchanged since the given hash was taken."""
+        return persistent_memory.verify(self._persona.id, current_hash)
+
+    def filter_by(self, predicate: Callable[[dict], bool]) -> list[dict]:
+        """Return memory documents matching the given predicate."""
+        return persistent_memory.filter_by(self._persona.id, predicate)
+
+    def as_messages(self, thread_id: str | None = None) -> list[dict]:
+        """Return memory as LLM chat messages, optionally filtered by thread_id."""
+        if thread_id:
+            docs = persistent_memory.filter_by(
+                self._persona.id, lambda doc: doc.get("thread_id") == thread_id
+            )
+            return [{"role": doc["role"], "content": doc["content"]} for doc in docs]
+
         messages = []
-        for doc in _storage.get(self._persona.id, []):
+        for doc in persistent_memory.read(self._persona.id):
             doc_type = doc.get("type")
             if doc_type in ("stimulus", "reflection", "prediction"):
                 messages.append({"role": doc["role"], "content": doc["content"]})
@@ -43,7 +104,7 @@ class AgentMemory:
         """Return memory formatted as a numbered conversation transcript."""
         lines = []
         idx = 1
-        for doc in _storage.get(self._persona.id, []):
+        for doc in persistent_memory.read(self._persona.id):
             doc_type = doc.get("type")
             if doc_type == "stimulus" and doc.get("role") == "user":
                 lines.append(f"[{idx}] User: {doc['content']}")

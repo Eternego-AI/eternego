@@ -1,11 +1,10 @@
 """WebSocket connection manager and signal subscriber."""
 
-import dataclasses
 import json
-from pathlib import Path
 
 from fastapi import WebSocket
 
+from application.platform import logger, objects
 from application.platform.observer import Signal
 
 
@@ -25,30 +24,12 @@ class ConnectionManager:
         for ws in list(self._connections):
             try:
                 await ws.send_text(data)
-            except Exception:
+            except Exception as e:
+                logger.warning("WebSocket broadcast failed", {"error": str(e), "type": type(e).__name__})
                 self._connections.remove(ws)
 
 
 manager = ConnectionManager()
-
-
-def _safe(obj):
-    """Recursively convert an object to a JSON-serializable form."""
-    if obj is None or isinstance(obj, (bool, int, float, str)):
-        return obj
-    if isinstance(obj, Path):
-        return str(obj)
-    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-        return {k: _safe(v) for k, v in dataclasses.asdict(obj).items()}
-    if isinstance(obj, dict):
-        return {k: _safe(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_safe(v) for v in obj]
-    try:
-        json.dumps(obj)
-        return obj
-    except (TypeError, ValueError):
-        return str(obj)
 
 
 async def on_signal(signal: Signal) -> None:
@@ -58,6 +39,6 @@ async def on_signal(signal: Signal) -> None:
     data = json.dumps({
         "type": signal.__class__.__name__,
         "title": signal.title,
-        "details": _safe(signal.details),
+        "details": objects.safe(signal.details),
     })
     await manager.broadcast(data)

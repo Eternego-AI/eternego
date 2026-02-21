@@ -16,8 +16,8 @@ class ChatRequest(BaseModel):
 class PersonaCreateRequest(BaseModel):
     name: str
     model: str
-    channel_name: str
-    channel_credentials: dict
+    network_type: str
+    network_credentials: dict
     frontier_model: str | None = None
     frontier_provider: str | None = None
     frontier_credentials: dict | None = None

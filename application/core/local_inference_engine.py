@@ -77,13 +77,14 @@ async def copy(source: str, destination: str) -> None:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
 
-async def delete(model: str) -> None:
-    """Delete a model from the local inference engine."""
+async def delete(model: str) -> bool:
+    """Delete a model from the local inference engine. Returns True on success, False on failure."""
     logger.info("Deleting model", {"model": model})
     try:
         ollama.delete("/api/delete", {"name": model})
-    except URLError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e
+        return True
+    except Exception:
+        return False
 
 
 async def fine_tune(model: str, training_set: str, new_model: str) -> None:

@@ -19,6 +19,24 @@ def role_based_text(data: str) -> str:
     return "\n".join(lines)
 
 
+def respond(api_key: str, model: str, messages: list[dict]) -> str:
+    """Send messages to the OpenAI API and return the full response text."""
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps({
+            "model": model,
+            "messages": messages,
+        }).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    with urllib.request.urlopen(request) as response:
+        data = json.loads(response.read())
+        return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+
 def stream(api_key: str, model: str, messages: list[dict]):
     """Stream a chat response from the OpenAI API, yielding normalized chunks."""
     request = urllib.request.Request(

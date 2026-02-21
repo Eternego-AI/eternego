@@ -4,11 +4,12 @@
        onclick="event.stopPropagation()">
 
     <div class="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-      <h2 class="font-semibold text-zinc-100">Create Persona</h2>
-      <button onclick="closeModal('modal-create')"
+      <h2 id="modal-create-title" class="font-semibold text-zinc-100">Create Persona</h2>
+      <button id="modal-create-close" onclick="closeModal('modal-create')"
               class="text-zinc-600 hover:text-zinc-300 text-2xl leading-none transition-colors">×</button>
     </div>
 
+    <!-- Step 1: creation form -->
     <form id="form-create" class="p-5 flex flex-col gap-4">
       <div>
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Name</label>
@@ -24,7 +25,7 @@
 
       <div>
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Channel</label>
-        <select name="channel_name" required
+        <select name="network_type" required
                 class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-violet-600 transition-colors">
           <option value="telegram">Telegram</option>
         </select>
@@ -35,6 +36,36 @@
         <input name="token" required type="text" placeholder="123456:ABCdef..."
                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-600 transition-colors">
         <p class="text-xs text-zinc-500 mt-1.5">Create a bot via <a href="https://t.me/botfather" target="_blank" class="text-violet-400 hover:text-violet-300 font-mono">@BotFather</a> and paste its token above.</p>
+      </div>
+
+      <!-- Frontier model (optional) -->
+      <div>
+        <button type="button" id="btn-frontier-toggle"
+                onclick="document.getElementById('frontier-fields').classList.toggle('hidden'); this.textContent = this.textContent.trim() === '+ Frontier model' ? '− Frontier model' : '+ Frontier model';"
+                class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+          + Frontier model
+        </button>
+
+        <div id="frontier-fields" class="hidden flex flex-col gap-3 mt-3 pt-3 border-t border-zinc-800">
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Provider</label>
+            <select name="frontier_provider"
+                    class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-violet-600 transition-colors">
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">Frontier model</label>
+            <input name="frontier_model" type="text" placeholder="e.g. claude-sonnet-4-6"
+                   class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-violet-600 transition-colors">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-1.5">API key</label>
+            <input name="frontier_api_key" type="password" placeholder="sk-ant-..."
+                   class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-600 transition-colors">
+          </div>
+        </div>
       </div>
 
       <div id="create-error"
@@ -51,6 +82,32 @@
         </button>
       </div>
     </form>
+
+    <!-- Step 2: recovery phrase screen (shown after successful creation) -->
+    <div id="create-phrase-screen" class="hidden p-5 flex flex-col gap-4">
+      <div class="flex items-start gap-3 text-amber-400 bg-amber-950/40 border border-amber-900/50 rounded-lg px-4 py-3">
+        <span class="text-lg leading-none mt-0.5">⚠</span>
+        <p class="text-xs leading-relaxed">
+          Write down this recovery phrase and store it somewhere safe.
+          It is the only way to restore your persona if something goes wrong.
+          <strong class="font-semibold">It will not be shown again.</strong>
+        </p>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-zinc-400 mb-1.5">Recovery phrase</label>
+        <div id="create-phrase-words"
+             class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-3 text-sm text-zinc-100 font-mono leading-relaxed tracking-wide select-all"></div>
+      </div>
+
+      <div class="flex justify-end pt-1">
+        <button type="button" id="btn-phrase-done"
+                class="text-sm px-4 py-2 rounded-lg bg-violet-700 hover:bg-violet-600 text-white font-medium transition-colors">
+          I've written it down
+        </button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -61,10 +118,18 @@
     const err = document.getElementById('create-error');
     const data = Object.fromEntries(new FormData(e.target));
 
-    if (data.channel_name === 'telegram') {
-      data.channel_credentials = { token: data.token };
+    if (data.network_type === 'telegram') {
+      data.network_credentials = { token: data.token };
     }
     delete data.token;
+
+    if (data.frontier_model) {
+      data.frontier_credentials = { api_key: data.frontier_api_key };
+    } else {
+      delete data.frontier_model;
+      delete data.frontier_provider;
+    }
+    delete data.frontier_api_key;
 
     btn.textContent = 'Creating…';
     btn.disabled    = true;
@@ -79,8 +144,14 @@
       let body;
       try { body = await res.json(); } catch { body = {}; }
       if (!res.ok) throw new Error(body.detail || 'Creation failed.');
-      closeModal('modal-create');
-      e.target.reset();
+
+      // Show phrase screen instead of closing
+      document.getElementById('modal-create-title').textContent = 'Recovery Phrase';
+      document.getElementById('modal-create-close').classList.add('hidden');
+      document.getElementById('form-create').classList.add('hidden');
+      document.getElementById('create-phrase-words').textContent = body.recovery_phrase || '';
+      document.getElementById('create-phrase-screen').classList.remove('hidden');
+
     } catch (ex) {
       err.textContent = ex.message;
       err.classList.remove('hidden');
@@ -88,5 +159,18 @@
       btn.textContent = 'Create';
       btn.disabled    = false;
     }
+  });
+
+  document.getElementById('btn-phrase-done').addEventListener('click', () => {
+    // Reset everything and close
+    document.getElementById('modal-create-title').textContent = 'Create Persona';
+    document.getElementById('modal-create-close').classList.remove('hidden');
+    document.getElementById('form-create').classList.remove('hidden');
+    document.getElementById('create-phrase-screen').classList.add('hidden');
+    document.getElementById('create-phrase-words').textContent = '';
+    document.getElementById('frontier-fields').classList.add('hidden');
+    document.getElementById('btn-frontier-toggle').textContent = '+ Frontier model';
+    document.getElementById('form-create').reset();
+    closeModal('modal-create');
   });
 </script>

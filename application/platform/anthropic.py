@@ -16,6 +16,26 @@ def role_based_text(data: str) -> str:
     return "\n".join(lines)
 
 
+def respond(api_key: str, model: str, messages: list[dict]) -> str:
+    """Send messages to the Anthropic API and return the full response text."""
+    request = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=json.dumps({
+            "model": model,
+            "messages": messages,
+            "max_tokens": 4096,
+        }).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        },
+    )
+    with urllib.request.urlopen(request) as response:
+        data = json.loads(response.read())
+        return data.get("content", [{}])[0].get("text", "")
+
+
 def stream(api_key: str, model: str, messages: list[dict]):
     """Stream a chat response from the Anthropic API, yielding normalized chunks."""
     request = urllib.request.Request(

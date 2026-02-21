@@ -5,16 +5,31 @@ from pathlib import Path
 from application.platform import logger, filesystem, crypto
 from application.core import local_model
 from application.core.data import Observation, Persona
-from application.core.exceptions import IdentityError
+from application.core.exceptions import IdentityError, SkillError
+
+
+_DEFAULTS_DIR = Path(__file__).parent / "default_skills"
 
 
 async def equip(persona: Persona) -> None:
-    """Prepare the skills directory for a persona."""
-    logger.info("Equipping basic skills", {"persona_id": persona.id})
+    """Prepare the skills directory and install default skills with observations."""
+    logger.info("Equipping skills", {"persona_id": persona.id})
+    from application.core import observations
     try:
         filesystem.ensure_dir(persona.storage_dir / "skills")
+        workspace = str(persona.storage_dir / "workspace")
+        for source in sorted(_DEFAULTS_DIR.glob("*.md")):
+            content = filesystem.read(source).replace("{workspace}", workspace)
+            filesystem.write(persona.storage_dir / "skills" / source.name, content)
     except OSError as e:
-        raise IdentityError("Failed to equip basic skills") from e
+        raise IdentityError("Failed to equip skills") from e
+    try:
+        for skill_file in sorted((persona.storage_dir / "skills").glob("*.md")):
+            observed = await summarize(persona, skill_file)
+            await observations.effect(persona, observed)
+    except Exception as e:
+        logger.error("Failed to assess default skills", {"persona_id": persona.id, "error": str(e)})
+        raise SkillError("Failed to assess default skills") from e
 
 
 async def shelve(persona: Persona, skill_path: str) -> Path:

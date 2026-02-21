@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
 
-from application.platform import datetimes
+from application.platform import datetimes, objects
 
 
 class Level(Enum):
@@ -51,7 +51,7 @@ def file_media(path: str | Path) -> Callable[[Message], None]:
             "time": datetimes.iso_8601(datetimes.now()),
             "level": message.level.value,
             "title": message.title,
-            "context": message.context,
+            "context": objects.safe(message.context),
         }
         with open(log_path, "a") as f:
             f.write(json.dumps(log_entry) + "\n")

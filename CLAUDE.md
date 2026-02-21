@@ -51,68 +51,52 @@ Business imports core. Core imports platform. Never upward. The service entry po
 
 ## Cognitive Architecture
 
-The interaction system uses a cognitive model. Understand this before touching Spec 7 code.
+The interaction system uses a cognitive model. Understand this before touching any brain/abilities code.
 
 ### Flow
 
 ```
-sense → agent.given(persona, stimulus) → think.reason() → yields Thought objects
-  thought.intent == "saying"     → channels.send → memories.agent(persona).remember(communicated)
-  thought.intent == "doing"      → system.is_authorized → system.execute → memories.agent(persona).remember(result)
-  thought.intent == "consulting"  → escalate spec → frontier.consulting(persona) → memories.agent(persona).remember(observation)
-  thought.intent == "reasoning"   → bus.share (internal, not shown to person)
+persona.hear (business) → brain.reason (core, background task)
+  → local_model.respond → parse JSON response
+    → dispatch to ability functions (say, act, escalate, ...)
+      → ability returns Prompt → appended to messages, loop continues
+      → ability returns None  → loop continues silently
+  → no prompts returned → loop breaks
+  → history.persist
 ```
 
-### Key classes (application/core/data.py)
+### Brain and Abilities
 
-- `Thought(intent, content, tool_calls)` — single unit of reasoning output
-- `Thinking(reason_by)` — wraps any async generator, exposes `.reason()`
-- `Observation(facts, traits, context, struggles)` — all four fields required, no defaults
+The brain (`core/brain.py`) builds a system prompt, calls the local model, parses the JSON response, and dispatches to ability functions. It runs as a background task — never blocks the caller.
 
-Short-term memory is in `memories` module: `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`.
+Abilities (`core/abilities.py`) are plain `async` functions decorated with `@ability(description, order)`. Each receives `(persona, thread, items)` and returns a `Prompt` to feed back into the next cycle, or `None` to stop.
 
-### Fluent API
+**Abilities that return `None` always run their body via `processes.run_async`** — fire and forget, fully isolated from the reasoning loop.
 
-```python
-# Local model thinking
-think = agent.given(persona, {"type": "stimulus", "role": "user", "content": prompt})
-async for thought in think.reason():
-    ...
+**The brain owns exception handling.** Abilities must not have top-level try/except (except the permission abilities, which have self-contained fallbacks because the permission system can fail at the filesystem level and must never crash the loop). If an ability raises, the brain converts it to a Prompt so the persona can reason about what went wrong.
 
-# Frontier model thinking — same pattern
-async for thought in frontier.consulting(persona, prompt).reason():
-    ...
-```
+### System Prompt Structure
 
-### Tag detection in agent.reason()
-
-- `<think>...</think>` → reasoning intent
-- `<escalate>...</escalate>` → consulting intent
-- Tool calls → doing intent
-- Plain text → saying intent
+`brain._system()` builds the system prompt with these sections in order:
+1. Base instruction (JSON-only response, abilities list)
+2. `## Escalation` — when and how to escalate, privacy rules
+3. `## Learning About the Person` — when to use learn_identity, remember_trait, load_trait
+4. `# Persona Identity` — loaded from disk if non-empty
+5. `# Person Identity` — loaded from disk if non-empty
+6. `# Pending Permissions` — injected only when permissions are awaiting response
 
 ### Memory vs History
 
-- **Memory** — short-term, in-process, per persona. Accessed via `memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`. Struggles are NOT in memory — they persist to disk via `struggles.identify()`.
-- **History** — long-term, on disk (`history/` directory). Persists across sessions. Used for oversight, control, and consolidated conversation storage.
+- **Memory** — short-term, in-process, per persona. `memories.agent(persona)` → `remember()`, `remember_on(thread, doc)`, `private_thread()`, `filter_by(predicate)`, `as_messages(thread_id)`, `as_transcript()`, `forget_everything()`.
+- **History** — long-term, on disk (`history/` directory). Persists across sessions.
 
-### Memory document types
+### Channel Pairing
 
-| Type | Created by | Contains |
-|---|---|---|
-| `stimulus` | `agent.given()` (writes via memories) | role, content, channel |
-| `say` | `agent.reason()` internally (writes via memories) | content |
-| `act` | business/frontier: `memories.agent(persona).remember()` | tool_calls, result |
-| `observation` | business escalate: `memories.agent(persona).remember()` | frontier conversation (minus reasoning) |
-| `communicated` | business sense/escalate/reflect/predict: `memories.agent(persona).remember()` | channel, content |
-
-### Action loop
-
-Inside `agent.py`'s `_reason()` closure (the function wrapped by `Thinking`), a `while True` loop rebuilds messages from `memories.agent(persona).as_messages()` and re-streams from the local model after each tool execution. When a cycle produces no tool calls, the loop breaks. This means the agent can chain tool calls naturally — think, act, see result, think again — without the business layer needing to re-call `sense`.
-
-### Escalation
-
-Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai platform modules → thoughts routed through same channels.send/system.execute pattern → frontier reasoning is NOT observed (agent develops its own reasoning path).
+Unknown senders are gated before reaching the brain. When an unverified `chat_id` messages the bot:
+1. `connections.bridge` calls `pairing.generate` → 6-char alphanumeric code stored in memory (10-minute expiry)
+2. Code is sent back to the unknown sender: `"Your pairing code is: XK9R2M — run: eternego pair XK9R2M"`
+3. Person runs `eternego pair XK9R2M` on the local machine → `environment.pair` → `pairing.claim` → `channels.add`
+4. `channels.md` is gitignored — re-pairing required on migration (intentional trust boundary per environment)
 
 ## Module Map
 
@@ -120,38 +104,43 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 | Module | Functions |
 |---|---|
-| `environment.py` | prepare, check_model |
-| `persona.py` | agents, find, find_by_channel, create, migrate, feed, grow, equip, chat, sense, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop |
+| `environment.py` | prepare, check_model, pair |
+| `persona.py` | agents, find, create, migrate, feed, grow, equip, sense, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop, connect, disconnect, hear |
 | `outcome.py` | Outcome dataclass |
 
 ### Core (application/core/)
 
 | Module | Role |
 |---|---|
-| `agent.py` | given(), initialize(), embody(), build(), identity CRUD, knowledge(), sleep(), save_training_set(), wake_up(), personas(), find(), remove() — `given()` injects skill documents into system message; `remove()` deletes storage dir on failed creation |
-| `person.py` | bond(), facts/traits CRUD |
+| `brain.py` | reason(persona, thread) — background reasoning loop; _system() builds system prompt with guidance sections and pending permissions |
+| `abilities.py` | say, broadcast, check_permission, ask_permission, resolve_permission, act, load_trait, load_skill, clarify, escalate, learn_identity, remember_trait, feel_struggle, update_context, schedule (stub), remind (stub), start_conversation, seek_history, replay — abilities returning None run fully async; permission abilities have self-contained fallback prompts |
+| `agent.py` | initialize(), embody(), build(), identity CRUD, knowledge(), learn(), refine_context(), sleep(), save_training_set(), wake_up(), personas(), find(), remove() — `build()` writes `.gitignore` (permissions.md, channels.md); `remove()` deletes storage dir on failed creation |
+| `person.py` | bond(), identified_by(), traits_toward(), add_facts(), add_traits(), refine_traits(), delete_identity(), delete_trait() |
+| `pairing.py` | generate(persona_id, network_id, chat_id) → 6-char code; claim(code) → dict\|None — in-memory only, 10-minute expiry, reuses code for same pending sender |
+| `channels.py` | is_verified(persona, network_id, chat_id), add(persona, network_id, chat_id), all_for(persona, network_id) — disk-backed in `channels.md`, gitignored |
+| `connections.py` | verify(network), connect(persona, network, on_message), disconnect_all(persona) — bridge gates on channels.is_verified; unknown senders receive pairing code |
+| `gateways.py` | of(persona) → add(gateway), find(channel), all(), close(channel), close_all() — per-persona gateway registry keyed by `type:name` |
 | `dna.py` | make(), read(), evolve() — persona DNA lifecycle |
 | `instructions.py` | read(), give(), add() — persona operating instructions |
 | `skills.py` | equip(), shelve(), summarize(), names(), delete() — persona skill documents |
 | `history.py` | start(), entries(), recall(), delete(), consolidate() — long-term conversation history |
 | `transcripts.py` | as_list(), extract() — conversation transcript parsing and extraction |
-| `frontier.py` | allow_escalation(), consulting(persona, prompt) → returns Thinking, respond() |
-| `local_model.py` | stream() async generator, observe(person_struggles), study(), cluster(), assess_skill(), generate_encryption_phrase(), respond() — `observe()` accepts `person_struggles` parameter; `study()` and `assess_skill()` pass `struggles=[]` explicitly |
+| `frontier.py` | allow_escalation(), respond() |
+| `local_model.py` | stream(), observe(person_struggles), study(), cluster(), assess_skill(), generate_encryption_phrase(), respond() |
 | `models.py` | generate_name() |
 | `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model(), copy(), delete(), fine_tune() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
 | `system.py` | is_authorized(), execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
-| `data.py` | Channel, Model, Thought, Thinking, Observation(facts, traits, context, struggles — all required), Gateway, Persona |
-| `memories.py` | agent(persona) → remember(), as_messages(), as_transcript(), forget_everything() — per-persona short-term memory |
-| `paths.py` | agents_home(), agent_identity(agent_id), struggles(agent_id) → path to `person-struggles.md` |
-| `prompts.py` | BASIC_INSTRUCTIONS, ESCALATION, EXTRACTION (now includes `struggle` category and `{person_struggles}` in Already Known), EXTRACTION_FROM_DNA, SKILL_ASSESSMENT, RECOVERY_PHRASE, SLEEP, DNA_SYNTHESIS, CONSOLIDATION, FRONTIER_IDENTITY, REFLECTION, PREDICTION (now includes `{skill_names}` and `{person_struggles}`), extraction(person_struggles), extraction_from_dna(), sleep(), dna_synthesis(), consolidation(), reflection(), prediction(skill_names, person_struggles) |
-| `observations.py` | effect() — applies observations (facts, traits, context, struggles) to persona files; now calls `struggles.identify()` |
-| `struggles.py` | be_mindful(persona) — create empty `person-struggles.md`; identify(persona, observed) — append new struggles; identified_by(persona) — read as string; as_list(persona) — read as list (for oversight); delete(persona, hash_part) — remove by hash (for control) |
-| `exceptions.py` | All domain exceptions (includes ChannelError) |
+| `data.py` | Network, Channel, Message, Model, Observation(facts, traits, context, struggles — all required), Gateway, Persona |
+| `memories.py` | agent(persona) → remember(), remember_on(thread, doc), private_thread(), new_thread(), current_thread(), filter_by(predicate), as_messages(thread_id), as_transcript(), forget_everything() |
+| `paths.py` | agents_home(), agent_identity(agent_id), struggles(agent_id) |
+| `prompts.py` | extraction(), extraction_from_dna(), sleep(), dna_synthesis(), consolidation(), reflection(), prediction(), thread_summary(), trait_refinement(existing, new_items), struggle_refinement(existing, new_items), context_refinement(existing, new_items) |
+| `observations.py` | effect() — applies observations (facts, traits, context, struggles) to persona files |
+| `struggles.py` | be_mindful(), identify(), refine(), identified_by(), as_list(), delete() |
+| `permissions.py` | check(persona, action), pending(persona), request(persona, action, thread_id), resolve(persona, action, decision, statement) — file-backed in `permissions.md`, gitignored |
+| `exceptions.py` | UnsupportedOS, InstallationError, EngineConnectionError, SecretStorageError, DiaryError, IdentityError, PersonError, ExternalDataError, FrontierError, ExecutionError, DNAError, NetworkError, NetworkVerificationRequired, PairingError |
 | `diary.py` | open_for(), open(), record() |
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |
-| `channels.py` | matches(), send(), assert_receives(), listen() — returns Gateway |
-| `gateways.py` | of(persona) → add(), close(), close_all(), is_active() — per-persona gateway registry |
 
 ### Web (web/)
 
@@ -162,7 +151,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 | `socket.py` | ConnectionManager (broadcast to all WS clients), on_signal subscriber, _safe() serializer |
 | `routes/openai.py` | GET /v1/models, GET /v1/models/{id}, POST /v1/chat/completions |
 | `routes/pages.py` | GET /dashboard, GET /dashboard/persona/{id}, GET /dashboard/persona/{id}/chat |
-| `routes/api.py` | POST /api/persona/create, POST /api/persona/migrate, POST /api/persona/{id}/control |
+| `routes/api.py` | POST /api/pair/{code}, POST /api/persona/create, POST /api/persona/migrate, POST /api/persona/{id}/control |
 | `routes/websocket.py` | WebSocket /ws — streams all bus signals to connected browser tabs |
 | `templates/base.html` | Layout, Tailwind CDN, WebSocket client, modal utilities |
 | `templates/pages/dashboard.html` | Persona grid, live signal feed per card, create/migrate modals |
@@ -178,7 +167,7 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 
 | Module | Role |
 |---|---|
-| `main.py` | `eternego` entry point: daemon, service start/stop/restart/status/logs, env check/prepare |
+| `main.py` | `eternego` entry point: daemon, service start/stop/restart/status/logs, env check/prepare, pair \<code\> |
 
 ### Platform (application/platform/)
 
@@ -208,7 +197,6 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
 - Spec 5: Persona Oversight
 - Spec 6: Persona Control
 - Spec 11: List Personas (agents)
-- Spec 12: Find Persona by Channel (find_by_channel)
 - Spec 7a: Chat (API conversation, text in/text out)
 - Spec 7b: Sense (reactive loop)
 - Spec 7d: Escalate (frontier routing with observation)
@@ -232,7 +220,11 @@ Local model wraps in `<escalate>` tags → frontier streams via anthropic/openai
   - Chat: `GET /dashboard/persona/{id}/chat` — full chat UI using the OpenAI-compatible API
   - Internal API: `POST /api/persona/create`, `POST /api/persona/migrate`, `POST /api/persona/{id}/control`
   - WebSocket: `/ws` — broadcasts all bus signals to connected browser tabs
-- CLI (`cli/`) — `eternego` command installed via `pyproject.toml`: `daemon`, `service`, `env` subcommands
+- Brain/Abilities system: `brain.py` reasoning loop, `abilities.py` with 19 abilities; system prompt guidance sections for escalation, person context, and pending permissions; permission abilities (check_permission, ask_permission, resolve_permission) with filesystem fallbacks; abilities returning None run fully async
+- Permissions system: `permissions.py` file-backed per persona, gitignored; three abilities gate sensitive actions; pending permissions surfaced in system prompt so model recognises responses
+- Channel pairing: `pairing.py` (in-memory codes) + `channels.py` (disk-backed verified list); `eternego pair <code>` CLI command; unknown senders receive code, person claims it locally
+- Background refinement: remember_trait → person.refine_traits, feel_struggle → struggles.refine, update_context → agent.refine_context — all fire after immediate append, queued behind current Ollama request
+- CLI (`cli/`) — `eternego` command installed via `pyproject.toml`: `daemon`, `service`, `env`, `pair` subcommands
 - Install scripts (`install.sh`, `install.ps1`) — one-command setup for Linux/macOS/Windows, registers system service
 - Windows platform: `winget` used for Ollama and Git installation; `pywin32` added as conditional platform dependency
 

@@ -2,124 +2,19 @@
 
 import json
 import uuid
-from collections.abc import AsyncIterator
-from dataclasses import asdict
 from pathlib import Path
 
-from application.platform import logger, filesystem, crypto, datetimes
-from application.core import memories, paths, prompts, local_model, instructions, struggles
-from application.core.data import Channel, Model, Persona, Thinking, Thought
+from application.platform import logger, filesystem, crypto, datetimes, objects
+from application.core import paths, prompts
+from application.core.data import Network, Model, Persona
 from application.core.exceptions import IdentityError
-
-
-def given(persona: Persona, document: dict) -> Thinking:
-    """Give the agent external input and return the thinking process."""
-    memories.agent(persona).remember(document)
-
-    system_parts = []
-
-    system_parts.append(f"Current date and time: {datetimes.iso_8601(datetimes.now())}")
-
-    inst = instructions.read(persona)
-    if inst:
-        system_parts.append(inst)
-
-    identity_path = persona.storage_dir / "persona-identity.md"
-    if identity_path.exists():
-        who_i_am = filesystem.read(identity_path).strip()
-        if who_i_am:
-            system_parts.append(who_i_am)
-
-    context_path = persona.storage_dir / "persona-context.md"
-    what_i_know = filesystem.read(context_path).strip() if context_path.exists() else ""
-    if what_i_know:
-        system_parts.append(what_i_know)
-
-    skills_dir = persona.storage_dir / "skills"
-    if skills_dir.exists():
-        skill_parts = []
-        for skill_file in sorted(skills_dir.glob("*.md")):
-            content = filesystem.read(skill_file).strip()
-            if content:
-                skill_parts.append(f"## {skill_file.stem}\n\n{content}")
-        if skill_parts:
-            system_parts.append("# Skill Documents\n\n" + "\n\n---\n\n".join(skill_parts))
-
-    person_identity_path = persona.storage_dir / "person-identity.md"
-    person_known = person_identity_path.exists() and filesystem.read(person_identity_path).strip()
-    if not person_known:
-        system_parts.append(
-            "You do not know your person yet — not their name or anything about them. "
-            "Learn who they are naturally through this conversation."
-        )
-
-    if not what_i_know:
-        system_parts.append(
-            "Your own context and purpose have not yet been shaped. "
-            "Ask your person what role they want you to play in their life."
-        )
-
-    system_message = "\n\n".join(system_parts)
-
-    async def _reason() -> AsyncIterator[Thought]:
-        while True:
-            messages = [{"role": "system", "content": system_message}]
-
-            messages.extend(memories.agent(persona).as_messages())
-
-            acted = False
-            said = ""
-            reasoning = False
-            escalating = False
-            escalation = ""
-            async for raw in local_model.stream(persona.model.name, messages):
-                content = raw.get("message", {}).get("content", "")
-                tool_calls = raw.get("message", {}).get("tool_calls")
-                done = raw.get("done", False)
-
-                if tool_calls:
-                    yield Thought(intent="doing", content=content, tool_calls=tool_calls)
-                    acted = True
-                elif not done:
-                    if "<think>" in content:
-                        reasoning = True
-                        content = content.replace("<think>", "")
-                    if "</think>" in content:
-                        reasoning = False
-                        content = content.replace("</think>", "")
-                        continue
-
-                    if "<escalate>" in content:
-                        escalating = True
-                        content = content.replace("<escalate>", "")
-                    if "</escalate>" in content:
-                        escalating = False
-                        escalation += content.replace("</escalate>", "")
-                        yield Thought(intent="consulting", content=escalation)
-                        continue
-
-                    if escalating:
-                        escalation += content
-                    elif reasoning:
-                        yield Thought(intent="reasoning", content=content)
-                    else:
-                        said += content
-                        yield Thought(intent="saying", content=content)
-
-            if said:
-                memories.agent(persona).remember({"type": "say", "content": said})
-
-            if not acted:
-                break
-
-    return Thinking(_reason)
 
 
 async def initialize(
     name: str,
     model: Model,
     frontier: Model | None = None,
-    channels: list[Channel] | None = None,
+    networks: list[Network] | None = None,
 ) -> Persona:
     """Create a new persona with a fresh identity."""
     logger.info("Initializing persona identity", {"name": name, "model": model.name})
@@ -129,7 +24,7 @@ async def initialize(
         name=name,
         model=model,
         frontier=frontier,
-        channels=channels,
+        networks=networks,
     )
 
 
@@ -148,6 +43,7 @@ async def build(persona: Persona) -> None:
         persona_identity = f"Name: {persona.name}\nBirthday: {birthday}\n"
         filesystem.write(persona.storage_dir / "persona-identity.md", persona_identity)
         filesystem.write(persona.storage_dir / "persona-context.md", "")
+        filesystem.write(persona.storage_dir / ".gitignore", "permissions.md\nchannels.md\n")
         filesystem.ensure_dir(persona.storage_dir / "training")
     except OSError as e:
         raise IdentityError("Failed to build agent") from e
@@ -223,6 +119,22 @@ async def learn(persona: Persona, context: list[str]) -> None:
         raise IdentityError("Failed to save context") from e
 
 
+async def refine_context(persona: Persona, new_items: list[str]) -> None:
+    """Consolidate new context notes with existing ones using the local model."""
+    logger.info("Refining context", {"persona_id": persona.id})
+    try:
+        from application.core import local_model, prompts
+        path = persona.storage_dir / "persona-context.md"
+        existing = filesystem.read(path).strip() if path.exists() else ""
+        refined = await local_model.respond(
+            persona.model.name,
+            [{"role": "user", "content": prompts.context_refinement(existing, new_items)}],
+        )
+        filesystem.write(path, refined.strip() + "\n" if refined.strip() else "")
+    except OSError as e:
+        raise IdentityError("Failed to refine context") from e
+
+
 def find(persona_id: str) -> Persona:
     """Load the persona for the given persona_id from its identity file."""
     logger.info("Loading persona", {"persona_id": persona_id})
@@ -237,7 +149,7 @@ def find(persona_id: str) -> Persona:
             model=Model(**config["model"]),
             base_model=config.get("base_model", config["model"]["name"]),
             frontier=Model(**config["frontier"]) if config.get("frontier") else None,
-            channels=[Channel(**ch) for ch in config["channels"]] if config.get("channels") else None,
+            networks=[Network(**n) for n in config["networks"]] if config.get("networks") else None,
         )
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise IdentityError("Persona data is malformed") from e
@@ -320,12 +232,16 @@ async def save_persona(persona: Persona) -> None:
     """Save persona configuration."""
     logger.info("Saving persona", {"persona_id": persona.id})
     try:
-        filesystem.write_json(persona.storage_dir / "config.json", asdict(persona))
+        filesystem.write_json(persona.storage_dir / "config.json", objects.json(persona))
     except OSError as e:
         raise IdentityError("Failed to save persona") from e
 
 
-async def remove(persona: Persona) -> None:
-    """Delete the persona's storage directory."""
+async def remove(persona: Persona) -> bool:
+    """Delete the persona's storage directory. Returns True on success, False on failure."""
     logger.info("Removing persona storage", {"persona_id": persona.id})
-    filesystem.delete_dir(persona.storage_dir)
+    try:
+        filesystem.delete_dir(persona.storage_dir)
+        return True
+    except Exception:
+        return False

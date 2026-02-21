@@ -2,10 +2,18 @@
 
 from fastapi import APIRouter, HTTPException
 
-from application.business import persona
+from application.business import environment, persona
 from web.requests import PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
 
 router = APIRouter(prefix="/api")
+
+
+@router.post("/pair/{code}")
+async def pair_channel(code: str):
+    outcome = await environment.pair(code)
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
 
 
 @router.post("/persona/create")
@@ -13,8 +21,8 @@ async def create_persona(request: PersonaCreateRequest):
     outcome = await persona.create(
         name=request.name,
         model=request.model,
-        channel_name=request.channel_name,
-        channel_credentials=request.channel_credentials,
+        network_type=request.network_type,
+        network_credentials=request.network_credentials,
         frontier_model=request.frontier_model,
         frontier_provider=request.frontier_provider,
         frontier_credentials=request.frontier_credentials,

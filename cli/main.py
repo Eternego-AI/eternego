@@ -80,6 +80,21 @@ def cmd_service_logs(_):
         pass
 
 
+# ── pairing ───────────────────────────────────────────────────────────────────
+
+def cmd_pair(args):
+    from application.business import environment
+
+    async def run():
+        outcome = await environment.pair(args.code)
+        if not outcome.success:
+            print(f"Error: {outcome.message}")
+            sys.exit(1)
+        print("Channel paired successfully.")
+
+    asyncio.run(run())
+
+
 # ── environment ───────────────────────────────────────────────────────────────
 
 def cmd_env_check(args):
@@ -135,6 +150,10 @@ def main():
     svc_sub.add_parser("status",  help="Show service status")
     svc_sub.add_parser("logs",    help="Follow service logs")
 
+    # pair
+    pair_p = sub.add_parser("pair", help="Pair a channel using a code sent by the persona")
+    pair_p.add_argument("code", help="6-character pairing code")
+
     # env
     env_p = sub.add_parser("env", help="Check and prepare the environment")
     env_sub = env_p.add_subparsers(dest="action", metavar="ACTION")
@@ -147,7 +166,10 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "daemon":
+    if args.command == "pair":
+        cmd_pair(args)
+
+    elif args.command == "daemon":
         cmd_daemon(args)
 
     elif args.command == "service":

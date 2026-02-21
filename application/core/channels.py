@@ -1,85 +1,55 @@
-"""Channels — channel communication."""
+"""Channels — disk-backed verified channel list per persona. Gitignored so it resets on migration."""
 
-import asyncio
-import threading
-import urllib.error
-from collections.abc import Callable, Coroutine
-
-from application.platform import logger, telegram
-from application.core.data import Channel, Gateway, Persona
-from application.core.exceptions import ChannelError
+from application.platform import logger, filesystem
+from application.core.data import Persona
+from application.core.exceptions import NetworkError
 
 
-def matches(ch: Channel, other: Channel) -> bool:
-    """True if the two channels refer to the same channel."""
-    logger.info("Matching channels", {"name": ch.name, "other_name": other.name})
-    if ch.name != other.name:
-        return False
-    return (ch.credentials or {}) == (other.credentials or {})
+def _path(persona: Persona):
+    return persona.storage_dir / "channels.md"
 
 
-async def send(ch: Channel, message: str) -> dict:
-    """Send a message through a channel."""
-    logger.info("Sending message through channel", {"name": ch.name})
+def _ensure(persona: Persona) -> None:
+    path = _path(persona)
+    if not path.exists():
+        filesystem.write(path, "")
+
+
+def is_verified(persona: Persona, network_id: str, chat_id: str) -> bool:
+    """Return True if this chat_id is verified for the given network."""
+    logger.info("Checking verified channel", {"persona": persona.id, "network": network_id})
     try:
-        if ch.name == "telegram":
-            return await asyncio.to_thread(
-                telegram.send,
-                token=ch.credentials["token"],
-                chat_id=ch.credentials["chat_id"],
-                message=message,
-            )
-        return {}
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as e:
-        raise ChannelError(f"Failed to send message through {ch.name}: {e}") from e
-
-
-async def assert_receives(ch: Channel, message: str) -> bool:
-    """Send a message and verify the channel received it."""
-    logger.info("Asserting channel receives message", {"name": ch.name})
-    try:
-        response = await send(ch, message)
-    except ChannelError:
+        _ensure(persona)
+        content = filesystem.read(_path(persona))
+        entry = f"{network_id}:{chat_id}"
+        return any(line.strip() == entry for line in content.splitlines())
+    except OSError:
         return False
-    if ch.name == "telegram":
-        return response.get("ok", False)
-    return False
 
 
-def listen(
-    persona: Persona,
-    ch: Channel,
-    on_message: Callable[[str], Coroutine[None, None, None]],
-) -> Gateway:
-    """Listen for incoming messages on a channel. Returns a gateway."""
-    logger.info("Listening on channel", {"name": ch.name, "persona": persona.id})
-    loop = asyncio.get_running_loop()
-    def bridge(text: str):
-        asyncio.run_coroutine_threadsafe(on_message(text), loop)
+def add(persona: Persona, network_id: str, chat_id: str) -> None:
+    """Mark a chat_id as verified for the given network. No-op if already verified."""
+    logger.info("Adding verified channel", {"persona": persona.id, "network": network_id})
+    try:
+        _ensure(persona)
+        if is_verified(persona, network_id, chat_id):
+            return
+        filesystem.append(_path(persona), f"{network_id}:{chat_id}\n")
+    except OSError as e:
+        raise NetworkError("Failed to save verified channel") from e
 
-    if ch.name != "telegram":
-        raise ChannelError(f"Unsupported channel: {ch.name}")
 
-    def on_error(exc: Exception):
-        logger.warning(
-            f"Polling error on {ch.name} for {persona.name}",
-            {"channel": ch.name, "persona": persona.id, "error": str(exc)},
-        )
-
-    gw = Gateway(channel=ch, threading=threading)
-
-    thread = gw.threading.Thread(
-        target=telegram.poll,
-        kwargs={
-            "token": ch.credentials["token"],
-            "chat_id": ch.credentials["chat_id"],
-            "username": persona.name,
-            "on_message": bridge,
-            "stop": lambda: gw.is_stopped,
-            "on_error": on_error,
-        },
-        daemon=True,
-    )
-    thread.start()
-
-    return gw
+def all_for(persona: Persona, network_id: str) -> list[str]:
+    """Return all verified chat_ids for the given network."""
+    logger.info("Listing verified channels", {"persona": persona.id, "network": network_id})
+    try:
+        _ensure(persona)
+        content = filesystem.read(_path(persona))
+        prefix = f"{network_id}:"
+        return [
+            line.strip()[len(prefix):]
+            for line in content.splitlines()
+            if line.strip().startswith(prefix)
+        ]
+    except OSError:
+        return []

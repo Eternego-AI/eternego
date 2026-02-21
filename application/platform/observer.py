@@ -54,7 +54,7 @@ async def send(*signals: Signal) -> list[Signal]:
     for signal in signals:
         for signal_type, handler in _handlers:
             if _matches(signal, signal_type):
-                if asyncio.iscoroutinefunction(handler):
+                if inspect.iscoroutinefunction(handler):
                     result = await handler(signal)
                 else:
                     result = handler(signal)

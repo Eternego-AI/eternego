@@ -29,6 +29,13 @@ def decrypt(data: bytes, key: bytes) -> bytes:
     return Fernet(key).decrypt(data)
 
 
+def sha256(data) -> str:
+    """Return the SHA-256 hex digest of any data."""
+    if not isinstance(data, (bytes, bytearray)):
+        data = str(data).encode()
+    return hashlib.sha256(data).hexdigest()
+
+
 def generate_unique_id(content: str) -> str:
     """Generate a short unique hash from content."""
-    return hashlib.sha256(content.encode()).hexdigest()[:6]
+    return sha256(content)[:6]

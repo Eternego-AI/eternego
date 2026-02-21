@@ -199,94 +199,109 @@ The `Persona` dataclass holds configuration and metadata: id, name, model, front
 
 The interaction system uses a cognitive model that mirrors human cognition. This is the central design pattern for how the persona processes and responds to the world.
 
-### Thought and Thinking
+### Brain and Abilities
 
-Every reasoning process — whether from the local model or a frontier model — yields `Thought` objects. Each thought has an `intent` that tells the business layer what to do with it:
+The brain (`core/brain.py`) is the persona's reasoning loop. It calls the local model, parses its JSON response, and dispatches to ability functions based on the keys in the response. The brain runs as a background task — it never blocks the caller.
 
-```python
-@dataclass(kw_only=True)
-class Thought:
-    intent: str       # "saying", "doing", "consulting", "reasoning"
-    content: str = ""
-    tool_calls: list[dict] | None = None
-
-class Thinking:
-    """The thinking process — wraps a reasoning function to yield thoughts."""
-    def __init__(self, reason_by: Callable[[], AsyncIterator[Thought]]):
-        self._reason = reason_by
-
-    def reason(self) -> AsyncIterator[Thought]:
-        return self._reason()
+```
+hear (business) → brain.reason (core, background)
+  → local_model.respond → parse JSON → dispatch abilities
+    → say   → gateway.send
+    → act   → system.execute
+    → escalate → frontier.respond
+    → remember_fact, load_trait, ... → disk
+  → repeat until model returns {}
+  → history.persist
 ```
 
-`Thinking` is reusable. It wraps any async generator that yields thoughts. The business layer doesn't care whether the thoughts come from a local model or a frontier API — it routes them the same way.
+Abilities live in `core/abilities.py`. Each is a plain `async` function decorated with `@ability(description, order)`. The brain discovers them by reflection. An ability receives `(persona, thread, items)` and returns either a `Prompt` to feed back into the next reasoning cycle, or `None` to continue silently.
 
-### The fluent API
+### The Abilities Contract
 
-The agent exposes a fluent interface for triggering thought:
+**Exception handling belongs in the brain, not in abilities.**
 
-```python
-think = agent.given(persona, {"type": "stimulus", "role": "user", "content": prompt})
-async for thought in think.reason():
-    if thought.intent == "saying":
-        await channels.send(channel, thought.content)
-        memories.agent(persona).remember({"type": "communicated", ...})
-    elif thought.intent == "doing":
-        if await system.is_authorized(thought.tool_calls):
-            result = await system.execute(thought.tool_calls)
-            memories.agent(persona).remember({"type": "act", ...})
-    elif thought.intent == "consulting":
-        await escalate(persona, thought.content, channel)
-```
-
-`agent.given()` stores the input in memory and returns a `Thinking` object. Calling `.reason()` starts the async generator. The same pattern works for frontier:
+The brain wraps every ability call in `try/except`:
 
 ```python
-async for thought in frontier.consulting(persona, prompt).reason():
-    ...
+try:
+    result = await fn(persona, thread, value)
+    if result:
+        new_prompts.append(result)
+except Exception as e:
+    new_prompts.append(Prompt(role="user", content=f"{key} failed: {e}"))
 ```
 
-### Intent detection
+This is the permanent, guaranteed connection between the brain and every ability. If an ability raises, the brain converts it to a `Prompt` and the persona can reason about what went wrong and adapt — retry, try a different approach, or inform the person.
 
-The local model streams tokens. The agent detects intents through XML-like tags embedded in the stream:
+If abilities had their own top-level `try/except`, they could swallow exceptions and return `None`, silently breaking the connection. The brain would never know something failed, and the persona would carry on as if nothing happened.
 
-- `<think>...</think>` → `intent="reasoning"` (internal, not shown to person)
-- `<escalate>...</escalate>` → `intent="consulting"` (content sent to frontier)
-- Tool calls in response → `intent="doing"`
-- Plain text → `intent="saying"`
+**Abilities may do internal self-correction** — retrying a flaky call, trying an alternative, falling back to a simpler approach. When they do, they should honour the contract:
 
-The frontier uses the same `<think>` detection but cannot escalate (no infinite escalation).
+- Return a `Prompt` with meaningful feedback if the brain should know what happened.
+- Return `None` if the situation was fully resolved and no further reasoning is needed.
+- Let exceptions propagate for genuine failures — the brain will handle them.
 
-### The action loop
+### The Reasoning Loop
 
-When the agent yields a "doing" thought, the business layer executes the tool and notes the result via `memories.agent(persona).remember()`. The reasoning loop inside `agent.reason()` uses a `while True` that only breaks when the agent produces no actions in a cycle. This means the agent can chain multiple tool calls naturally — think, act, see result, think again — without recursive calls.
+The brain's `_reason()` function runs a `while True` loop:
+
+1. Call `local_model.respond()` with the current message history.
+2. Parse the JSON response — each key is an ability name, value is a list of items.
+3. Dispatch to each named ability, collect returned `Prompt` objects.
+4. If no prompts were returned, break — reasoning is done.
+5. Otherwise, append the prompts to messages and loop.
+
+This lets the persona chain naturally — think, act, see the result, think again — without the business layer needing to re-invoke anything.
 
 ### Memory vs History
 
 **Memory** is short-term, in-process, per persona. The `memories` module (`application/core/memories.py`) holds documents for the current session:
 
-- `memories.agent(persona)` — returns a handle for that persona's memory
-- `memories.agent(persona).remember(document)` — append a document (creates memory if needed)
-- `memories.agent(persona).as_messages()` — return memory formatted as LLM chat messages (used by agent._reason())
-- `memories.agent(persona).as_transcript()` — return memory as a numbered conversation transcript (used by sleep before consolidation)
-- `memories.agent(persona).forget_everything()` — clear that persona's memory
+- `memories.agent(persona).remember(document)` — append a document to the current thread
+- `memories.agent(persona).as_messages(thread_id)` — return memory as LLM chat messages
+- `memories.agent(persona).as_transcript()` — return memory as a numbered transcript
+- `memories.agent(persona).filter_by(predicate)` — query memory with a closure
+- `memories.agent(persona).forget_everything()` — clear all memory for this persona
 
-The agent writes to memory via `memories.agent(persona).remember()`: `agent.given()` appends the stimulus; the business layer appends act results, delivery confirmations, and frontier observations. When building messages for the model, the agent calls `memories.agent(persona).as_messages()` which maps each document type to the appropriate message role (user, assistant, tool).
+**History** is long-term, on disk. The `history/` directory stores conversation files that persist across sessions. Used for oversight (`history.entries()`), control (`history.delete()`), and consolidation at sleep time (`history.consolidate()`).
 
-**History** is long-term, on disk. The `history/` directory stores conversation files that persist across sessions. Used for oversight (listing via `history.entries()`), control (deletion via `history.delete()`), and consolidation at sleep time (via `history.consolidate()`).
+### Networks, Connections, and Gateways
+
+Three distinct concepts — do not conflate them:
+
+| Concept | Scope | Lives in |
+|---|---|---|
+| **Network** | Config — a named external service (telegram token) | `Persona.networks`, `config.json` |
+| **Connection** | Runtime persistent — one polling thread per network, started on app start | `core/connections.py`, `_pollers` dict |
+| **Gateway** | Runtime ephemeral — one per conversation (one per `chat_id` for telegram, one per request for web) | `core/gateways.py`, `_active` dict |
+
+A `Connection` starts when `persona.start()` is called. For telegram it starts a polling thread. As each verified `chat_id` sends a message, the connection creates a `Gateway` for that chat and registers it. The `Gateway` holds closures for `send`, `stop`, `wait`, and `verify` — it knows how to reach a specific person without exposing credentials to the rest of the system.
+
+Unverified senders are gated before a Gateway is ever created — see **Channel Pairing** below.
+
+### Channel Pairing
+
+Verified channels are stored in `channels.md` (gitignored) per persona. On each incoming message, `connections.bridge` calls `channels.is_verified`. If the `chat_id` is not verified:
+
+1. `pairing.generate(persona_id, network_id, chat_id)` creates a 6-char alphanumeric code (36^6 ≈ 2.1B combinations) stored in memory with a 10-minute expiry.
+2. The code is sent back to the unknown sender via Telegram.
+3. The person runs `eternego pair <code>` on their local machine.
+4. The CLI calls `environment.pair(code)` → `pairing.claim` → `channels.add` → persists to `channels.md`.
+5. The next message from that `chat_id` passes the verification check and proceeds normally.
+
+`channels.md` is gitignored so migrating to a new environment requires re-pairing — each environment is a fresh trust boundary.
+
+For web requests, the route creates a `Channel` and calls `persona.connect()` to get a `Gateway` backed by an `asyncio.Future`. The route calls `persona.hear()` to start reasoning, then `await gw.wait()` to block until the persona responds. `persona.disconnect()` closes the gateway when done.
 
 ### Escalation
 
 The escalation flow connects the local model to a more powerful frontier model:
 
-1. The local model detects it can't handle something → wraps reason in `<escalate>` tags.
-2. The agent yields `Thought(intent="consulting")`.
-3. The business layer calls `escalate`, which uses `frontier.consulting()`.
-4. The frontier streams through the same `Thinking` pattern.
-5. Frontier thoughts are routed through `say` and `act`.
-6. After completion, the full interaction (minus reasoning) is stored via `memories.agent(persona).remember({"type": "observation", "observation": ...})` in the business layer.
+1. The persona uses the `escalate` ability with a question.
+2. `frontier.respond()` sends the question to the configured frontier model and returns the answer.
+3. The answer is returned as a `Prompt` — the persona reasons about it and continues.
 
-The agent does **not** observe the frontier's reasoning. Like a child learning from a parent, it sees what the parent does and says, but develops its own reasoning path for similar situations.
+The persona does not observe the frontier's reasoning, only its answer. Like asking an expert a question — you get the conclusion, not their internal deliberation.
 
 ---
 
@@ -332,15 +347,15 @@ All shared data types live in `application/core/data.py`:
 
 | Class | Purpose |
 |---|---|
-| `Channel` | Communication channel (name, credentials) |
+| `Network` | Config for an external service — type ("telegram") + credentials. Stored in `Persona.networks`. |
+| `Channel` | A conversation address — type + name (chat_id for telegram, uuid for web). No credentials. |
+| `Message` | An incoming message — channel it arrived on + text content. |
 | `Model` | AI model reference (name, provider, credentials) |
-| `Thought` | Single unit of reasoning output (intent, content, tool_calls) |
-| `Thinking` | Wraps a reasoning function, exposes `.reason()` |
 | `Observation` | Extracted observations from conversations (facts, traits, context, struggles — all required, no defaults) |
-| `Gateway` | A live channel connection — a thread bound to a channel (channel, close(), is_stopped) |
-| `Persona` | Persona configuration (id, name, model, base_model, frontier, channels, storage_dir) |
+| `Gateway` | A live conversation channel — closure-based send/stop/wait/verify for a specific Channel. |
+| `Persona` | Persona configuration (id, name, model, base_model, frontier, networks, storage_dir) |
 
-Short-term memory is per-persona and lives in the `memories` module (`memories.agent(persona).remember()`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`), not in `data.py`.
+Short-term memory is per-persona and lives in the `memories` module, not in `data.py`.
 
 ---
 
@@ -360,7 +375,9 @@ All domain exceptions live in `application/core/exceptions.py`:
 | `ExternalDataError` | external_llms | Failed to parse external AI export |
 | `FrontierError` | frontier | Failed to reach or parse frontier API |
 | `ExecutionError` | system | Failed to execute a tool call |
-| `ChannelError` | channels | Failed to send/listen on a channel |
+| `NetworkError` | connections | Failed to connect to or send on a network |
+| `NetworkVerificationRequired` | connections | Unverified chat_id attempted to message (legacy, replaced by pairing flow) |
+| `PairingError` | pairing, channels | Pairing code invalid, expired, or channel save failed |
 
 ---
 
@@ -377,17 +394,30 @@ The README tells you WHAT to build in business. We as developers figure out HOW 
 For interaction specs, the cognitive architecture adds another dimension:
 
 ```
-sense (business) --> agent.given (core) --> local_model.stream (core) --> ollama (platform)
-  thought.intent == "saying"    --> say (business) --> channels.send (core) --> telegram.send (platform)
-  thought.intent == "doing"     --> act (business) --> system.execute (core) --> OS modules (platform)
-  thought.intent == "consulting" --> escalate (business) --> frontier.consulting (core) --> anthropic/openai (platform)
+persona.hear (business) → brain.reason (core, background)
+  → local_model.respond → parse JSON
+    → say       → gateway.send → telegram/web
+    → act       → system.execute
+    → escalate  → frontier.respond → anthropic/openai
+    → learn_identity, remember_trait, feel_struggle, update_context → disk (async)
+    → check/ask/resolve_permission → permissions.md (with fallback prompts)
+  → loop until model returns {}
+  → history.persist
 
-service.py --> persona.start (business) --> channels.listen (core) --> telegram.poll (platform, in thread)
-           --> persona.stop (business) --> gateways.of(persona).close_all (core) --> Gateway.close (data)
-           --> predict_loop (every N seconds) --> persona.predict (business) --> agent.given (core)
-           --> start_web (uvicorn) --> web/routes --> persona.* (business)
+service.py → persona.start (business) → connections.connect (core) → telegram.poll (platform, in thread)
+             incoming message → channels.is_verified?
+               no  → pairing.generate → telegram.send (code to sender)
+               yes → Gateway created → persona.hear → brain.reason
+           → persona.stop (business) → connections.disconnect_all (core)
+           → sleep_loop (nightly) → persona.sleep (business)
+           → start_web (uvicorn) → web/routes → persona.* / environment.* (business)
 
-web/routes/openai.py --> persona.agents / persona.find / persona.chat (business)
-web/routes/pages.py  --> persona.agents (business)
-web/routes/api.py    --> persona.* (business) [internal management endpoints]
+web/routes/openai.py → persona.connect → gateway with asyncio.Future
+                     → persona.hear → brain.reason (background)
+                     → gw.wait() → response
+                     → persona.disconnect
+web/routes/api.py    → environment.pair / persona.create / migrate / control (business)
+
+cli/ → environment.pair(code) → pairing.claim → channels.add
+     → environment.prepare / check_model
 ```

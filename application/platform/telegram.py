@@ -13,6 +13,16 @@ POLL_INTERVAL = 1
 POLL_TIMEOUT = 30
 
 
+def get_me(token: str) -> dict:
+    """Validate a bot token via getMe. Returns bot info dict."""
+    request = urllib.request.Request(
+        f"{BASE_URL}/bot{token}/getMe",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request) as response:
+        return json.loads(response.read())
+
+
 def send(token: str, chat_id: str, message: str) -> dict:
     """Send a message via Telegram Bot API."""
     request = urllib.request.Request(
@@ -24,11 +34,21 @@ def send(token: str, chat_id: str, message: str) -> dict:
         return json.loads(response.read())
 
 
+def typing_action(token: str, chat_id: str) -> None:
+    """Send a typing indicator to a Telegram chat."""
+    request = urllib.request.Request(
+        f"{BASE_URL}/bot{token}/sendChatAction",
+        data=json.dumps({"chat_id": chat_id, "action": "typing"}).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request) as response:
+        json.loads(response.read())
+
+
 def poll(
     token: str,
-    chat_id: str,
     username: str,
-    on_message: Callable[[str], None],
+    on_message: Callable[[str, str], None],
     stop: Callable[[], bool],
     on_error: Callable[[Exception], None] | None = None,
 ) -> None:
@@ -57,17 +77,14 @@ def poll(
             text = message.get("text", "")
             msg_chat_id = str(message.get("chat", {}).get("id", ""))
 
-            if msg_chat_id != chat_id:
-                continue
-
-            if not text:
+            if not text or not msg_chat_id:
                 continue
 
             is_group = message.get("chat", {}).get("type", "") in ("group", "supergroup")
             if is_group and not is_mentioned(username, text):
                 continue
 
-            on_message(text)
+            on_message(text, msg_chat_id)
 
 
 def is_mentioned(username: str, text: str) -> bool:

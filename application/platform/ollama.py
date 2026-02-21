@@ -21,7 +21,8 @@ def post(path: str, data: dict) -> dict:
         headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(request) as response:
-        return json.loads(response.read())
+        body = response.read()
+        return json.loads(body) if body.strip() else {}
 
 
 def delete(path: str, data: dict) -> dict:
@@ -33,7 +34,8 @@ def delete(path: str, data: dict) -> dict:
         method="DELETE",
     )
     with urllib.request.urlopen(request) as response:
-        return json.loads(response.read())
+        body = response.read()
+        return json.loads(body) if body.strip() else {}
 
 
 def stream_post(path: str, data: dict):

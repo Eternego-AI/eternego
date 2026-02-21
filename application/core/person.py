@@ -84,3 +84,19 @@ async def add_traits(persona: Persona, traits: list[str]) -> None:
             filesystem.append(persona.storage_dir / "person-traits.md", "\n".join(traits) + "\n")
     except OSError as e:
         raise PersonError("Failed to save traits") from e
+
+
+async def refine_traits(persona: Persona, new_items: list[str]) -> None:
+    """Consolidate new traits with existing ones using the local model."""
+    logger.info("Refining traits", {"persona_id": persona.id})
+    try:
+        from application.core import local_model, prompts
+        path = persona.storage_dir / "person-traits.md"
+        existing = filesystem.read(path).strip() if path.exists() else ""
+        refined = await local_model.respond(
+            persona.model.name,
+            [{"role": "user", "content": prompts.trait_refinement(existing, new_items)}],
+        )
+        filesystem.write(path, refined.strip() + "\n" if refined.strip() else "")
+    except OSError as e:
+        raise PersonError("Failed to refine traits") from e
