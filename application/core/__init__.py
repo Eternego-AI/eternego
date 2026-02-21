@@ -2,8 +2,6 @@
 
 from . import bus
 from . import channels
-from . import connections
-from . import pairing
 from . import data
 from . import memories
 from . import paths

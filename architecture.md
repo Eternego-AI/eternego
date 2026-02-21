@@ -214,7 +214,7 @@ hear (business) → brain.reason (core, background)
   → history.persist
 ```
 
-Abilities live in `core/abilities.py`. Each is a plain `async` function decorated with `@ability(description, order)`. The brain discovers them by reflection. An ability receives `(persona, thread, items)` and returns either a `Prompt` to feed back into the next reasoning cycle, or `None` to continue silently.
+Abilities live in `core/abilities.py`. Each is a plain `async` function decorated with `@ability(description, scopes, order)`. The `scopes` argument is a required list of channel authorities where the ability is available (e.g. `["commander", "conversational"]`). The brain discovers them by reflection and filters the system prompt to only include abilities whose scopes contain the current channel's authority. An ability receives `(persona, thread, channel, items)` and returns either a `Prompt` to feed back into the next reasoning cycle, or `None` to continue silently.
 
 ### The Abilities Contract
 
@@ -224,7 +224,7 @@ The brain wraps every ability call in `try/except`:
 
 ```python
 try:
-    result = await fn(persona, thread, value)
+    result = await fn(persona, thread, channel, value)
     if result:
         new_prompts.append(result)
 except Exception as e:
@@ -245,11 +245,14 @@ If abilities had their own top-level `try/except`, they could swallow exceptions
 
 The brain's `_reason()` function runs a `while True` loop:
 
-1. Call `local_model.respond()` with the current message history.
-2. Parse the JSON response — each key is an ability name, value is a list of items.
-3. Dispatch to each named ability, collect returned `Prompt` objects.
-4. If no prompts were returned, break — reasoning is done.
-5. Otherwise, append the prompts to messages and loop.
+1. Ask subscribers via `bus.ask("Reasoning Thought", ...)` — any subscriber may return a `Stop Reasoning` command to halt before the model is called.
+2. Propose the reasoning plan via `bus.propose("Reasoning"/"Chaining", {channel: ...})` — subscribers may again return `Stop Reasoning`. This is how web channels cancel in-flight reasoning when no active request is waiting.
+3. Call `local_model.respond()` with the current message history.
+4. Parse the JSON response — each key is an ability name, value is a list of items.
+5. Before dispatching each ability, check `channel.authority in fn.ability_scopes` — abilities out of scope return a "not available" prompt instead of executing.
+6. Dispatch to each in-scope ability, collect returned `Prompt` objects.
+7. If no prompts were returned, break — reasoning is done.
+8. Otherwise, append the prompts to messages and loop.
 
 This lets the persona chain naturally — think, act, see the result, think again — without the business layer needing to re-invoke anything.
 
@@ -259,39 +262,47 @@ This lets the persona chain naturally — think, act, see the result, think agai
 
 - `memories.agent(persona).remember(document)` — append a document to the current thread
 - `memories.agent(persona).as_messages(thread_id)` — return memory as LLM chat messages
-- `memories.agent(persona).as_transcript()` — return memory as a numbered transcript
 - `memories.agent(persona).filter_by(predicate)` — query memory with a closure
 - `memories.agent(persona).forget_everything()` — clear all memory for this persona
 
 **History** is long-term, on disk. The `history/` directory stores conversation files that persist across sessions. Used for oversight (`history.entries()`), control (`history.delete()`), and consolidation at sleep time (`history.consolidate()`).
 
-### Networks, Connections, and Gateways
+### Channels and Authority
 
-Three distinct concepts — do not conflate them:
+Every interaction arrives on a `Channel`. A channel has:
 
-| Concept | Scope | Lives in |
+- `type` — the transport (`"telegram"`, `"web"`)
+- `name` — the address within that transport (chat_id for telegram, a UUID per web request)
+- `authority` — what the channel is allowed to do (`"commander"` or `"conversational"`)
+- `credentials` — transport credentials (sensitive, excluded from serialization)
+- `bus` — an `asyncio.Queue` for web channels, used to pass responses back to the waiting HTTP request (hidden, excluded from serialization)
+
+**Authority** controls which abilities are shown to the model and which can execute:
+
+| Authority | Who sets it | Abilities available |
 |---|---|---|
-| **Network** | Config — a named external service (telegram token) | `Persona.networks`, `config.json` |
-| **Connection** | Runtime persistent — one polling thread per network, started on app start | `core/connections.py`, `_pollers` dict |
-| **Gateway** | Runtime ephemeral — one per conversation (one per `chat_id` for telegram, one per request for web) | `core/gateways.py`, `_active` dict |
+| `"commander"` | Telegram, API routes | All abilities including `act`, `check_permission`, `schedule`, etc. |
+| `"conversational"` | Web chat endpoint | Cognitive abilities only — no system actions |
 
-A `Connection` starts when `persona.start()` is called. For telegram it starts a polling thread. As each verified `chat_id` sends a message, the connection creates a `Gateway` for that chat and registers it. The `Gateway` holds closures for `send`, `stop`, `wait`, and `verify` — it knows how to reach a specific person without exposing credentials to the rest of the system.
-
-Unverified senders are gated before a Gateway is ever created — see **Channel Pairing** below.
+`Persona.channels` stores the persistent channels (telegram tokens, etc.) in `config.json`. Web channels are ephemeral — created per-request by the web route and never persisted.
 
 ### Channel Pairing
 
-Verified channels are stored in `channels.md` (gitignored) per persona. On each incoming message, `connections.bridge` calls `channels.is_verified`. If the `chat_id` is not verified:
+Verified channels are stored in `channels.md` per persona in the format `type:name:verified_at`. On each incoming message, `channels.is_verified(persona, channel)` checks this file. If the sender is not verified:
 
-1. `pairing.generate(persona_id, network_id, chat_id)` creates a 6-char alphanumeric code (36^6 ≈ 2.1B combinations) stored in memory with a 10-minute expiry.
-2. The code is sent back to the unknown sender via Telegram.
+1. `channels.pair(persona, channel)` generates a 6-char uppercase hex code.
+2. The code is sent back to the sender and saved via `system.save_pairing_code()` in OS secure storage.
 3. The person runs `eternego pair <code>` on their local machine.
-4. The CLI calls `environment.pair(code)` → `pairing.claim` → `channels.add` → persists to `channels.md`.
-5. The next message from that `chat_id` passes the verification check and proceeds normally.
+4. The CLI calls `environment.pair(code)` → `channels.save()` → persists `type:name:verified_at` to `channels.md`.
+5. The next message from that address passes the verification check and proceeds normally.
 
-`channels.md` is gitignored so migrating to a new environment requires re-pairing — each environment is a fresh trust boundary.
+`channels.md` is gitignored — migrating to a new environment requires re-pairing.
 
-For web requests, the route creates a `Channel` and calls `persona.connect()` to get a `Gateway` backed by an `asyncio.Future`. The route calls `persona.hear()` to start reasoning, then `await gw.wait()` to block until the persona responds. `persona.disconnect()` closes the gateway when done.
+### Web Channel Flow
+
+For web requests, the route creates an ephemeral `Channel` with `authority="conversational"` and a fresh `asyncio.Queue` as its `bus`. It calls `persona.hear()` to start background reasoning, then `await channel.bus.get()` to block until the persona's `say` ability puts the response on the queue. The response arrives as an OpenAI-compatible JSON payload.
+
+Active web threads are tracked in `openai._active_threads`. A bus subscriber in `app.py` listens for `Plan` signals titled `"Reasoning"` or `"Chaining"` — if the channel is web and the thread is not in the active set, it returns `Command("Stop Reasoning")` to halt orphaned reasoning tasks. A `DELETE /persona/{persona_id}/chat/{thread_id}` endpoint removes a thread from the active set early (client-side cancellation).
 
 ### Escalation
 
@@ -347,13 +358,11 @@ All shared data types live in `application/core/data.py`:
 
 | Class | Purpose |
 |---|---|
-| `Network` | Config for an external service — type ("telegram") + credentials. Stored in `Persona.networks`. |
-| `Channel` | A conversation address — type + name (chat_id for telegram, uuid for web). No credentials. |
+| `Channel` | A conversation channel — type, name, authority, credentials (sensitive), bus (hidden asyncio.Queue for web). |
 | `Message` | An incoming message — channel it arrived on + text content. |
 | `Model` | AI model reference (name, provider, credentials) |
 | `Observation` | Extracted observations from conversations (facts, traits, context, struggles — all required, no defaults) |
-| `Gateway` | A live conversation channel — closure-based send/stop/wait/verify for a specific Channel. |
-| `Persona` | Persona configuration (id, name, model, base_model, frontier, networks, storage_dir) |
+| `Persona` | Persona configuration (id, name, model, base_model, frontier, channels, storage_dir) |
 
 Short-term memory is per-persona and lives in the `memories` module, not in `data.py`.
 
@@ -404,20 +413,20 @@ persona.hear (business) → brain.reason (core, background)
   → loop until model returns {}
   → history.persist
 
-service.py → persona.start (business) → connections.connect (core) → telegram.poll (platform, in thread)
+service.py → persona.start (business) → channels.open (core) → telegram.poll (platform, in thread)
              incoming message → channels.is_verified?
-               no  → pairing.generate → telegram.send (code to sender)
-               yes → Gateway created → persona.hear → brain.reason
-           → persona.stop (business) → connections.disconnect_all (core)
+               no  → channels.pair → system.save_pairing_code → telegram.send (code to sender)
+               yes → persona.hear → brain.reason (background)
+           → persona.stop (business) → gateways.of(persona).clear()
            → sleep_loop (nightly) → persona.sleep (business)
            → start_web (uvicorn) → web/routes → persona.* / environment.* (business)
 
-web/routes/openai.py → persona.connect → gateway with asyncio.Future
+web/routes/openai.py → Channel(type="web", authority="conversational", bus=Queue())
                      → persona.hear → brain.reason (background)
-                     → gw.wait() → response
-                     → persona.disconnect
+                     → channel.bus.get() → response (OpenAI-compatible JSON)
+                     → DELETE /persona/{id}/chat/{thread_id} → remove from _active_threads
 web/routes/api.py    → environment.pair / persona.create / migrate / control (business)
 
-cli/ → environment.pair(code) → pairing.claim → channels.add
+cli/ → environment.pair(code) → channels.save → channels.md
      → environment.prepare / check_model
 ```

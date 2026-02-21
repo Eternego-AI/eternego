@@ -29,6 +29,10 @@
       <span id="ws-dot" class="w-1.5 h-1.5 rounded-full bg-zinc-600 transition-colors duration-300"></span>
       <span id="ws-label">connecting</span>
     </div>
+    <button id="sig-toggle-btn" onclick="toggleSidebar()"
+            class="text-xs px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300 font-mono transition-colors">
+      signals
+    </button>
 
     <button onclick="openModal('modal-create')"
             class="text-xs px-3.5 py-1.5 rounded-lg bg-violet-700 hover:bg-violet-600 text-white font-medium transition-colors">
@@ -40,9 +44,21 @@
     </button>
   </header>
 
-  <main class="p-6">
+  <main id="main-content" class="p-6 transition-all duration-200">
     {% block content %}{% endblock %}
   </main>
+
+  <!-- Signals sidebar -->
+  <aside id="sig-sidebar"
+         class="fixed top-14 right-0 h-[calc(100vh-56px)] w-64 bg-zinc-900/95 backdrop-blur border-l border-zinc-800 flex flex-col z-40 transition-transform duration-200">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800 flex-shrink-0">
+      <span class="text-xs font-mono text-zinc-500 uppercase tracking-widest">Signals</span>
+      <button onclick="toggleSidebar()" class="text-zinc-600 hover:text-zinc-300 transition-colors text-lg leading-none">×</button>
+    </div>
+    <div id="sig-feed" class="flex-1 overflow-y-auto feed-scroll px-3 py-3 flex flex-col gap-1.5">
+      <p id="sig-empty" class="text-xs font-mono text-zinc-700 text-center mt-4">No signals yet.</p>
+    </div>
+  </aside>
 
   {% include "components/create_modal.html" %}
   {% include "components/migrate_modal.html" %}
@@ -61,7 +77,7 @@
       if (e.target.hasAttribute('data-backdrop')) closeModal(e.target.id);
     });
 
-    // ── WebSocket ─────────────────────────────────────────────────────────
+    // ── WebSocket badge ───────────────────────────────────────────────────
     function setWsBadge(state) {
       const badge = document.getElementById('ws-badge');
       const dot   = document.getElementById('ws-dot');
@@ -76,12 +92,72 @@
       label.textContent = cfg.label;
     }
 
+    // ── Signals sidebar ───────────────────────────────────────────────────
+    const _sidebarOpen = localStorage.getItem('sig-sidebar') !== 'closed';
+    const _sidebar     = document.getElementById('sig-sidebar');
+    const _main        = document.getElementById('main-content');
+
+    function applySidebar(open) {
+      _sidebar.style.transform = open ? 'translateX(0)' : 'translateX(100%)';
+      _main.style.paddingRight = open ? '17rem' : '';
+      localStorage.setItem('sig-sidebar', open ? 'open' : 'closed');
+    }
+
+    function toggleSidebar() { applySidebar(_sidebar.style.transform === 'translateX(100%)'); }
+
+    applySidebar(_sidebarOpen);
+
+    const _typeColour = { Plan: 'text-violet-400', Event: 'text-emerald-400', Message: 'text-sky-400' };
+
+    function pushSignal(signal) {
+      document.getElementById('sig-empty')?.remove();
+      const feed = document.getElementById('sig-feed');
+      const row  = document.createElement('div');
+      row.className = 'sig-row flex flex-col gap-0.5 py-1.5 px-2 rounded-lg bg-zinc-800/50 border border-zinc-800/80';
+
+      const top = document.createElement('div');
+      top.className = 'flex items-center gap-1.5';
+
+      const tag = document.createElement('span');
+      tag.className = `text-[10px] font-mono ${_typeColour[signal.type] || 'text-zinc-500'}`;
+      tag.textContent = (signal.type || '').toLowerCase();
+
+      const title = document.createElement('span');
+      title.className = 'text-xs text-zinc-300 truncate flex-1';
+      title.textContent = signal.title || '';
+
+      top.appendChild(tag);
+      top.appendChild(title);
+      row.appendChild(top);
+
+      const persona = signal.details?.persona;
+      const personaId = persona?.id ?? persona;
+      if (personaId && typeof personaId === 'string') {
+        const sub = document.createElement('span');
+        sub.className = 'text-[10px] font-mono text-zinc-600 truncate';
+        sub.textContent = personaId.slice(0, 8) + '…';
+        row.appendChild(sub);
+      }
+
+      feed.appendChild(row);
+      // keep last 100 entries
+      while (feed.children.length > 100) feed.removeChild(feed.firstChild);
+      feed.scrollTop = feed.scrollHeight;
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────────
     function wsConnect() {
       const ws = new WebSocket(`ws://${location.host}/ws`);
       ws.onopen    = () => setWsBadge('live');
       ws.onclose   = () => { setWsBadge('reconnecting'); setTimeout(wsConnect, 3000); };
       ws.onerror   = () => ws.close();
-      ws.onmessage = e => { try { if (typeof onSignal === 'function') onSignal(JSON.parse(e.data)); } catch {} };
+      ws.onmessage = e => {
+        try {
+          const signal = JSON.parse(e.data);
+          pushSignal(signal);
+          if (typeof onSignal === 'function') onSignal(signal);
+        } catch {}
+      };
     }
 
     wsConnect();

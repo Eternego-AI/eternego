@@ -330,7 +330,7 @@ For MVP, simple prefix matching is sufficient. More sophisticated matching (rege
 
 ## G. Short-Term Memory
 
-During a conversation, the agent accumulates documents in an in-memory store provided by the `memories` module (`application/core/memories.py`). Memory is per persona: `memories.agent(persona).remember(document)`, `.as_messages()`, `.as_transcript()`, `.forget_everything()`. There is no disk persistence for short-term memory — it lives only in process memory.
+During a conversation, the agent accumulates documents in an in-memory store provided by the `memories` module (`application/core/memories.py`). Memory is per persona: `memories.agent(persona).remember(document)`, `.as_messages(thread_id)`, `.forget_everything()`. There is no disk persistence for short-term memory — it lives only in process memory.
 
 ### Document Types
 
@@ -361,30 +361,17 @@ When the agent reasons, it calls `memories.agent(persona).as_messages()`, which 
 
 Instructions are prepended as a system message. The OS-specific instruction is added by `local_model.stream`.
 
-### How Transcripts Are Built
-
-Before sleep, `memories.agent(persona).as_transcript()` produces a numbered plain-text transcript for consolidation:
-
-- `stimulus` (role=user) → `[N] User: {content}`
-- `say` → `[N] Persona: {content}`
-- `act` → `[N] Action ({tool_name}): {result (truncated to 300 chars)}`
-
-The `core/transcripts.py` module provides two helpers used by `history.consolidate`:
-
-- `transcripts.as_list(text)` — parses the numbered transcript into a list of `{"index": N, "content": ...}` dicts
-- `transcripts.extract(text, indices)` — extracts only the entries at the given indices, returning a plain string
 
 ### Memory Lifecycle
 
 - **Short-term**: In-memory, per-persona via `memories.agent(persona)` (current implementation)
-- **Consolidation**: At sleep time, `memories.agent(persona).as_transcript()` captures the session as a numbered transcript, which `history.consolidate()` clusters by topic, extracts observations from each cluster, and writes as dated history files
+- **Consolidation**: At sleep time, `history.consolidate()` clusters conversation history by topic, extracts observations from each cluster, and writes as dated history files
 - **Sleep**: Observations extracted during consolidation are applied to persona files; short-term memory is then cleared via `forget_everything()`
 
 ### Notes
 
 - Memory metadata (timestamp, channel, heard status) can be added to documents on need. The document-based approach supports arbitrary fields without schema changes.
 - Memory is cleared after sleep via `memories.agent(persona).forget_everything()`. Short-term memory resets to empty.
-- The `communicated` document type lets the agent know what the person actually received, enabling multi-channel awareness.
 
 ---
 
@@ -528,7 +515,7 @@ Complete directory layout:
 ~/.eternego/
 ├── personas/
 │   └── {uuid}/
-│       ├── config.json                  # UUID, name, channel, model, base_model, frontier
+│       ├── config.json                  # UUID, name, channels, model, base_model, frontier
 │       ├── person-identity.md           # Facts about the person
 │       ├── person-traits.md             # Behavioral preferences (cleared after sleep)
 │       ├── person-struggles.md          # Recurring obstacles/unmet needs (accumulates across sleep)

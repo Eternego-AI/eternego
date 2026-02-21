@@ -1,8 +1,11 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
-from application.core import bus, system, local_inference_engine
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, IdentityError, NetworkError
+from datetime import timedelta
+
+from application.core import bus, channels, system, local_inference_engine
+from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, ChannelError
 from application.business.outcome import Outcome
+from application.platform import datetimes
 
 
 async def prepare(model: str | None = None) -> Outcome[dict]:
@@ -59,22 +62,34 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
 
 
 async def pair(code: str) -> Outcome[dict]:
-    """Claim a pairing code and add the verified channel to the persona's known channels."""
+    """Claim a pairing code and mark the channel as verified for the persona."""
     await bus.propose("Pairing channel", {"code": code})
+
+    codes = await system.get_pairing_codes()
+    entry = codes.get(code.upper())
+
+    if not entry:
+        await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid"})
+        return Outcome(success=False, message="Pairing code is invalid or has expired.")
+
+    persona = entry["persona"]
+    channel = entry["channel"]
+    created_at = entry["created_at"]
+
+    if channels.is_verified(persona, channel):
+        await bus.broadcast("Pairing failed", {"code": code, "reason": "already_verified"})
+        return Outcome(success=False, message="This channel is already verified.")
+
+    if datetimes.now() - created_at > timedelta(minutes=10):
+        await bus.broadcast("Pairing failed", {"code": code, "reason": "expired"})
+        return Outcome(success=False, message="Pairing code has expired. Ask the persona to send a new message to get a fresh code.")
+
     try:
-        from application.core import agent, channels, pairing
-        entry = pairing.claim(code.upper())
-        if not entry:
-            await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid_or_expired"})
-            return Outcome(success=False, message="Pairing code is invalid or has expired. Ask the device to send a new message to get a fresh code.")
-        found = agent.find(entry["persona_id"])
-        channels.add(found, entry["network_id"], entry["chat_id"])
-        await bus.broadcast("Channel paired", {"persona": entry["persona_id"], "network": entry["network_id"]})
-        return Outcome(success=True, message="Channel paired successfully.", data=entry)
-    except IdentityError:
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "persona_not_found"})
-        return Outcome(success=False, message="Persona not found. The service may have restarted — ask the device to send a new message.")
-    except NetworkError:
+        channel.verified_at = datetimes.iso_8601(datetimes.now())
+        channels.save(persona, channel)
+        await bus.broadcast("Channel paired", {"persona": persona, "channel": channel})
+        return Outcome(success=True, message="Channel verified successfully.", data={"persona": persona, "channel": channel})
+    except ChannelError:
         await bus.broadcast("Pairing failed", {"code": code, "reason": "save_failed"})
         return Outcome(success=False, message="Failed to save the verified channel. Please try again.")
 

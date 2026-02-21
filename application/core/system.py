@@ -1,5 +1,6 @@
 """System — generic program availability and installation."""
 
+import json as _json
 import subprocess
 
 from application.platform import logger, crypto, OS, linux, mac, windows
@@ -78,6 +79,75 @@ async def install(program: str) -> None:
             await windows.install(program)
     except (subprocess.CalledProcessError, NotImplementedError) as e:
         raise InstallationError(f"Failed to install {program}") from e
+
+
+async def get_pairing_codes() -> dict[str, dict]:
+    """Return all pending pairing codes from OS secure storage. Each entry has persona, channel, created_at."""
+    logger.info("Retrieving pairing codes")
+    platform = OS.get_supported()
+    if platform is None:
+        return {}
+    try:
+        if platform == "linux":
+            raw = await linux.retrieve_secret("pairing_codes")
+        elif platform == "mac":
+            raw = await mac.retrieve_secret("pairing_codes")
+        elif platform == "windows":
+            raw = await windows.retrieve_secret("pairing_codes")
+        else:
+            return {}
+        from datetime import datetime
+        from application.core import agent as _agent
+        from application.core.data import Channel
+        result = {}
+        for code, entry in _json.loads(raw).items():
+            try:
+                persona = _agent.find(entry["persona_id"])
+                channel = Channel(**entry["channel"])
+                created_at = datetime.fromisoformat(entry["created_at"])
+                result[code] = {"persona": persona, "channel": channel, "created_at": created_at}
+            except Exception:
+                continue
+        return result
+    except Exception:
+        return {}
+
+
+async def save_pairing_code(code: str, persona, channel) -> None:
+    """Store a pairing code with its persona and channel in OS secure storage."""
+    logger.info("Saving pairing code", {"code": code, "persona_id": persona.id})
+    platform = OS.get_supported()
+    if platform is None:
+        raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
+    try:
+        from application.platform import datetimes, objects
+        existing = {}
+        try:
+            if platform == "linux":
+                raw = await linux.retrieve_secret("pairing_codes")
+            elif platform == "mac":
+                raw = await mac.retrieve_secret("pairing_codes")
+            elif platform == "windows":
+                raw = await windows.retrieve_secret("pairing_codes")
+            existing = _json.loads(raw)
+        except Exception:
+            pass
+        existing[code] = {
+            "persona_id": persona.id,
+            "channel": objects.json(channel),
+            "created_at": datetimes.iso_8601(datetimes.now()),
+        }
+        serialized = _json.dumps(existing)
+        if platform == "linux":
+            await linux.store_secret("pairing_codes", serialized)
+        elif platform == "mac":
+            await mac.store_secret("pairing_codes", serialized)
+        elif platform == "windows":
+            await windows.store_secret("pairing_codes", serialized)
+    except (UnsupportedOS, SecretStorageError):
+        raise
+    except Exception as e:
+        raise SecretStorageError("Failed to save pairing code to secure storage") from e
 
 
 async def generate_encryption_phrase(persona: Persona) -> str:

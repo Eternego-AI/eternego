@@ -3,9 +3,16 @@
 from fastapi import APIRouter, HTTPException
 
 from application.business import environment, persona
+from web.state import active_threads
 from web.requests import PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
 
 router = APIRouter(prefix="/api")
+
+
+@router.post("/chat/{thread_id}/stop")
+async def stop_chat(thread_id: str):
+    active_threads.discard(thread_id)
+    return {"stopped": thread_id}
 
 
 @router.post("/pair/{code}")
@@ -21,8 +28,8 @@ async def create_persona(request: PersonaCreateRequest):
     outcome = await persona.create(
         name=request.name,
         model=request.model,
-        network_type=request.network_type,
-        network_credentials=request.network_credentials,
+        channel_type=request.channel_type,
+        channel_credentials=request.channel_credentials,
         frontier_model=request.frontier_model,
         frontier_provider=request.frontier_provider,
         frontier_credentials=request.frontier_credentials,

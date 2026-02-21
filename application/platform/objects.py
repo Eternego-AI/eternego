@@ -22,6 +22,8 @@ def safe(v) -> object:
     if isinstance(v, Data):
         result = {}
         for f in fields(v):
+            if f.metadata.get("hidden"):
+                continue
             val = getattr(v, f.name)
             result[f.name] = ("" if val is None else "***") if f.metadata.get("sensitive") else safe(val)
         return result
@@ -47,7 +49,7 @@ def json(v) -> object:
     if v is None or isinstance(v, (bool, int, float, str)):
         return v
     if isinstance(v, Data):
-        return {f.name: json(getattr(v, f.name)) for f in fields(v)}
+        return {f.name: json(getattr(v, f.name)) for f in fields(v) if not f.metadata.get("hidden")}
     if isinstance(v, Path):
         return str(v)
     if isinstance(v, dict):
@@ -69,3 +71,8 @@ def are_equal(a: Data, b: Data) -> bool:
 def sensitive(default=None):
     """Field factory that marks a field as sensitive."""
     return field(default=default, metadata={"sensitive": True})
+
+
+def hidden(default=None):
+    """Field factory that marks a field as hidden — excluded from all serialization."""
+    return field(default=default, metadata={"hidden": True})

@@ -1,12 +1,14 @@
 """OpenAI-compatible routes — /v1/models and /v1/chat/completions."""
 
 import asyncio
+import json
 import uuid
 
 from fastapi import APIRouter, HTTPException
 
 from application.business import persona
 from application.core.data import Channel, Message
+from web.state import active_threads
 from web.requests import ChatRequest
 
 router = APIRouter()
@@ -51,25 +53,25 @@ async def chat_completions(request: ChatRequest):
     if not user_messages:
         raise HTTPException(status_code=400, detail="No user message in request.")
 
-    channel = Channel(type="web", name=str(uuid.uuid4()))
-    future = asyncio.get_running_loop().create_future()
-    outcome = await persona.connect(
-        found, channel,
-        on_send=lambda text, _f=future: _f.set_result(text) if not _f.done() else None,
-        on_wait=lambda _f=future: _f,
+    channel = Channel(
+        type="web",
+        name=str(uuid.uuid4()),
+        authority="conversational",
+        bus=asyncio.Queue(),
     )
-    if not outcome.success:
-        raise HTTPException(status_code=500, detail=outcome.message)
-
-    gw = outcome.data["gateway"]
-    await persona.hear(found, Message(channel=channel, content=user_messages[-1].content))
+    outcome = await persona.hear(found, Message(channel=channel, content=user_messages[-1].content))
+    thread_id = outcome.data["thread_id"]
+    active_threads.add(thread_id)
 
     try:
-        response = await asyncio.wait_for(gw.wait(), timeout=120)
+        raw = await asyncio.wait_for(channel.bus.get(), timeout=300)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Persona did not respond in time.")
     finally:
-        await persona.disconnect(found, channel)
+        active_threads.discard(thread_id)
+
+    payload = json.loads(raw)
+    content = payload["choices"][0]["message"]["content"]
 
     return {
         "object": "chat.completion",
@@ -77,8 +79,14 @@ async def chat_completions(request: ChatRequest):
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": response},
+                "message": {"role": "assistant", "content": content},
                 "finish_reason": "stop",
             }
         ],
     }
+
+
+@router.delete("/persona/{persona_id}/chat/{thread_id}")
+async def stop_chat(persona_id: str, thread_id: str):
+    active_threads.discard(thread_id)
+    return {"stopped": thread_id}

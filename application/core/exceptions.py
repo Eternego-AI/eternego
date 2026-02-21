@@ -45,15 +45,7 @@ class DNAError(Exception):
     pass
 
 
-class NetworkError(Exception):
-    pass
-
-
-class NetworkVerificationRequired(Exception):
-    pass
-
-
-class PairingError(Exception):
+class ChannelError(Exception):
     pass
 
 

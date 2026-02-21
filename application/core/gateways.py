@@ -1,48 +1,43 @@
-"""Gateways — persona-scoped conversation channel registry, process-lived."""
+"""Gateways — per-persona connection registry, process-lived."""
 
-from application.core.data import Channel, Gateway, Persona
+from collections.abc import Callable
 
+from application.core.data import Channel, Persona
 
-_active: dict[str, dict[str, Gateway]] = {}  # persona_id → {channel_key → Gateway}
+_active: dict[str, list[tuple[Channel, Callable[[], None]]]] = {}
 
 
 def _key(channel: Channel) -> str:
     return f"{channel.type}:{channel.name}"
 
 
-def of(persona: Persona) -> "PersonaGateway":
-    """Return the gateway handle for this persona."""
-    return PersonaGateway(persona)
+def of(persona: Persona) -> "Connections":
+    """Return the active connections for this persona."""
+    return Connections(persona)
 
 
-class PersonaGateway:
-    """Handle for one persona's active gateways. Use via gateways.of(persona)."""
+class Connections:
+    """All active channel connections for one persona. Use via gateways.of(persona)."""
 
     def __init__(self, persona: Persona):
-        self._persona = persona
+        self._id = persona.id
 
-    def add(self, gateway: Gateway) -> None:
-        """Register a gateway."""
-        _active.setdefault(self._persona.id, {})[_key(gateway.channel)] = gateway
+    def add(self, channel: Channel, stop: Callable[[], None]) -> None:
+        """Register a stop callable for a channel."""
+        _active.setdefault(self._id, []).append((channel, stop))
 
-    def find(self, channel: Channel) -> Gateway | None:
-        """Return the gateway for the given channel, or None."""
-        return _active.get(self._persona.id, {}).get(_key(channel))
+    def remove(self, channel: Channel) -> Callable[[], None] | None:
+        """Remove and return the stop callable for a channel, or None if not found."""
+        pairs = _active.get(self._id, [])
+        key = _key(channel)
+        for i, (ch, stop) in enumerate(pairs):
+            if _key(ch) == key:
+                pairs.pop(i)
+                return stop
+        return None
 
-    def all(self) -> list[Gateway]:
-        """Return all active gateways for this persona."""
-        return list(_active.get(self._persona.id, {}).values())
-
-    def close(self, channel: Channel) -> bool:
-        """Remove a single gateway. Returns True if it was active."""
-        gw = _active.get(self._persona.id, {}).pop(_key(channel), None)
-        return gw is not None
-
-    def close_all(self) -> bool:
-        """Remove all gateways. Returns True if any were active."""
-        persona_gws = _active.pop(self._persona.id, {})
-        return bool(persona_gws)
-
-    def is_active(self) -> bool:
-        """True if the persona has any active gateways."""
-        return bool(_active.get(self._persona.id))
+    def clear(self) -> None:
+        """Stop and remove all connections for this persona."""
+        for _, stop in _active.get(self._id, []):
+            stop()
+        _active.pop(self._id, None)

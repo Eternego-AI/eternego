@@ -21,3 +21,8 @@ def struggles(agent_id: str) -> Path:
 def memory(agent_id: str) -> Path:
     """Path to the memory.json file for that agent."""
     return agents_home() / agent_id / "memory.json"
+
+
+def channels(agent_id: str) -> Path:
+    """Path to the channels.md file for that agent."""
+    return agents_home() / agent_id / "channels.md"

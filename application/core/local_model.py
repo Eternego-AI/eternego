@@ -89,7 +89,7 @@ async def assess_skill(model: str, skill_name: str, skill_content: str) -> Obser
         raise EngineConnectionError("Model returned an invalid response") from e
 
 
-async def respond(model: str, messages: list[dict]) -> str:
+async def respond(model: str, messages: list[dict], json_mode: bool = False) -> str:
     """Send a list of messages to the local model and return the response text."""
     logger.info("Generating response", {"model": model})
     try:
@@ -97,11 +97,10 @@ async def respond(model: str, messages: list[dict]) -> str:
         if current_os:
             messages = [{"role": "system", "content": f"When running tools, commands must be for {current_os}."}] + messages
 
-        response = ollama.post("/api/chat", {
-            "model": model,
-            "messages": messages,
-            "stream": False,
-        })
+        body = {"model": model, "messages": messages, "stream": False}
+        if json_mode:
+            body["format"] = "json"
+        response = ollama.post("/api/chat", body)
         return response["message"]["content"]
     except URLError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e

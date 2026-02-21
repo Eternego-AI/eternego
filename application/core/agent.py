@@ -6,7 +6,7 @@ from pathlib import Path
 
 from application.platform import logger, filesystem, crypto, datetimes, objects
 from application.core import paths, prompts
-from application.core.data import Network, Model, Persona
+from application.core.data import Channel, Model, Persona
 from application.core.exceptions import IdentityError
 
 
@@ -14,7 +14,7 @@ async def initialize(
     name: str,
     model: Model,
     frontier: Model | None = None,
-    networks: list[Network] | None = None,
+    channels: list[Channel] | None = None,
 ) -> Persona:
     """Create a new persona with a fresh identity."""
     logger.info("Initializing persona identity", {"name": name, "model": model.name})
@@ -24,7 +24,7 @@ async def initialize(
         name=name,
         model=model,
         frontier=frontier,
-        networks=networks,
+        channels=channels,
     )
 
 
@@ -149,7 +149,7 @@ def find(persona_id: str) -> Persona:
             model=Model(**config["model"]),
             base_model=config.get("base_model", config["model"]["name"]),
             frontier=Model(**config["frontier"]) if config.get("frontier") else None,
-            networks=[Network(**n) for n in config["networks"]] if config.get("networks") else None,
+            channels=[Channel(**n) for n in config["channels"]] if config.get("channels") else None,
         )
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise IdentityError("Persona data is malformed") from e

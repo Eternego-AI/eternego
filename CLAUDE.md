@@ -69,7 +69,7 @@ persona.hear (business) → brain.reason (core, background task)
 
 The brain (`core/brain.py`) builds a system prompt, calls the local model, parses the JSON response, and dispatches to ability functions. It runs as a background task — never blocks the caller.
 
-Abilities (`core/abilities.py`) are plain `async` functions decorated with `@ability(description, order)`. Each receives `(persona, thread, items)` and returns a `Prompt` to feed back into the next cycle, or `None` to stop.
+Abilities (`core/abilities.py`) are plain `async` functions decorated with `@ability(description, scopes, order)` where `scopes` is a required list of channel authorities (e.g. `["commander", "conversational"]`). Each receives `(persona, thread, channel, items)` and returns a `Prompt` to feed back into the next cycle, or `None` to stop. Abilities with scopes that do not include the current channel's authority are filtered from the system prompt and blocked at call time.
 
 **Abilities that return `None` always run their body via `processes.run_async`** — fire and forget, fully isolated from the reasoning loop.
 
@@ -87,16 +87,16 @@ Abilities (`core/abilities.py`) are plain `async` functions decorated with `@abi
 
 ### Memory vs History
 
-- **Memory** — short-term, in-process, per persona. `memories.agent(persona)` → `remember()`, `remember_on(thread, doc)`, `private_thread()`, `filter_by(predicate)`, `as_messages(thread_id)`, `as_transcript()`, `forget_everything()`.
+- **Memory** — short-term, in-process, per persona. `memories.agent(persona)` → `remember()`, `remember_on(thread, doc)`, `private_thread()`, `filter_by(predicate)`, `as_messages(thread_id)`, `forget_everything()`.
 - **History** — long-term, on disk (`history/` directory). Persists across sessions.
 
 ### Channel Pairing
 
 Unknown senders are gated before reaching the brain. When an unverified `chat_id` messages the bot:
-1. `connections.bridge` calls `pairing.generate` → 6-char alphanumeric code stored in memory (10-minute expiry)
+1. `channels.pair(persona, channel)` → 6-char uppercase hex code stored via `system.save_pairing_code()` in OS secure storage
 2. Code is sent back to the unknown sender: `"Your pairing code is: XK9R2M — run: eternego pair XK9R2M"`
-3. Person runs `eternego pair XK9R2M` on the local machine → `environment.pair` → `pairing.claim` → `channels.add`
-4. `channels.md` is gitignored — re-pairing required on migration (intentional trust boundary per environment)
+3. Person runs `eternego pair XK9R2M` on the local machine → `environment.pair` → `channels.save()`
+4. `channels.md` format: `type:name:verified_at` — gitignored, re-pairing required on migration
 
 ## Module Map
 
@@ -105,21 +105,19 @@ Unknown senders are gated before reaching the brain. When an unverified `chat_id
 | Module | Functions |
 |---|---|
 | `environment.py` | prepare, check_model, pair |
-| `persona.py` | agents, find, create, migrate, feed, grow, equip, sense, escalate, reflect, predict, oversee, control, write_diary, sleep, start, stop, connect, disconnect, hear |
+| `persona.py` | agents, find, create, migrate, feed, equip, oversee, control, write_diary, sleep, start, stop, connect, pair, hear |
 | `outcome.py` | Outcome dataclass |
 
 ### Core (application/core/)
 
 | Module | Role |
 |---|---|
-| `brain.py` | reason(persona, thread) — background reasoning loop; _system() builds system prompt with guidance sections and pending permissions |
-| `abilities.py` | say, broadcast, check_permission, ask_permission, resolve_permission, act, load_trait, load_skill, clarify, escalate, learn_identity, remember_trait, feel_struggle, update_context, schedule (stub), remind (stub), start_conversation, seek_history, replay — abilities returning None run fully async; permission abilities have self-contained fallback prompts |
+| `brain.py` | reason(persona, thread, channel) — background reasoning loop; _system(persona, channel) builds system prompt, filters abilities by channel.authority; _reason() checks bus.propose result for Stop Reasoning command |
+| `abilities.py` | say, check_permission, ask_permission, resolve_permission, act, load_trait, load_skill, clarify, escalate, learn_identity, remember_trait, feel_struggle, update_context, schedule (stub), remind (stub), start_conversation, seek_history, replay — each decorated with @ability(description, scopes, order); `scopes` required; say formats response as OpenAI JSON when authority=="conversational" |
 | `agent.py` | initialize(), embody(), build(), identity CRUD, knowledge(), learn(), refine_context(), sleep(), save_training_set(), wake_up(), personas(), find(), remove() — `build()` writes `.gitignore` (permissions.md, channels.md); `remove()` deletes storage dir on failed creation |
 | `person.py` | bond(), identified_by(), traits_toward(), add_facts(), add_traits(), refine_traits(), delete_identity(), delete_trait() |
-| `pairing.py` | generate(persona_id, network_id, chat_id) → 6-char code; claim(code) → dict\|None — in-memory only, 10-minute expiry, reuses code for same pending sender |
-| `channels.py` | is_verified(persona, network_id, chat_id), add(persona, network_id, chat_id), all_for(persona, network_id) — disk-backed in `channels.md`, gitignored |
-| `connections.py` | verify(network), connect(persona, network, on_message), disconnect_all(persona) — bridge gates on channels.is_verified; unknown senders receive pairing code |
-| `gateways.py` | of(persona) → add(gateway), find(channel), all(), close(channel), close_all() — per-persona gateway registry keyed by `type:name` |
+| `channels.py` | open(persona, channel, on_message) → stop callable; send(channel, text); pair(persona, channel) → 6-char code; save(persona, channel); is_verified(persona, channel) — disk-backed in `channels.md` as `type:name:verified_at` |
+| `gateways.py` | of(persona) → Connections; Connections.add(channel, stop), remove(channel), clear() — per-persona registry of active stop callables |
 | `dna.py` | make(), read(), evolve() — persona DNA lifecycle |
 | `instructions.py` | read(), give(), add() — persona operating instructions |
 | `skills.py` | equip(), shelve(), summarize(), names(), delete() — persona skill documents |
@@ -130,15 +128,15 @@ Unknown senders are gated before reaching the brain. When an unverified `chat_id
 | `models.py` | generate_name() |
 | `local_inference_engine.py` | is_installed(), install(), pull(), check(), get_default_model(), copy(), delete(), fine_tune() |
 | `bus.py` | Signal dispatch: propose, broadcast, share, ask, order |
-| `system.py` | is_authorized(), execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable() |
-| `data.py` | Network, Channel, Message, Model, Observation(facts, traits, context, struggles — all required), Gateway, Persona |
-| `memories.py` | agent(persona) → remember(), remember_on(thread, doc), private_thread(), new_thread(), current_thread(), filter_by(predicate), as_messages(thread_id), as_transcript(), forget_everything() |
-| `paths.py` | agents_home(), agent_identity(agent_id), struggles(agent_id) |
+| `system.py` | is_authorized(), execute(), is_installed(), install(), save/get_phrases(), make_rows_traceable(), get_pairing_codes(), save_pairing_code() — pairing codes stored in OS secure storage as JSON |
+| `data.py` | Channel(type, name, authority="commander", credentials=sensitive(), verified_at, bus=hidden()), Message, Model, Observation(facts, traits, context, struggles — all required), Persona(id, name, model, base_model, frontier, channels) |
+| `memories.py` | agent(persona) → remember(), remember_on(thread, doc), private_thread(), new_thread(), current_thread(), filter_by(predicate), as_messages(thread_id), forget_everything() |
+| `paths.py` | agents_home(), agent_identity(agent_id), struggles(agent_id), channels(agent_id) |
 | `prompts.py` | extraction(), extraction_from_dna(), sleep(), dna_synthesis(), consolidation(), reflection(), prediction(), thread_summary(), trait_refinement(existing, new_items), struggle_refinement(existing, new_items), context_refinement(existing, new_items) |
 | `observations.py` | effect() — applies observations (facts, traits, context, struggles) to persona files |
 | `struggles.py` | be_mindful(), identify(), refine(), identified_by(), as_list(), delete() |
 | `permissions.py` | check(persona, action), pending(persona), request(persona, action, thread_id), resolve(persona, action, decision, statement) — file-backed in `permissions.md`, gitignored |
-| `exceptions.py` | UnsupportedOS, InstallationError, EngineConnectionError, SecretStorageError, DiaryError, IdentityError, PersonError, ExternalDataError, FrontierError, ExecutionError, DNAError, NetworkError, NetworkVerificationRequired, PairingError |
+| `exceptions.py` | UnsupportedOS, InstallationError, EngineConnectionError, SecretStorageError, DiaryError, IdentityError, PersonError, ExternalDataError, FrontierError, ExecutionError, DNAError, ChannelError |
 | `diary.py` | open_for(), open(), record() |
 | `external_llms.py` | read() — parses OpenAI/Anthropic exports |
 
@@ -146,10 +144,10 @@ Unknown senders are gated before reaching the brain. When an unverified `chat_id
 
 | Module | Role |
 |---|---|
-| `app.py` | FastAPI app, mounts all routers |
+| `app.py` | FastAPI app, mounts all routers; registers `_on_reasoning_plan` subscriber — stops reasoning on Plan signals for web threads not in `openai._active_threads` |
 | `requests.py` | Pydantic models: Message, ChatRequest, PersonaCreateRequest, PersonaMigrateRequest, PersonaControlRequest |
 | `socket.py` | ConnectionManager (broadcast to all WS clients), on_signal subscriber, _safe() serializer |
-| `routes/openai.py` | GET /v1/models, GET /v1/models/{id}, POST /v1/chat/completions |
+| `routes/openai.py` | GET /v1/models, GET /v1/models/{id}, POST /v1/chat/completions, DELETE /persona/{id}/chat/{thread_id}; `_active_threads: set[str]` tracks in-flight web requests |
 | `routes/pages.py` | GET /dashboard, GET /dashboard/persona/{id}, GET /dashboard/persona/{id}/chat |
 | `routes/api.py` | POST /api/pair/{code}, POST /api/persona/create, POST /api/persona/migrate, POST /api/persona/{id}/control |
 | `routes/websocket.py` | WebSocket /ws — streams all bus signals to connected browser tabs |

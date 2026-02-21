@@ -25,7 +25,7 @@
 
       <div>
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Channel</label>
-        <select name="network_type" required
+        <select name="channel_type" required
                 class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-violet-600 transition-colors">
           <option value="telegram">Telegram</option>
         </select>
@@ -118,8 +118,8 @@
     const err = document.getElementById('create-error');
     const data = Object.fromEntries(new FormData(e.target));
 
-    if (data.network_type === 'telegram') {
-      data.network_credentials = { token: data.token };
+    if (data.channel_type === 'telegram') {
+      data.channel_credentials = { token: data.token };
     }
     delete data.token;
 

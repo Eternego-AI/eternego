@@ -38,7 +38,13 @@
         Send
       </button>
     </form>
-    <p class="text-xs text-zinc-700 mt-2 font-mono">Enter to send · Shift+Enter for new line</p>
+    <div class="flex items-center gap-3 mt-2">
+      <p class="text-xs text-zinc-700 font-mono">Enter to send · Shift+Enter for new line</p>
+      <button id="stop-btn"
+              class="hidden text-xs font-mono px-2.5 py-1 rounded-lg border border-red-900/60 text-red-400 hover:text-red-300 hover:border-red-700 transition-colors">
+        stop
+      </button>
+    </div>
   </div>
 
 </div>
@@ -112,12 +118,53 @@
       '<span class="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce [animation-delay:150ms]"></span>' +
       '<span class="w-1.5 h-1.5 rounded-full bg-zinc-600 animate-bounce [animation-delay:300ms]"></span>';
 
+    const status = document.createElement('span');
+    status.id = 'thinking-status';
+    status.className = 'text-[10px] font-mono text-zinc-700 px-1 mt-0.5';
+    status.textContent = '';
+
     wrap.appendChild(label);
     wrap.appendChild(bubble);
+    wrap.appendChild(status);
 
     const messages = document.getElementById('messages');
     messages.appendChild(wrap);
     messages.scrollTop = messages.scrollHeight;
+  }
+
+  let _stopThreadId = null;
+  const _stopBtn = document.getElementById('stop-btn');
+
+  function showStop(threadId) {
+    _stopThreadId = threadId;
+    _stopBtn.classList.remove('hidden');
+  }
+
+  function hideStop() {
+    _stopThreadId = null;
+    _stopBtn.classList.add('hidden');
+  }
+
+  _stopBtn.addEventListener('click', async () => {
+    if (!_stopThreadId) return;
+    const id = _stopThreadId;
+    hideStop();
+    await fetch(`/api/chat/${id}/stop`, { method: 'POST' }).catch(() => {});
+  });
+
+  function onSignal(signal) {
+    const persona = signal.details?.persona;
+    const personaId = persona?.id ?? persona;
+    if (personaId !== PERSONA_ID) return;
+
+    const el = document.getElementById('thinking-status');
+    if (el) el.textContent = signal.title || '';
+
+    if (signal.type === 'Inquiry' && signal.title === 'Reasoning Thought') {
+      showStop(signal.details?.thread?.id);
+    } else if (signal.type === 'Event' && signal.title === 'Thought Concluded') {
+      hideStop();
+    }
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -161,6 +208,7 @@
       appendMessage('assistant', `Error: ${ex.message}`);
       messages.pop();
     } finally {
+      hideStop();
       btn.disabled = false;
       input.focus();
     }
