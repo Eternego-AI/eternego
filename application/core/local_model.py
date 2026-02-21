@@ -4,7 +4,8 @@ import asyncio
 import json
 from urllib.error import URLError
 
-from application.platform import logger, ollama, strings, OS
+
+from application.platform import logger, ollama, strings, OS, lists
 from application.core import prompts
 from application.core.data import Observation, Persona
 from application.core.exceptions import EngineConnectionError
@@ -34,10 +35,10 @@ async def observe(
         })
         parsed = strings.extract_json(response["response"])
         return Observation(
-            facts=parsed.get("facts", []),
-            traits=parsed.get("traits", []),
-            context=parsed.get("context", []),
-            struggles=parsed.get("struggles", []),
+            facts=lists.as_list(parsed.get("facts")),
+            traits=lists.as_list(parsed.get("traits")),
+            context=lists.as_list(parsed.get("context")),
+            struggles=lists.as_list(parsed.get("struggles")),
         )
     except URLError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
@@ -56,9 +57,9 @@ async def study(model: str, dna: str) -> Observation:
         })
         parsed = strings.extract_json(response["response"])
         return Observation(
-            facts=parsed.get("facts", []),
-            traits=parsed.get("traits", []),
-            context=parsed.get("context", []),
+            facts=lists.as_list(parsed.get("facts")),
+            traits=lists.as_list(parsed.get("traits")),
+            context=lists.as_list(parsed.get("context")),
             struggles=[],
         )
     except URLError as e:
@@ -80,8 +81,8 @@ async def assess_skill(model: str, skill_name: str, skill_content: str) -> Obser
         parsed = strings.extract_json(response["response"])
         return Observation(
             facts=[],
-            traits=parsed.get("traits", []),
-            context=parsed.get("context", []),
+            traits=lists.as_list(parsed.get("traits")),
+            context=lists.as_list(parsed.get("context")),
             struggles=[],
         )
     except URLError as e:

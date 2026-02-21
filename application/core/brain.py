@@ -56,36 +56,43 @@ def reason(persona: Persona, thread: Thread, channel: Channel) -> None:
 
     async def _run():
         await bus.propose("Thinking", {"persona": persona, "thread": thread})
-        await _reason(persona, thread, channel, messages)
-        await bus.broadcast("Thought Concluded", {"persona": persona, "thread": thread})
+        loops = await _reason(persona, thread, channel, messages)
+        await bus.broadcast("Thought Concluded", {"persona": persona, "thread": thread, "loops": loops})
         await history.persist(persona, thread)
 
     processes.run_async(_run)
 
 
-async def _reason(persona: Persona, thread: Thread, channel: Channel, messages: list[dict]) -> None:
-    first = True
+async def _reason(persona: Persona, thread: Thread, channel: Channel, messages: list[dict]) -> int:
+    loop = 0
     while True:
-        responses = await bus.ask("Reasoning Thought", {"persona": persona, "thread": thread})
+        responses = await bus.ask("Reasoning Thought", {"persona": persona, "thread": thread, "loop": loop})
         if any(isinstance(r, Command) and r.title == "Stop Reasoning" for r in responses):
             break
 
-        plan_title = "Reasoning" if first else "Chaining"
-        responses = await bus.propose(plan_title, {"persona": persona, "thread": thread, "channel": channel})
+        plan_title = "Reasoning" if loop == 0 else "Chaining"
+        responses = await bus.propose(plan_title, {"persona": persona, "thread": thread, "channel": channel, "loop": loop})
         if any(isinstance(r, Command) and r.title == "Stop Reasoning" for r in responses):
             break
-        first = False
 
         response = await local_model.respond(persona.model.name, messages, json_mode=True)
         parsed = strings.to_json(response)
-        if not parsed:
+        if parsed is None:
             parsed = {"say": [response]}
         messages.append({"role": "assistant", "content": response})
+        loop += 1
+
+        if not parsed:
+            if loop == 1:
+                messages.append({"role": "user", "content": "You must respond to the person. Use the say ability to send them a message."})
+                continue
+            break
 
         new_prompts = []
         for key, value in parsed.items():
             if not value or not reflections.has_ability(abilities, key, "ability"):
                 continue
+            value = value if isinstance(value, list) else [value]
             fn = getattr(abilities, key)
             if channel.authority not in fn.ability_scopes:
                 new_prompts.append(Prompt(role="user", content=f"{key} is not available on this channel."))
@@ -103,3 +110,5 @@ async def _reason(persona: Persona, thread: Thread, channel: Channel, messages: 
 
         for p in new_prompts:
             messages.append({"role": p.role, "content": p.content})
+
+    return loop
