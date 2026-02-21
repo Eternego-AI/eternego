@@ -30,6 +30,14 @@ async def sleep_loop(personas: list) -> None:
         await asyncio.gather(*[persona.sleep(agent) for agent in personas], return_exceptions=True)
 
 
+async def on_channel_paired(signal: Signal):
+    if signal.title != "Channel paired":
+        return
+    agent = signal.details.get("persona")
+    if agent:
+        await persona.start(agent)
+
+
 async def restart_gateway(command: Command):
     if command.title != "Restart gateway":
         return
@@ -75,7 +83,7 @@ async def main():
             print(f"[{signal.__class__.__name__}] {signal.title}", signal.details)
 
     logger.default_media(log_media)
-    subscribe(log_signal, restart_gateway, on_signal)
+    subscribe(log_signal, restart_gateway, on_channel_paired, on_signal)
 
     outcome = await persona.agents()
     if not outcome.success:

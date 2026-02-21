@@ -59,7 +59,7 @@ def _open_telegram(persona: Persona, channel: Channel, on_message: Callable) -> 
 
 async def send(channel: Channel, text: str) -> None:
     """Send text to a specific channel."""
-    logger.info("Sending on channel", {"type": channel.type})
+    logger.info("Sending on channel", {"type": channel.type, "text": text[:50]})
     if channel.type == "telegram":
         token = (channel.credentials or {})["token"]
         await asyncio.to_thread(telegram.send, token=token, chat_id=channel.name, message=text)

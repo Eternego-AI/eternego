@@ -36,6 +36,11 @@ class Connections:
                 return stop
         return None
 
+    def has_channel(self, channel: Channel) -> bool:
+        """Return True if a connection for this channel is already registered."""
+        key = _key(channel)
+        return any(_key(ch) == key for ch, _ in _active.get(self._id, []))
+
     def clear(self) -> None:
         """Stop and remove all connections for this persona."""
         for _, stop in _active.get(self._id, []):

@@ -99,9 +99,12 @@ async def create(
             await local_inference_engine.delete(persona_model)
             raise
 
-        await bus.broadcast(
-            "Persona created", {"persona": persona}
-        )
+        outcome = await start(persona)
+        if not outcome.success:
+            await bus.broadcast("Persona creation failed", {"reason": outcome.message, "persona": persona})
+            return outcome
+
+        await bus.broadcast("Persona created", {"persona": persona})
 
         return Outcome(
             success=True,
@@ -185,6 +188,11 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
             await agent.remove(persona)
             await local_inference_engine.delete(persona_model)
             raise
+
+        outcome = await start(persona)
+        if not outcome.success:
+            await bus.broadcast("Persona migration failed", {"reason": outcome.message, "persona": persona})
+            return outcome
 
         await bus.broadcast("Persona migrated", {"persona": persona})
 
@@ -488,6 +496,10 @@ async def connect(persona: Persona, channel: Channel) -> Outcome:
     """Open a connection for a channel and register it."""
     await bus.propose("Connecting channel", {"persona": persona, "channel": channel})
     try:
+        if gateways.of(persona).has_channel(channel):
+            await bus.broadcast("Channel connected", {"persona": persona, "channel": channel})
+            return Outcome(success=True, message="")
+
         async def on_message(message: Message) -> Outcome:
             if channels.is_verified(persona, message.channel):
                 return await hear(persona, message)
