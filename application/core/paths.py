@@ -26,3 +26,8 @@ def memory(agent_id: str) -> Path:
 def channels(agent_id: str) -> Path:
     """Path to the channels.md file for that agent."""
     return agents_home() / agent_id / "channels.md"
+
+
+def destiny(agent_id: str) -> Path:
+    """Path to the destiny directory for that agent."""
+    return agents_home() / agent_id / "destiny"

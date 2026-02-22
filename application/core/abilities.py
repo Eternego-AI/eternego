@@ -14,7 +14,10 @@ def ability(description: str, scopes: list[str], order: int = 99):
     return decorator
 
 
-@ability("Send a message to the person on their active channel. Items: [message text]", ["commander", "conversational"], order=1)
+@ability(
+"Send a message to the person on their active channel. Items: [message text]",
+["commander", "conversational"],
+order=1)
 async def say(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Send a message on the channel and record it in memory."""
     logger.info("Ability: say", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -32,7 +35,10 @@ async def say(persona: Persona, thread: Thread, channel: Channel, items: list) -
     return None
 
 
-@ability("Check if you have permission for an action before proceeding. Items: [action description]", ["commander"], order=3)
+@ability(
+"Check if you have permission for an action before proceeding. Items: [action description]",
+["commander"],
+order=3)
 async def check_permission(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Look up stored permissions and return what is known for each action."""
     logger.info("Ability: check_permission", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -52,7 +58,10 @@ async def check_permission(persona: Persona, thread: Thread, channel: Channel, i
         return Prompt(role="user", content="Could not check permissions. Treat the action as unpermitted and ask the person directly before proceeding.")
 
 
-@ability("Ask the person for permission before taking a sensitive action. Items: [action description]", ["commander"], order=4)
+@ability(
+"Ask the person for permission before taking a sensitive action. Items: [action description]",
+["commander"],
+order=4)
 async def ask_permission(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Record the permission request and ask the person. Reasoning stops until resolve_permission resumes it."""
     logger.info("Ability: ask_permission", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -74,7 +83,10 @@ async def ask_permission(persona: Persona, thread: Thread, channel: Channel, ite
         return Prompt(role="user", content="Could not record the permission request. Proceed as if the person has not yet answered — use say to ask them directly and wait for their reply before acting.")
 
 
-@ability("Record the person's permission decision (granted or denied) and resume the waiting thread. Items: [{action, decision, statement}]", ["commander"], order=5)
+@ability(
+"Record the person's permission decision (granted or denied) and resume the waiting thread. Items: [{action, decision, statement}]",
+["commander"],
+order=5)
 async def resolve_permission(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Record the permission decision and resume the original reasoning thread."""
     logger.info("Ability: resolve_permission", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -101,7 +113,10 @@ async def resolve_permission(persona: Persona, thread: Thread, channel: Channel,
         return Prompt(role="user", content="Could not record the permission decision. The waiting task will not resume automatically — let the person know and ask them to repeat their instruction so you can act on it directly.")
 
 
-@ability("Execute system commands. Items: [{function: {name, arguments: {command}}}]", ["commander"], order=6)
+@ability(
+"Execute system commands. Items: [{function: {name, arguments: {command}}}]",
+["commander"],
+order=6)
 async def act(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Execute tool calls and return the result so the model can respond."""
     logger.info("Ability: act", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -110,7 +125,10 @@ async def act(persona: Persona, thread: Thread, channel: Channel, items: list) -
     return Prompt(role="user", content=f"Result:\n{result}")
 
 
-@ability("Request person traits needed to respond. Items: [question about the person]", ["commander", "conversational"], order=7)
+@ability(
+"Request person traits needed to respond. Items: [question about the person]",
+["commander", "conversational"],
+order=7)
 async def load_trait(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Look up person facts and traits and return them as context."""
     logger.info("Ability: load_trait", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -127,7 +145,10 @@ async def load_trait(persona: Persona, thread: Thread, channel: Channel, items: 
     return Prompt(role="user", content="\n\n".join(parts))
 
 
-@ability("Request skill documents needed to proceed. Items: [skill name]", ["commander", "conversational"], order=8)
+@ability(
+"Request skill documents needed to proceed. Items: [skill name]",
+["commander", "conversational"],
+order=8)
 async def load_skill(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Load the requested skill documents and return them as context."""
     logger.info("Ability: load_skill", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -142,7 +163,10 @@ async def load_skill(persona: Persona, thread: Thread, channel: Channel, items: 
     return Prompt(role="user", content="\n\n".join(parts))
 
 
-@ability("Ask the person a clarifying question before proceeding. Items: [question]", ["commander", "conversational"], order=9)
+@ability(
+"Ask the person a clarifying question before proceeding. Items: [question]",
+["commander", "conversational"],
+order=9)
 async def clarify(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Send a clarifying question and stop reasoning until the person responds."""
     logger.info("Ability: clarify", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -154,7 +178,10 @@ async def clarify(persona: Persona, thread: Thread, channel: Channel, items: lis
     return None
 
 
-@ability("Escalate questions to a more capable frontier model. Items: [question]", ["commander", "conversational"], order=10)
+@ability(
+"Escalate questions to a more capable frontier model. Items: [question]",
+["commander", "conversational"],
+order=10)
 async def escalate(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Ask the frontier model and return its answer as context."""
     logger.info("Ability: escalate", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -165,7 +192,10 @@ async def escalate(persona: Persona, thread: Thread, channel: Channel, items: li
     return Prompt(role="user", content="Frontier answers:\n" + "\n".join(answers))
 
 
-@ability("Record an identifying fact about the person — name, role, location, or any stable detail about who they are. Items: [fact]", ["commander", "conversational"], order=11)
+@ability(
+"Record an identifying fact about the person — name, role, location, or any stable detail about who they are. Items: [fact]",
+["commander", "conversational"],
+order=11)
 async def learn_identity(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Persist identity facts learned about the person."""
     logger.info("Ability: learn_identity", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -178,7 +208,10 @@ async def learn_identity(persona: Persona, thread: Thread, channel: Channel, ite
     return None
 
 
-@ability("Remember a new trait or preference of the person. Items: [trait]", ["commander", "conversational"], order=12)
+@ability(
+"Remember a new trait or preference of the person. Items: [trait]",
+["commander", "conversational"],
+order=12)
 async def remember_trait(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Persist new traits and schedule background refinement of the traits file."""
     logger.info("Ability: remember_trait", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -193,7 +226,10 @@ async def remember_trait(persona: Persona, thread: Thread, channel: Channel, ite
     return None
 
 
-@ability("Record a struggle or recurring obstacle the person faces. Items: [struggle]", ["commander", "conversational"], order=13)
+@ability(
+"Record a struggle or recurring obstacle the person faces. Items: [struggle]",
+["commander", "conversational"],
+order=13)
 async def feel_struggle(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Persist new struggles and schedule background refinement of the struggles file."""
     logger.info("Ability: feel_struggle", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -208,7 +244,10 @@ async def feel_struggle(persona: Persona, thread: Thread, channel: Channel, item
     return None
 
 
-@ability("Update your own context with something you should remember. Items: [context note]", ["commander", "conversational"], order=14)
+@ability(
+"Update your own context with something you should remember. Items: [context note]",
+["commander", "conversational"],
+order=14)
 async def update_context(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Persist new context notes and schedule background refinement of the context file."""
     logger.info("Ability: update_context", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -223,21 +262,102 @@ async def update_context(persona: Persona, thread: Thread, channel: Channel, ite
     return None
 
 
-@ability("Schedule a job to run at a specific time. Items: [{job, at}]", ["commander"], order=15)
+@ability(
+"Schedule an event at a specific datetime. Items: [{trigger: 'YYYY-MM-DD HH:MM', content: 'description'}]",
+["commander", "conversational"],
+order=15)
 async def schedule(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
-    """Store scheduled jobs."""
+    """Save each scheduled event to disk. Returns feedback so the model can confirm or report errors."""
     logger.info("Ability: schedule", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
-    ...
+    from datetime import datetime
+    from application.core import destiny
+    parts = []
+    for item in items:
+        if not isinstance(item, dict):
+            parts.append("Invalid item — expected an object with trigger and content.")
+            continue
+        trigger = str(item.get("trigger", "")).strip()
+        content = str(item.get("content", "")).strip()
+        if not trigger:
+            parts.append("Missing trigger — use clarify to ask the person when this should happen.")
+            continue
+        try:
+            datetime.strptime(trigger, "%Y-%m-%d %H:%M")
+        except ValueError:
+            parts.append(f"Invalid trigger format '{trigger}' — must be YYYY-MM-DD HH:MM.")
+            continue
+        if not content:
+            parts.append("Missing content — use clarify to ask the person what this event is about.")
+            continue
+        await destiny.save(persona, trigger, "schedule", content)
+        parts.append(f"Scheduled: {trigger} — {content}")
+    return Prompt(role="user", content="\n".join(parts) if parts else "No items were scheduled.")
 
 
-@ability("Set a reminder to trigger after a duration. Items: [{message, after}]", ["commander"], order=16)
+@ability(
+"Set a reminder at a specific datetime. Items: [{trigger: 'YYYY-MM-DD HH:MM', content: 'description'}]",
+["commander", "conversational"],
+order=16)
 async def remind(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
-    """Store reminders."""
+    """Save each reminder to disk. Returns feedback so the model can confirm or report errors."""
     logger.info("Ability: remind", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
-    ...
+    from datetime import datetime
+    from application.core import destiny
+    parts = []
+    for item in items:
+        if not isinstance(item, dict):
+            parts.append("Invalid item — expected an object with trigger and content.")
+            continue
+        trigger = str(item.get("trigger", "")).strip()
+        content = str(item.get("content", "")).strip()
+        if not trigger:
+            parts.append("Missing trigger — use clarify to ask the person when this should happen.")
+            continue
+        try:
+            datetime.strptime(trigger, "%Y-%m-%d %H:%M")
+        except ValueError:
+            parts.append(f"Invalid trigger format '{trigger}' — must be YYYY-MM-DD HH:MM.")
+            continue
+        if not content:
+            parts.append("Missing content — use clarify to ask the person what you want to be reminded about.")
+            continue
+        await destiny.save(persona, trigger, "reminder", content)
+        parts.append(f"Reminder set: {trigger} — {content}")
+    return Prompt(role="user", content="\n".join(parts) if parts else "No reminders were set.")
 
 
-@ability("Start a new conversation thread for an unrelated incoming message. Items: [message]", ["commander"], order=17)
+@ability(
+"Get scheduled events. Items: []",
+["commander", "conversational"],
+order=20)
+async def calendar(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
+    """Read pending scheduled events and return them for the model to reason about."""
+    logger.info("Ability: calendar", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
+    from application.core import destiny
+    entries = await destiny.read(persona, "schedule")
+    if not entries:
+        return Prompt(role="user", content="No scheduled events found.")
+    return Prompt(role="user", content="Scheduled events:\n" + "\n---\n".join(entries))
+
+
+@ability(
+"Get reminders. Items: []",
+["commander", "conversational"],
+order=21)
+async def reminder(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
+    """Read pending reminders and return them for the model to reason about."""
+    logger.info("Ability: reminder", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
+    from application.core import destiny
+    entries = await destiny.read(persona, "reminder")
+    if not entries:
+        return Prompt(role="user", content="No reminders found.")
+    return Prompt(role="user", content="Reminders:\n" + "\n---\n".join(entries))
+
+
+@ability(
+"Start a new conversation thread for an unrelated incoming message. Items: [message]",
+["commander"],
+order=17)
 async def start_conversation(persona: Persona, thread: Thread, channel: Channel, items: list) -> None:
     """Remove items from the current thread, start a fresh thread per item, and begin reasoning."""
     logger.info("Ability: start_conversation", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -254,7 +374,10 @@ async def start_conversation(persona: Persona, thread: Thread, channel: Channel,
     processes.run_async(_run)
 
 
-@ability("Search past conversation history. Items: [what you are looking for]", ["commander", "conversational"], order=18)
+@ability(
+"Search past conversation history. Items: [what you are looking for]",
+["commander", "conversational"],
+order=18)
 async def seek_history(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Load the history briefing so the model can identify which past conversation to replay."""
     logger.info("Ability: seek_history", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
@@ -263,7 +386,10 @@ async def seek_history(persona: Persona, thread: Thread, channel: Channel, items
     return Prompt(role="user", content=f"History briefing:\n\n{content}")
 
 
-@ability("Replay a specific past conversation. Items: [filename from the briefing]", ["commander", "conversational"], order=19)
+@ability(
+"Replay a specific past conversation. Items: [filename from the briefing]",
+["commander", "conversational"],
+order=19)
 async def replay(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Load a specific history file and return its contents as context."""
     logger.info("Ability: replay", {"persona": persona.id, "thread": thread.id, "channel": channel.name})

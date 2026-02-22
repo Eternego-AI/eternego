@@ -1,5 +1,7 @@
 """History — long-term conversation history for a persona."""
 
+import time
+
 from application.platform import logger, filesystem, crypto, datetimes
 from application.core import local_model
 from application.core.data import Persona, Thread
@@ -86,6 +88,18 @@ async def briefing(persona: Persona) -> str:
         return filesystem.read(path) if path.exists() else "(no history yet)"
     except OSError as e:
         raise IdentityError("Failed to read history briefing") from e
+
+
+async def record_event(persona: Persona, title: str, content: str) -> None:
+    """Write a fired destiny event into history."""
+    logger.info("Recording event in history", {"persona_id": persona.id, "title": title})
+    try:
+        stamp = datetimes.stamp(datetimes.now())
+        filename = f"{datetimes.date_stamp(datetimes.now())}-event-{stamp}.md"
+        history_dir = persona.storage_dir / "history"
+        filesystem.write(history_dir / filename, f"# {title}\n\n{content}\n")
+    except OSError as e:
+        raise IdentityError("Failed to record event in history") from e
 
 
 async def load_conversation(persona: Persona, filename: str) -> str:

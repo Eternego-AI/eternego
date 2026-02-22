@@ -74,6 +74,12 @@ def unzip(data: bytes, destination: Path) -> None:
         zf.extractall(destination)
 
 
+def move(source: Path, destination: Path) -> None:
+    """Move a file to a new location."""
+    ensure_dir(destination.parent)
+    source.rename(destination)
+
+
 def delete(path: Path) -> None:
     """Delete a file."""
     path.unlink()
