@@ -51,3 +51,11 @@ class ChannelError(Exception):
 
 class SkillError(Exception):
     pass
+
+
+class HistoryError(Exception):
+    pass
+
+
+class DestinyError(Exception):
+    pass

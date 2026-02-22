@@ -58,7 +58,7 @@ def reason(persona: Persona, thread: Thread, channel: Channel) -> None:
         await bus.propose("Thinking", {"persona": persona, "thread": thread})
         loops = await _reason(persona, thread, channel, messages)
         await bus.broadcast("Thought Concluded", {"persona": persona, "thread": thread, "loops": loops})
-        await history.persist(persona, thread)
+        await history.summarize_conversation(persona, thread)
 
     processes.run_async(_run)
 

@@ -72,7 +72,6 @@ async def create(
         try:
             await agent.build(persona)
             await dna.make(persona)
-            await history.start(persona)
             await struggles.be_mindful(persona)
             await workspace.create(persona)
             await skills.equip(persona)
@@ -426,7 +425,7 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     await bus.propose("Sleeping", {"persona": persona})
 
     try:
-        await history.persist(persona, memories.agent(persona).current_thread())
+        await history.summarize_conversation(persona, memories.agent(persona).current_thread())
         memories.agent(persona).forget_everything()
 
         latest_knowledge = await agent.knowledge(persona)

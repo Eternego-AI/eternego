@@ -289,7 +289,7 @@ async def schedule(persona: Persona, thread: Thread, channel: Channel, items: li
         if not content:
             parts.append("Missing content — use clarify to ask the person what this event is about.")
             continue
-        await destiny.save(persona, trigger, "schedule", content)
+        await destiny.save(persona, thread, trigger, "schedule", content)
         parts.append(f"Scheduled: {trigger} — {content}")
     return Prompt(role="user", content="\n".join(parts) if parts else "No items were scheduled.")
 
@@ -321,7 +321,7 @@ async def remind(persona: Persona, thread: Thread, channel: Channel, items: list
         if not content:
             parts.append("Missing content — use clarify to ask the person what you want to be reminded about.")
             continue
-        await destiny.save(persona, trigger, "reminder", content)
+        await destiny.save(persona, thread, trigger, "reminder", content)
         parts.append(f"Reminder set: {trigger} — {content}")
     return Prompt(role="user", content="\n".join(parts) if parts else "No reminders were set.")
 
@@ -382,7 +382,7 @@ async def seek_history(persona: Persona, thread: Thread, channel: Channel, items
     """Load the history briefing so the model can identify which past conversation to replay."""
     logger.info("Ability: seek_history", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
     from application.core import history
-    content = await history.briefing(persona)
+    content = await history.review(persona)
     return Prompt(role="user", content=f"History briefing:\n\n{content}")
 
 
@@ -397,5 +397,5 @@ async def replay(persona: Persona, thread: Thread, channel: Channel, items: list
     filename = str(items[0]) if items else ""
     if not filename:
         return None
-    content = await history.load_conversation(persona, filename)
+    content = await history.recall(persona, filename)
     return Prompt(role="user", content=f"Past conversation:\n\n{content}")

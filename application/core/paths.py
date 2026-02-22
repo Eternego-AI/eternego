@@ -31,3 +31,13 @@ def channels(agent_id: str) -> Path:
 def destiny(agent_id: str) -> Path:
     """Path to the destiny directory for that agent."""
     return agents_home() / agent_id / "destiny"
+
+
+def history(agent_id: str) -> Path:
+    """Path to the history directory for that agent."""
+    return agents_home() / agent_id / "history"
+
+
+def history_briefing(agent_id: str) -> Path:
+    """Path to the history briefing index for that agent."""
+    return agents_home() / agent_id / "history" / "briefing.md"
