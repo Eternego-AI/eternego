@@ -334,7 +334,7 @@ async def calendar(persona: Persona, thread: Thread, channel: Channel, items: li
     """Read pending scheduled events and return them for the model to reason about."""
     logger.info("Ability: calendar", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
     from application.core import destiny
-    entries = await destiny.read(persona, "schedule")
+    entries = await destiny.entries(persona, "schedule")
     if not entries:
         return Prompt(role="user", content="No scheduled events found.")
     return Prompt(role="user", content="Scheduled events:\n" + "\n---\n".join(entries))
@@ -348,7 +348,7 @@ async def reminder(persona: Persona, thread: Thread, channel: Channel, items: li
     """Read pending reminders and return them for the model to reason about."""
     logger.info("Ability: reminder", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
     from application.core import destiny
-    entries = await destiny.read(persona, "reminder")
+    entries = await destiny.entries(persona, "reminder")
     if not entries:
         return Prompt(role="user", content="No reminders found.")
     return Prompt(role="user", content="Reminders:\n" + "\n---\n".join(entries))

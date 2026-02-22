@@ -327,7 +327,7 @@ Platform modules expose what external tools actually offer. If Ollama has an HTT
 def get(path: str) -> dict:
     """Send a GET request to the Ollama API."""
     with urllib.request.urlopen(f"{BASE_URL}{path}") as response:
-        return json.loads(response.read())
+        return json.loads(response.entries())
 ```
 
 ### Normalized output for frontier models

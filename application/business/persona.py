@@ -1,6 +1,6 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from application.core import bus, agent, brain, channels, gateways, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, skills, workspace, history, observations, struggles
+from application.core import bus, agent, brain, channels, gateways, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, skills, workspace, history, destiny, observations, struggles
 from application.core.data import Channel, Message, Model, Persona
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
@@ -320,7 +320,8 @@ async def oversee(persona: Persona) -> Outcome[dict]:
         traits = await person.traits_toward(persona)
         agent_data = await agent.identity(persona)
         skill_list = await skills.names(persona)
-        conversations = await history.entries(persona)
+        histories = await history.entries(persona)
+        destinies = await destiny.entries(persona)
         struggle_list = await struggles.as_list(persona)
 
         await bus.broadcast("Persona overseen", {"persona": persona})
@@ -334,7 +335,8 @@ async def oversee(persona: Persona) -> Outcome[dict]:
                 "agent": system.make_rows_traceable(agent_data["identity"], "pai")
                     + system.make_rows_traceable(agent_data["context"], "pc"),
                 "skills": system.make_rows_traceable(skill_list, "sk"),
-                "history": system.make_rows_traceable(conversations, "hist"),
+                "history": system.make_rows_traceable(histories, "hist"),
+                "destiny": system.make_rows_traceable(destinies, "dest"),
                 "struggles": system.make_rows_traceable(struggle_list, "ps"),
             },
         )
@@ -368,6 +370,8 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
                 await skills.delete(persona, hash_part)
             elif prefix == "hist":
                 await history.delete(persona, hash_part)
+            elif prefix == "dest":
+                await destiny.delete(persona, hash_part)
             elif prefix == "ps":
                 await struggles.delete(persona, hash_part)
 

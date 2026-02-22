@@ -2,26 +2,40 @@
 
 from datetime import datetime
 
-from application.platform import logger, filesystem, datetimes
+from application.platform import logger, filesystem, datetimes, crypto
 from application.core import paths
 from application.core.data import Persona
 from application.core.exceptions import IdentityError
 
 
 async def save(persona: Persona, trigger: str, event: str, detail: str) -> None:
-    """Save a destiny event to disk."""
+    """Save a destiny entry to disk."""
     logger.info("Saving destiny event", {"persona_id": persona.id, "event": event, "trigger": trigger})
     try:
         dt = datetime.strptime(trigger, "%Y-%m-%d %H:%M")
         created = datetimes.stamp(datetimes.now())
         filesystem.write(paths.destiny(persona.id) / f"{event}-{dt.strftime('%Y-%m-%d-%H-%M')}-{created}.md", detail)
     except OSError as e:
-        raise IdentityError("Failed to save destiny event") from e
+        raise IdentityError("Failed to save destiny entry") from e
 
 
-async def read(persona: Persona, event: str | None = None) -> list[str]:
+async def delete(persona: Persona, hash_part: str) -> None:
+    """Remove a destiny file by its stem hash."""
+    logger.info("Deleting destiny entry", {"persona_id": persona.id, "hash": hash_part})
+    try:
+        directory = paths.destiny(persona.id)
+        for file in directory.glob("*.md"):
+            if crypto.generate_unique_id(file.stem) == hash_part:
+                filesystem.delete(file)
+                return
+        raise IdentityError("Destiny entry not found or already removed")
+    except OSError as e:
+        raise IdentityError("Failed to delete destiny entry") from e
+
+
+async def entries(persona: Persona, event: str | None = None) -> list[str]:
     """Read destiny event contents, optionally filtered by event type."""
-    logger.info("Reading destiny events", {"persona_id": persona.id, "event": event})
+    logger.info("Reading destiny entries", {"persona_id": persona.id, "event": event})
     try:
         directory = paths.destiny(persona.id)
         if not directory.exists():
@@ -29,6 +43,6 @@ async def read(persona: Persona, event: str | None = None) -> list[str]:
         pattern = f"{event}-*.md" if event else "*.md"
         return [filesystem.read(path) for path in sorted(directory.glob(pattern))]
     except OSError as e:
-        raise IdentityError("Failed to read destiny events") from e
+        raise IdentityError("Failed to read destiny entries") from e
 
 
