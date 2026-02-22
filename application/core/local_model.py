@@ -5,90 +5,41 @@ import json
 from urllib.error import URLError
 
 
-from application.platform import logger, ollama, strings, OS, lists
-from application.core import prompts
-from application.core.data import Observation, Persona
+from application.platform import logger, ollama, strings, OS
 from application.core.exceptions import EngineConnectionError
 
-
-async def observe(
-    model: str,
-    conversations: str,
-    person_identity: str = "",
-    person_traits: str = "",
-    persona_context: str = "",
-    person_struggles: str = "",
-) -> Observation:
-    """Analyze conversations and extract observations about the person."""
-    logger.info("Observing conversations", {"model": model})
+async def request(model: str, prompt: str) -> str:
+    """Send a request to the local model and return the response text."""
+    logger.info("Sending request to model", {"model": model, "prompt": prompt})
     try:
         response = await asyncio.to_thread(ollama.post, "/api/generate", {
             "model": model,
-            "prompt": prompts.extraction(
-                conversations=conversations,
-                person_identity=person_identity,
-                person_traits=person_traits,
-                persona_context=persona_context,
-                person_struggles=person_struggles,
-            ),
+            "prompt": prompt,
             "stream": False,
         })
-        parsed = strings.extract_json(response["response"])
-        return Observation(
-            facts=lists.as_list(parsed.get("facts")),
-            traits=lists.as_list(parsed.get("traits")),
-            context=lists.as_list(parsed.get("context")),
-            struggles=lists.as_list(parsed.get("struggles")),
-        )
+        return response["response"].strip()
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+    except KeyError as e:
+        raise EngineConnectionError("Model returned an invalid response") from e
+
+
+
+async def request_json(model: str, prompt: str) -> dict:
+    """Send a request to the local model and return the parsed JSON response."""
+    logger.info("Sending JSON request to model", {"model": model, "prompt": prompt})
+    try:
+        response = await asyncio.to_thread(ollama.post, "/api/generate", {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+        })
+        return strings.extract_json(response["response"])
     except URLError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except (json.JSONDecodeError, KeyError) as e:
         raise EngineConnectionError("Model returned an invalid response") from e
 
-
-async def study(model: str, dna: str) -> Observation:
-    """Study DNA and extract observations to populate traits and context."""
-    logger.info("Studying DNA", {"model": model})
-    try:
-        response = await asyncio.to_thread(ollama.post, "/api/generate", {
-            "model": model,
-            "prompt": prompts.extraction_from_dna(dna=dna),
-            "stream": False,
-        })
-        parsed = strings.extract_json(response["response"])
-        return Observation(
-            facts=lists.as_list(parsed.get("facts")),
-            traits=lists.as_list(parsed.get("traits")),
-            context=lists.as_list(parsed.get("context")),
-            struggles=[],
-        )
-    except URLError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e
-    except (json.JSONDecodeError, KeyError) as e:
-        raise EngineConnectionError("Model returned an invalid response") from e
-
-
-
-async def assess_skill(model: str, skill_name: str, skill_content: str) -> Observation:
-    """Analyze a skill document and extract observations using the given model."""
-    logger.info("Assessing skill", {"model": model, "skill": skill_name})
-    try:
-        response = await asyncio.to_thread(ollama.post, "/api/generate", {
-            "model": model,
-            "prompt": prompts.skill_assessment(skill_name, skill_content),
-            "stream": False,
-        })
-        parsed = strings.extract_json(response["response"])
-        return Observation(
-            facts=[],
-            traits=lists.as_list(parsed.get("traits")),
-            context=lists.as_list(parsed.get("context")),
-            struggles=[],
-        )
-    except URLError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e
-    except (json.JSONDecodeError, KeyError) as e:
-        raise EngineConnectionError("Model returned an invalid response") from e
 
 
 async def respond(model: str, messages: list[dict], json_mode: bool = False) -> str:
@@ -108,35 +59,3 @@ async def respond(model: str, messages: list[dict], json_mode: bool = False) -> 
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
 
-async def summarize_thread(model: str, messages: list[dict]) -> dict:
-    """Generate a title and one-sentence summary for a conversation thread."""
-    logger.info("Summarizing thread", {"model": model})
-    try:
-        response = await asyncio.to_thread(ollama.post, "/api/generate", {
-            "model": model,
-            "prompt": prompts.thread_summary(messages),
-            "stream": False,
-        })
-        parsed = strings.extract_json(response["response"])
-        return {
-            "title": parsed.get("title", "conversation"),
-            "summary": parsed.get("summary", ""),
-        }
-    except URLError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e
-    except (json.JSONDecodeError, KeyError):
-        return {"title": "conversation", "summary": ""}
-
-
-async def generate_encryption_phrase(persona: Persona) -> str:
-    """Ask the local model to generate a recovery phrase."""
-    logger.info("Generating encryption phrase", {"persona_id": persona.id, "model": persona.model.name})
-    try:
-        response = await asyncio.to_thread(ollama.post, "/api/generate", {
-            "model": persona.model.name,
-            "prompt": prompts.RECOVERY_PHRASE,
-            "stream": False,
-        })
-        return response["response"].strip()
-    except URLError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e

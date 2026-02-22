@@ -3,7 +3,6 @@
 from . import bus
 from . import channels
 from . import data
-from . import memories
 from . import paths
 from . import diary
 from . import exceptions
@@ -17,7 +16,6 @@ from . import prompts
 from . import external_llms
 from . import system
 from . import gateways
-from . import permissions
 from . import dna
 from . import skills
 from . import workspace

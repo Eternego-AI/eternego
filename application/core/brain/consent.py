@@ -1,26 +1,23 @@
-"""Permissions — per-persona action permission records. Gitignored so they reset on each new environment."""
+"""Consent — per-persona action permission records. Gitignored so they reset on each new environment."""
 
 import re
 
 from application.platform import logger, filesystem
+from application.core import paths
 from application.core.data import Persona
 
 
-def _path(persona: Persona):
-    return persona.storage_dir / "permissions.md"
-
-
 def _ensure(persona: Persona) -> None:
-    path = _path(persona)
+    path = paths.permissions(persona.id)
     if not path.exists():
         filesystem.write(path, "## Granted\n\n## Denied\n\n## Pending\n")
 
 
 def check(persona: Persona, action: str) -> str | None:
     """Return 'granted', 'denied', or None if no record exists for this action."""
-    logger.info("Checking permission", {"persona": persona.id, "action": action})
+    logger.info("Checking consent", {"persona": persona.id, "action": action})
     _ensure(persona)
-    content = filesystem.read(_path(persona))
+    content = filesystem.read(paths.permissions(persona.id))
     action_lower = action.lower()
     section = None
     for line in content.splitlines():
@@ -37,10 +34,10 @@ def check(persona: Persona, action: str) -> str | None:
 
 
 def pending(persona: Persona) -> list[dict]:
-    """Return all pending permission requests as {action, thread_id} dicts."""
-    logger.info("Reading pending permissions", {"persona": persona.id})
+    """Return all pending consent requests as {action, thread_id} dicts."""
+    logger.info("Reading pending consent", {"persona": persona.id})
     _ensure(persona)
-    content = filesystem.read(_path(persona))
+    content = filesystem.read(paths.permissions(persona.id))
     result = []
     in_pending = False
     for line in content.splitlines():
@@ -56,10 +53,10 @@ def pending(persona: Persona) -> list[dict]:
 
 
 def request(persona: Persona, action: str, thread_id: str) -> None:
-    """Add a pending permission request for the given action and originating thread."""
-    logger.info("Recording permission request", {"persona": persona.id, "action": action})
+    """Add a pending consent request for the given action and originating thread."""
+    logger.info("Recording consent request", {"persona": persona.id, "action": action})
     _ensure(persona)
-    content = filesystem.read(_path(persona))
+    content = filesystem.read(paths.permissions(persona.id))
     entry = f"- {action} [thread:{thread_id}]"
     lines = content.splitlines()
     final = []
@@ -67,14 +64,14 @@ def request(persona: Persona, action: str, thread_id: str) -> None:
         final.append(line)
         if line.strip() == "## Pending":
             final.append(entry)
-    filesystem.write(_path(persona), "\n".join(final) + "\n")
+    filesystem.write(paths.permissions(persona.id), "\n".join(final) + "\n")
 
 
 def resolve(persona: Persona, action: str, decision: str, statement: str) -> str | None:
     """Move a pending request to granted or denied. Returns the original thread_id or None if not found."""
-    logger.info("Resolving permission", {"persona": persona.id, "action": action, "decision": decision})
+    logger.info("Resolving consent", {"persona": persona.id, "action": action, "decision": decision})
     _ensure(persona)
-    content = filesystem.read(_path(persona))
+    content = filesystem.read(paths.permissions(persona.id))
     action_lower = action.lower()
     thread_id = None
 
@@ -106,5 +103,5 @@ def resolve(persona: Persona, action: str, decision: str, statement: str) -> str
         if line.strip() == section:
             final.append(entry)
 
-    filesystem.write(_path(persona), "\n".join(final) + "\n")
+    filesystem.write(paths.permissions(persona.id), "\n".join(final) + "\n")
     return thread_id

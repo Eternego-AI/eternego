@@ -76,9 +76,11 @@ class AgentMemory:
         """Return True if memory is unchanged since the given hash was taken."""
         return persistent_memory.verify(self._persona.id, current_hash)
 
-    def filter_by(self, predicate: Callable[[dict], bool]) -> list[dict]:
-        """Return memory documents matching the given predicate."""
-        return persistent_memory.filter_by(self._persona.id, predicate)
+    def threads(self) -> list[Thread]:
+        """Return all threads present in memory, in order of first appearance."""
+        docs = persistent_memory.filter_by(self._persona.id, lambda doc: "thread_id" in doc)
+        seen = dict.fromkeys(doc["thread_id"] for doc in docs)
+        return [Thread(id=thread_id) for thread_id in seen]
 
     def as_messages(self, thread_id: str | None = None) -> list[dict]:
         """Return memory as LLM chat messages, optionally filtered by thread_id."""

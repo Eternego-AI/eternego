@@ -2,11 +2,10 @@
 
 import argparse
 import asyncio
-from datetime import datetime, timedelta
 
 import uvicorn
 
-from application.business import persona
+from application.business import persona, routine
 from application.platform import logger
 from application.platform.observer import Command, Event, Plan, Signal, subscribe
 from web.app import app as web_app
@@ -18,16 +17,6 @@ async def start_web(host: str, port: int) -> None:
     config = uvicorn.Config(web_app, host=host, port=port, log_level="warning")
     server = uvicorn.Server(config)
     await server.serve()
-
-
-
-async def sleep_loop(personas: list) -> None:
-    """Run sleep for all personas concurrently every night at midnight."""
-    while True:
-        now = datetime.now()
-        midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        await asyncio.sleep((midnight - now).total_seconds())
-        await asyncio.gather(*[persona.sleep(agent) for agent in personas], return_exceptions=True)
 
 
 async def on_channel_paired(signal: Signal):
@@ -97,17 +86,19 @@ async def main():
         if not outcome.success:
             print(f"Failed to start gateway for {agent.name}: {outcome.message}")
 
-    if personas:
-        asyncio.create_task(sleep_loop(personas))
-
     web_task = asyncio.create_task(start_web(args.host, args.port))
     web_task.add_done_callback(
         lambda t: print(f"Web server stopped: {t.exception()}") if not t.cancelled() and t.exception() else None
     )
 
-    # Keep the event loop alive for signal handling and on_message callbacks
+    elapsed = 0
     while True:
         await asyncio.sleep(1)
+        elapsed += 1
+        if elapsed >= 60:
+            elapsed = 0
+            for agent in personas:
+                await routine.trigger(agent)
 
 
 if __name__ == "__main__":

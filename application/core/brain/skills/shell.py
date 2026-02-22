@@ -1,9 +1,17 @@
-# Shell
+"""Shell — how to run shell commands via the act ability."""
+
+name = "shell"
+summary = "Knows how to run shell commands, manage files, and work within the workspace using the act ability."
+
+
+def skill(persona) -> str:
+    workspace = str(persona.storage_dir / "workspace")
+    return f"""# Shell
 
 Use `act` to run shell commands:
 
 ```json
-{"act": [{"function": {"name": "shell", "arguments": {"command": "your command here"}}}]}
+{{"act": [{{"function": {{"name": "shell", "arguments": {{"command": "your command here"}}}}}}]}}
 ```
 
 ## Workspace
@@ -28,6 +36,6 @@ Write all files to: {workspace}
 
 Never use shell to directly modify these persona files:
 
-`persona-identity.md`, `persona-context.md`, `person-identity.md`, `person-traits.md`, `permissions.md`
+`persona-context.md`, `person-identity.md`, `person-traits.md`, `permissions.md`
 
-Use the abilities for those instead.
+Use the abilities for those instead."""

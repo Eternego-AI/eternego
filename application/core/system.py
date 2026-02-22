@@ -1,10 +1,9 @@
 """System — generic program availability and installation."""
 
-import json as _json
+import json
 import subprocess
 
 from application.platform import logger, crypto, OS, linux, mac, windows
-from application.core import local_model
 from application.core.data import Persona
 from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError, ExecutionError
 
@@ -31,6 +30,8 @@ async def execute(tool_calls: list[dict]) -> str:
             code, output = await mac.execute_on_sub_process(command)
         elif platform == "windows":
             code, output = await windows.execute_on_sub_process(command)
+        else:
+            raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
 
         if code != 0:
             raise ExecutionError(f"{name}: {output}")
@@ -77,6 +78,8 @@ async def install(program: str) -> None:
             await mac.install(program)
         elif platform == "windows":
             await windows.install(program)
+        else:
+            raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
     except (subprocess.CalledProcessError, NotImplementedError) as e:
         raise InstallationError(f"Failed to install {program}") from e
 
@@ -100,7 +103,7 @@ async def get_pairing_codes() -> dict[str, dict]:
         from application.core import agent as _agent
         from application.core.data import Channel
         result = {}
-        for code, entry in _json.loads(raw).items():
+        for code, entry in json.loads(raw).items():
             try:
                 persona = _agent.find(entry["persona_id"])
                 channel = Channel(**entry["channel"])
@@ -129,7 +132,7 @@ async def save_pairing_code(code: str, persona, channel) -> None:
                 raw = await mac.retrieve_secret("pairing_codes")
             elif platform == "windows":
                 raw = await windows.retrieve_secret("pairing_codes")
-            existing = _json.loads(raw)
+            existing = json.loads(raw)
         except Exception:
             pass
         existing[code] = {
@@ -137,7 +140,7 @@ async def save_pairing_code(code: str, persona, channel) -> None:
             "channel": objects.json(channel),
             "created_at": datetimes.iso_8601(datetimes.now()),
         }
-        serialized = _json.dumps(existing)
+        serialized = json.dumps(existing)
         if platform == "linux":
             await linux.store_secret("pairing_codes", serialized)
         elif platform == "mac":
@@ -148,12 +151,6 @@ async def save_pairing_code(code: str, persona, channel) -> None:
         raise
     except Exception as e:
         raise SecretStorageError("Failed to save pairing code to secure storage") from e
-
-
-async def generate_encryption_phrase(persona: Persona) -> str:
-    """Generate a recovery phrase for the persona."""
-    logger.info("Generating encryption phrase", {"persona_id": persona.id})
-    return await local_model.generate_encryption_phrase(persona)
 
 
 async def save_phrases(persona: Persona, phrase: str) -> None:
@@ -179,10 +176,6 @@ async def get_phrases(persona: Persona) -> str:
     """Retrieve the encryption phrase from OS secure storage."""
     logger.info("Retrieving encryption phrase", {"persona_id": persona.id})
     platform = OS.get_supported()
-
-    if platform is None:
-        raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
-
     try:
         if platform == "linux":
             return await linux.retrieve_secret(persona.id)
@@ -192,3 +185,11 @@ async def get_phrases(persona: Persona) -> str:
             return await windows.retrieve_secret(persona.id)
     except Exception as e:
         raise SecretStorageError("Failed to retrieve encryption phrase from secure storage") from e
+
+    raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
+
+
+async def persona_key(phrase: str, persona_id: str) -> bytes:
+    """Derive a symmetric encryption key for the persona from the phrase."""
+    logger.info("Deriving persona key", {"persona_id": persona_id})
+    return crypto.derive_key(phrase, persona_id.encode())

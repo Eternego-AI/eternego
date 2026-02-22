@@ -3,6 +3,7 @@
 import asyncio
 import uuid
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
 from application.core import paths
@@ -28,16 +29,18 @@ class Channel(Data):
 
 @dataclass(kw_only=True)
 class Persona(Data):
-    id: str
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     model: Model
+    version: str = "v1"
     base_model: str = ""
+    birthday: str = field(default_factory=lambda: str(date.today()))
     frontier: Model | None = None
     channels: list[Channel] | None = None
 
     @property
     def storage_dir(self) -> Path:
-        return paths.agents_home() / self.id
+        return paths.personas_home() / self.id
 
 
 @dataclass(kw_only=True)

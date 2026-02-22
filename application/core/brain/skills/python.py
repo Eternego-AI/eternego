@@ -1,4 +1,12 @@
-# Python
+"""Python — how to write and run Python scripts via the act ability."""
+
+name = "python"
+summary = "Knows how to write Python scripts to the workspace and execute them for calculations, file processing, and automation."
+
+
+def skill(persona) -> str:
+    workspace = str(persona.storage_dir / "workspace")
+    return f"""# Python
 
 Write a script to workspace then run it — two `act` calls:
 
@@ -39,4 +47,4 @@ Work with dates:
 ```python
 from datetime import datetime, timedelta
 print((datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"))
-```
+```"""

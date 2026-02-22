@@ -93,3 +93,8 @@ def delete_dir(path: Path) -> None:
 def copy_dir(source: Path, destination: Path) -> None:
     """Copy a directory tree to a new location."""
     shutil.copytree(source, destination, dirs_exist_ok=True)
+
+def copy_file(source: Path, destination: Path) -> None:
+    """Copy a single file to a new location."""
+    ensure_dir(destination.parent)
+    shutil.copy2(source, destination)

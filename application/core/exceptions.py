@@ -29,10 +29,6 @@ class PersonError(Exception):
     pass
 
 
-class ExternalDataError(Exception):
-    pass
-
-
 class FrontierError(Exception):
     pass
 
@@ -58,4 +54,7 @@ class HistoryError(Exception):
 
 
 class DestinyError(Exception):
+    pass
+
+class ContextError(Exception):
     pass

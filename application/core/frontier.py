@@ -1,11 +1,11 @@
 """Frontier — escalation to a more powerful external model."""
 
-import asyncio
+import asyncio, json
 from urllib.error import URLError
 
 from application.platform import logger
-from application.platform import anthropic as anthropic_platform
-from application.platform import openai as openai_platform
+from application.platform import anthropic
+from application.platform import openai
 from application.core.data import Model
 from application.core.exceptions import FrontierError
 
@@ -20,11 +20,22 @@ async def respond(model: Model, prompt: str) -> str:
 
     try:
         if provider == "openai":
-            return await asyncio.to_thread(openai_platform.respond, api_key, model.name, messages)
+            return await asyncio.to_thread(openai.respond, api_key, model.name, messages)
         if provider == "anthropic":
-            return await asyncio.to_thread(anthropic_platform.respond, api_key, model.name, messages)
+            return await asyncio.to_thread(anthropic.respond, api_key, model.name, messages)
         raise FrontierError(f"Unsupported frontier provider: {provider}")
     except (URLError, OSError) as e:
         raise FrontierError(f"Failed to contact frontier model: {e}") from e
 
+
+async def read(data: str, source: str) -> str:
+    """Parse external AI history into role-based text."""
+    logger.info("Reading external LLM history", {"source": source})
+    try:
+        if source == "claude":
+            return anthropic.role_based_text(data)
+
+        return openai.role_based_text(data)
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        raise FrontierError("Could not parse external data") from e
 

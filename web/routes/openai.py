@@ -54,7 +54,7 @@ async def chat_completions(request: ChatRequest):
         raise HTTPException(status_code=400, detail="No user message in request.")
 
     channel = Channel(
-        type="web",
+        type="api",
         name=str(uuid.uuid4()),
         authority="conversational",
         bus=asyncio.Queue(),

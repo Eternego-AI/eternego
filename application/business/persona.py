@@ -1,14 +1,18 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
+from pathlib import Path
 
-from application.core import bus, agent, brain, channels, gateways, memories, person, frontier, diary, system, external_llms, local_model, local_inference_engine, models, prompts, dna, skills, workspace, history, destiny, observations, struggles
+from application.core import bus, agent, channels, gateways, person, frontier, system, \
+    local_model, local_inference_engine, models, prompts, paths, context
+from application.core.brain import mind, memories, skills
 from application.core.data import Channel, Message, Model, Persona
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
-    DiaryError, IdentityError, PersonError, ExternalDataError, FrontierError,
-    DNAError, SkillError, ChannelError,
+    DiaryError, IdentityError, PersonError, FrontierError,
+    DNAError, SkillError, ChannelError, ContextError,
 )
 from application.business import environment
 from application.business.outcome import Outcome
+from application.platform import logger
 
 
 async def agents() -> Outcome[dict]:
@@ -16,7 +20,22 @@ async def agents() -> Outcome[dict]:
     await bus.propose("Listing personas", {})
 
     try:
-        personas = await agent.personas()
+        root = await paths.personas_home()
+        if not root.exists():
+            await bus.broadcast("No personas found", {})
+            return Outcome(success=False, message="No personas found. Create one to get started.", data={"personas": []})
+        try:
+            persona_ids = [d.name for d in root.iterdir() if d.is_dir() and (d / "config.json").exists()]
+        except OSError as e:
+            raise IdentityError("Failed to list personas") from e
+        personas = []
+        for persona_id in persona_ids:
+            try:
+                persona = find(persona_id)
+                personas.append(persona)
+            except (IdentityError, OSError):
+                continue
+
         await bus.broadcast("Personas listed", {"count": len(personas)})
         return Outcome(success=True, message="", data={"personas": personas})
     except IdentityError as e:
@@ -36,6 +55,21 @@ async def find(persona_id: str) -> Outcome[dict]:
         return Outcome(success=False, message="Persona not found.")
 
 
+async def delete(persona: Persona) -> Outcome[dict]:
+    """Delete a persona and all its data."""
+    await bus.propose("Deleting persona", {"persona": persona})
+    try:
+        await paths.delete_recursively(await paths.home(persona.id))
+        if await local_inference_engine.check(persona.model.name):
+            await local_inference_engine.delete(persona.model.name)
+        await bus.broadcast("Persona deleted", {"persona": persona})
+        return Outcome(success=True, message="Persona deleted successfully")
+    except IdentityError as e:
+        await bus.broadcast("Persona deletion failed", {"persona": persona, "error": str(e)})
+        return Outcome(success=False, message="Could not delete persona. Please check the persona data.")
+    except EngineConnectionError as e:
+        await bus.broadcast("Persona deletion failed", {"persona": persona, "error": str(e)})
+        return Outcome(success=False, message="Could not connect to the local inference engine to delete the model. Please make sure it is running.")
 
 async def create(
     name: str,
@@ -51,10 +85,11 @@ async def create(
         "Creating persona", {"name": name, "model": model, "channel": channel_type, "frontier_model": frontier_model, "frontier_provider": frontier_provider}
     )
 
+    persona = None
+
     try:
         channel = Channel(type=channel_type, credentials=channel_credentials)
 
-        local_model_obj = Model(name=model)
         frontier_model_obj = None
         if frontier_model:
             frontier_model_obj = Model(
@@ -62,41 +97,45 @@ async def create(
                 provider=frontier_provider,
                 credentials=frontier_credentials,
             )
+        persona = Persona(
+            name=name,
+            model=Model(name=model),
+            version="v1",
+            frontier=frontier_model_obj,
+            channels=[channel],
+        )
+        persona.base_model = model
+        persona.model = models.generate(model, persona.id)
 
-        persona = await agent.initialize(name, local_model_obj, frontier_model_obj, channels=[channel])
+        await local_inference_engine.copy(model, persona.model.name)
 
-        persona_model = models.generate_name(model, persona.id)
-        await agent.embody(persona, local_model_obj, persona_model)
-        await local_inference_engine.copy(model, persona_model)
+        await paths.create_home(persona.id)
+        await paths.create_directories(persona.id, [
+            "skills",
+            "history",
+            "destiny",
+            "training",
+            "workspace"
+            ,"notes"
+        ])
 
-        try:
-            await agent.build(persona)
-            await dna.make(persona)
-            await struggles.be_mindful(persona)
-            await workspace.create(persona)
-            await skills.equip(persona)
-            await person.bond(persona)
-            await agent.save_persona(persona)
+        await context.add(persona, "\n".join(skill.summary for skill in skills.basics))
 
-            phrase = await system.generate_encryption_phrase(persona)
+        await paths.save_as_json(persona.id, await paths.persona_identity(persona.id), persona)
 
-            await system.save_phrases(persona, phrase)
+        phrase = await local_model.request(persona.model.name, prompts.RECOVERY_PHRASE)
+        await system.save_phrases(persona, phrase)
 
-            await diary.open_for(persona)
+        await paths.add_routine(persona.id, "sleep", "00:00", "daily")
 
-            outcome = await write_diary(persona)
-            if not outcome.success:
-                await bus.broadcast(
-                    "Persona creation failed", {"reason": "diary", "persona": persona}
-                )
-                await agent.remove(persona)
-                await local_inference_engine.delete(persona_model)
-                return Outcome(success=False, message=outcome.message)
-
-        except Exception:
-            await agent.remove(persona)
-            await local_inference_engine.delete(persona_model)
-            raise
+        await paths.init_git(await paths.diary(persona.id))
+        outcome = await write_diary(persona)
+        if not outcome.success:
+            await delete(persona)
+            await bus.broadcast(
+                "Persona creation failed", {"reason": "diary", "persona": persona}
+            )
+            return Outcome(success=False, message=outcome.message)
 
         outcome = await start(persona)
         if not outcome.success:
@@ -116,77 +155,133 @@ async def create(
         )
 
     except UnsupportedOS as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona creation failed", {"reason": "unsupported_os", "error": str(e)})
         return Outcome(success=False, message="Your operating system is not supported.")
 
     except EngineConnectionError as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona creation failed", {"reason": "connection", "error": str(e)})
         return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
 
     except SecretStorageError as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona creation failed", {"reason": "secret_storage", "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")
 
     except IdentityError as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona creation failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not set up persona identity files.")
 
     except PersonError as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona creation failed", {"reason": "person", "error": str(e)})
         return Outcome(success=False, message="Could not set up person files.")
 
+    except ContextError as e:
+        await delete(persona)
+
+        await bus.broadcast("Persona creation failed", {"reason": "context", "error": str(e)})
+        return Outcome(success=False, message="Could not set up initial context for the persona.")
+
     except SkillError as e:
+        await delete(persona)
+
         await bus.broadcast("Persona creation failed", {"reason": "skills", "error": str(e)})
         return Outcome(success=False, message="Could not assess default skills. The model may have returned an unexpected response — try again.")
 
     except DiaryError as e:
+        await delete(persona)
+
         await bus.broadcast("Persona creation failed", {"reason": "diary", "error": str(e)})
         return Outcome(success=False, message="Could not save the persona diary.")
 
+
+async def study(persona: Persona, content: str) -> Outcome[dict]:
+    """It lets your persona study any content you want so it can learn what matters to you."""
+    await bus.propose("Studying content", {"persona": persona})
+
+    prompt = prompts.observation_extraction(content=content)
+    response = await local_model.request_json(persona.model.name, prompt)
+
+    await person.add_facts(persona, response.get("facts", []))
+    await person.add_traits(persona, response.get("traits", []))
+    await context.add(persona, response.get("context", []))
+
+    await bus.broadcast("Content studied", {"persona": persona})
+
+    return Outcome(
+        success=True,
+        message="Content studied successfully",
+        data={
+            "persona_id": persona.id,
+            "facts": response.get("facts"),
+            "traits": response.get("traits"),
+            "context": response.get("context"),
+        },
+    )
 
 async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
     """It enables you to migrate your persona so nothing is ever lost."""
     await bus.propose("Migrating persona", {"diary_path": diary_path, "model": model})
 
+    persona = None
+
     try:
-        materials = await diary.open(diary_path, phrase)
+        temp_path = Path(diary_path)
+        persona_id = temp_path.stem
+        archive = await paths.decrypt(temp_path, await system.persona_key(phrase, persona_id))
+        staging = await paths.unzip(persona_id, archive)
 
         outcome = await environment.prepare(model)
         if not outcome.success:
             await bus.broadcast("Persona migration failed", {"reason": "environment"})
             return Outcome(success=False, message=outcome.message)
 
-        persona = await agent.distill(materials)
+        await paths.copy_recursively(staging, await paths.home(persona_id))
+        await paths.delete_recursively(staging)
 
-        model_obj = Model(name=model)
-        persona_model = models.generate_name(model, persona.id)
-        await agent.embody(persona, model_obj, persona_model)
-        await local_inference_engine.copy(model, persona_model)
+        outcome = await find(persona_id)
+        if not outcome.success:
+            await bus.broadcast("Persona migration failed", {"reason": "identity"})
+            return Outcome(success=False, message=outcome.message)
 
-        try:
-            await agent.save_persona(persona)
+        persona = outcome.data["persona"]
+        persona.base_model = Model(name=model)
+        persona.model = models.generate(model, persona.id)
 
-            dna_structure = dna.read(persona)
-            observed = await local_model.study(persona.model.name, dna_structure)
-            await observations.effect(persona, observed)
+        await local_inference_engine.copy(persona.base_model.name, persona.model.name)
 
-            await system.save_phrases(persona, phrase)
+        await paths.save_as_json(persona.id, await paths.persona_identity(persona.id), persona)
 
-            await diary.open_for(persona)
+        dna_structure = await paths.read(await paths.dna(persona.id))
 
-            outcome = await write_diary(persona)
-            if not outcome.success:
-                await bus.broadcast(
-                    "Persona migration failed", {"reason": "diary", "persona": persona}
-                )
-                await agent.remove(persona)
-                await local_inference_engine.delete(persona_model)
-                return Outcome(success=False, message=outcome.message)
+        outcome = await study(persona, dna_structure)
+        if not outcome.success:
+            await delete(persona)
+            await bus.broadcast("Persona migration failed", {"reason": "study", "persona": persona})
+            return outcome
 
-        except Exception:
-            await agent.remove(persona)
-            await local_inference_engine.delete(persona_model)
-            raise
+        await system.save_phrases(persona, phrase)
+
+        outcome = await write_diary(persona)
+        if not outcome.success:
+            await delete(persona)
+            await bus.broadcast(
+                "Persona migration failed", {"reason": "diary", "persona": persona}
+            )
+            return Outcome(success=False, message=outcome.message)
 
         outcome = await start(persona)
         if not outcome.success:
@@ -205,30 +300,49 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
         )
 
     except DiaryError as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona migration failed", {"reason": "diary", "error": str(e)})
         return Outcome(success=False, message="Could not restore from diary. Please check the file path and recovery phrase.")
 
     except IdentityError as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona migration failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not restore persona. The diary data may be corrupted.")
 
     except PersonError as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona migration failed", {"reason": "person", "error": str(e)})
         return Outcome(success=False, message="Could not save person observations during migration.")
 
     except DNAError as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona migration failed", {"reason": "dna", "error": str(e)})
         return Outcome(success=False, message="Could not read persona DNA. The diary may be from an older version.")
 
     except EngineConnectionError as e:
+        if Persona is not None:
+            await delete(persona)
+
         await bus.broadcast("Persona migration failed", {"reason": "connection", "error": str(e)})
         return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
 
     except UnsupportedOS as e:
+        if Persona is not None:
+            await delete(persona)
         await bus.broadcast("Persona migration failed", {"reason": "unsupported_os", "error": str(e)})
         return Outcome(success=False, message="Your operating system is not supported.")
 
     except SecretStorageError as e:
+        if Persona is not None:
+            await delete(persona)
         await bus.broadcast("Persona migration failed", {"reason": "secret_storage", "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")
 
@@ -238,11 +352,18 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     await bus.propose("Feeding persona", {"persona": persona, "source": source})
 
     try:
-        conversations = await external_llms.read(data, source)
+        response = await local_model.request_json(persona.model.name, prompts.extraction(
+                conversations=await frontier.read(data, source),
+                person_identity=await paths.read(await paths.person_identity(persona.id)),
+                person_traits=await paths.read(await paths.person_traits(persona.id)),
+                persona_context=await paths.read(await paths.context(persona.id)),
+                person_struggles=await paths.read(await paths.struggles(persona.id)),
+            ))
 
-        knowledge = await agent.knowledge(persona)
-        observation = await local_model.observe(persona.model.name, conversations, **knowledge)
-        await observations.effect(persona, observation)
+        await person.add_facts(persona, response.get("facts", []))
+        await person.add_traits(persona, response.get("traits", []))
+        await person.add_struggles(persona, response.get("struggles", []))
+        await context.add(persona, response.get("context", []))
 
         await bus.broadcast("Persona fed", {
             "persona": persona,
@@ -255,7 +376,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
             data={"persona_id": persona.id},
         )
 
-    except ExternalDataError as e:
+    except FrontierError as e:
         await bus.broadcast("Persona feeding failed", {"reason": "external_data", "error": str(e)})
         return Outcome(success=False, message="Could not parse the external data. Please check the file format.")
 
@@ -281,10 +402,16 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
         return Outcome(success=False, message="Skill must be a markdown (.md) file.")
 
     try:
-        skill_file = await skills.shelve(persona, skill_path)
+        skill_source = Path(skill_path)
+        skill_file = await paths.add_to_skills(persona.id, skill_source)
 
-        observed = await skills.summarize(persona, skill_file)
-        await observations.effect(persona, observed)
+        response = await local_model.request_json(
+            persona.model.name,
+            prompts.skill_assessment(skill_source.name, await paths.read(skill_file))
+        )
+
+        await person.add_traits(persona, response.get('traits', []))
+        await context.add(persona, response.get('context', []))
 
         await bus.broadcast("Persona equipped", {
             "persona": persona,
@@ -315,13 +442,13 @@ async def oversee(persona: Persona) -> Outcome[dict]:
     await bus.propose("Overseeing persona", {"persona": persona})
 
     try:
-        facts = await person.identified_by(persona)
-        traits = await person.traits_toward(persona)
-        agent_data = await agent.identity(persona)
-        skill_list = await skills.names(persona)
-        histories = await history.entries(persona)
-        destinies = await destiny.entries(persona)
-        struggle_list = await struggles.as_list(persona)
+        facts = await paths.lines(await paths.person_identity(persona.id))
+        traits = await paths.lines(await paths.person_traits(persona.id))
+        persona_context = await paths.lines(await paths.context(persona.id))
+        skill_list = await paths.md_files(await paths.skills(persona.id)) 
+        histories = await paths.md_files(await paths.history(persona.id))
+        destinies = await paths.md_files(await paths.destiny(persona.id))
+        struggle_list = await paths.lines(await paths.struggles(persona.id))
 
         await bus.broadcast("Persona overseen", {"persona": persona})
 
@@ -331,11 +458,10 @@ async def oversee(persona: Persona) -> Outcome[dict]:
             data={
                 "person": system.make_rows_traceable(facts, "pi"),
                 "traits": system.make_rows_traceable(traits, "pt"),
-                "agent": system.make_rows_traceable(agent_data["identity"], "pai")
-                    + system.make_rows_traceable(agent_data["context"], "pc"),
-                "skills": system.make_rows_traceable(skill_list, "sk"),
-                "history": system.make_rows_traceable(histories, "hist"),
-                "destiny": system.make_rows_traceable(destinies, "dest"),
+                "context": system.make_rows_traceable(persona_context, "pc"),
+                "skills": system.make_rows_traceable([skill_path.name for skill_path in skill_list], "sk"),
+                "history": system.make_rows_traceable([history_path.name for history_path in histories], "hist"),
+                "destiny": system.make_rows_traceable([destiny_path.name for destiny_path in destinies], "dest"),
                 "struggles": system.make_rows_traceable(struggle_list, "ps"),
             },
         )
@@ -358,21 +484,19 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
             prefix, hash_part = entry_id.split("-", 1)
 
             if prefix == "pi":
-                await person.delete_identity(persona, hash_part)
+                await paths.delete_entry(await paths.person_identity(persona.id), hash_part)
             elif prefix == "pt":
-                await person.delete_trait(persona, hash_part)
-            elif prefix == "pai":
-                await agent.delete_identity(persona, hash_part)
+                await paths.delete_entry(await paths.person_traits(persona.id), hash_part)
             elif prefix == "pc":
-                await agent.delete_context(persona, hash_part)
+                await paths.delete_entry(await paths.context(persona.id), hash_part)
             elif prefix == "sk":
-                await skills.delete(persona, hash_part)
+                await paths.find_and_delete_file(await paths.skills(persona.id), hash_part)
             elif prefix == "hist":
-                await history.delete(persona, hash_part)
+                await paths.find_and_delete_file(await paths.history(persona.id), hash_part)
             elif prefix == "dest":
-                await destiny.delete(persona, hash_part)
+                await paths.find_and_delete_file(await paths.destiny(persona.id), hash_part)
             elif prefix == "ps":
-                await struggles.delete(persona, hash_part)
+                await paths.delete_entry(await paths.struggles(persona.id), hash_part)
 
         await bus.broadcast("Persona controlled", {"persona": persona, "removed": len(entry_ids)})
 
@@ -401,7 +525,12 @@ async def write_diary(persona: Persona) -> Outcome[dict]:
 
     try:
         phrase = await system.get_phrases(persona)
-        await diary.record(persona.storage_dir, phrase)
+        archive = await paths.zip_home(persona.id)
+        encrypted_archive = await paths.encrypt(archive, await system.persona_key(phrase, persona.id))
+        diary_path = await paths.diary(persona.id)
+        diary_filename = f"{persona.id}.diary"
+        await paths.save_as_binary(diary_path / diary_filename, encrypted_archive)
+        await paths.commit_diary(persona.id, diary_path)
 
         await bus.broadcast("Diary saved", {"persona": persona})
 
@@ -418,81 +547,6 @@ async def write_diary(persona: Persona) -> Outcome[dict]:
     except DiaryError as e:
         await bus.broadcast("Diary failed", {"reason": "diary", "persona": persona, "error": str(e)})
         return Outcome(success=False, message="Could not save the persona diary.")
-
-
-async def sleep(persona: Persona) -> Outcome[dict]:
-    """It lets your persona rest, reflect, and grow stronger from everything it experienced."""
-    await bus.propose("Sleeping", {"persona": persona})
-
-    try:
-        await history.summarize_conversation(persona, memories.agent(persona).current_thread())
-        memories.agent(persona).forget_everything()
-
-        latest_knowledge = await agent.knowledge(persona)
-        synthesis = prompts.dna_synthesis(
-            previous_dna=dna.read(persona),
-            person_traits=latest_knowledge.get("person_traits", ""),
-            persona_context=latest_knowledge.get("persona_context", ""),
-        )
-        if persona.frontier:
-            new_dna = await frontier.respond(persona.frontier, synthesis)
-        else:
-            new_dna = await local_model.respond(persona.model.name, [{"role": "user", "content": synthesis}])
-        await dna.evolve(persona, new_dna)
-
-        prompt = await agent.sleep(persona)
-
-        if persona.frontier:
-            training_set = await frontier.respond(persona.frontier, prompt)
-        else:
-            training_set = await local_model.respond(persona.model.name, [{"role": "user", "content": prompt}])
-
-        await agent.save_training_set(persona, training_set)
-
-        old_model = persona.model.name
-        new_model = models.generate_name(persona.base_model, persona.id)
-        await local_inference_engine.fine_tune(persona.base_model, training_set, new_model)
-
-        if not await local_inference_engine.check(new_model):
-            await bus.broadcast("Sleep failed", {"reason": "fine_tune", "persona": persona})
-            return Outcome(success=False, message="Fine-tuned model failed verification. Previous model is still available.")
-
-        await local_inference_engine.delete(old_model)
-
-        await agent.wake_up(persona, new_model)
-
-        outcome = await write_diary(persona)
-        if not outcome.success:
-            await bus.broadcast("Sleep failed", {"reason": "diary", "persona": persona})
-            return outcome
-
-        await bus.broadcast("Slept", {
-            "persona": persona,
-            "model": new_model,
-            "channels": [ch for ch in (persona.channels or [])],
-        })
-
-        return Outcome(
-            success=True,
-            message="Persona slept and grew stronger",
-            data={"persona_id": persona.id, "model": new_model},
-        )
-
-    except IdentityError as e:
-        await bus.broadcast("Sleep failed", {"reason": "identity", "error": str(e)})
-        return Outcome(success=False, message="Could not process persona files during sleep.")
-
-    except PersonError as e:
-        await bus.broadcast("Sleep failed", {"reason": "person", "error": str(e)})
-        return Outcome(success=False, message="Could not save person observations during sleep.")
-
-    except EngineConnectionError as e:
-        await bus.broadcast("Sleep failed", {"reason": "connection", "error": str(e)})
-        return Outcome(success=False, message="Could not connect to the inference engine. Please make sure it is running.")
-
-    except FrontierError as e:
-        await bus.broadcast("Sleep failed", {"reason": "frontier", "error": str(e)})
-        return Outcome(success=False, message="Could not reach the frontier model. Please check your credentials and connection.")
 
 
 async def connect(persona: Persona, channel: Channel) -> Outcome:
@@ -558,9 +612,37 @@ async def hear(persona: Persona, message: Message) -> Outcome:
         "role": "user",
         "content": prompts.user_prompt(message),
     })
-    brain.reason(persona, thread, message.channel)
+    mind.think(persona, thread, message.channel)
+    await mind.summarize(persona, thread, message.channel, [thread])
     await bus.broadcast("Message heard", {"persona": persona})
     return Outcome(success=True, message="Message received", data={"thread_id": thread.id})
+
+
+async def sleep(persona: Persona) -> Outcome[dict]:
+    """Let the persona rest, reflect on its conversations, and grow from everything it experienced."""
+    await bus.propose("Sleeping", {"persona": persona})
+    try:
+        m = memories.agent(persona)
+        reflective_channel = Channel(type="sleep", name="sleep", authority="reflective")
+        sleep_thread = m.private_thread()
+
+        await mind.summarize(persona, sleep_thread, reflective_channel, m.threads())
+        m.forget_everything()
+
+        await mind.grow(persona, reflective_channel)
+        outcome = await write_diary(persona)
+        if not outcome.success:
+            logger.warning("Sleep diary save failed", {"persona": persona, "error": outcome.message})
+
+        await bus.broadcast("Wake up", {"persona": persona})
+        return Outcome(success=True, message="Sleep complete.")
+
+    except DNAError as e:
+        await bus.broadcast("Sleep failed", {"reason": "fine_tune", "persona": persona, "error": str(e)})
+        return Outcome(success=False, message=str(e))
+    except Exception as e:
+        await bus.broadcast("Sleep failed", {"reason": "unknown", "persona": persona, "error": str(e)})
+        return Outcome(success=False, message="Sleep failed unexpectedly.")
 
 
 async def start(persona: Persona) -> Outcome[dict]:

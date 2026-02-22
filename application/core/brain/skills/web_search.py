@@ -1,4 +1,12 @@
-# Web Search
+"""Web Search — how to search the web using DuckDuckGo."""
+
+name = "web-search"
+summary = "Knows how to search the web using DuckDuckGo's API without requiring an API key."
+
+
+def skill(persona) -> str:
+    workspace = str(persona.storage_dir / "workspace")
+    return f"""# Web Search
 
 Search using DuckDuckGo's instant answer API — no key required:
 
@@ -30,4 +38,4 @@ jq '.RelatedTopics[].Text' {workspace}/search.json
 
 - URL-encode spaces as `+` in the query string
 - Add `site:example.com` to restrict to a domain
-- Summarise findings with `say` rather than dumping raw results to the person
+- Summarise findings with `say` rather than dumping raw results to the person"""

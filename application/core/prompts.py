@@ -56,13 +56,13 @@ Return ONLY valid JSON:
 }}"""
 
 
-EXTRACTION_FROM_DNA = """# Observation Extraction
+OBSERVATION_EXTRACTION = """# Observation Extraction
 
 Analyze the following document and extract all meaningful observations about the person it describes.
 
 ## Document
 
-{dna}
+{content}
 
 ## Categories
 
@@ -184,9 +184,13 @@ You are synthesizing a compressed profile document that captures everything know
 
 {persona_context}
 
+## Past Conversations
+
+{history_briefing}
+
 ## Task
 
-Synthesize a new profile that merges the previous profile with the new traits and context.
+Synthesize a new profile that merges the previous profile with the new traits, context, and notable conversation history.
 
 Rules:
 - **Bold** patterns that appear repeatedly — these are core identity.
@@ -235,19 +239,20 @@ def extraction(
     )
 
 
-def extraction_from_dna(dna: str) -> str:
-    return EXTRACTION_FROM_DNA.format(dna=dna)
+def observation_extraction(content: str) -> str:
+    return OBSERVATION_EXTRACTION.format(content=content)
 
 
-def sleep(dna: str, max_pairs: int = 500) -> str:
+def grow(dna: str, max_pairs: int = 500) -> str:
     return SLEEP.format(dna=dna, max_pairs=max_pairs)
 
 
-def dna_synthesis(previous_dna: str, person_traits: str, persona_context: str) -> str:
+def dna_synthesis(previous_dna: str, person_traits: str, persona_context: str, history_briefing: str = "") -> str:
     return DNA_SYNTHESIS.format(
         previous_dna=previous_dna or "(empty — first synthesis)",
         person_traits=person_traits or "(none)",
         persona_context=persona_context or "(none)",
+        history_briefing=history_briefing or "(none yet)",
     )
 
 

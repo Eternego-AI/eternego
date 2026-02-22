@@ -63,8 +63,8 @@ async def send(channel: Channel, text: str) -> None:
     if channel.type == "telegram":
         token = (channel.credentials or {})["token"]
         await asyncio.to_thread(telegram.send, token=token, chat_id=channel.name, message=text)
-    elif channel.type == "web" and channel.bus is not None:
-        await channel.bus.put(text)
+    else:
+        await channel.bus.put(f"{channel.bus}{text}")
 
 
 # ── Verified channel list (disk-backed) ───────────────────────────────────────
