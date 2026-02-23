@@ -5,7 +5,8 @@ summary = "Knows how to write, list, read, and search the person's notes using t
 
 
 def skill(persona) -> str:
-    notes_dir = str(persona.storage_dir / "notes")
+    from application.core import paths
+    notes_dir = str(paths.home(persona.id) / "notes")
     return f"""# Notes
 
 Take and retrieve structured notes for the person using the filesystem.

@@ -22,7 +22,7 @@ def _rotate_thread(persona_id: str) -> Thread:
 
 def agent(persona: Persona) -> "AgentMemory":
     """Return the memory handle for this persona."""
-    persistent_memory.load(persona.id, paths.memory(persona.id))
+    persistent_memory.load(persona.id, paths.home(persona.id) / "memory.json")
     return AgentMemory(persona)
 
 
@@ -69,7 +69,7 @@ class AgentMemory:
 
     def hash(self) -> str:
         """Return a hash of the current memory state."""
-        return persistent_memory.load(self._persona.id, paths.memory(self._persona.id))
+        return persistent_memory.load(self._persona.id, paths.home(self._persona.id) / "memory.json")
 
     def verify(self, current_hash: str) -> bool:
         """Return True if memory is unchanged since the given hash was taken."""

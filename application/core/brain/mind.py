@@ -1,5 +1,7 @@
 """Mind — the persona's cognitive processing core."""
 
+import json
+
 from application.platform import logger, strings, processes, reflections
 from application.platform.observer import Command
 from application.core import bus, local_model
@@ -112,7 +114,7 @@ async def reason(persona: Persona, thread: Thread, channel: Channel, messages: l
         if not response or not isinstance(response, dict):
             response = {"say": [response]} if response else {}
 
-        messages.append({"role": "assistant", "content": response})
+        messages.append({"role": "assistant", "content": json.dumps(response)})
         loop += 1
 
         if not response:

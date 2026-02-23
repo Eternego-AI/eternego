@@ -63,5 +63,5 @@ async def send(channel: Channel, text: str) -> None:
         token = (channel.credentials or {})["token"]
         await asyncio.to_thread(telegram.send, token=token, chat_id=channel.name, message=text)
     else:
-        await channel.bus.put(f"{channel.bus}{text}")
+        await channel.bus.put(text)
 

@@ -5,7 +5,8 @@ summary = "Knows how to run shell commands, manage files, and work within the wo
 
 
 def skill(persona) -> str:
-    workspace = str(persona.storage_dir / "workspace")
+    from application.core import paths
+    workspace = str(paths.home(persona.id) / "workspace")
     return f"""# Shell
 
 Use `act` to run shell commands:

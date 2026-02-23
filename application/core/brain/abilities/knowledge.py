@@ -13,8 +13,8 @@ order=7)
 async def load_trait(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
     """Look up person facts and traits and return them as context."""
     logger.info("Ability: load_trait", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
-    parts = ["Facts:\n" + "\n".join(await paths.read(await paths.person_identity(persona.id))),
-             "Traits:\n" + "\n".join(await paths.read(await paths.person_traits(persona.id)))]
+    parts = ["Facts:\n" + await paths.read(await paths.person_identity(persona.id)),
+             "Traits:\n" + await paths.read(await paths.person_traits(persona.id))]
     if not parts:
         return Prompt(role="user", content="No person data known yet.")
     return Prompt(role="user", content="\n\n".join(parts))
@@ -35,7 +35,7 @@ async def load_skill(persona: Persona, thread: Thread, channel: Channel, items: 
         if brain:
             parts.append(f"## {skill_name}\n\n{brain.skill(persona)}")
             continue
-        path = persona.storage_dir / "skills" / f"{skill_name}.md"
+        path = paths.home(persona.id) / "skills" / f"{skill_name}.md"
         if path.exists():
             parts.append(f"## {skill_name}\n\n{filesystem.read(path)}")
     if not parts:

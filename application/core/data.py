@@ -4,9 +4,7 @@ import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
-from pathlib import Path
 
-from application.core import paths
 from application.platform.objects import Data, hidden, sensitive
 
 
@@ -37,10 +35,6 @@ class Persona(Data):
     birthday: str = field(default_factory=lambda: str(date.today()))
     frontier: Model | None = None
     channels: list[Channel] | None = None
-
-    @property
-    def storage_dir(self) -> Path:
-        return paths.personas_home() / self.id
 
 
 @dataclass(kw_only=True)

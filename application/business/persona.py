@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from application.core import bus, channels, gateways, frontier, system, \
-    local_model, local_inference_engine, models, prompts, paths, context
+    local_model, local_inference_engine, models, prompts, paths
 from application.core.brain import mind, memories, skills
 from application.core.data import Channel, Message, Model, Persona
 from application.core.exceptions import (
@@ -31,8 +31,9 @@ async def agents() -> Outcome[dict]:
         personas = []
         for persona_id in persona_ids:
             try:
-                persona = find(persona_id)
-                personas.append(persona)
+                outcome = await find(persona_id)
+                if outcome.success:
+                    personas.append(outcome.data["persona"])
             except (IdentityError, OSError):
                 continue
 
@@ -75,7 +76,7 @@ async def delete(persona: Persona) -> Outcome[dict]:
     """Delete a persona and all its data."""
     await bus.propose("Deleting persona", {"persona": persona})
     try:
-        await paths.delete_recursively(await paths.home(persona.id))
+        await paths.delete_recursively(paths.home(persona.id))
         if await local_inference_engine.check(persona.model.name):
             await local_inference_engine.delete(persona.model.name)
         await bus.broadcast("Persona deleted", {"persona": persona})
@@ -172,35 +173,35 @@ async def create(
         )
 
     except UnsupportedOS as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona creation failed", {"reason": "unsupported_os", "error": str(e)})
         return Outcome(success=False, message="Your operating system is not supported.")
 
     except EngineConnectionError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona creation failed", {"reason": "connection", "error": str(e)})
         return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
 
     except SecretStorageError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona creation failed", {"reason": "secret_storage", "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")
 
     except IdentityError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona creation failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not set up persona identity files.")
 
     except PersonError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona creation failed", {"reason": "person", "error": str(e)})
@@ -266,7 +267,7 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
             await bus.broadcast("Persona migration failed", {"reason": "environment"})
             return Outcome(success=False, message=outcome.message)
 
-        await paths.copy_recursively(staging, await paths.home(persona_id))
+        await paths.copy_recursively(staging, paths.home(persona_id))
         await paths.delete_recursively(staging)
 
         outcome = await find(persona_id)
@@ -317,48 +318,48 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
         )
 
     except DiaryError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona migration failed", {"reason": "diary", "error": str(e)})
         return Outcome(success=False, message="Could not restore from diary. Please check the file path and recovery phrase.")
 
     except IdentityError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona migration failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not restore persona. The diary data may be corrupted.")
 
     except PersonError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona migration failed", {"reason": "person", "error": str(e)})
         return Outcome(success=False, message="Could not save person observations during migration.")
 
     except DNAError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona migration failed", {"reason": "dna", "error": str(e)})
         return Outcome(success=False, message="Could not read persona DNA. The diary may be from an older version.")
 
     except EngineConnectionError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
 
         await bus.broadcast("Persona migration failed", {"reason": "connection", "error": str(e)})
         return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
 
     except UnsupportedOS as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
         await bus.broadcast("Persona migration failed", {"reason": "unsupported_os", "error": str(e)})
         return Outcome(success=False, message="Your operating system is not supported.")
 
     except SecretStorageError as e:
-        if Persona is not None:
+        if persona is not None:
             await delete(persona)
         await bus.broadcast("Persona migration failed", {"reason": "secret_storage", "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")

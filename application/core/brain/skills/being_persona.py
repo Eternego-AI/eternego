@@ -5,7 +5,8 @@ summary = "Defines how the persona thinks, communicates, and acts — its values
 
 
 def skill(persona) -> str:
-    workspace = str(persona.storage_dir / "workspace")
+    from application.core import paths
+    workspace = str(paths.home(persona.id) / "workspace")
     return f"""# Being a Persona
 
 ## Workspace

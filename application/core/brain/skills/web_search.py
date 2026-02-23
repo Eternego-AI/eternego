@@ -5,7 +5,8 @@ summary = "Knows how to search the web using DuckDuckGo's API without requiring 
 
 
 def skill(persona) -> str:
-    workspace = str(persona.storage_dir / "workspace")
+    from application.core import paths
+    workspace = str(paths.home(persona.id) / "workspace")
     return f"""# Web Search
 
 Search using DuckDuckGo's instant answer API — no key required:

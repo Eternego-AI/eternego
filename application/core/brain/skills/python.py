@@ -5,7 +5,8 @@ summary = "Knows how to write Python scripts to the workspace and execute them f
 
 
 def skill(persona) -> str:
-    workspace = str(persona.storage_dir / "workspace")
+    from application.core import paths
+    workspace = str(paths.home(persona.id) / "workspace")
     return f"""# Python
 
 Write a script to workspace then run it — two `act` calls:

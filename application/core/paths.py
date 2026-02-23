@@ -17,99 +17,98 @@ async def personas_home() -> Path:
     return Path.home() / ".eternego" / "personas"
 
 
-async def home(persona_id: str) -> Path:
+def home(persona_id: str) -> Path:
     """Root directory for a specific persona."""
-    logger.info("Accessing persona's home directory", {"persona_id": persona_id})
-    return await personas_home() / persona_id
+    return Path.home() / ".eternego" / "personas" / persona_id
 
 
 async def persona_identity(persona_id: str) -> Path:
     """Path to the config.json file for that persona."""
     logger.info("Accessing persona identity file", {"persona_id": persona_id})
-    return await home(persona_id) / "config.json"
+    return home(persona_id) / "config.json"
 
 
 async def person_identity(persona_id: str) -> Path:
     """Path to the person.md file for that persona."""
     logger.info("Accessing person identity file", {"persona_id": persona_id})
-    return await home(persona_id) / "person.md"
+    return home(persona_id) / "person.md"
 
 
 async def person_traits(persona_id: str) -> Path:
     """Path to the traits.md file for that persona."""
     logger.info("Accessing person traits file", {"persona_id": persona_id})
-    return await home(persona_id) / "traits.md"
+    return home(persona_id) / "traits.md"
 
 
 async def context(persona_id: str) -> Path:
     """Path to the persona-context.md file for that persona."""
     logger.info("Accessing persona context file", {"persona_id": persona_id})
-    return await home(persona_id) / "context.md"
+    return home(persona_id) / "context.md"
 
 
 async def struggles(persona_id: str) -> Path:
     """Path to the struggles.md file for that persona."""
     logger.info("Accessing person's struggles file", {"persona_id": persona_id})
-    return await home(persona_id) / "struggles.md"
+    return home(persona_id) / "struggles.md"
 
 
 async def memory(persona_id: str) -> Path:
     """Path to the memory.json file for that persona."""
     logger.info("Accessing persona memory file", {"persona_id": persona_id})
-    return await home(persona_id) / "memory.json"
+    return home(persona_id) / "memory.json"
 
 
 async def channels(persona_id: str) -> Path:
     """Path to the channels.md file for that persona."""
     logger.info("Accessing persona channels file", {"persona_id": persona_id})
-    return await home(persona_id) / "channels.md"
+    return home(persona_id) / "channels.md"
 
 
 async def skills(persona_id: str) -> Path:
     """Path to the skills directory for that persona."""
     logger.info("Accessing persona skills directory", {"persona_id": persona_id})
-    return await home(persona_id) / "skills"
+    return home(persona_id) / "skills"
 
 
 async def destiny(persona_id: str) -> Path:
     """Path to the destiny directory for that persona."""
     logger.info("Accessing persona destiny directory", {"persona_id": persona_id})
-    return await home(persona_id) / "destiny"
+    return home(persona_id) / "destiny"
 
 
 async def history(persona_id: str) -> Path:
     """Path to the history directory for that persona."""
     logger.info("Accessing persona history directory", {"persona_id": persona_id})
-    return await home(persona_id) / "history"
+    return home(persona_id) / "history"
 
 
 async def history_briefing(persona_id: str) -> Path:
     """Path to the history briefing index for that persona."""
     logger.info("Accessing persona history briefing file", {"persona_id": persona_id})
-    return await home(persona_id) / "history" / "briefing.md"
+    return home(persona_id) / "history" / "briefing.md"
 
 
 async def permissions(persona_id: str) -> Path:
     """Path to the permissions.md file for that persona."""
     logger.info("Accessing persona permissions file", {"persona_id": persona_id})
-    return await home(persona_id) / "permissions.md"
+    return home(persona_id) / "permissions.md"
 
 
 async def training_set(persona_id: str) -> Path:
     """Path to the training directory for that persona."""
     logger.info("Accessing persona training directory", {"persona_id": persona_id})
-    return await home(persona_id) / "training"
+    return home(persona_id) / "training"
 
 
 async def dna(persona_id: str) -> Path:
     """Path to the dna.md file for that persona."""
     logger.info("Accessing persona DNA file", {"persona_id": persona_id})
-    return await home(persona_id) / "dna.md"
+    return home(persona_id) / "dna.md"
 
 async def routines(persona_id: str) -> Path:
     """Path to the routines.json file for that persona."""
     logger.info("Accessing persona routines file", {"persona_id": persona_id})
-    return await home(persona_id) / "routines.json"
+    return home(persona_id) / "routines.json"
 
 
 async def add_routine(persona_id: str, spec: str, time: str, recurrence: str) -> None:
@@ -136,7 +135,7 @@ async def create_home(persona_id: str) -> None:
 async def create_directories(persona_id: str, directories: list[str]) -> None:
     """Create the directory structure for a persona."""
     logger.info("Creating directories for persona", {"persona_id": persona_id})
-    base = await home(persona_id)
+    base = home(persona_id)
     for subdir in directories:
         (base / subdir).mkdir(parents=True, exist_ok=True)
 
@@ -144,7 +143,7 @@ async def create_directories(persona_id: str, directories: list[str]) -> None:
 async def save_as_json(persona_id: str, filename: Path, content) -> None:
     """Save a json content in file to the persona's home directory."""
     logger.info("Saving file for persona", {"persona_id": persona_id, "filename": filename.name})
-    path = await home(persona_id) / filename
+    path = home(persona_id) / filename
     filesystem.write_json(path, objects.json(content))
     
 
@@ -238,24 +237,24 @@ async def append_context(persona_id: str, content: str) -> None:
 
 
 async def add_person_identity(persona_id: str, content: str) -> None:
-    """Write text content to the persona's person-identity.md file."""
+    """Append text content to the persona's person-identity.md file."""
     logger.info("Adding person identity", {"persona_id": persona_id})
     path = await person_identity(persona_id)
-    filesystem.write(path, content)
+    filesystem.append(path, content)
 
 
 async def add_person_traits(persona_id: str, content: str) -> None:
-    """Write text content to the persona's person-traits.md file."""
+    """Append text content to the persona's person-traits.md file."""
     logger.info("Adding person traits", {"persona_id": persona_id})
     path = await person_traits(persona_id)
-    filesystem.write(path, content)
+    filesystem.append(path, content)
 
 
 async def add_struggles(persona_id: str, content: str) -> None:
-    """Write text content to the persona's person-struggles.md file."""
+    """Append text content to the persona's person-struggles.md file."""
     logger.info("Adding struggles", {"persona_id": persona_id})
     path = await struggles(persona_id)
-    filesystem.write(path, content)
+    filesystem.append(path, content)
 
 
 def md_list(path: Path, section: str) -> list[str]:
@@ -333,7 +332,7 @@ async def add_history_briefing(persona_id: str, header: str, row: str) -> None:
     if not briefing_path.exists():
         await save_as_string(briefing_path, header + "\n|-------|---------|------|\n")
 
-    await save_as_string(briefing_path, row + "\n")
+    await append_as_string(briefing_path, row + "\n")
 
 
 async def md_files(directory: Path) -> list[Path]:
@@ -349,7 +348,7 @@ async def md_files(directory: Path) -> list[Path]:
 async def zip_home(persona_id: str) -> bytes:
     """Zip the entire persona's home directory and return the archive as bytes."""
     logger.info("Zipping persona's home directory", {"persona_id": persona_id})
-    path = await home(persona_id)
+    path = home(persona_id)
     if not path.exists():
         logger.error("Persona home directory not found", {"persona_id": persona_id})
         raise FileNotFoundError(f"Persona home directory not found for persona_id: {persona_id}")
