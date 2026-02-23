@@ -1,7 +1,7 @@
 """Knowledge abilities — loading and recording what is known about the person and persona."""
 
 from application.platform import logger, processes
-from application.core import paths
+from application.core import paths, prompts
 from application.core.data import Channel, Persona, Prompt, Thread
 from application.core.brain.abilities._base import ability
 
@@ -52,8 +52,7 @@ async def learn_identity(persona: Persona, thread: Thread, channel: Channel, ite
     logger.info("Ability: learn_identity", {"persona": persona.id, "thread": thread.id, "channel": channel.name})
 
     async def _run():
-        from application.core import person
-        await person.add_facts(persona, [str(item) for item in items])
+        await paths.add_person_identity(persona.id, "\n".join(str(item) for item in items) + "\n")
 
     processes.run_async(_run)
     return None
@@ -69,9 +68,20 @@ async def remember_trait(persona: Persona, thread: Thread, channel: Channel, ite
     observed = [str(item) for item in items]
 
     async def _run():
-        from application.core import person
-        await person.add_traits(persona, observed)
-        await person.refine_traits(persona, observed)
+        from application.core import local_model
+
+        person_trait = await paths.person_traits(persona.id)
+        current_person_traits = await paths.read(person_trait)
+
+        # instant append to ensure new traits are included in future reads while the refined version is being generated
+        await paths.append_as_string(person_trait, "\n".join(observed) + "\n")
+
+        new_person_trait = await local_model.generate(
+            persona.model.name,
+            prompts.trait_refinement(current_person_traits, observed)
+        )
+
+        await paths.save_as_string(person_trait, new_person_trait)
 
     processes.run_async(_run)
     return None
@@ -87,9 +97,20 @@ async def feel_struggle(persona: Persona, thread: Thread, channel: Channel, item
     observed = [str(item) for item in items]
 
     async def _run():
-        from application.core import struggles
-        await struggles.identify(persona, observed)
-        await struggles.refine(persona, observed)
+        from application.core import local_model
+
+        person_struggles = await paths.struggles(persona.id)
+        current_person_struggles = await paths.read(person_struggles)
+
+        # instant append to ensure new struggles are included in future reads while the refined version is being
+        await paths.append_as_string(person_struggles, "\n".join(observed) + "\n")
+
+        new_person_struggles = await local_model.generate(
+            persona.model.name,
+            prompts.struggle_refinement(current_person_struggles, observed),
+        )
+
+        await paths.save_as_string(person_struggles, new_person_struggles)
 
     processes.run_async(_run)
     return None
@@ -105,9 +126,20 @@ async def update_context(persona: Persona, thread: Thread, channel: Channel, ite
     notes = [str(item) for item in items]
 
     async def _run():
-        from application.core import agent
-        await paths.append_context(persona.id, "\n".join(notes) + "\n")
-        await agent.refine_context(persona, notes)
+        from application.core import local_model
+
+        persona_context = await paths.context(persona.id)
+        current_persona_context = await paths.read(persona_context)
+
+        # instant append to ensure new context is included in future reads while the refined version is being generated
+        await paths.append_as_string(persona_context, "\n".join(notes) + "\n")
+
+        new_persona_context = await local_model.generate(
+            persona.model.name,
+            prompts.context_refinement(current_persona_context, notes),
+        )
+
+        await paths.save_as_string(persona_context, new_persona_context)
 
     processes.run_async(_run)
     return None

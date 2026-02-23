@@ -1,7 +1,6 @@
 """Memories — persona-scoped short-term memory, persisted to disk."""
 
 import uuid
-from collections.abc import Callable
 
 from application.platform import persistent_memory
 from application.core import paths

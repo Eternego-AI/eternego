@@ -166,11 +166,18 @@ async def init_git(path: Path) -> None:
     git.init(path)
 
 
+async def append_as_string(path: Path, content: str) -> None:
+    """Append string content to a file."""
+    logger.info("Appending to file", {"path": str(path)})
+    filesystem.append(path, content)
+
+
 async def commit_diary(persona_id: str, diary_path: Path) -> None:
     """Commit the diary entry to git."""
     logger.info("Committing diary entry to git", {"persona_id": persona_id, "diary_path": str(diary_path)})
     git.add(diary_path, "*")
     git.commit(diary_path, "Persona diary entry date: " + str(datetimes.iso_8601(datetimes.now())))
+
 
 async def delete_recursively(path: Path) -> None:
     """Delete a file or directory and all its contents."""
@@ -214,6 +221,14 @@ async def read(path: Path) -> str:
         return ""
     return filesystem.read(path).strip()
 
+
+async def read_json(path: Path) -> dict | None:
+    """Read JSON content from a file."""
+    logger.info("Reading JSON file", {"path": str(path)})
+    if not path.exists():
+        logger.warning("File not found", {"path": str(path)})
+        return None
+    return filesystem.read_json(path)
 
 async def append_context(persona_id: str, content: str) -> None:
     """Append text content to the persona's context file."""

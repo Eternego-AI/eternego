@@ -1,9 +1,10 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
-from datetime import timedelta
+from datetime import timedelta, datetime
 
-from application.core import bus, channels, system, local_inference_engine
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, ChannelError
+from application.core import bus, channels, system, local_inference_engine, paths
+from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, ChannelError, \
+    SecretStorageError
 from application.business.outcome import Outcome
 from application.platform import datetimes
 
@@ -65,33 +66,57 @@ async def pair(code: str) -> Outcome[dict]:
     """Claim a pairing code and mark the channel as verified for the persona."""
     await bus.propose("Pairing channel", {"code": code})
 
-    codes = await system.get_pairing_codes()
-    entry = codes.get(code.upper())
-
-    if not entry:
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid"})
-        return Outcome(success=False, message="Pairing code is invalid or has expired.")
-
-    persona = entry["persona"]
-    channel = entry["channel"]
-    created_at = entry["created_at"]
-
-    if channels.is_verified(persona, channel):
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "already_verified"})
-        return Outcome(success=False, message="This channel is already verified.")
-
-    if datetimes.now() - created_at > timedelta(minutes=10):
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "expired"})
-        return Outcome(success=False, message="Pairing code has expired. Ask the persona to send a new message to get a fresh code.")
-
     try:
-        channel.verified_at = datetimes.iso_8601(datetimes.now())
-        channels.save(persona, channel)
-        await bus.broadcast("Channel paired", {"persona": persona, "channel": channel})
-        return Outcome(success=True, message="Channel verified successfully.", data={"persona": persona, "channel": channel})
-    except ChannelError:
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "save_failed"})
-        return Outcome(success=False, message="Failed to save the verified channel. Please try again.")
+        entry = await system.get_pairing_code_data(code)
+
+        if not entry:
+            await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid"})
+            return Outcome(success=False, message="Pairing code is invalid or has expired.")
+
+        created_at = datetime.fromisoformat(entry.get("created_at")) if entry and "created_at" in entry else None
+
+        if not created_at or datetimes.now() - created_at > timedelta(minutes=10):
+            await bus.broadcast("Pairing failed", {"code": code, "reason": "expired"})
+            return Outcome(success=False, message="Pairing code has expired. Ask the persona to send a new message to get a fresh code.")
+
+        import persona
+        outcome = await persona.find(entry["persona_id"])
+        if not outcome.success:
+            await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid persona"})
+            return Outcome(success=False, message="The persona associated with this pairing code could not be found.")
+
+        found_persona = outcome.data.get('persona')
+
+        channel = None
+        for ch in found_persona.channels:
+            if ch.name == entry["channel"]:
+                channel = ch
+                break
+
+        if not channel:
+            await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid_channel"})
+            return Outcome(success=False, message="The channel associated with this pairing code could not be found.")
+
+        if channel.verified_at:
+            await bus.broadcast("Pairing failed", {"code": code, "reason": "already verified"})
+            return Outcome(success=False, message="This channel is already verified.")
+
+        for persona_channel in found_persona.channels:
+            if persona_channel.name == channel.name:
+                persona_channel.verified_at = datetimes.iso_8601(datetimes.now())
+
+        await paths.save_as_json(found_persona.id, await paths.persona_identity(found_persona.id), found_persona)
+
+        await bus.broadcast("Channel paired", {"persona_id": found_persona.id, "channel": channel.name})
+        return Outcome(success=True, message="Channel paired successfully", data={"persona_id": found_persona.id, "channel": channel.name})
+
+    except SecretStorageError as e:
+        await bus.broadcast("Pairing failed", {
+            "code": code,
+            "reason": "secret_storage",
+            "error": str(e),
+        })
+        return Outcome(success=False, message="Failed to access secret storage. Please check your system configuration.")
 
 
 async def check_model(model: str) -> Outcome[dict]:

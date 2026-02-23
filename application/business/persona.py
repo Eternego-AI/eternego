@@ -1,7 +1,7 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 from pathlib import Path
 
-from application.core import bus, agent, channels, gateways, person, frontier, system, \
+from application.core import bus, channels, gateways, frontier, system, \
     local_model, local_inference_engine, models, prompts, paths, context
 from application.core.brain import mind, memories, skills
 from application.core.data import Channel, Message, Model, Persona
@@ -47,9 +47,25 @@ async def find(persona_id: str) -> Outcome[dict]:
     """Find a persona by its ID."""
     await bus.propose("Finding persona", {"persona_id": persona_id})
     try:
-        found = agent.find(persona_id)
-        await bus.broadcast("Persona found", {"persona": found})
-        return Outcome(success=True, message="", data={"persona": found})
+        identity_path = await paths.persona_identity(persona_id)
+        if not identity_path.exists():
+            await bus.broadcast("Persona not found", {"persona_id": persona_id})
+            return Outcome(success=False, message="Persona not found.")
+
+        raw_persona = await paths.read_json(identity_path)
+        persona = Persona(
+            id=raw_persona["id"],
+            name=raw_persona["name"],
+            model=Model(**raw_persona["model"]),
+            version=raw_persona.get("version"),
+            base_model=raw_persona.get("base_model", raw_persona["model"]["name"]),
+            birthday=raw_persona.get("birthday"),
+            frontier=Model(**raw_persona["frontier"]) if raw_persona.get("frontier") else None,
+            channels=[Channel(**n) for n in raw_persona["channels"]] if raw_persona.get("channels") else None,
+        )
+
+        await bus.broadcast("Persona found", {"persona": persona})
+        return Outcome(success=True, message="", data={"persona": persona})
     except IdentityError as e:
         await bus.broadcast("Persona not found", {"persona_id": persona_id, "error": str(e)})
         return Outcome(success=False, message="Persona not found.")
@@ -119,11 +135,12 @@ async def create(
             ,"notes"
         ])
 
-        await context.add(persona, "\n".join(skill.summary for skill in skills.basics))
+        basic_skills = "\n".join(skill.summary for skill in skills.basics)
+        await paths.save_as_string(await paths.context(persona.id), basic_skills)
 
         await paths.save_as_json(persona.id, await paths.persona_identity(persona.id), persona)
 
-        phrase = await local_model.request(persona.model.name, prompts.RECOVERY_PHRASE)
+        phrase = await local_model.generate(persona.model.name, prompts.generate_recovery_phrase())
         await system.save_phrases(persona, phrase)
 
         await paths.add_routine(persona.id, "sleep", "00:00", "daily")
@@ -213,11 +230,11 @@ async def study(persona: Persona, content: str) -> Outcome[dict]:
     await bus.propose("Studying content", {"persona": persona})
 
     prompt = prompts.observation_extraction(content=content)
-    response = await local_model.request_json(persona.model.name, prompt)
+    response = await local_model.generate_json(persona.model.name, prompt)
 
-    await person.add_facts(persona, response.get("facts", []))
-    await person.add_traits(persona, response.get("traits", []))
-    await context.add(persona, response.get("context", []))
+    await paths.add_person_identity(persona.id, "\n".join(response.get("facts", [])) + "\n")
+    await paths.add_person_traits(persona.id, "\n".join(response.get("traits", [])) + "\n")
+    await paths.append_context(persona.id, "\n".join(response.get("context", [])) + "\n")
 
     await bus.broadcast("Content studied", {"persona": persona})
 
@@ -352,7 +369,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     await bus.propose("Feeding persona", {"persona": persona, "source": source})
 
     try:
-        response = await local_model.request_json(persona.model.name, prompts.extraction(
+        response = await local_model.generate_json(persona.model.name, prompts.extraction(
                 conversations=await frontier.read(data, source),
                 person_identity=await paths.read(await paths.person_identity(persona.id)),
                 person_traits=await paths.read(await paths.person_traits(persona.id)),
@@ -360,10 +377,10 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
                 person_struggles=await paths.read(await paths.struggles(persona.id)),
             ))
 
-        await person.add_facts(persona, response.get("facts", []))
-        await person.add_traits(persona, response.get("traits", []))
-        await person.add_struggles(persona, response.get("struggles", []))
-        await context.add(persona, response.get("context", []))
+        await paths.add_person_identity(persona.id, "\n".join(response.get("facts", [])) + "\n")
+        await paths.add_person_traits(persona.id, "\n".join(response.get("traits", [])) + "\n")
+        await paths.add_struggles(persona.id, "\n".join(response.get("struggles", [])) + "\n")
+        await paths.append_as_string(await paths.context(persona.id), "\n".join(response.get("context", [])) + "\n")
 
         await bus.broadcast("Persona fed", {
             "persona": persona,
@@ -405,13 +422,13 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
         skill_source = Path(skill_path)
         skill_file = await paths.add_to_skills(persona.id, skill_source)
 
-        response = await local_model.request_json(
+        response = await local_model.generate_json(
             persona.model.name,
             prompts.skill_assessment(skill_source.name, await paths.read(skill_file))
         )
 
-        await person.add_traits(persona, response.get('traits', []))
-        await context.add(persona, response.get('context', []))
+        await paths.add_person_traits(persona.id, "\n".join(response.get('traits', [])) + "\n")
+        await paths.append_context(persona.id, "\n".join(response.get('context', [])) + "\n")
 
         await bus.broadcast("Persona equipped", {
             "persona": persona,
@@ -558,7 +575,7 @@ async def connect(persona: Persona, channel: Channel) -> Outcome:
             return Outcome(success=True, message="")
 
         async def on_message(message: Message) -> Outcome:
-            if channels.is_verified(persona, message.channel):
+            if channel.verified_at is not None:
                 return await hear(persona, message)
 
             outcome = await pair(persona, message.channel)
@@ -586,7 +603,7 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
     """Generate a pairing code so the person can verify a new channel."""
     await bus.propose("Pairing channel", {"persona": persona, "channel": channel})
 
-    if channels.is_verified(persona, channel):
+    if channel.verified_at is not None:
         await bus.broadcast("Channel pairing failed", {"persona": persona, "reason": "already_verified"})
         return Outcome(success=False, message="This channel is already verified.")
 
@@ -596,10 +613,10 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
 
     try:
         code = channels.pair(persona, channel)
-        await system.save_pairing_code(code, persona, channel)
+        await system.save_pairing_code(code, {"persona": persona.id, "channel": channel.name})
         await bus.broadcast("Channel pairing started", {"persona": persona, "channel": channel})
         return Outcome(success=True, message="Pairing code generated.", data={"pairing_code": code})
-    except (ChannelError, SecretStorageError) as e:
+    except SecretStorageError as e:
         await bus.broadcast("Channel pairing failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Could not generate a pairing code.")
 

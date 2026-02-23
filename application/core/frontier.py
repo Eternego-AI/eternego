@@ -10,7 +10,7 @@ from application.core.data import Model
 from application.core.exceptions import FrontierError
 
 
-async def respond(model: Model, prompt: str) -> str:
+async def chat(model: Model, prompt: str) -> str:
     """Send a prompt to a frontier model and return the response."""
     logger.info("Responding via frontier", {"model": model.name})
     messages = [{"role": "user", "content": prompt}]
@@ -20,9 +20,27 @@ async def respond(model: Model, prompt: str) -> str:
 
     try:
         if provider == "openai":
-            return await asyncio.to_thread(openai.respond, api_key, model.name, messages)
+            return await asyncio.to_thread(openai.chat, api_key, model.name, messages)
         if provider == "anthropic":
-            return await asyncio.to_thread(anthropic.respond, api_key, model.name, messages)
+            return await asyncio.to_thread(anthropic.chat, api_key, model.name, messages)
+        raise FrontierError(f"Unsupported frontier provider: {provider}")
+    except (URLError, OSError) as e:
+        raise FrontierError(f"Failed to contact frontier model: {e}") from e
+
+
+async def chat_json(model: Model, prompt: str) -> dict:
+    """Send a prompt to a frontier model and return the parsed JSON response."""
+    logger.info("Responding with JSON via frontier", {"model": model.name})
+    messages = [{"role": "user", "content": prompt}]
+    creds = model.credentials or {}
+    provider = model.provider or "openai"
+    api_key = creds.get("api_key", "")
+
+    try:
+        if provider == "openai":
+            return await asyncio.to_thread(openai.chat_json, api_key, model.name, messages)
+        if provider == "anthropic":
+            return await asyncio.to_thread(anthropic.chat_json, api_key, model.name, messages)
         raise FrontierError(f"Unsupported frontier provider: {provider}")
     except (URLError, OSError) as e:
         raise FrontierError(f"Failed to contact frontier model: {e}") from e

@@ -52,7 +52,7 @@ async def escalate(persona: Persona, thread: Thread, channel: Channel, items: li
     from application.core import frontier
     if not persona.frontier:
         return Prompt(role="user", content="No frontier model is configured. Be honest with the person — acknowledge you are not confident enough to handle this well, and let them know that having a more capable model available would help.")
-    answers = [await frontier.respond(persona.frontier, str(item)) for item in items]
+    answers = [await frontier.chat(persona.frontier, str(item)) for item in items]
     return Prompt(role="user", content="Frontier answers:\n" + "\n".join(answers))
 
 

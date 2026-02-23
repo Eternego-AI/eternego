@@ -19,13 +19,14 @@ def role_based_text(data: str) -> str:
     return "\n".join(lines)
 
 
-def respond(api_key: str, model: str, messages: list[dict]) -> str:
-    """Send messages to the OpenAI API and return the full response text."""
+def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False) -> str:
+    """Send messages to the OpenAI API and return the response text."""
     request = urllib.request.Request(
         "https://api.openai.com/v1/chat/completions",
         data=json.dumps({
             "model": model,
             "messages": messages,
+            "format": "json" if json_mode else "text",
         }).encode(),
         headers={
             "Content-Type": "application/json",
@@ -37,14 +38,23 @@ def respond(api_key: str, model: str, messages: list[dict]) -> str:
         return data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
 
-def stream(api_key: str, model: str, messages: list[dict]):
-    """Stream a chat response from the OpenAI API, yielding normalized chunks."""
+def chat_json(api_key: str, model: str, messages: list[dict]) -> dict:
+    """Send messages to the OpenAI API and return the parsed JSON response."""
+    response = chat(api_key, model, messages, json_mode=True)
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        return {}
+
+
+def generate(api_key: str, model: str, prompt: str, json_mode: bool = False) -> str:
+    """Send a prompt to the OpenAI API and return the response text."""
     request = urllib.request.Request(
         "https://api.openai.com/v1/chat/completions",
         data=json.dumps({
             "model": model,
-            "messages": messages,
-            "stream": True,
+            "messages": [{"role": "user", "content": prompt}],
+            "format": "json" if json_mode else "text",
         }).encode(),
         headers={
             "Content-Type": "application/json",
@@ -52,21 +62,15 @@ def stream(api_key: str, model: str, messages: list[dict]):
         },
     )
     with urllib.request.urlopen(request) as response:
-        for line in response:
-            line = line.decode().strip()
-            if not line.startswith("data: "):
-                continue
-            data = line[6:]
-            if data == "[DONE]":
-                break
-            event = json.loads(data)
-            choice = event.get("choices", [{}])[0]
-            delta = choice.get("delta", {})
-            finish = choice.get("finish_reason")
+        data = json.loads(response.read())
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return content.strip()
 
-            if finish:
-                yield {"message": {"content": ""}, "done": True}
-            elif delta.get("tool_calls"):
-                yield {"message": {"content": delta.get("content", ""), "tool_calls": delta["tool_calls"]}, "done": False}
-            elif delta.get("content"):
-                yield {"message": {"content": delta["content"]}, "done": False}
+
+def generate_json(api_key: str, model: str, prompt: str) -> dict:
+    """Send a prompt to the OpenAI API and return the parsed JSON response."""
+    response = generate(api_key, model, prompt, json_mode=True)
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        return {}

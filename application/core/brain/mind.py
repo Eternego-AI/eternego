@@ -25,9 +25,9 @@ async def grow(persona: Persona, channel: Channel) -> None:
         history_briefing=await paths.read_history_brief(persona.id, "(no history yet)"),
     )
     if persona.frontier:
-        new_dna = await frontier.respond(persona.frontier, synthesis)
+        new_dna = await frontier.chat(persona.frontier, synthesis)
     else:
-        new_dna = await local_model.respond(persona.model.name, [{"role": "user", "content": synthesis}])
+        new_dna = await local_model.generate(persona.model.name, synthesis)
     await paths.write_dna(persona.id, new_dna)
 
     # Generate per-item training set
@@ -36,9 +36,9 @@ async def grow(persona: Persona, channel: Channel) -> None:
     for item in dna_items:
         item_prompt = prompts.grow(dna=item, max_pairs=5)
         if persona.frontier:
-            response = await frontier.respond(persona.frontier, item_prompt)
+            response = await frontier.chat(persona.frontier, item_prompt)
         else:
-            response = await local_model.respond(persona.model.name, [{"role": "user", "content": item_prompt}])
+            response = await local_model.generate_json(persona.model.name, item_prompt)
         parsed = strings.to_json(response)
         if parsed and "training_pairs" in parsed:
             all_pairs.extend(parsed["training_pairs"])
@@ -107,21 +107,22 @@ async def reason(persona: Persona, thread: Thread, channel: Channel, messages: l
         if any(isinstance(r, Command) and r.title == "Stop Reasoning" for r in responses):
             break
 
-        response = await local_model.respond(persona.model.name, messages, json_mode=True)
-        parsed = strings.to_json(response)
-        if parsed is None:
-            parsed = {"say": [response]}
+        response = await local_model.chat_json(persona.model.name, messages)
+
+        if not response or not isinstance(response, dict):
+            response = {"say": [response]} if response else {}
+
         messages.append({"role": "assistant", "content": response})
         loop += 1
 
-        if not parsed:
+        if not response:
             if loop == 1:
                 messages.append({"role": "user", "content": "You must respond to the person. Use the say ability to send them a message."})
                 continue
             break
 
         new_prompts = []
-        for key, value in parsed.items():
+        for key, value in response.items():
             if not value or not reflections.has_ability(abilities, key, "ability"):
                 continue
             value = value if isinstance(value, list) else [value]

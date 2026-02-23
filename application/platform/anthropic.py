@@ -16,14 +16,15 @@ def role_based_text(data: str) -> str:
     return "\n".join(lines)
 
 
-def respond(api_key: str, model: str, messages: list[dict]) -> str:
-    """Send messages to the Anthropic API and return the full response text."""
+def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False) -> str:
+    """Send a list of messages to the Anthropic API and return the response text."""
     request = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
         data=json.dumps({
             "model": model,
             "messages": messages,
             "max_tokens": 4096,
+            "format": "json" if json_mode else "text",
         }).encode(),
         headers={
             "Content-Type": "application/json",
@@ -36,38 +37,40 @@ def respond(api_key: str, model: str, messages: list[dict]) -> str:
         return data.get("content", [{}])[0].get("text", "")
 
 
-def stream(api_key: str, model: str, messages: list[dict]):
-    """Stream a chat response from the Anthropic API, yielding normalized chunks."""
+def chat_json(api_key: str, model: str, messages: list[dict]) -> dict:
+    """Send a list of messages to the Anthropic API and return the parsed JSON response."""
+    response = chat(api_key, model, messages, json_mode=True)
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        return {}
+
+
+def generate(api_key: str, model: str, prompt: str, json_mode: bool = False) -> str:
+    """Send a prompt to the Anthropic API and return the response text."""
     request = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
+        "https://api.anthropic.com/v1/chat/completions",
         data=json.dumps({
             "model": model,
-            "messages": messages,
+            "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 4096,
-            "stream": True,
+            "format": "json" if json_mode else "text",
         }).encode(),
         headers={
             "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
+            "Authorization": f"Bearer {api_key}",
         },
     )
     with urllib.request.urlopen(request) as response:
-        for line in response:
-            line = line.decode().strip()
-            if not line.startswith("data: "):
-                continue
-            data = line[6:]
-            if data == "[DONE]":
-                break
-            event = json.loads(data)
-            event_type = event.get("type", "")
+        data = json.loads(response.read())
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return content.strip()
 
-            if event_type == "content_block_delta":
-                delta = event.get("delta", {})
-                if delta.get("type") == "text_delta":
-                    yield {"message": {"content": delta.get("text", "")}, "done": False}
-                elif delta.get("type") == "input_json_delta":
-                    yield {"message": {"content": "", "tool_calls": [delta]}, "done": False}
-            elif event_type == "message_stop":
-                yield {"message": {"content": ""}, "done": True}
+def generate_json(api_key: str, model: str, prompt: str) -> dict:
+    """Send a prompt to the Anthropic API and return the parsed JSON response."""
+    response = generate(api_key, model, prompt, json_mode=True)
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        return {}
+

@@ -8,43 +8,10 @@ from urllib.error import URLError
 from application.platform import logger, ollama, strings, OS
 from application.core.exceptions import EngineConnectionError
 
-async def request(model: str, prompt: str) -> str:
-    """Send a request to the local model and return the response text."""
-    logger.info("Sending request to model", {"model": model, "prompt": prompt})
-    try:
-        response = await asyncio.to_thread(ollama.post, "/api/generate", {
-            "model": model,
-            "prompt": prompt,
-            "stream": False,
-        })
-        return response["response"].strip()
-    except URLError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e
-    except KeyError as e:
-        raise EngineConnectionError("Model returned an invalid response") from e
 
-
-
-async def request_json(model: str, prompt: str) -> dict:
-    """Send a request to the local model and return the parsed JSON response."""
-    logger.info("Sending JSON request to model", {"model": model, "prompt": prompt})
-    try:
-        response = await asyncio.to_thread(ollama.post, "/api/generate", {
-            "model": model,
-            "prompt": prompt,
-            "stream": False,
-        })
-        return strings.extract_json(response["response"])
-    except URLError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e
-    except (json.JSONDecodeError, KeyError) as e:
-        raise EngineConnectionError("Model returned an invalid response") from e
-
-
-
-async def respond(model: str, messages: list[dict], json_mode: bool = False) -> str:
+async def chat(model: str, messages: list[dict], json_mode: bool = False) -> str:
     """Send a list of messages to the local model and return the response text."""
-    logger.info("Generating response", {"model": model})
+    logger.info("Sending chat request to model", {"model": model})
     try:
         current_os = OS.get_supported()
         if current_os:
@@ -57,5 +24,41 @@ async def respond(model: str, messages: list[dict], json_mode: bool = False) -> 
         return response["message"]["content"]
     except URLError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
+    except KeyError as e:
+        raise EngineConnectionError("Model returned an invalid response") from e
 
+
+async def chat_json(model: str, messages: list[dict]) -> dict:
+    """Send a list of messages to the local model and return the parsed JSON response."""
+    logger.info("Sending JSON chat request to model", {"model": model})
+    response = await chat(model, messages, json_mode=True)
+    try:
+        return strings.extract_json(response)
+    except json.JSONDecodeError as e:
+        raise EngineConnectionError("Model returned an invalid JSON response") from e
+
+
+async def generate(model: str, prompt: str, json_mode: bool = False) -> str:
+    """Send a prompt to the local model and return the response text."""
+    logger.info("Sending generate request to model", {"model": model, "prompt": prompt})
+    try:
+        body = {"model": model, "prompt": prompt, "stream": False}
+        if json_mode:
+            body["format"] = "json"
+        response = await asyncio.to_thread(ollama.post, "/api/generate", body)
+        return response["response"].strip()
+    except URLError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
+    except KeyError as e:
+        raise EngineConnectionError("Model returned an invalid response") from e
+
+
+async def generate_json(model: str, prompt: str) -> dict:
+    """Send a prompt to the local model and return the parsed JSON response."""
+    logger.info("Sending JSON generate request to model", {"model": model, "prompt": prompt})
+    response = await generate(model, prompt, json_mode=True)
+    try:
+        return strings.extract_json(response)
+    except json.JSONDecodeError as e:
+        raise EngineConnectionError("Model returned an invalid JSON response") from e
 
