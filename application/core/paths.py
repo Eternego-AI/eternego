@@ -371,6 +371,37 @@ async def add_training_set(persona_id:str, training_set_content: str) -> None:
     path = training_dir / filename
     filesystem.write(path, training_set_content)
 
+
+async def add_history_entry(persona_id: str, event: str, content: str) -> None:
+    """Write the given content to a new file in the persona's history directory."""
+    logger.info("Adding history entry", {"persona_id": persona_id})
+    history_dir = await history(persona_id)
+    if not history_dir.exists():
+        history_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetimes.date_stamp(datetimes.now())
+    filename = f"{event}-{timestamp}.md"
+    path = history_dir / filename
+    filesystem.write(path, content)
+
+
+async def save_destiny_entry(persona_id: str, event: str, trigger: str, thread_id: str, content: str) -> None:
+    """Write a destiny entry file named by event type and trigger datetime."""
+    from datetime import datetime
+    logger.info("Saving destiny entry", {"persona_id": persona_id, "event": event, "trigger": trigger})
+    dt = datetime.strptime(trigger, "%Y-%m-%d %H:%M")
+    created = datetimes.stamp(datetimes.now())
+    directory = await destiny(persona_id)
+    filesystem.write(directory / f"{event}-{dt.strftime('%Y-%m-%d-%H-%M')}-{thread_id[:8]}-{created}.md", content)
+
+
+async def read_files_matching(persona_id: str, directory: Path, pattern: str) -> list[str]:
+    """Return 'File: name\\ncontent' entries for all non-empty files matching the glob pattern."""
+    logger.info("Reading files matching pattern", {"persona_id": persona_id, "pattern": pattern})
+    if not directory.exists():
+        return []
+    return [f"File: {f.name}\n{c}" for f in sorted(directory.glob(pattern)) if (c := await read(f))]
+
+
 async def clear(path: Path) -> None:
     """Clear the contents of a file."""
     logger.info("Clearing file contents", {"path": str(path)})

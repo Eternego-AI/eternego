@@ -5,8 +5,9 @@ import asyncio
 
 import uvicorn
 
-from application.business import persona, routine
+from application.business import persona
 from application.platform import logger
+import heart
 from application.platform.observer import Command, Event, Plan, Signal, subscribe
 from web.app import app as web_app
 from web.socket import on_signal
@@ -98,7 +99,7 @@ async def main():
         if elapsed >= 60:
             elapsed = 0
             for agent in personas:
-                await routine.trigger(agent)
+                await heart.beat(agent)
 
 
 if __name__ == "__main__":

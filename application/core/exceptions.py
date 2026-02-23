@@ -53,8 +53,5 @@ class HistoryError(Exception):
     pass
 
 
-class DestinyError(Exception):
-    pass
-
 class ContextError(Exception):
     pass

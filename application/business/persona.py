@@ -618,6 +618,44 @@ async def hear(persona: Persona, message: Message) -> Outcome:
     return Outcome(success=True, message="Message received", data={"thread_id": thread.id})
 
 
+async def nudge(persona: Persona, message: str) -> Outcome[dict]:
+    """Privately nudge the persona with a system message on the secretary channel."""
+    await bus.propose("Nudging persona", {"persona": persona})
+    try:
+        from application.platform import datetimes
+        stamp = datetimes.now().strftime("%Y-%m-%d-%H-%M")
+        secretary = Channel(type="heartbeat", name=f"heartbeat-{stamp}", authority="secretary")
+        m = memories.agent(persona)
+        thread = m.private_thread()
+        m.remember_on(thread, {"role": "user", "content": message})
+        mind.think(persona, thread, secretary)
+        await bus.broadcast("Persona nudged", {"persona": persona})
+        return Outcome(success=True, message="Nudge sent.")
+    except Exception as e:
+        logger.warning("Nudge failed", {"persona": persona.id, "error": str(e)})
+        await bus.broadcast("Nudge failed", {"persona": persona, "error": str(e)})
+        return Outcome(success=False, message=str(e))
+
+
+async def live(persona: Persona, dt) -> Outcome[dict]:
+    """Check for destiny entries due at dt and nudge the persona to act on them."""
+    await bus.propose("Checking destiny", {"persona": persona})
+    try:
+        destiny_path = await paths.destiny(persona.id)
+        pattern = f"*{dt.strftime('%Y-%m-%d-%H-%M')}*.md"
+        contents = await paths.read_files_matching(persona.id, destiny_path, pattern)
+        if not contents:
+            await bus.broadcast("No destiny due", {"persona": persona})
+            return Outcome(success=True, message="No destiny entries due.")
+        await nudge(persona, f"The following destiny entries are due right now:\n\n" + "\n\n".join(contents) + "\n\nReach out to the person for each one, then manifest destiny.")
+        await bus.broadcast("Destiny checked", {"persona": persona, "due": len(contents)})
+        return Outcome(success=True, message=f"{len(contents)} destiny entries due.")
+    except OSError as e:
+        logger.warning("Destiny check failed", {"persona": persona.id, "error": str(e)})
+        await bus.broadcast("Destiny check failed", {"persona": persona, "error": str(e)})
+        return Outcome(success=False, message=str(e))
+
+
 async def sleep(persona: Persona) -> Outcome[dict]:
     """Let the persona rest, reflect on its conversations, and grow from everything it experienced."""
     await bus.propose("Sleeping", {"persona": persona})

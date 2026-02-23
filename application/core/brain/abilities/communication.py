@@ -57,6 +57,25 @@ async def escalate(persona: Persona, thread: Thread, channel: Channel, items: li
 
 
 @ability(
+"Send a message to the person by finding any active channel. Reports success or failure. Items: [message text]",
+["secretary"],
+order=2)
+async def reach_out(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
+    """Find all active channels and send the message on each. Returns delivery feedback."""
+    logger.info("Ability: reach_out", {"persona": persona.id, "thread": thread.id})
+    from application.core import gateways, channels as ch_module
+    active = gateways.of(persona).all_channels()
+    if not active:
+        return Prompt(role="user", content="No active channels found — could not reach the person.")
+    results = []
+    for ch in active:
+        for text in items:
+            await ch_module.send(ch, str(text))
+            results.append(f"Reached: {ch.type}:{ch.name}")
+    return Prompt(role="user", content="\n".join(results))
+
+
+@ability(
 "Start a new conversation thread for an unrelated incoming message. Items: [message]",
 ["commander"],
 order=17)
