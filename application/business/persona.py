@@ -276,10 +276,10 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
             return Outcome(success=False, message=outcome.message)
 
         persona = outcome.data["persona"]
-        persona.base_model = Model(name=model)
+        persona.base_model = model
         persona.model = models.generate(model, persona.id)
 
-        await local_inference_engine.copy(persona.base_model.name, persona.model.name)
+        await local_inference_engine.copy(persona.base_model, persona.model.name)
 
         await paths.save_as_json(persona.id, await paths.persona_identity(persona.id), persona)
 

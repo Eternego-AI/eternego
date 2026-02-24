@@ -1,6 +1,6 @@
 """Values — builds the system prompt that defines who the persona is and what it can do."""
 
-from application.platform import filesystem, reflections
+from application.platform import filesystem, reflections, datetimes
 from application.core import paths
 from application.core.brain import abilities
 from application.core.brain import consent
@@ -27,7 +27,8 @@ def build(persona: Persona, channel: Channel) -> str:
     person_identity = _read(paths.home(persona.id) / "person.md")
     being_persona = being_persona_skill.skill(persona)
 
-    sections = [cornerstone.instruction(persona), f"## Abilities\n\n{abilities_doc}"]
+    today = f"Current datetime is {datetimes.date_stamp(datetimes.now())}."
+    sections = [cornerstone.instruction(persona), today, f"## Abilities\n\n{abilities_doc}"]
 
     if being_persona:
         sections.append(being_persona)

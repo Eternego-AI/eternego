@@ -106,6 +106,89 @@ When the service is running, each persona is reachable through the OpenAI-compat
 
 ---
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Entry Points                                │
+│                                                                     │
+│   service.py          web/           cli/                           │
+│   (heartbeat,      (FastAPI +      (eternego                        │
+│    gateways)        dashboard)      command)                        │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ calls
+┌──────────────────────────▼──────────────────────────────────────────┐
+│                     Business Layer  (WHY)                           │
+│                  application/business/                              │
+│                                                                     │
+│   persona.py                        environment.py                  │
+│   hear · nudge · live · sleep       prepare · pair · check_model   │
+│   create · migrate · feed           routine.py                      │
+│   start · stop · find · agents      trigger                         │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ calls
+┌──────────────────────────▼──────────────────────────────────────────┐
+│                       Core Layer  (HOW)                             │
+│                    application/core/                                │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                    Brain  (core/brain/)                      │   │
+│  │                                                              │   │
+│  │  mind.py                    values.py                        │   │
+│  │  ┌─ think()  ─────────────► build() ──► system prompt       │   │
+│  │  │  (fire-and-forget)        (filters abilities by authority) │   │
+│  │  │                                                           │   │
+│  │  └─ reason() ─── model loop ──► parse JSON ──► dispatch     │   │
+│  │     summarize()                abilities/                    │   │
+│  │     grow()       cornerstone.py  communication.py (say …)   │   │
+│  │                  instruction()   knowledge.py (load_trait …) │   │
+│  │  memories.py                     consent.py (check_perm …)  │   │
+│  │  agent() → AgentMemory           destiny.py (schedule …)    │   │
+│  │  remember · as_messages          history.py (archive …)     │   │
+│  │  forget_everything               routine.py (add_routine …)  │   │
+│  │                                  system.py (act)             │   │
+│  │  skills/  (being_persona,                                    │   │
+│  │            shell, notes …)                                   │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│  agent · person · channels · gateways · dna · history · diary      │
+│  paths · local_model · local_inference_engine · system · bus        │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ calls
+┌──────────────────────────▼──────────────────────────────────────────┐
+│                     Platform Layer  (WHAT)                          │
+│                   application/platform/                             │
+│                                                                     │
+│  ollama · anthropic · openai · telegram                             │
+│  filesystem · crypto · datetimes · logger · observer               │
+│  git · lora · linux · mac · windows                                 │
+└─────────────────────────────────────────────────────────────────────┘
+
+Channel Authorities
+───────────────────
+commander     — Telegram and real channels  — all abilities
+conversational— Web / API chat              — cognitive abilities only
+reflective    — Sleep summarization         — archive only
+secretary     — Heartbeat nudges            — calendar, reminder, reach_out, manifest_destiny
+
+Cognitive Loops
+───────────────
+Thinking loop    triggered by persona.hear / persona.nudge
+                 mind.think (background) → reason() → abilities → response
+
+Summarizing loop triggered by persona.hear (after think) / persona.sleep
+                 mind.summarize() → archive ability → history/
+
+Growth loop      triggered by persona.sleep (after summarize)
+                 mind.grow() → DNA synthesis → training → fine-tune
+
+Heartbeat        every 60 s via service.py → heart.beat()
+                 persona.live() — destiny entries due this minute → nudge
+                 routine.trigger() — routines whose HH:MM matches now
+```
+
+---
+
 ## Business Specifications
 
 ### 1. Environment Preparation

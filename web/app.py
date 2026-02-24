@@ -23,7 +23,7 @@ def _on_reasoning_plan(signal: Plan) -> Command | None:
         return None
     thread = signal.details.get("thread")
     channel = signal.details.get("channel")
-    if thread and channel and channel.type == "web" and thread.id not in active_threads:
+    if thread and channel and channel.type == "api" and thread.id not in active_threads:
         return Command("Stop Reasoning", {"thread": thread})
     return None
 

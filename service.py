@@ -98,6 +98,9 @@ async def main():
         elapsed += 1
         if elapsed >= 60:
             elapsed = 0
+            outcome = await persona.agents()
+            if outcome.success:
+                personas = (outcome.data or {}).get("personas", [])
             for agent in personas:
                 await heart.beat(agent)
 

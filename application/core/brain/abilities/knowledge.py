@@ -7,7 +7,7 @@ from application.core.brain.abilities._base import ability
 
 
 @ability(
-"Request person traits needed to respond. Items: [question about the person]",
+"Load what is known about the person — facts and traits. Items: []",
 ["commander", "conversational"],
 order=7)
 async def load_trait(persona: Persona, thread: Thread, channel: Channel, items: list) -> Prompt | None:
