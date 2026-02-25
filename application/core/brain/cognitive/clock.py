@@ -10,19 +10,34 @@ stream groups the four concurrent loops:
   sub_conscious — sub-conscious thoughts → act → done
 """
 
+import json
+
 from application.core.data import Persona
 from application.core.brain.cognitive.data import Thought, Stimulus
 from application.core.brain.cognitive.memory import Memory
 from application.core.brain.cognitive import ego, memory
 from application.platform import logger, processes, datetimes
 
+_TICK_INSTRUCTION = '\n\nRespond with JSON: {"content": "your response"}'
+
 
 async def tick(persona: Persona, mem: Memory, thought: Thought) -> Stimulus:
-    """Process one thought through the persona's ego and return a new stimulus."""
-    response = await ego.reason(persona, mem, thought.content)
-    content = response.get("content", "") if isinstance(response, dict) else ""
+    """Process one thought through the persona's ego and return a new stimulus.
+
+    Asks the model for a JSON response with a 'content' key. If the model
+    returns plain text instead, that text is used directly so nothing is lost
+    and the system can self-correct on the next cycle.
+    """
+    prompt = thought.content + _TICK_INSTRUCTION
+    raw = await ego.talk(persona, mem, prompt)
+    try:
+        parsed = json.loads(raw)
+        content = parsed.get("content") if isinstance(parsed, dict) else None
+    except (json.JSONDecodeError, ValueError):
+        content = None
     if not content:
-        logger.warning("tick: model returned no content", {"persona_id": persona.id, "thread_id": thought.thread_id})
+        logger.warning("tick: model returned plain text, using as-is", {"persona_id": persona.id, "thread_id": thought.thread_id})
+        content = raw
     return Stimulus(
         role="assistant",
         content=content,
