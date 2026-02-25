@@ -58,6 +58,11 @@ async def memory(persona_id: str) -> Path:
     return home(persona_id) / "memory.json"
 
 
+def memory_state(persona_id: str) -> Path:
+    """Path to the single cognitive memory state file for that persona."""
+    return home(persona_id) / "memory" / "state.json"
+
+
 async def channels(persona_id: str) -> Path:
     """Path to the channels.md file for that persona."""
     logger.info("Accessing persona channels file", {"persona_id": persona_id})

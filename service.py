@@ -9,6 +9,7 @@ from application.business import persona
 from application.platform import logger
 import heart
 from application.platform.observer import Command, Event, Plan, Signal, subscribe
+from application.core.brain.cognitive import memory as cognitive_memory, clock
 from web.app import app as web_app
 from web.socket import on_signal
 
@@ -83,6 +84,8 @@ async def main():
     personas = (outcome.data or {}).get("personas", [])
 
     for agent in personas:
+        mem = await cognitive_memory.load(agent)
+        clock.start(agent, mem)
         outcome = await persona.start(agent)
         if not outcome.success:
             print(f"Failed to start gateway for {agent.name}: {outcome.message}")
