@@ -19,7 +19,7 @@ dependencies = [
 eternego = "cli.main:main"
 
 [tool.setuptools]
-py-modules = ["service"]
+py-modules = ["service", "heart"]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -140,15 +140,19 @@ class Mind:
             if not signals:
                 return
 
+            logger.debug("mind._tick: realizing", {"persona_id": self._persona_id, "signals": len(signals)})
             self._stage = "realizing"
             self._awareness = await ego.realize(persona, signals)
             if not self._awareness:
+                logger.debug("mind._tick: no awareness, exiting", {"persona_id": self._persona_id})
                 return
 
             if self._stage != "interrupting":
+                logger.debug("mind._tick: ordering", {"persona_id": self._persona_id, "perceptions": len(self._awareness)})
                 self._stage = "ordering"
                 self._order = await ego.order(persona, self._awareness)
                 if not self._order:
+                    logger.debug("mind._tick: no order, exiting", {"persona_id": self._persona_id})
                     return
 
             # Resolve pending permission if signals have arrived after the request
@@ -169,15 +173,18 @@ class Mind:
 
             meaning = None
             if self._stage != "interrupting":
+                logger.debug("mind._tick: preparing", {"persona_id": self._persona_id, "perception": self._order[0].title})
                 self._stage = "preparing"
                 meaning = await ego.prepare(persona, self._order[0])
                 if not meaning.traits:
                     meaning.traits = ["say"]
 
             if self._stage != "interrupting" and meaning is not None:
+                logger.debug("mind._tick: planning", {"persona_id": self._persona_id, "traits": meaning.traits})
                 self._stage = "planning"
                 steps = await ego.plan(persona, self._order[0], meaning)
                 if not steps:
+                    logger.debug("mind._tick: no steps planned, exiting", {"persona_id": self._persona_id})
                     return
                 meaning.path = steps
                 self._plan = steps
@@ -192,6 +199,7 @@ class Mind:
             if self._stage != "interrupting":
                 blocked = await ego.legalize(persona, self._plan)
                 if blocked:
+                    logger.debug("mind._tick: blocked by permissions", {"persona_id": self._persona_id, "blocked": blocked})
                     top = self._order[0]
                     if top.thread.signals:
                         top.thread.signals[-1].pending_permission = blocked
@@ -208,6 +216,7 @@ class Mind:
                     return
 
             interrupted = self._stage == "interrupting"
+            logger.debug("mind._tick: executing", {"persona_id": self._persona_id, "steps": len(self._plan), "interrupted": interrupted})
             self._stage = "executing"
             results = ""
 
@@ -215,6 +224,7 @@ class Mind:
                 step = self.next_task(taking=True)
                 if step is None:
                     break
+                logger.debug("mind._tick: running trait", {"persona_id": self._persona_id, "trait": step.trait})
                 output = await self.execute(step.trait, step.params)
                 results += f"[{step.trait}] {output}\n"
                 if self._stage == "interrupting":
@@ -225,6 +235,7 @@ class Mind:
                 results += "Interrupted: a new message arrived before execution completed."
 
             if results:
+                logger.debug("mind._tick: summarizing results", {"persona_id": self._persona_id})
                 await self.execute("summarize", {"text": f"Summarize these execution results into a concise record:\n\n{results}"})
 
             if not interrupted and self._order:
