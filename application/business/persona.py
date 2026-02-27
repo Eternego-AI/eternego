@@ -3,7 +3,7 @@ from pathlib import Path
 
 from application.core import bus, channels, gateways, frontier, system, \
     local_model, local_inference_engine, models, prompts, paths
-from application.core.brain import mind, memories, skills
+from application.core.brain import mind, skills
 from application.core.data import Channel, Message, Model, Persona
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
@@ -20,7 +20,7 @@ async def agents() -> Outcome[dict]:
     await bus.propose("Listing personas", {})
 
     try:
-        root = await paths.personas_home()
+        root = paths.personas_home()
         if not root.exists():
             await bus.broadcast("No personas found", {})
             return Outcome(success=False, message="No personas found. Create one to get started.", data={"personas": []})
@@ -48,12 +48,12 @@ async def find(persona_id: str) -> Outcome[dict]:
     """Find a persona by its ID."""
     await bus.propose("Finding persona", {"persona_id": persona_id})
     try:
-        identity_path = await paths.persona_identity(persona_id)
+        identity_path = paths.persona_identity(persona_id)
         if not identity_path.exists():
             await bus.broadcast("Persona not found", {"persona_id": persona_id})
             return Outcome(success=False, message="Persona not found.")
 
-        raw_persona = await paths.read_json(identity_path)
+        raw_persona = paths.read_json(identity_path)
         persona = Persona(
             id=raw_persona["id"],
             name=raw_persona["name"],
@@ -72,11 +72,26 @@ async def find(persona_id: str) -> Outcome[dict]:
         return Outcome(success=False, message="Persona not found.")
 
 
+async def loaded(persona_id: str) -> Outcome[dict]:
+    """Return the live persona from the in-process registry."""
+    from application.core import registry
+    p = registry.get_persona(persona_id)
+    if p is None:
+        return Outcome(success=False, message=f"Persona '{persona_id}' is not running.")
+    return Outcome(success=True, message="", data={"persona": p})
+
+
+async def running() -> Outcome[dict]:
+    """Return all currently running personas from the in-process registry."""
+    from application.core import registry
+    return Outcome(success=True, message="", data={"personas": registry.all()})
+
+
 async def delete(persona: Persona) -> Outcome[dict]:
     """Delete a persona and all its data."""
     await bus.propose("Deleting persona", {"persona": persona})
     try:
-        await paths.delete_recursively(paths.home(persona.id))
+        paths.delete_recursively(paths.home(persona.id))
         if await local_inference_engine.check(persona.model.name):
             await local_inference_engine.delete(persona.model.name)
         await bus.broadcast("Persona deleted", {"persona": persona})
@@ -126,8 +141,8 @@ async def create(
 
         await local_inference_engine.copy(model, persona.model.name)
 
-        await paths.create_home(persona.id)
-        await paths.create_directories(persona.id, [
+        paths.create_home(persona.id)
+        paths.create_directories(persona.id, [
             "skills",
             "history",
             "destiny",
@@ -136,17 +151,17 @@ async def create(
             ,"notes"
         ])
 
-        basic_skills = "\n".join(skill.summary for skill in skills.basics)
-        await paths.save_as_string(await paths.context(persona.id), basic_skills)
+        basic_skills = "\n".join(s.description for s in skills.basics())
+        paths.save_as_string(paths.context(persona.id), basic_skills)
 
-        await paths.save_as_json(persona.id, await paths.persona_identity(persona.id), persona)
+        paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
         phrase = await local_model.generate(persona.model.name, prompts.generate_recovery_phrase())
         await system.save_phrases(persona, phrase)
 
-        await paths.add_routine(persona.id, "sleep", "00:00", "daily")
+        paths.add_routine(persona.id, "sleep", "00:00", "daily")
 
-        await paths.init_git(await paths.diary(persona.id))
+        paths.init_git(paths.diary(persona.id))
         outcome = await write_diary(persona)
         if not outcome.success:
             await delete(persona)
@@ -233,9 +248,9 @@ async def study(persona: Persona, content: str) -> Outcome[dict]:
     prompt = prompts.observation_extraction(content=content)
     response = await local_model.generate_json(persona.model.name, prompt)
 
-    await paths.add_person_identity(persona.id, "\n".join(response.get("facts", [])) + "\n")
-    await paths.add_person_traits(persona.id, "\n".join(response.get("traits", [])) + "\n")
-    await paths.append_context(persona.id, "\n".join(response.get("context", [])) + "\n")
+    paths.add_person_identity(persona.id, "\n".join(response.get("facts", [])) + "\n")
+    paths.add_person_traits(persona.id, "\n".join(response.get("traits", [])) + "\n")
+    paths.append_context(persona.id, "\n".join(response.get("context", [])) + "\n")
 
     await bus.broadcast("Content studied", {"persona": persona})
 
@@ -259,16 +274,16 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
     try:
         temp_path = Path(diary_path)
         persona_id = temp_path.stem
-        archive = await paths.decrypt(temp_path, await system.persona_key(phrase, persona_id))
-        staging = await paths.unzip(persona_id, archive)
+        archive = paths.decrypt(temp_path, await system.persona_key(phrase, persona_id))
+        staging = paths.unzip(persona_id, archive)
 
         outcome = await environment.prepare(model)
         if not outcome.success:
             await bus.broadcast("Persona migration failed", {"reason": "environment"})
             return Outcome(success=False, message=outcome.message)
 
-        await paths.copy_recursively(staging, paths.home(persona_id))
-        await paths.delete_recursively(staging)
+        paths.copy_recursively(staging, paths.home(persona_id))
+        paths.delete_recursively(staging)
 
         outcome = await find(persona_id)
         if not outcome.success:
@@ -281,9 +296,9 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
 
         await local_inference_engine.copy(persona.base_model, persona.model.name)
 
-        await paths.save_as_json(persona.id, await paths.persona_identity(persona.id), persona)
+        paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
-        dna_structure = await paths.read(await paths.dna(persona.id))
+        dna_structure = paths.read(paths.dna(persona.id))
 
         outcome = await study(persona, dna_structure)
         if not outcome.success:
@@ -372,16 +387,16 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     try:
         response = await local_model.generate_json(persona.model.name, prompts.extraction(
                 conversations=await frontier.read(data, source),
-                person_identity=await paths.read(await paths.person_identity(persona.id)),
-                person_traits=await paths.read(await paths.person_traits(persona.id)),
-                persona_context=await paths.read(await paths.context(persona.id)),
-                person_struggles=await paths.read(await paths.struggles(persona.id)),
+                person_identity=paths.read(paths.person_identity(persona.id)),
+                person_traits=paths.read(paths.person_traits(persona.id)),
+                persona_context=paths.read(paths.context(persona.id)),
+                person_struggles=paths.read(paths.struggles(persona.id)),
             ))
 
-        await paths.add_person_identity(persona.id, "\n".join(response.get("facts", [])) + "\n")
-        await paths.add_person_traits(persona.id, "\n".join(response.get("traits", [])) + "\n")
-        await paths.add_struggles(persona.id, "\n".join(response.get("struggles", [])) + "\n")
-        await paths.append_as_string(await paths.context(persona.id), "\n".join(response.get("context", [])) + "\n")
+        paths.add_person_identity(persona.id, "\n".join(response.get("facts", [])) + "\n")
+        paths.add_person_traits(persona.id, "\n".join(response.get("traits", [])) + "\n")
+        paths.add_struggles(persona.id, "\n".join(response.get("struggles", [])) + "\n")
+        paths.append_as_string(paths.context(persona.id), "\n".join(response.get("context", [])) + "\n")
 
         await bus.broadcast("Persona fed", {
             "persona": persona,
@@ -421,15 +436,15 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
 
     try:
         skill_source = Path(skill_path)
-        skill_file = await paths.add_to_skills(persona.id, skill_source)
+        skill_file = paths.add_to_skills(persona.id, skill_source)
 
         response = await local_model.generate_json(
             persona.model.name,
-            prompts.skill_assessment(skill_source.name, await paths.read(skill_file))
+            prompts.skill_assessment(skill_source.name, paths.read(skill_file))
         )
 
-        await paths.add_person_traits(persona.id, "\n".join(response.get('traits', [])) + "\n")
-        await paths.append_context(persona.id, "\n".join(response.get('context', [])) + "\n")
+        paths.add_person_traits(persona.id, "\n".join(response.get('traits', [])) + "\n")
+        paths.append_context(persona.id, "\n".join(response.get('context', [])) + "\n")
 
         await bus.broadcast("Persona equipped", {
             "persona": persona,
@@ -460,13 +475,13 @@ async def oversee(persona: Persona) -> Outcome[dict]:
     await bus.propose("Overseeing persona", {"persona": persona})
 
     try:
-        facts = await paths.lines(await paths.person_identity(persona.id))
-        traits = await paths.lines(await paths.person_traits(persona.id))
-        persona_context = await paths.lines(await paths.context(persona.id))
-        skill_list = await paths.md_files(await paths.skills(persona.id)) 
-        histories = await paths.md_files(await paths.history(persona.id))
-        destinies = await paths.md_files(await paths.destiny(persona.id))
-        struggle_list = await paths.lines(await paths.struggles(persona.id))
+        facts = paths.lines(paths.person_identity(persona.id))
+        traits = paths.lines(paths.person_traits(persona.id))
+        persona_context = paths.lines(paths.context(persona.id))
+        skill_list = paths.md_files(paths.skills(persona.id)) 
+        histories = paths.md_files(paths.history(persona.id))
+        destinies = paths.md_files(paths.destiny(persona.id))
+        struggle_list = paths.lines(paths.struggles(persona.id))
 
         await bus.broadcast("Persona overseen", {"persona": persona})
 
@@ -502,19 +517,19 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
             prefix, hash_part = entry_id.split("-", 1)
 
             if prefix == "pi":
-                await paths.delete_entry(await paths.person_identity(persona.id), hash_part)
+                paths.delete_entry(paths.person_identity(persona.id), hash_part)
             elif prefix == "pt":
-                await paths.delete_entry(await paths.person_traits(persona.id), hash_part)
+                paths.delete_entry(paths.person_traits(persona.id), hash_part)
             elif prefix == "pc":
-                await paths.delete_entry(await paths.context(persona.id), hash_part)
+                paths.delete_entry(paths.context(persona.id), hash_part)
             elif prefix == "sk":
-                await paths.find_and_delete_file(await paths.skills(persona.id), hash_part)
+                paths.find_and_delete_file(paths.skills(persona.id), hash_part)
             elif prefix == "hist":
-                await paths.find_and_delete_file(await paths.history(persona.id), hash_part)
+                paths.find_and_delete_file(paths.history(persona.id), hash_part)
             elif prefix == "dest":
-                await paths.find_and_delete_file(await paths.destiny(persona.id), hash_part)
+                paths.find_and_delete_file(paths.destiny(persona.id), hash_part)
             elif prefix == "ps":
-                await paths.delete_entry(await paths.struggles(persona.id), hash_part)
+                paths.delete_entry(paths.struggles(persona.id), hash_part)
 
         await bus.broadcast("Persona controlled", {"persona": persona, "removed": len(entry_ids)})
 
@@ -543,12 +558,12 @@ async def write_diary(persona: Persona) -> Outcome[dict]:
 
     try:
         phrase = await system.get_phrases(persona)
-        archive = await paths.zip_home(persona.id)
-        encrypted_archive = await paths.encrypt(archive, await system.persona_key(phrase, persona.id))
-        diary_path = await paths.diary(persona.id)
+        archive = paths.zip_home(persona.id)
+        encrypted_archive = paths.encrypt(archive, await system.persona_key(phrase, persona.id))
+        diary_path = paths.diary(persona.id)
         diary_filename = f"{persona.id}.diary"
-        await paths.save_as_binary(diary_path / diary_filename, encrypted_archive)
-        await paths.commit_diary(persona.id, diary_path)
+        paths.save_as_binary(diary_path / diary_filename, encrypted_archive)
+        paths.commit_diary(persona.id, diary_path)
 
         await bus.broadcast("Diary saved", {"persona": persona})
 
@@ -625,28 +640,23 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
 async def hear(persona: Persona, message: Message) -> Outcome:
     """Hear an incoming message and hand it to the brain for processing."""
     await bus.propose("Hearing message", {"persona": persona, "channel": message.channel})
-
-    thread = memories.agent(persona).remember({
-        "role": "user",
-        "content": prompts.user_prompt(message),
-    })
-    mind.think(persona, thread, message.channel)
-    await mind.summarize(persona, thread, message.channel, [thread])
+    m = mind.get(persona.id)
+    if m is None:
+        logger.warning("hear: mind not loaded", {"persona_id": persona.id})
+        return Outcome(success=False, message="Mind not loaded.")
+    m.hear(message)
     await bus.broadcast("Message heard", {"persona": persona})
-    return Outcome(success=True, message="Message received", data={"thread_id": thread.id})
+    return Outcome(success=True, message="Message received")
 
 
 async def nudge(persona: Persona, message: str) -> Outcome[dict]:
-    """Privately nudge the persona with a system message on the secretary channel."""
+    """Privately nudge the persona with an internal signal."""
     await bus.propose("Nudging persona", {"persona": persona})
     try:
-        from application.platform import datetimes
-        stamp = datetimes.now().strftime("%Y-%m-%d-%H-%M")
-        secretary = Channel(type="heartbeat", name=f"heartbeat-{stamp}", authority="secretary")
-        m = memories.agent(persona)
-        thread = m.private_thread()
-        m.remember_on(thread, {"role": "user", "content": message})
-        mind.think(persona, thread, secretary)
+        m = mind.get(persona.id)
+        if m is None:
+            return Outcome(success=False, message="Mind not loaded.")
+        m.interrupt(message)
         await bus.broadcast("Persona nudged", {"persona": persona})
         return Outcome(success=True, message="Nudge sent.")
     except Exception as e:
@@ -659,9 +669,9 @@ async def live(persona: Persona, dt) -> Outcome[dict]:
     """Check for destiny entries due at dt and nudge the persona to act on them."""
     await bus.propose("Checking destiny", {"persona": persona})
     try:
-        destiny_path = await paths.destiny(persona.id)
+        destiny_path = paths.destiny(persona.id)
         pattern = f"*{dt.strftime('%Y-%m-%d-%H-%M')}*.md"
-        contents = await paths.read_files_matching(persona.id, destiny_path, pattern)
+        contents = paths.read_files_matching(persona.id, destiny_path, pattern)
         if not contents:
             await bus.broadcast("No destiny due", {"persona": persona})
             return Outcome(success=True, message="No destiny entries due.")
@@ -678,17 +688,15 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     """Let the persona rest, reflect on its conversations, and grow from everything it experienced."""
     await bus.propose("Sleeping", {"persona": persona})
     try:
-        m = memories.agent(persona)
-        reflective_channel = Channel(type="sleep", name="sleep", authority="reflective")
-        sleep_thread = m.private_thread()
-
-        await mind.summarize(persona, sleep_thread, reflective_channel, m.threads())
-        m.forget_everything()
-
-        await mind.grow(persona, reflective_channel)
+        await mind.grow(persona)
         outcome = await write_diary(persona)
         if not outcome.success:
             logger.warning("Sleep diary save failed", {"persona": persona, "error": outcome.message})
+
+        await stop(persona)
+        fresh = await find(persona.id)
+        if fresh.success:
+            await start(fresh.data["persona"])
 
         await bus.broadcast("Wake up", {"persona": persona})
         return Outcome(success=True, message="Sleep complete.")
@@ -704,6 +712,9 @@ async def sleep(persona: Persona) -> Outcome[dict]:
 async def start(persona: Persona) -> Outcome[dict]:
     """Open all channels for a persona and start listening."""
     await bus.propose("Starting channels", {"persona": persona})
+
+    if mind.get(persona.id) is None:
+        mind.Mind.load(persona)
 
     if not (persona.channels or []):
         await bus.broadcast("Channels start failed", {"persona": persona, "reason": "no_channels"})
@@ -724,6 +735,9 @@ async def stop(persona: Persona) -> Outcome[dict]:
     await bus.propose("Stopping channels", {"persona": persona})
 
     gateways.of(persona).clear()
+
+    from application.core import registry
+    registry.remove(persona.id)
 
     await bus.broadcast("Channels stopped", {"persona": persona})
     return Outcome(success=True, message="Channels stopped", data={"persona_id": persona.id})

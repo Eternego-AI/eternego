@@ -1,14 +1,13 @@
 """OpenAI-compatible routes — /v1/models and /v1/chat/completions."""
 
 import asyncio
-import json
 import uuid
 
 from fastapi import APIRouter, HTTPException
 
 from application.business import persona
+from application.core import gateways
 from application.core.data import Channel, Message
-from web.state import active_threads
 from web.requests import ChatRequest
 
 router = APIRouter()
@@ -43,13 +42,13 @@ async def get_model(model_id: str):
 
 @router.post("/v1/chat/completions")
 async def chat_completions(request: ChatRequest):
-    outcome = await persona.find(request.model)
+    outcome = await persona.loaded(request.model)
     if not outcome.success:
         raise HTTPException(status_code=404, detail=outcome.message)
 
-    found = outcome.data["persona"]
+    live = outcome.data["persona"]
 
-    user_messages = [m for m in request.messages if m.role == "user"]
+    user_messages = [msg for msg in request.messages if msg.role == "user"]
     if not user_messages:
         raise HTTPException(status_code=400, detail="No user message in request.")
 
@@ -59,23 +58,18 @@ async def chat_completions(request: ChatRequest):
         authority="conversational",
         bus=asyncio.Queue(),
     )
-    outcome = await persona.hear(found, Message(channel=channel, content=user_messages[-1].content))
-    thread_id = outcome.data["thread_id"]
-    active_threads.add(thread_id)
-
+    gateways.of(live).add(channel, lambda: None)
     try:
-        raw = await asyncio.wait_for(channel.bus.get(), timeout=300)
+        await persona.hear(live, Message(channel=channel, content=user_messages[-1].content))
+        content = await asyncio.wait_for(channel.bus.get(), timeout=300)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Persona did not respond in time.")
     finally:
-        active_threads.discard(thread_id)
-
-    payload = json.loads(raw)
-    content = payload["choices"][0]["message"]["content"]
+        gateways.of(live).remove(channel)
 
     return {
         "object": "chat.completion",
-        "model": request.model,
+        "model": live.id,
         "choices": [
             {
                 "index": 0,
@@ -84,9 +78,3 @@ async def chat_completions(request: ChatRequest):
             }
         ],
     }
-
-
-@router.delete("/persona/{persona_id}/chat/{thread_id}")
-async def stop_chat(persona_id: str, thread_id: str):
-    active_threads.discard(thread_id)
-    return {"stopped": thread_id}

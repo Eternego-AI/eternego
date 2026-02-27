@@ -12,7 +12,7 @@ async def trigger(persona: Persona) -> Outcome[dict]:
     current_time = datetimes.now().strftime("%H:%M")
     fired = []
 
-    path = await paths.routines(persona.id)
+    path = paths.routines(persona.id)
     data = filesystem.read_json(path) if path.exists() else {}
     for entry in data.get("routines", []):
         spec = entry.get("spec", "")

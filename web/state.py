@@ -1,3 +1,1 @@
-"""Shared web state — imported by both app and routes without circular deps."""
-
-active_threads: set[str] = set()
+"""Shared web state — imported by routes without circular deps."""

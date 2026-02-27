@@ -105,7 +105,7 @@ async def pair(code: str) -> Outcome[dict]:
             if persona_channel.name == channel.name:
                 persona_channel.verified_at = datetimes.iso_8601(datetimes.now())
 
-        await paths.save_as_json(persona.id, await paths.persona_identity(persona.id), persona)
+        paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
         await bus.broadcast("Channel paired", {"persona_id": persona.id, "channel": channel.name})
         return Outcome(success=True, message="Channel paired successfully", data={"persona_id": persona.id, "channel": channel.name})

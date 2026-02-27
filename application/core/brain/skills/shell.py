@@ -1,18 +1,25 @@
-"""Shell — how to run shell commands via the act ability."""
+"""Shell — how to run shell commands via the shell trait."""
 
-name = "shell"
-summary = "Knows how to run shell commands, manage files, and work within the workspace using the act ability."
+from application.core.brain.data import Skill
 
 
-def skill(persona) -> str:
-    from application.core import paths
-    workspace = str(paths.home(persona.id) / "workspace")
-    return f"""# Shell
+class _ShellSkill(Skill):
+    name = "shell"
+    description = (
+        "Provides commands and patterns for running shell operations, "
+        "managing files, and working within the workspace."
+    )
 
-Use `act` to run shell commands:
+    def execution(self):
+        def _doc(persona):
+            from application.core import paths
+            workspace = str(paths.home(persona.id) / "workspace")
+            return f"""# Shell
+
+Use the `shell` trait to run commands:
 
 ```json
-{{"act": [{{"function": {{"name": "shell", "arguments": {{"command": "your command here"}}}}}}]}}
+{{"trait": "shell", "params": {{"command": "your command here"}}}}
 ```
 
 ## Workspace
@@ -33,10 +40,18 @@ Write all files to: {workspace}
 | Disk usage | `du -sh /path` |
 | Running processes | `ps aux | grep name` |
 
+## Multi-step Workflows
+
+When a shell result shapes what you say next, use `reflect` after the shell step. This seeds the next tick with the actual output so the following cycle can respond with real data rather than guessing.
+
 ## Caution
 
 Never use shell to directly modify these persona files:
 
-`persona-context.md`, `person-identity.md`, `person-traits.md`, `permissions.md`
+`context.md`, `person.md`, `traits.md`, `permissions.md`
 
-Use the abilities for those instead."""
+Use the traits for those instead."""
+        return _doc
+
+
+skill = _ShellSkill()

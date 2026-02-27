@@ -3,16 +3,9 @@
 from fastapi import APIRouter, HTTPException
 
 from application.business import environment, persona
-from web.state import active_threads
 from web.requests import PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
 
 router = APIRouter(prefix="/api")
-
-
-@router.post("/chat/{thread_id}/stop")
-async def stop_chat(thread_id: str):
-    active_threads.discard(thread_id)
-    return {"stopped": thread_id}
 
 
 @router.post("/pair/{code}")

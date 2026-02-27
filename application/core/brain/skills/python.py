@@ -1,38 +1,43 @@
-"""Python — how to write and run Python scripts via the act ability."""
+"""Python — how to write and run Python scripts via the shell trait."""
 
-name = "python"
-summary = "Knows how to write Python scripts to the workspace and execute them for calculations, file processing, and automation."
+from application.core.brain.data import Skill
 
 
-def skill(persona) -> str:
-    from application.core import paths
-    workspace = str(paths.home(persona.id) / "workspace")
-    return f"""# Python
+class _PythonSkill(Skill):
+    name = "python"
+    description = (
+        "Provides patterns for writing and running Python scripts "
+        "for calculations, file processing, and automation."
+    )
 
-Write a script to workspace then run it — two `act` calls:
+    def execution(self):
+        def _doc(persona):
+            from application.core import paths
+            workspace = str(paths.home(persona.id) / "workspace")
+            return f"""# Python
+
+Write a script to workspace then run it — two `shell` trait calls:
 
 **1. Write the script:**
-```
-cat > {workspace}/script.py << 'EOF'
-# your code here
-print("result")
-EOF
+```json
+{{"trait": "shell", "params": {{"command": "cat > {workspace}/script.py << 'EOF'\\n# your code here\\nprint(\\"result\\")\\nEOF"}}}}
 ```
 
 **2. Run it:**
-```
-python3 {workspace}/script.py
+```json
+{{"trait": "shell", "params": {{"command": "python3 {workspace}/script.py"}}}}
 ```
 
-The output is returned to you by `act`.
+The output is returned as the trait result.
 
 ## Tips
 
 - Write all file I/O inside scripts to `{workspace}/`
-- Print results to stdout — that is what `act` captures
-- For one-off calculations, use `python3 -c "print(2 + 2)"` directly
+- Print results to stdout — that is what shell captures
+- For one-off calculations: `python3 -c "print(2 + 2)"`
 - Install a missing package: `pip install --quiet package_name`
 - Clean up when done: `rm {workspace}/script.py`
+- After running a script that produces output you need to report, use `reflect` to seed the next tick with the actual result rather than guessing it at plan time
 
 ## Useful Patterns
 
@@ -49,3 +54,7 @@ Work with dates:
 from datetime import datetime, timedelta
 print((datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"))
 ```"""
+        return _doc
+
+
+skill = _PythonSkill()

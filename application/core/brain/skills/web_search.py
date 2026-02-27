@@ -1,42 +1,53 @@
 """Web Search — how to search the web using DuckDuckGo."""
 
-name = "web-search"
-summary = "Knows how to search the web using DuckDuckGo's API without requiring an API key."
+from application.core.brain.data import Skill
 
 
-def skill(persona) -> str:
-    from application.core import paths
-    workspace = str(paths.home(persona.id) / "workspace")
-    return f"""# Web Search
+class _WebSearchSkill(Skill):
+    name = "web-search"
+    description = (
+        "Provides commands for searching the web using DuckDuckGo's API "
+        "without requiring an API key."
+    )
+
+    def execution(self):
+        def _doc(persona):
+            from application.core import paths
+            workspace = str(paths.home(persona.id) / "workspace")
+            return f"""# Web Search
 
 Search using DuckDuckGo's instant answer API — no key required:
 
-```
-curl -s "https://api.duckduckgo.com/?q=YOUR+QUERY&format=json&no_redirect=1&no_html=1"
+```json
+{{"trait": "shell", "params": {{"command": "curl -s \\"https://api.duckduckgo.com/?q=YOUR+QUERY&format=json&no_redirect=1&no_html=1\\""}}}}
 ```
 
 The `AbstractText` field contains a summary. `RelatedTopics` lists related results.
 
-For broader web results, use the HTML endpoint and extract links:
+For broader web results:
 
-```
-curl -sA "Mozilla/5.0" "https://html.duckduckgo.com/html/?q=YOUR+QUERY"
+```json
+{{"trait": "shell", "params": {{"command": "curl -sA \\"Mozilla/5.0\\" \\"https://html.duckduckgo.com/html/?q=YOUR+QUERY\\""}}}}
 ```
 
 ## Save Before Processing
 
-```
-curl -s "https://api.duckduckgo.com/?q=YOUR+QUERY&format=json" > {workspace}/search.json
+```json
+{{"trait": "shell", "params": {{"command": "curl -s \\"https://api.duckduckgo.com/?q=YOUR+QUERY&format=json\\" > {workspace}/search.json"}}}}
 ```
 
-Parse with `python` (see `python` skill) or `jq` if available:
+Then parse with Python (see `python` skill) or jq:
 
-```
-jq '.RelatedTopics[].Text' {workspace}/search.json
+```json
+{{"trait": "shell", "params": {{"command": "jq '.RelatedTopics[].Text' {workspace}/search.json"}}}}
 ```
 
 ## Tips
 
 - URL-encode spaces as `+` in the query string
 - Add `site:example.com` to restrict to a domain
-- Summarise findings with `say` rather than dumping raw results to the person"""
+- After getting results, use `reflect` to seed the next tick with what you found — then `say` in the following tick with the actual data rather than guessing it at plan time"""
+        return _doc
+
+
+skill = _WebSearchSkill()

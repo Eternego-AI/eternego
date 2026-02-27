@@ -9,7 +9,6 @@ from application.business import persona
 from application.platform import logger
 import heart
 from application.platform.observer import Command, Event, Plan, Signal, subscribe
-from application.core.brain.cognitive import memory as cognitive_memory, clock
 from web.app import app as web_app
 from web.socket import on_signal
 
@@ -24,9 +23,15 @@ async def start_web(host: str, port: int) -> None:
 async def on_channel_paired(signal: Signal):
     if signal.title != "Channel paired":
         return
-    agent = signal.details.get("persona")
-    if agent:
-        await persona.start(agent)
+    persona_id = signal.details.get("persona_id")
+    if not persona_id:
+        return
+    live = await persona.loaded(persona_id)
+    if live.success:
+        await persona.stop(live.data["persona"])
+    outcome = await persona.find(persona_id)
+    if outcome.success:
+        await persona.start(outcome.data["persona"])
 
 
 async def restart_gateway(command: Command):
@@ -84,8 +89,6 @@ async def main():
     personas = (outcome.data or {}).get("personas", [])
 
     for agent in personas:
-        mem = await cognitive_memory.load(agent)
-        clock.start(agent, mem)
         outcome = await persona.start(agent)
         if not outcome.success:
             print(f"Failed to start gateway for {agent.name}: {outcome.message}")
@@ -101,11 +104,10 @@ async def main():
         elapsed += 1
         if elapsed >= 60:
             elapsed = 0
-            outcome = await persona.agents()
+            outcome = await persona.running()
             if outcome.success:
-                personas = (outcome.data or {}).get("personas", [])
-            for agent in personas:
-                await heart.beat(agent)
+                for agent in (outcome.data or {}).get("personas", []):
+                    await heart.beat(agent)
 
 
 if __name__ == "__main__":

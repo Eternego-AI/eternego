@@ -1,13 +1,20 @@
 """Eternego — how Eternego works and how to operate it."""
 
-name = "eternego"
-summary = "Knows how Eternego works — the service, dashboard, persona files, channel pairing, and common troubleshooting."
+from application.core.brain.data import Skill
 
 
-def skill(persona) -> str:
-    from application.core import paths
-    storage = str(paths.home(persona.id))
-    return f"""# Eternego
+class _EternegoSkill(Skill):
+    name = "eternego"
+    description = (
+        "Explains how Eternego works — the service, dashboard, persona files, "
+        "channel pairing, and common troubleshooting."
+    )
+
+    def execution(self):
+        def _doc(persona):
+            from application.core import paths
+            storage = str(paths.home(persona.id))
+            return f"""# Eternego
 
 Eternego runs AI personas on the person's own hardware. Each persona learns from every interaction and stores its knowledge as plain files.
 
@@ -36,10 +43,10 @@ All persona data lives under:
 ```
 {storage}/
   config.json           # persona identity — name, birthday, model, version
-  persona-context.md    # evolving operational context
-  person-identity.md    # facts about the person (name, role, location)
-  person-traits.md      # how the person prefers to work and communicate
-  person-struggles.md   # recurring obstacles and unmet needs
+  context.md            # evolving operational context
+  person.md             # facts about the person (name, role, location)
+  traits.md             # how the person prefers to work and communicate
+  struggles.md          # recurring obstacles and unmet needs
   permissions.md        # pending and granted permissions
   channels.md           # verified channel chat IDs
   skills/               # loaded skill documents
@@ -64,6 +71,10 @@ eternego env check     # verify Ollama, Git, model availability
 eternego env prepare   # install missing dependencies
 ```
 
+## Multi-step Workflows
+
+When running commands that produce output you need to report (status, logs, env check), use `reflect` with the result so the next tick can compose an accurate response rather than guessing.
+
 ## Common Issues
 
 **Persona not responding on Telegram**
@@ -75,5 +86,9 @@ eternego env prepare   # install missing dependencies
 - `eternego env check` — confirms Ollama is running and the model is pulled
 
 **Persona seems to have forgotten something**
-- Check `person-traits.md` and `person-identity.md`
+- Check `traits.md` and `person.md`
 - Check `history/` — past conversations are archived here after sleep"""
+        return _doc
+
+
+skill = _EternegoSkill()

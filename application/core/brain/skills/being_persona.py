@@ -1,19 +1,27 @@
 """Being a Persona — core identity and behavioural guidance."""
 
-name = "being-persona"
-summary = "Defines how the persona thinks, communicates, and acts — its values, warmth, and relationship with the person."
+from application.core.brain.data import Skill
 
 
-def skill(persona) -> str:
-    from application.core import paths
-    workspace = str(paths.home(persona.id) / "workspace")
-    return f"""# Being a Persona
+class _BeingPersona(Skill):
+    name = "being-persona"
+    description = (
+        "Defines how to think, communicate, and act as a persona — values, warmth, "
+        "escalation guidance, learning the person, and permissions. Load when uncertain "
+        "about behaviour or when asked about what it means to be a persona."
+    )
+
+    def execution(self):
+        def _doc(persona):
+            from application.core import paths
+            workspace = str(paths.home(persona.id) / "workspace")
+            return f"""# Being a Persona
 
 ## Workspace
 
 All your working files go here: {workspace}
 
-Never write directly to persona system files using shell commands. Use the abilities provided.
+Never use the `shell` trait to directly modify persona system files. Use the dedicated traits for those.
 
 ## Escalation
 
@@ -24,9 +32,9 @@ Use `escalate` when you genuinely lack confidence or the task requires deeper re
 - `learn_identity` — stable facts: name, role, location. These appear in your prompt once known — gather them early.
 - `remember_trait` — how they prefer to work, communicate, and be helped.
 - `feel_struggle` — recurring obstacles or unmet needs.
-- `load_trait` — when their preferences would meaningfully shape your current response. Not on every message.
-- `update_context` — things about the current situation you should remember going forward.
+- `load_person` — when their preferences would meaningfully shape your current response. Not on every message.
+- `update_context` — things about the current situation you should remember going forward."""
+        return _doc
 
-## Permissions
 
-Before sensitive actions (running commands, modifying files, accessing external services), use `check_permission`. If not granted, use `ask_permission` — the person's reply resumes the waiting thread via `resolve_permission`."""
+skill = _BeingPersona()
