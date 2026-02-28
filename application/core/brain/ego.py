@@ -140,9 +140,13 @@ async def focus(persona: Persona, perception: Perception) -> Meaning:
     def prompt() -> str:
         tool_list = current.tools()
         skill_list = current.skills(persona)
+        signals_text = "\n".join(
+            f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
+            for s in perception.thread.signals
+        )
         lines = [
-            f"Perception: {perception.title}\n",
-            "Select only the tools needed to address this perception.",
+            f"Signals:\n{signals_text}\n",
+            "Select only the tools needed to address these signals.",
             'Return JSON: {"tools": ["tool_name", ...], "skills": ["skill_name", ...]}\n',
             "Tools:",
         ]
@@ -278,20 +282,22 @@ async def recap(persona: Persona, signals: list["Signal"], results: str, interru
     return response.get("recap", "") if isinstance(response, dict) else ""
 
 
-async def think(persona: Persona, perception: Perception, focus: Meaning) -> list[Step]:
+async def think(persona: Persona, perception: Perception, meaning: Meaning) -> list[Step]:
     """Plan the steps needed to address a perception using the focused tools."""
     def prompt() -> str:
         signals_text = "\n".join(
             f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
             for s in perception.thread.signals
         )
+        allowed = ", ".join(meaning.tools) if meaning.tools else "say"
         return (
             f"Signals:\n{signals_text}\n\n"
-            "Plan the steps to address these signals using the available tools.\n"
+            f"Allowed tools: {allowed}\n\n"
+            "Plan the steps to address these signals using only the allowed tools.\n"
             'Return JSON: {"steps": [{"number": 1, "tool": "tool_name", "params": {}}]}'
         )
 
-    response = await reason(persona, prompt(), system=current.situation(persona, focus))
+    response = await reason(persona, prompt(), system=current.situation(persona, meaning))
     items = response.get("steps") if isinstance(response, dict) else None
     if not isinstance(items, list) or not items:
         logger.warning("ego.think: model returned unexpected output", {"persona_id": persona.id})

@@ -118,7 +118,7 @@ class Mind:
 
             results = ""
             perception: Perception | None = None
-            focus = None
+            meaning = None
             self._plan = []
 
             try:
@@ -156,26 +156,26 @@ class Mind:
 
                 if self._interrupting_signal is None and perception is not None:
                     logger.debug("mind._tick: focusing", {"persona_id": self._persona_id})
-                    focus = await ego.focus(persona, perception)
-                    if not focus.tools:
-                        focus.tools = ["say"]
+                    meaning = await ego.focus(persona, perception)
+                    if not meaning.tools:
+                        meaning.tools = ["say"]
 
                     # Signals are now encoded in the plan — expire them
                     for s in perception.thread.signals:
                         s.expired = True
 
-                if self._interrupting_signal is None and focus is not None:
-                    logger.debug("mind._tick: thought", {"persona_id": self._persona_id, "tools": focus.tools})
-                    thought = await ego.think(persona, perception, focus)
+                if self._interrupting_signal is None and meaning is not None:
+                    logger.debug("mind._tick: thought", {"persona_id": self._persona_id, "tools": meaning.tools})
+                    thought = await ego.think(persona, perception, meaning)
                     if not thought:
                         logger.debug("mind._tick: no thought, exiting", {"persona_id": self._persona_id})
                         return
-                    focus.path = thought
+                    meaning.path = thought
                     self._plan = thought
                     paths.append_meaning_path(
-                        persona.id, focus.title,
-                        focus.tools,
-                        [s.tool for s in focus.path],
+                        persona.id, meaning.title,
+                        meaning.tools,
+                        [s.tool for s in meaning.path],
                     )
 
                 # Legalize: check which steps require permission
