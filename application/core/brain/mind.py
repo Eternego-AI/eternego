@@ -108,6 +108,7 @@ class Mind:
     async def _tick(self) -> None:
         """Full cognitive cycle: perceptions → awareness → focus → thought → execute → recap → archive."""
         from application.core.brain import ego
+        from application.core import channels
 
         async with self._lock:
             self._interrupting_signal = None  # reset: triggering signal is already in _signals
@@ -120,11 +121,14 @@ class Mind:
             perception: Perception | None = None
             meaning = None
             self._plan = []
+            channel = channels.default_channel(persona)
 
             try:
                 if not self.present():
                     return
 
+                if channel:
+                    await channels.in_progress(channel)
                 logger.debug("mind._tick: perceiving", {"persona_id": self._persona_id, "signals": len(self.present())})
                 perceptions = await ego.perceptions(persona, self.present())
                 if not perceptions:
@@ -132,6 +136,8 @@ class Mind:
                     return
 
                 if self._interrupting_signal is None:
+                    if channel:
+                        await channels.in_progress(channel)
                     logger.debug("mind._tick: awareness", {"persona_id": self._persona_id, "perceptions": len(perceptions)})
                     awareness = await ego.awareness(persona, perceptions)
                     if not awareness:
@@ -155,6 +161,8 @@ class Mind:
                             await self._authorize(persona, pending_signal, decisions)
 
                 if self._interrupting_signal is None and perception is not None:
+                    if channel:
+                        await channels.in_progress(channel)
                     logger.debug("mind._tick: focusing", {"persona_id": self._persona_id})
                     meaning = await ego.focus(persona, perception)
                     if not meaning.tools:
@@ -165,6 +173,8 @@ class Mind:
                         s.expired = True
 
                 if self._interrupting_signal is None and meaning is not None:
+                    if channel:
+                        await channels.in_progress(channel)
                     logger.debug("mind._tick: thought", {"persona_id": self._persona_id, "tools": meaning.tools})
                     thought = await ego.think(persona, perception, meaning)
                     if not thought:

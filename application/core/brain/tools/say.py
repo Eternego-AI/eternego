@@ -28,9 +28,12 @@ class _Say(Tool):
             )
             logger.debug("say: channel lookup", {"channel_name": channel_name, "found": channel is not None, "available": [c.name for c in gateways.of(persona).all_channels()]})
             if channel is None:
-                return f"failed: channel '{channel_name}' not found"
+                channel = channels.default_channel(persona)
+                if channel is None:
+                    return "failed: no active channels found"
+                logger.debug("say: falling back to default channel", {"channel_name": channel.name})
             await channels.send(channel, text)
-            return f"message has been sent through channel {channel_name}"
+            return f"message has been sent through channel {channel.name}"
         return _run
 
 

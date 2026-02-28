@@ -32,7 +32,7 @@ def open(persona: Persona, channel: Channel, on_message: Callable) -> Callable[[
             async def handle():
                 outcome = await on_message(message)
                 if outcome.success:
-                    await asyncio.to_thread(telegram.typing_action, token=token, chat_id=chat_id)
+                    await in_progress(msg_channel)
 
             asyncio.run_coroutine_threadsafe(handle(), loop)
 
@@ -54,6 +54,20 @@ def open(persona: Persona, channel: Channel, on_message: Callable) -> Callable[[
         return stop_event.set
     raise ChannelError(f"Unsupported channel type: {channel.type}")
 
+
+
+def default_channel(persona: Persona) -> Channel | None:
+    """Return the first active channel for a persona, or None if none are open."""
+    from application.core import gateways
+    active = gateways.of(persona).all_channels()
+    return active[0] if active else None
+
+
+async def in_progress(channel: Channel) -> None:
+    """Signal to the channel that the persona is working on something."""
+    if channel.type == "telegram":
+        token = (channel.credentials or {})["token"]
+        await asyncio.to_thread(telegram.typing_action, token=token, chat_id=channel.name)
 
 
 async def send(channel: Channel, text: str) -> None:
