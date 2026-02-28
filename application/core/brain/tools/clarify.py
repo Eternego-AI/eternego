@@ -1,9 +1,9 @@
 """Clarify — ask the person for clarification when something is uncertain."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Clarify(Trait):
+class _Clarify(Tool):
     name = "clarify"
     requires_permission = False
     description = (
@@ -12,7 +12,7 @@ class _Clarify(Trait):
         "Prefer this over say when the intent is to ask rather than inform."
     )
     instruction = (
-        "Trait: clarify\n"
+        "Tool: clarify\n"
         "Ask the person a clarifying question when uncertain.\n"
         'Params: {"text": "clarifying question to ask", "channel_name": "name of the channel"}'
     )
@@ -34,4 +34,4 @@ class _Clarify(Trait):
         return _run
 
 
-trait = _Clarify()
+tool = _Clarify()

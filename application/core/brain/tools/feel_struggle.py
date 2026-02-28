@@ -1,9 +1,9 @@
 """Feel struggle — record a struggle or recurring obstacle the person faces."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _FeelStruggle(Trait):
+class _FeelStruggle(Tool):
     name = "feel_struggle"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _FeelStruggle(Trait):
         "Use when the person describes something they find hard, frustrating, or repeatedly problematic."
     )
     instruction = (
-        "Trait: feel_struggle\n"
+        "Tool: feel_struggle\n"
         "Record a struggle or recurring obstacle the person faces.\n"
         'Params: {"struggle": "the struggle to record"}'
     )
@@ -38,4 +38,4 @@ class _FeelStruggle(Trait):
         return _run
 
 
-trait = _FeelStruggle()
+tool = _FeelStruggle()

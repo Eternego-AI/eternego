@@ -1,9 +1,9 @@
 """Load person — load what is known about the person into context."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _LoadPerson(Trait):
+class _LoadPerson(Tool):
     name = "load_person"
     requires_permission = False
     description = (
@@ -12,7 +12,7 @@ class _LoadPerson(Trait):
         "recall their preferences, or understand their situation."
     )
     instruction = (
-        "Trait: load_person\n"
+        "Tool: load_person\n"
         "Load known facts and traits about the person.\n"
         "Params: {}"
     )
@@ -35,4 +35,4 @@ class _LoadPerson(Trait):
         return _run
 
 
-trait = _LoadPerson()
+tool = _LoadPerson()

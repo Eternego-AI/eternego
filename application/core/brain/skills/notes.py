@@ -21,7 +21,7 @@ Take and retrieve structured notes for the person using the `shell` trait.
 ## Write a Note
 
 ```json
-{{"trait": "shell", "params": {{"command": "cat > {notes_dir}/YYYY-MM-DD-title.md << 'EOF'\\n# Title\\n\\nContent here.\\nEOF"}}}}
+{{"tool": "shell", "params": {{"command": "cat > {notes_dir}/YYYY-MM-DD-title.md << 'EOF'\\n# Title\\n\\nContent here.\\nEOF"}}}}
 ```
 
 Or use Python to get today's date automatically (see `python` skill):
@@ -39,19 +39,19 @@ print(f"Saved to {{path}}")
 ## List Notes
 
 ```json
-{{"trait": "shell", "params": {{"command": "ls -1t {notes_dir}/"}}}}
+{{"tool": "shell", "params": {{"command": "ls -1t {notes_dir}/"}}}}
 ```
 
 ## Read a Note
 
 ```json
-{{"trait": "shell", "params": {{"command": "cat {notes_dir}/YYYY-MM-DD-title.md"}}}}
+{{"tool": "shell", "params": {{"command": "cat {notes_dir}/YYYY-MM-DD-title.md"}}}}
 ```
 
 ## Search Notes
 
 ```json
-{{"trait": "shell", "params": {{"command": "grep -rl \\"keyword\\" {notes_dir}/"}}}}
+{{"tool": "shell", "params": {{"command": "grep -rl \\"keyword\\" {notes_dir}/"}}}}
 ```
 
 ## Tips

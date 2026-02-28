@@ -1,9 +1,9 @@
 """Reflect — interrupt the current cycle and inject a reflection to seed the next tick."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Reflect(Trait):
+class _Reflect(Tool):
     name = "reflect"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _Reflect(Trait):
         "Use when you have intermediate results and need a fresh cycle to continue with full context."
     )
     instruction = (
-        "Trait: reflect\n"
+        "Tool: reflect\n"
         "Interrupt and inject a reflection to seed the next tick.\n"
         'Params: {"text": "what you observed and what should happen next"}'
     )
@@ -32,4 +32,4 @@ class _Reflect(Trait):
         return _run
 
 
-trait = _Reflect()
+tool = _Reflect()

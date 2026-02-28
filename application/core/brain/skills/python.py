@@ -20,12 +20,12 @@ Write a script to workspace then run it — two `shell` trait calls:
 
 **1. Write the script:**
 ```json
-{{"trait": "shell", "params": {{"command": "cat > {workspace}/script.py << 'EOF'\\n# your code here\\nprint(\\"result\\")\\nEOF"}}}}
+{{"tool": "shell", "params": {{"command": "cat > {workspace}/script.py << 'EOF'\\n# your code here\\nprint(\\"result\\")\\nEOF"}}}}
 ```
 
 **2. Run it:**
 ```json
-{{"trait": "shell", "params": {{"command": "python3 {workspace}/script.py"}}}}
+{{"tool": "shell", "params": {{"command": "python3 {workspace}/script.py"}}}}
 ```
 
 The output is returned as the trait result.

@@ -1,9 +1,9 @@
 """Reminder — get all pending reminders."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Reminder(Trait):
+class _Reminder(Tool):
     name = "reminder"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _Reminder(Trait):
         "Use when you need to see what reminders are set or to identify ones that are due."
     )
     instruction = (
-        "Trait: reminder\n"
+        "Tool: reminder\n"
         "Get all pending reminders.\n"
         "Params: {}"
     )
@@ -29,4 +29,4 @@ class _Reminder(Trait):
         return _run
 
 
-trait = _Reminder()
+tool = _Reminder()

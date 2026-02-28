@@ -1,9 +1,9 @@
 """Remind — set a reminder at a specific datetime."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Remind(Trait):
+class _Remind(Tool):
     name = "remind"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _Remind(Trait):
         "Use when the person wants to be reminded of something at a specific moment."
     )
     instruction = (
-        "Trait: remind\n"
+        "Tool: remind\n"
         "Set a reminder at a specific datetime.\n"
         'Params: {"trigger": "YYYY-MM-DD HH:MM", "content": "what to be reminded of"}'
     )
@@ -36,4 +36,4 @@ class _Remind(Trait):
         return _run
 
 
-trait = _Remind()
+tool = _Remind()

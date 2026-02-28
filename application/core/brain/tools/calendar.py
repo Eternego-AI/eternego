@@ -1,9 +1,9 @@
 """Calendar — get all pending scheduled events."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Calendar(Trait):
+class _Calendar(Tool):
     name = "calendar"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _Calendar(Trait):
         "Use when you need to see what is coming up or to identify events that are due."
     )
     instruction = (
-        "Trait: calendar\n"
+        "Tool: calendar\n"
         "Get all pending scheduled events.\n"
         "Params: {}"
     )
@@ -29,4 +29,4 @@ class _Calendar(Trait):
         return _run
 
 
-trait = _Calendar()
+tool = _Calendar()

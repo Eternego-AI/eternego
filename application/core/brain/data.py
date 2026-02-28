@@ -2,10 +2,10 @@
 
 Signal    — a raw input arriving in presence (role + content + channel + timestamp)
 Thread    — a group of related signals
-Meaning   — a perception's title and selected traits
+Meaning   — a perception's title and selected tools
 Perception — a thread paired with its meaning
-Step      — a single trait invocation with parameters
-Trait     — base class for persona capabilities
+Step      — a single tool invocation with parameters
+Tool      — base class for persona capabilities
 Skill     — base class for persona knowledge documents
 """
 
@@ -21,7 +21,7 @@ class Signal:
     prompt: Prompt
     channel: Channel | None = None
     created_at: datetime = field(default_factory=datetimes.now)
-    pending_permission: list[str] = field(default_factory=list)  # blocked trait names awaiting decision
+    pending_permission: list[str] = field(default_factory=list)  # blocked tool names awaiting decision
     expired: bool = False  # True once the signal has been encoded into a plan
 
 
@@ -33,7 +33,7 @@ class Thread:
 @dataclass
 class Meaning:
     title: str
-    traits: list[str] = field(default_factory=list)
+    tools: list[str] = field(default_factory=list)
     skills: list[str] = field(default_factory=list)
     path: list["Step"] = field(default_factory=list)
 
@@ -47,17 +47,17 @@ class Perception:
 @dataclass
 class Step:
     number: int
-    trait: str
+    tool: str
     params: dict
 
 
-class Trait:
+class Tool:
     """A persona capability that can be planned and executed.
 
     Subclasses declare:
       name: str               — the key used in plan steps
       requires_permission: bool — whether explicit permission is needed (default True)
-      description: str        — one-line summary shown during prepare
+      description: str        — one-line summary shown during focus
       instruction: str        — how-to shown in situation context when selected
 
     And implement:
@@ -70,7 +70,7 @@ class Trait:
     instruction: str = ""
 
     def execution(self, **params):
-        """Return an async callable that runs this trait: async (persona) -> str."""
+        """Return an async callable that runs this tool: async (persona) -> str."""
         raise NotImplementedError(f"{self.__class__.__name__}.execution not implemented")
 
 
@@ -80,7 +80,7 @@ class Skill:
     Subclasses declare:
       name: str               — the key used for selection
       requires_permission: bool — (default False; skills are read-only documents)
-      description: str        — one-line summary shown during prepare
+      description: str        — one-line summary shown during focus
       instruction: str        — static usage hint (optional)
 
     And implement:

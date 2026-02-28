@@ -160,16 +160,16 @@ def append_as_string(path: Path, content: str) -> None:
 
 
 def meanings(persona_id: str) -> Path:
-    """Directory where meaning trait-history files are stored."""
+    """Directory where meaning tool-history files are stored."""
     return home(persona_id) / "meanings"
 
 
-def append_meaning_path(persona_id: str, title: str, traits: list[str], path: list[str]) -> None:
-    """Append one observed iteration (prepared traits + actual path) to the meaning file."""
+def append_meaning_path(persona_id: str, title: str, tools: list[str], path: list[str]) -> None:
+    """Append one observed iteration (focused tools + actual path) to the meaning file."""
     file = meanings(persona_id) / f"{title}.md"
     file.parent.mkdir(parents=True, exist_ok=True)
     meaning_lines = (
-        ["# traits"] + [f"- {t}" for t in traits] +
+        ["# tools"] + [f"- {t}" for t in tools] +
         ["# path"] + [f"- {t}" for t in path]
     )
     filesystem.append(file, "\n".join(meaning_lines) + "\n\n")

@@ -7,12 +7,12 @@ reason(persona, prompt, system)      reasons with an additional system section.
 
 perceptions(persona, signals)        group signals into related perception threads.
 awareness(persona, perceptions)      order perceptions by priority.
-focus(persona, perception)           select the relevant traits for the top perception.
-thought(persona, perception, focus)  produce steps using the focused traits.
+focus(persona, perception)           select the relevant tools for the top perception.
+think(persona, perception, focus)    produce steps using the focused tools.
 """
 
 from application.core.data import Persona
-from application.core.brain import character, current, traits
+from application.core.brain import character, current, tools
 from application.core.brain.data import Signal, Thread, Meaning, Perception, Step
 from application.core import local_model
 from application.platform import logger
@@ -37,7 +37,7 @@ async def reason(persona: Persona, prompt: str, system: str = "") -> dict:
 
     An optional system string is appended after the base instruction —
     used by cognitive functions to inject task-specific context such as
-    the available trait vocabulary.
+    the available tool vocabulary.
     """
     def reasoning_system() -> str:
         base = (
@@ -136,17 +136,17 @@ async def awareness(persona: Persona, perceptions: list[Perception]) -> list[Per
 
 
 async def focus(persona: Persona, perception: Perception) -> Meaning:
-    """Select the relevant traits and skills for this perception and return a Meaning."""
+    """Select the relevant tools and skills for this perception and return a Meaning."""
     def prompt() -> str:
-        trait_list = current.traits()
+        tool_list = current.tools()
         skill_list = current.skills(persona)
         lines = [
             f"Perception: {perception.title}\n",
-            "Select only the traits needed to address this perception.",
-            'Return JSON: {"traits": ["trait_name", ...], "skills": ["skill_name", ...]}\n',
-            "Traits:",
+            "Select only the tools needed to address this perception.",
+            'Return JSON: {"tools": ["tool_name", ...], "skills": ["skill_name", ...]}\n',
+            "Tools:",
         ]
-        for t in trait_list:
+        for t in tool_list:
             if t.description:
                 lines.append(f"- {t.name}: {t.description}")
         if skill_list:
@@ -161,34 +161,34 @@ async def focus(persona: Persona, perception: Perception) -> Meaning:
         logger.warning("ego.focus: model returned unexpected output", {"persona_id": persona.id})
         return Meaning(perception.title)
 
-    selected_traits = response.get("traits") or []
+    selected_tools = response.get("tools") or []
     selected_skills = response.get("skills") or []
 
-    if not isinstance(selected_traits, list):
+    if not isinstance(selected_tools, list):
         logger.warning("ego.focus: model returned unexpected output", {"persona_id": persona.id})
         return Meaning(perception.title)
 
     valid_skill_names = {s.name for s in current.skills(persona)}
-    valid_traits = [t for t in selected_traits if isinstance(t, str) and traits.for_name(t) is not None]
+    valid_tools = [t for t in selected_tools if isinstance(t, str) and tools.for_name(t) is not None]
     valid_skills = [s for s in selected_skills if isinstance(s, str) and s in valid_skill_names]
-    return Meaning(perception.title, valid_traits, valid_skills)
+    return Meaning(perception.title, valid_tools, valid_skills)
 
 
 async def legalize(persona: Persona, steps: list[Step]) -> list[str]:
     """Check which planned steps require but haven't been granted permission.
 
-    Reads permissions.md and asks the model to identify any traits in the plan
+    Reads permissions.md and asks the model to identify any tools in the plan
     that declare requires_permission=True and have not been explicitly granted.
-    Returns a list of trait names that are blocked.
+    Returns a list of tool names that are blocked.
     """
     from application.core import paths
 
-    # Collect traits in plan that require permission
+    # Collect tools in plan that require permission
     guarded = []
     for step in steps:
-        t = traits.for_name(step.trait)
+        t = tools.for_name(step.tool)
         if t and t.requires_permission:
-            guarded.append(step.trait)
+            guarded.append(step.tool)
 
     if not guarded:
         return []
@@ -198,14 +198,14 @@ async def legalize(persona: Persona, steps: list[Step]) -> list[str]:
 
     def prompt() -> str:
         lines = [
-            "The following traits require explicit permission before they can run:",
+            "The following tools require explicit permission before they can run:",
             ", ".join(guarded),
             "",
             "Permissions file content (lines starting with 'granted:' or 'rejected:'):",
             permissions_content if permissions_content else "(empty — no permissions recorded yet)",
             "",
-            "Which of the listed traits are NOT yet granted permission?",
-            'Return JSON: {"blocked": ["trait_name", ...]}',
+            "Which of the listed tools are NOT yet granted permission?",
+            'Return JSON: {"blocked": ["tool_name", ...]}',
             "Return an empty list if all are granted.",
         ]
         return "\n".join(lines)
@@ -214,7 +214,7 @@ async def legalize(persona: Persona, steps: list[Step]) -> list[str]:
     blocked = response.get("blocked") if isinstance(response, dict) else None
     if not isinstance(blocked, list):
         logger.warning("ego.legalize: model returned unexpected output", {"persona_id": persona.id})
-        return guarded  # safe default: block all guarded traits if model fails
+        return guarded  # safe default: block all guarded tools if model fails
 
     return [t for t in blocked if isinstance(t, str)]
 
@@ -235,7 +235,7 @@ async def grant_or_reject(persona: Persona, blocked: list[str], subsequent: list
             f"[{s.prompt.role}]: {s.prompt.content}" for s in subsequent
         )
         return "\n".join([
-            f"These traits are pending permission: {', '.join(blocked)}",
+            f"These tools are pending permission: {', '.join(blocked)}",
             "",
             "Messages received after the permission request:",
             signals_text,
@@ -243,9 +243,9 @@ async def grant_or_reject(persona: Persona, blocked: list[str], subsequent: list
             "Current permissions on file:",
             permissions_content if permissions_content else "(none recorded yet)",
             "",
-            "Based on the person's response, did they explicitly grant or reject any of these traits?",
-            "Only include traits the person clearly authorised or denied.",
-            'Return JSON: {"granted": ["trait_name", ...], "rejected": ["trait_name", ...]}',
+            "Based on the person's response, did they explicitly grant or reject any of these tools?",
+            "Only include tools the person clearly authorised or denied.",
+            'Return JSON: {"granted": ["tool_name", ...], "rejected": ["tool_name", ...]}',
             "Return empty lists if no clear decision was made.",
         ])
 
@@ -279,7 +279,7 @@ async def recap(persona: Persona, signals: list["Signal"], results: str, interru
 
 
 async def think(persona: Persona, perception: Perception, focus: Meaning) -> list[Step]:
-    """Plan the steps needed to address a perception using the focused meaning."""
+    """Plan the steps needed to address a perception using the focused tools."""
     def prompt() -> str:
         signals_text = "\n".join(
             f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
@@ -287,26 +287,26 @@ async def think(persona: Persona, perception: Perception, focus: Meaning) -> lis
         )
         return (
             f"Signals:\n{signals_text}\n\n"
-            "Plan the steps to address these signals using the available traits.\n"
-            'Return JSON: {"steps": [{"number": 1, "trait": "trait_name", "params": {}}]}'
+            "Plan the steps to address these signals using the available tools.\n"
+            'Return JSON: {"steps": [{"number": 1, "tool": "tool_name", "params": {}}]}'
         )
 
     response = await reason(persona, prompt(), system=current.situation(persona, focus))
     items = response.get("steps") if isinstance(response, dict) else None
     if not isinstance(items, list) or not items:
-        logger.warning("ego.thought: model returned unexpected output", {"persona_id": persona.id})
+        logger.warning("ego.think: model returned unexpected output", {"persona_id": persona.id})
         return []
 
     result = []
     for item in items:
         number = item.get("number")
-        trait_name = item.get("trait")
+        tool_name = item.get("tool")
         params = item.get("params") or {}
-        if not isinstance(number, int) or not trait_name:
+        if not isinstance(number, int) or not tool_name:
             continue
-        if traits.for_name(trait_name) is None:
-            logger.warning("ego.thought: unknown trait in response", {"persona_id": persona.id, "trait": trait_name})
+        if tools.for_name(tool_name) is None:
+            logger.warning("ego.think: unknown tool in response", {"persona_id": persona.id, "tool": tool_name})
             continue
-        result.append(Step(number=number, trait=trait_name, params=params))
+        result.append(Step(number=number, tool=tool_name, params=params))
 
     return result

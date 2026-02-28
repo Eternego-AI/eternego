@@ -1,9 +1,9 @@
 """Reach out — deliver a message across every active channel."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _ReachOut(Trait):
+class _ReachOut(Tool):
     name = "reach_out"
     requires_permission = False
     description = (
@@ -12,7 +12,7 @@ class _ReachOut(Trait):
         "regardless of which channel they are currently using."
     )
     instruction = (
-        "Trait: reach_out\n"
+        "Tool: reach_out\n"
         "Send a message to every active channel at once.\n"
         'Params: {"text": "message to deliver"}'
     )
@@ -41,4 +41,4 @@ class _ReachOut(Trait):
         return _run
 
 
-trait = _ReachOut()
+tool = _ReachOut()

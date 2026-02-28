@@ -21,7 +21,7 @@ class _BeingPersona(Skill):
 
 All your working files go here: {workspace}
 
-Never use the `shell` trait to directly modify persona system files. Use the dedicated traits for those.
+Never use the `shell` tool to directly modify persona system files. Use the dedicated tools for those.
 
 ## Escalation
 

@@ -1,9 +1,9 @@
 """Say — send a message to the person through a named channel."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Say(Trait):
+class _Say(Tool):
     name = "say"
     requires_permission = False
     description = (
@@ -12,7 +12,7 @@ class _Say(Trait):
         "or deliver any response to the person."
     )
     instruction = (
-        "Trait: say\n"
+        "Tool: say\n"
         "Send a message to the person through a channel.\n"
         'Params: {"text": "message to send", "channel_name": "name of the channel"}'
     )
@@ -34,4 +34,4 @@ class _Say(Trait):
         return _run
 
 
-trait = _Say()
+tool = _Say()

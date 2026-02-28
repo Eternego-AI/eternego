@@ -1,9 +1,9 @@
 """Seek history — load the history briefing to find past conversations."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _SeekHistory(Trait):
+class _SeekHistory(Tool):
     name = "seek_history"
     requires_permission = False
     description = (
@@ -12,7 +12,7 @@ class _SeekHistory(Trait):
         "or check what has been discussed before. Follow with recall to load the full conversation."
     )
     instruction = (
-        "Trait: seek_history\n"
+        "Tool: seek_history\n"
         "Load the history briefing to find past conversations.\n"
         "Params: {}"
     )
@@ -26,4 +26,4 @@ class _SeekHistory(Trait):
         return _run
 
 
-trait = _SeekHistory()
+tool = _SeekHistory()

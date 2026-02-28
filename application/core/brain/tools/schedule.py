@@ -1,9 +1,9 @@
 """Schedule — create a scheduled event at a specific datetime."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Schedule(Trait):
+class _Schedule(Tool):
     name = "schedule"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _Schedule(Trait):
         "Use when the person wants to record an event, appointment, or task at a specific moment."
     )
     instruction = (
-        "Trait: schedule\n"
+        "Tool: schedule\n"
         "Schedule an event at a specific datetime.\n"
         'Params: {"trigger": "YYYY-MM-DD HH:MM", "content": "event description"}'
     )
@@ -36,4 +36,4 @@ class _Schedule(Trait):
         return _run
 
 
-trait = _Schedule()
+tool = _Schedule()

@@ -1,9 +1,9 @@
 """Escalate — consult a more capable frontier model when the local model is not confident."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Escalate(Trait):
+class _Escalate(Tool):
     name = "escalate"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _Escalate(Trait):
         "Use when the question is complex, requires specialised knowledge, or when uncertain about the answer."
     )
     instruction = (
-        "Trait: escalate\n"
+        "Tool: escalate\n"
         "Consult a more capable model when the question exceeds local confidence.\n"
         'Params: {"question": "the question or task to escalate"}'
     )
@@ -30,4 +30,4 @@ class _Escalate(Trait):
         return _run
 
 
-trait = _Escalate()
+tool = _Escalate()

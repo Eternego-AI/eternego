@@ -19,7 +19,7 @@ class _WebSearchSkill(Skill):
 Search using DuckDuckGo's instant answer API — no key required:
 
 ```json
-{{"trait": "shell", "params": {{"command": "curl -s \\"https://api.duckduckgo.com/?q=YOUR+QUERY&format=json&no_redirect=1&no_html=1\\""}}}}
+{{"tool": "shell", "params": {{"command": "curl -s \\"https://api.duckduckgo.com/?q=YOUR+QUERY&format=json&no_redirect=1&no_html=1\\""}}}}
 ```
 
 The `AbstractText` field contains a summary. `RelatedTopics` lists related results.
@@ -27,19 +27,19 @@ The `AbstractText` field contains a summary. `RelatedTopics` lists related resul
 For broader web results:
 
 ```json
-{{"trait": "shell", "params": {{"command": "curl -sA \\"Mozilla/5.0\\" \\"https://html.duckduckgo.com/html/?q=YOUR+QUERY\\""}}}}
+{{"tool": "shell", "params": {{"command": "curl -sA \\"Mozilla/5.0\\" \\"https://html.duckduckgo.com/html/?q=YOUR+QUERY\\""}}}}
 ```
 
 ## Save Before Processing
 
 ```json
-{{"trait": "shell", "params": {{"command": "curl -s \\"https://api.duckduckgo.com/?q=YOUR+QUERY&format=json\\" > {workspace}/search.json"}}}}
+{{"tool": "shell", "params": {{"command": "curl -s \\"https://api.duckduckgo.com/?q=YOUR+QUERY&format=json\\" > {workspace}/search.json"}}}}
 ```
 
 Then parse with Python (see `python` skill) or jq:
 
 ```json
-{{"trait": "shell", "params": {{"command": "jq '.RelatedTopics[].Text' {workspace}/search.json"}}}}
+{{"tool": "shell", "params": {{"command": "jq '.RelatedTopics[].Text' {workspace}/search.json"}}}}
 ```
 
 ## Tips

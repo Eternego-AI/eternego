@@ -1,9 +1,9 @@
 """Shell — run a shell command and return its output."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Shell(Trait):
+class _Shell(Tool):
     name = "shell"
     requires_permission = True
     description = (
@@ -12,7 +12,7 @@ class _Shell(Trait):
         "or perform any system operation."
     )
     instruction = (
-        "Trait: shell\n"
+        "Tool: shell\n"
         "Run a shell command and return its output.\n"
         'Params: {"command": "the shell command to run"}'
     )
@@ -39,4 +39,4 @@ class _Shell(Trait):
         return _run
 
 
-trait = _Shell()
+tool = _Shell()

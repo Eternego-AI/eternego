@@ -12,7 +12,7 @@ the gate is closed (tick is running).
 
 mind.interrupt(prompt, channel) — urgent signal: starts tick if idle, interrupts if busy
 mind.reflect(prompt)            — passive signal: added to presence, no tick started
-mind.execute(trait, params)     — run any trait directly
+mind.execute(tool, params)     — run any tool directly
 mind.next_task(taking)          — peek or consume the next plan step
 mind.load(persona)              — the only way to create a Mind
 grow(persona)                   — evolve DNA, generate training, fine-tune
@@ -71,24 +71,24 @@ class Mind:
         self._signals.append(signal)
         logger.debug("mind.reflect", {"persona_id": self._persona_id})
 
-    async def execute(self, trait_name: str, params: dict) -> str:
-        """Run a single trait. Reflects on success; interrupts on failure."""
-        from application.core.brain import traits
+    async def execute(self, tool_name: str, params: dict) -> str:
+        """Run a single tool. Reflects on success; interrupts on failure."""
+        from application.core.brain import tools
         persona = self.persona
-        trait = traits.for_name(trait_name)
-        if trait is None:
-            self.interrupt(Prompt(role="user", content=f"[{trait_name}] failed: unknown trait"))
-            return f"error: unknown trait '{trait_name}'"
+        tool = tools.for_name(tool_name)
+        if tool is None:
+            self.interrupt(Prompt(role="user", content=f"[{tool_name}] failed: unknown tool"))
+            return f"error: unknown tool '{tool_name}'"
         try:
-            fn = trait.execution(**params)
+            fn = tool.execution(**params)
             output = await fn(persona)
-            # reflect trait calls mind.interrupt internally — don't double-reflect
-            if trait_name != "reflect":
-                self.reflect(Prompt(role="assistant", content=f"[{trait_name}] {output}"))
+            # reflect tool calls mind.interrupt internally — don't double-reflect
+            if tool_name != "reflect":
+                self.reflect(Prompt(role="assistant", content=f"[{tool_name}] {output}"))
             return output
         except Exception as e:
             error = str(e)
-            self.interrupt(Prompt(role="user", content=f"[{trait_name}] failed: {error}"))
+            self.interrupt(Prompt(role="user", content=f"[{tool_name}] failed: {error}"))
             return f"error: {error}"
 
     def present(self) -> list[Signal]:
@@ -157,15 +157,15 @@ class Mind:
                 if self._interrupting_signal is None and perception is not None:
                     logger.debug("mind._tick: focusing", {"persona_id": self._persona_id})
                     focus = await ego.focus(persona, perception)
-                    if not focus.traits:
-                        focus.traits = ["say"]
+                    if not focus.tools:
+                        focus.tools = ["say"]
 
                     # Signals are now encoded in the plan — expire them
                     for s in perception.thread.signals:
                         s.expired = True
 
                 if self._interrupting_signal is None and focus is not None:
-                    logger.debug("mind._tick: thought", {"persona_id": self._persona_id, "traits": focus.traits})
+                    logger.debug("mind._tick: thought", {"persona_id": self._persona_id, "tools": focus.tools})
                     thought = await ego.think(persona, perception, focus)
                     if not thought:
                         logger.debug("mind._tick: no thought, exiting", {"persona_id": self._persona_id})
@@ -174,8 +174,8 @@ class Mind:
                     self._plan = thought
                     paths.append_meaning_path(
                         persona.id, focus.title,
-                        focus.traits,
-                        [s.trait for s in focus.path],
+                        focus.tools,
+                        [s.tool for s in focus.path],
                     )
 
                 # Legalize: check which steps require permission
@@ -202,9 +202,9 @@ class Mind:
                     step = self.next_task(taking=True)
                     if step is None:
                         break
-                    logger.debug("mind._tick: running trait", {"persona_id": self._persona_id, "trait": step.trait})
-                    output = await self.execute(step.trait, step.params)
-                    results += f"[{step.trait}] {output}\n"
+                    logger.debug("mind._tick: running tool", {"persona_id": self._persona_id, "tool": step.tool})
+                    output = await self.execute(step.tool, step.params)
+                    results += f"[{step.tool}] {output}\n"
 
                 interrupting_signal = self._interrupting_signal
                 self._interrupting_signal = None

@@ -1,9 +1,9 @@
 """Update context — update the persona's own context with something to remember."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _UpdateContext(Trait):
+class _UpdateContext(Tool):
     name = "update_context"
     requires_permission = False
     description = (
@@ -12,7 +12,7 @@ class _UpdateContext(Trait):
         "should be retained across conversations."
     )
     instruction = (
-        "Trait: update_context\n"
+        "Tool: update_context\n"
         "Update your own context with something you should remember.\n"
         'Params: {"note": "the context note to record"}'
     )
@@ -39,4 +39,4 @@ class _UpdateContext(Trait):
         return _run
 
 
-trait = _UpdateContext()
+tool = _UpdateContext()

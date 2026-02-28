@@ -1,9 +1,9 @@
 """Manifest destiny — archive a destiny entry to history and mark it done."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _ManifestDestiny(Trait):
+class _ManifestDestiny(Tool):
     name = "manifest_destiny"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _ManifestDestiny(Trait):
         "Use when a scheduled event or reminder has been delivered or completed."
     )
     instruction = (
-        "Trait: manifest_destiny\n"
+        "Tool: manifest_destiny\n"
         "Archive a destiny entry to history and mark it as done.\n"
         'Params: {"filename": "the destiny entry filename"}'
     )
@@ -34,4 +34,4 @@ class _ManifestDestiny(Trait):
         return _run
 
 
-trait = _ManifestDestiny()
+tool = _ManifestDestiny()

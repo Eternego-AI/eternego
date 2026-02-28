@@ -1,9 +1,9 @@
 """Recall — load a specific past conversation from history by filename."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _Recall(Trait):
+class _Recall(Tool):
     name = "recall"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _Recall(Trait):
         "Use after seek_history has identified the right file to retrieve the full content."
     )
     instruction = (
-        "Trait: recall\n"
+        "Tool: recall\n"
         "Load a specific past conversation from history by filename.\n"
         'Params: {"filename": "the filename from the history briefing"}'
     )
@@ -30,4 +30,4 @@ class _Recall(Trait):
         return _run
 
 
-trait = _Recall()
+tool = _Recall()

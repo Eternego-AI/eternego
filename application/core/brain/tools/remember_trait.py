@@ -1,9 +1,9 @@
 """Remember trait — record a new trait or preference of the person."""
 
-from application.core.brain.data import Trait
+from application.core.brain.data import Tool
 
 
-class _RememberTrait(Trait):
+class _RememberTrait(Tool):
     name = "remember_trait"
     requires_permission = False
     description = (
@@ -11,7 +11,7 @@ class _RememberTrait(Trait):
         "Use when you observe something consistent about how the person thinks, works, or communicates."
     )
     instruction = (
-        "Trait: remember_trait\n"
+        "Tool: remember_trait\n"
         "Record a new trait or preference observed in the person.\n"
         'Params: {"trait": "the trait to record"}'
     )
@@ -38,4 +38,4 @@ class _RememberTrait(Trait):
         return _run
 
 
-trait = _RememberTrait()
+tool = _RememberTrait()

@@ -19,7 +19,7 @@ class _ShellSkill(Skill):
 Use the `shell` trait to run commands:
 
 ```json
-{{"trait": "shell", "params": {{"command": "your command here"}}}}
+{{"tool": "shell", "params": {{"command": "your command here"}}}}
 ```
 
 ## Workspace
@@ -50,7 +50,7 @@ Never use shell to directly modify these persona files:
 
 `context.md`, `person.md`, `traits.md`, `permissions.md`
 
-Use the traits for those instead."""
+Use the tools for those instead."""
         return _doc
 
 
