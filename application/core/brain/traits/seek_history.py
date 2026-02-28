@@ -21,7 +21,7 @@ class _SeekHistory(Trait):
         async def _run(persona):
             from application.core import paths
             from application.platform import logger
-            logger.info("seek_history: loading history briefing", {"persona_id": persona.id})
+            logger.debug("seek_history: loading history briefing", {"persona_id": persona.id})
             return paths.read_history_brief(persona.id, "(no history yet)")
         return _run
 

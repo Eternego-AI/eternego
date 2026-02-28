@@ -22,7 +22,7 @@ class _Schedule(Trait):
             from datetime import datetime
             from application.core import paths
             from application.platform import logger
-            logger.info("schedule: saving event", {"persona_id": persona.id, "trigger": trigger})
+            logger.debug("schedule: saving event", {"persona_id": persona.id, "trigger": trigger, "content": content[:80]})
             if not trigger:
                 return "no trigger provided — use clarify to ask when this should happen"
             try:

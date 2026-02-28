@@ -330,7 +330,9 @@ def add_history_briefing(persona_id: str, header: str, row: str) -> None:
     logger.info("Adding entry to history briefing", {"persona_id": persona_id, "row": row})
     briefing_path = history_briefing(persona_id)
     if not briefing_path.exists():
-        save_as_string(briefing_path, header + "\n|-------|---------|------|\n")
+        cols = header.count("|") - 1
+        separator = "|" + "|".join(["--------|" for _ in range(cols)])
+        save_as_string(briefing_path, header + "\n" + separator + "\n")
     append_as_string(briefing_path, row + "\n")
 
 

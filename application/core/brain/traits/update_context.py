@@ -21,7 +21,7 @@ class _UpdateContext(Trait):
         async def _run(persona):
             from application.core import paths, prompts, local_model
             from application.platform import logger, processes
-            logger.info("update_context: recording context note", {"persona_id": persona.id})
+            logger.debug("update_context: recording context note", {"persona_id": persona.id, "note": note[:80]})
             if not note:
                 return "no note provided"
 

@@ -21,11 +21,12 @@ class _Clarify(Trait):
         async def _run(persona):
             from application.core import channels, gateways
             from application.platform import logger
-            logger.info("clarify: asking for clarification", {"persona_id": persona.id, "channel": channel_name})
+            logger.debug("clarify: asking for clarification", {"persona_id": persona.id, "channel": channel_name, "text": text[:80]})
             channel = next(
                 (c for c in gateways.of(persona).all_channels() if c.name == channel_name),
                 None,
             )
+            logger.debug("clarify: channel lookup", {"channel_name": channel_name, "found": channel is not None, "available": [c.name for c in gateways.of(persona).all_channels()]})
             if channel is None:
                 return f"failed: channel '{channel_name}' not found"
             await channels.send(channel, text)

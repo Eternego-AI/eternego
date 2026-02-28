@@ -20,7 +20,7 @@ class _RememberTrait(Trait):
         async def _run(persona):
             from application.core import paths, prompts, local_model
             from application.platform import logger, processes
-            logger.info("remember_trait: recording trait", {"persona_id": persona.id})
+            logger.debug("remember_trait: recording trait", {"persona_id": persona.id, "trait": trait[:80]})
             if not trait:
                 return "no trait provided"
 

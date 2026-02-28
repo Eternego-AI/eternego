@@ -20,7 +20,7 @@ class _Recall(Trait):
         async def _run(persona):
             from application.core import paths
             from application.platform import logger
-            logger.info("recall: loading history file", {"persona_id": persona.id, "filename": filename})
+            logger.debug("recall: loading history file", {"persona_id": persona.id, "filename": filename})
             if not filename:
                 return "no filename provided"
             content = paths.read(paths.history(persona.id) / filename)

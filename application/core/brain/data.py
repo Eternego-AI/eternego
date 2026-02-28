@@ -22,6 +22,7 @@ class Signal:
     channel: Channel | None = None
     created_at: datetime = field(default_factory=datetimes.now)
     pending_permission: list[str] = field(default_factory=list)  # blocked trait names awaiting decision
+    expired: bool = False  # True once the signal has been encoded into a plan
 
 
 @dataclass

@@ -20,7 +20,7 @@ class _LearnIdentity(Trait):
         async def _run(persona):
             from application.core import paths
             from application.platform import logger
-            logger.info("learn_identity: recording fact", {"persona_id": persona.id})
+            logger.debug("learn_identity: recording fact", {"persona_id": persona.id, "fact": fact[:80]})
             if not fact:
                 return "no fact provided"
             paths.add_person_identity(persona.id, fact + "\n")

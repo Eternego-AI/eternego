@@ -20,7 +20,7 @@ class _FeelStruggle(Trait):
         async def _run(persona):
             from application.core import paths, prompts, local_model
             from application.platform import logger, processes
-            logger.info("feel_struggle: recording struggle", {"persona_id": persona.id})
+            logger.debug("feel_struggle: recording struggle", {"persona_id": persona.id, "struggle": struggle[:80]})
             if not struggle:
                 return "no struggle provided"
 

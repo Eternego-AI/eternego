@@ -21,7 +21,7 @@ class _LoadPerson(Trait):
         async def _run(persona):
             from application.core import paths
             from application.platform import logger
-            logger.info("load_person: loading person data", {"persona_id": persona.id})
+            logger.debug("load_person: loading person data", {"persona_id": persona.id})
             identity = paths.read(paths.person_identity(persona.id))
             traits = paths.read(paths.person_traits(persona.id))
             parts = []

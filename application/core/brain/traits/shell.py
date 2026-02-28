@@ -20,7 +20,7 @@ class _Shell(Trait):
     def execution(self, command=""):
         async def _run(persona):
             from application.platform import logger, OS
-            logger.info("shell: running command", {"persona_id": persona.id, "command": command})
+            logger.debug("shell: running command", {"persona_id": persona.id, "command": command})
             if not command:
                 return "no command provided"
             platform = OS.get_supported()

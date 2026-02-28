@@ -20,7 +20,7 @@ class _Reminder(Trait):
         async def _run(persona):
             from application.core import paths
             from application.platform import logger
-            logger.info("reminder: reading reminders", {"persona_id": persona.id})
+            logger.debug("reminder: reading reminders", {"persona_id": persona.id})
             destiny_dir = paths.destiny(persona.id)
             entries = paths.read_files_matching(persona.id, destiny_dir, "reminder-*.md")
             if not entries:

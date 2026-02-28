@@ -4,7 +4,7 @@ from pathlib import Path
 from application.core import bus, channels, gateways, frontier, system, \
     local_model, local_inference_engine, models, prompts, paths
 from application.core.brain import mind, skills
-from application.core.data import Channel, Message, Model, Persona
+from application.core.data import Channel, Message, Model, Persona, Prompt
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
     DiaryError, IdentityError, PersonError, FrontierError,
@@ -644,7 +644,7 @@ async def hear(persona: Persona, message: Message) -> Outcome:
     if m is None:
         logger.warning("hear: mind not loaded", {"persona_id": persona.id})
         return Outcome(success=False, message="Mind not loaded.")
-    m.hear(message)
+    m.interrupt(Prompt(role="user", content=message.content), message.channel)
     await bus.broadcast("Message heard", {"persona": persona})
     return Outcome(success=True, message="Message received")
 
@@ -656,7 +656,7 @@ async def nudge(persona: Persona, message: str) -> Outcome[dict]:
         m = mind.get(persona.id)
         if m is None:
             return Outcome(success=False, message="Mind not loaded.")
-        m.interrupt(message)
+        m.interrupt(Prompt(role="user", content=message))
         await bus.broadcast("Persona nudged", {"persona": persona})
         return Outcome(success=True, message="Nudge sent.")
     except Exception as e:

@@ -20,7 +20,7 @@ class _ManifestDestiny(Trait):
         async def _run(persona):
             from application.core import paths
             from application.platform import logger, filesystem
-            logger.info("manifest_destiny: manifesting entry", {"persona_id": persona.id, "filename": filename})
+            logger.debug("manifest_destiny: manifesting entry", {"persona_id": persona.id, "filename": filename})
             if not filename:
                 return "no filename provided"
             destiny_dir = paths.destiny(persona.id)

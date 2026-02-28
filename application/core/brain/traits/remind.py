@@ -22,7 +22,7 @@ class _Remind(Trait):
             from datetime import datetime
             from application.core import paths
             from application.platform import logger
-            logger.info("remind: saving reminder", {"persona_id": persona.id, "trigger": trigger})
+            logger.debug("remind: saving reminder", {"persona_id": persona.id, "trigger": trigger, "content": content[:80]})
             if not trigger:
                 return "no trigger provided — use clarify to ask when this reminder should fire"
             try:

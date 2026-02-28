@@ -6,23 +6,21 @@ external inputs and runs the full cognitive cycle internally.
 Mind is ephemeral — no state is persisted to disk. Completed thoughts
 are archived to history; everything else is discarded on restart.
 
-Stages:
-  rest         — idle, ready for the next tick
-  realizing    — grouping signals into threads and naming them
-  ordering     — prioritising perceptions
-  planning     — planning steps for the top perception
-  executing    — running the step loop
-  interrupting — a new signal arrived mid-cycle; executor will summarise then stop
+The tick lock is held for the full cognitive cycle. interrupt() knocks
+if the gate is open (starts a tick) or sets the interrupting signal if
+the gate is closed (tick is running).
 
-mind.hear(message)          — receive a message from the outside world
-mind.interrupt(text)        — inject an internal signal and interrupt the current cycle
-mind.execute(trait, params) — run any trait directly
-mind.next_task(taking)      — peek or consume the next plan step
-mind.load(persona)          — the only way to create a Mind
-grow(persona)               — evolve DNA, generate training, fine-tune
+mind.interrupt(prompt, channel) — urgent signal: starts tick if idle, interrupts if busy
+mind.reflect(prompt)            — passive signal: added to presence, no tick started
+mind.execute(trait, params)     — run any trait directly
+mind.next_task(taking)          — peek or consume the next plan step
+mind.load(persona)              — the only way to create a Mind
+grow(persona)                   — evolve DNA, generate training, fine-tune
 """
 
-from application.core.data import Persona, Message, Prompt
+import asyncio
+
+from application.core.data import Persona, Prompt, Channel
 from application.core.brain.data import Signal, Perception, Step
 from application.core import paths, local_model
 from application.platform import logger, processes
@@ -37,15 +35,10 @@ def get(persona_id: str) -> "Mind | None":
 class Mind:
     def __init__(self, persona: Persona):
         self._persona_id = persona.id
-        # Presence — ephemeral, rebuilt from scratch on restart
         self._signals: list[Signal] = []
-        # Derived layers — rebuilt each tick
-        self._awareness: list[Perception] = []
-        self._order: list[Perception] = []
         self._plan: list[Step] = []
-        self._current_step: int = 0
-        # Orchestration state
-        self._stage: str = "rest"   # rest | realizing | ordering | preparing | planning | executing | interrupting
+        self._lock = asyncio.Lock()
+        self._interrupting_signal: Signal | None = None
 
     @classmethod
     def load(cls, persona: Persona) -> "Mind":
@@ -63,191 +56,180 @@ class Mind:
 
     # ── Public ────────────────────────────────────────────────────────────
 
-    def hear(self, message: Message) -> None:
-        """Receive a message, add as a signal, and trigger the cognitive cycle."""
-        self._signals.append(Signal(
-            prompt=Prompt(role="user", content=message.content),
-            channel=message.channel,
-        ))
-        logger.info("mind.hear: signal received", {"persona_id": self._persona_id})
-
-        if self._stage != "rest":
-            self._stage = "interrupting"
-        else:
+    def interrupt(self, prompt: Prompt, channel: Channel | None = None) -> None:
+        """Add an urgent signal. Knocks to start tick if idle; sets interrupting signal if busy."""
+        signal = Signal(prompt=prompt, channel=channel)
+        self._signals.append(signal)
+        self._interrupting_signal = signal
+        logger.debug("mind.interrupt", {"persona_id": self._persona_id, "locked": self._lock.locked()})
+        if not self._lock.locked():
             processes.run_async(self._tick)
 
+    def reflect(self, prompt: Prompt) -> None:
+        """Add a passive signal to presence without starting a tick."""
+        signal = Signal(prompt=prompt)
+        self._signals.append(signal)
+        logger.debug("mind.reflect", {"persona_id": self._persona_id})
+
     async def execute(self, trait_name: str, params: dict) -> str:
-        """Run a single trait and return its output. Public — can run any trait."""
+        """Run a single trait. Reflects on success; interrupts on failure."""
         from application.core.brain import traits
         persona = self.persona
         trait = traits.for_name(trait_name)
         if trait is None:
-            output = f"error: unknown trait '{trait_name}'"
-        else:
-            try:
-                fn = trait.execution(**params)
-                output = await fn(persona)
-            except Exception as e:
-                output = f"error: {str(e)}"
+            self.interrupt(Prompt(role="user", content=f"[{trait_name}] failed: unknown trait"))
+            return f"error: unknown trait '{trait_name}'"
+        try:
+            fn = trait.execution(**params)
+            output = await fn(persona)
+            # reflect trait calls mind.interrupt internally — don't double-reflect
+            if trait_name != "reflect":
+                self.reflect(Prompt(role="assistant", content=f"[{trait_name}] {output}"))
+            return output
+        except Exception as e:
+            error = str(e)
+            self.interrupt(Prompt(role="user", content=f"[{trait_name}] failed: {error}"))
+            return f"error: {error}"
 
-        if trait_name == "summarize":
-            async def _commit():
-                if output:
-                    self._signals.append(Signal(prompt=Prompt(role="user", content=output)))
-                processes.run_async(self._tick)
-            processes.run_async(_commit)
-
-        return output
-
-    def interrupt(self, text: str) -> None:
-        """Inject an internal signal and interrupt the current cycle."""
-        self._signals.append(Signal(prompt=Prompt(role="user", content=text)))
-        logger.info("mind.interrupt: internal signal", {"persona_id": self._persona_id})
-        if self._stage != "rest":
-            self._stage = "interrupting"
-        else:
-            processes.run_async(self._tick)
+    def present(self) -> list[Signal]:
+        """Return all non-expired signals — the current presence."""
+        return [s for s in self._signals if not s.expired]
 
     def next_task(self, taking: bool = False) -> Step | None:
-        """Return the next plan step, or None if the plan is exhausted.
-
-        taking=False  — peek: returns the step without advancing the plan.
-        taking=True   — consume: advances the plan pointer (used by the executor).
-        """
-        if self._current_step >= len(self._plan):
+        """Return the next plan step, or None if the plan is exhausted."""
+        if not self._plan:
             return None
-        step = self._plan[self._current_step]
         if taking:
-            self._current_step += 1
-        return step
+            return self._plan.pop(0)
+        return self._plan[0]
 
     # ── Internal ─────────────────────────────────────────────────────────
 
     async def _tick(self) -> None:
-        """Full cognitive cycle: realize → order → plan → execute → archive."""
+        """Full cognitive cycle: perceptions → awareness → focus → thought → execute → recap → archive."""
         from application.core.brain import ego
 
-        if self._stage != "rest":
-            return
+        async with self._lock:
+            self._interrupting_signal = None  # reset: triggering signal is already in _signals
 
-        # Cache persona at tick start — survives any registry changes during execution
-        persona = self.persona
-        if persona is None:
-            return
-
-        try:
-            signals = list(self._signals)
-            if not signals:
+            persona = self.persona
+            if persona is None:
                 return
 
-            logger.debug("mind._tick: realizing", {"persona_id": self._persona_id, "signals": len(signals)})
-            self._stage = "realizing"
-            self._awareness = await ego.realize(persona, signals)
-            if not self._awareness:
-                logger.debug("mind._tick: no awareness, exiting", {"persona_id": self._persona_id})
-                return
-
-            if self._stage != "interrupting":
-                logger.debug("mind._tick: ordering", {"persona_id": self._persona_id, "perceptions": len(self._awareness)})
-                self._stage = "ordering"
-                self._order = await ego.order(persona, self._awareness)
-                if not self._order:
-                    logger.debug("mind._tick: no order, exiting", {"persona_id": self._persona_id})
-                    return
-
-            # Resolve pending permission if signals have arrived after the request
-            if self._stage != "interrupting":
-                top = self._order[0]
-                pending_idx = next(
-                    (i for i, s in enumerate(top.thread.signals) if s.pending_permission),
-                    None,
-                )
-                if pending_idx is not None:
-                    subsequent = top.thread.signals[pending_idx + 1:]
-                    if subsequent:
-                        pending_signal = top.thread.signals[pending_idx]
-                        decisions = await ego.grant_or_reject(
-                            persona, pending_signal.pending_permission, subsequent,
-                        )
-                        await self._authorize(persona, pending_signal, decisions)
-
-            meaning = None
-            if self._stage != "interrupting":
-                logger.debug("mind._tick: preparing", {"persona_id": self._persona_id, "perception": self._order[0].title})
-                self._stage = "preparing"
-                meaning = await ego.prepare(persona, self._order[0])
-                if not meaning.traits:
-                    meaning.traits = ["say"]
-
-            if self._stage != "interrupting" and meaning is not None:
-                logger.debug("mind._tick: planning", {"persona_id": self._persona_id, "traits": meaning.traits})
-                self._stage = "planning"
-                steps = await ego.plan(persona, self._order[0], meaning)
-                if not steps:
-                    logger.debug("mind._tick: no steps planned, exiting", {"persona_id": self._persona_id})
-                    return
-                meaning.path = steps
-                self._plan = steps
-                self._current_step = 0
-                paths.append_meaning_path(
-                    persona.id, meaning.title,
-                    meaning.traits,
-                    [s.trait for s in meaning.path],
-                )
-
-            # Legalize: check which steps require permission
-            if self._stage != "interrupting":
-                blocked = await ego.legalize(persona, self._plan)
-                if blocked:
-                    logger.debug("mind._tick: blocked by permissions", {"persona_id": self._persona_id, "blocked": blocked})
-                    top = self._order[0]
-                    if top.thread.signals:
-                        top.thread.signals[-1].pending_permission = blocked
-                    self._signals.append(Signal(
-                        prompt=Prompt(
-                            role="user",
-                            content=(
-                                f"You are not allowed to run: {', '.join(blocked)}. "
-                                "Let the person know and ask if they want to grant permission."
-                            ),
-                        )
-                    ))
-                    processes.run_async(self._tick)
-                    return
-
-            interrupted = self._stage == "interrupting"
-            logger.debug("mind._tick: executing", {"persona_id": self._persona_id, "steps": len(self._plan), "interrupted": interrupted})
-            self._stage = "executing"
             results = ""
+            perception: Perception | None = None
+            focus = None
+            self._plan = []
 
-            while True:
-                step = self.next_task(taking=True)
-                if step is None:
-                    break
-                logger.debug("mind._tick: running trait", {"persona_id": self._persona_id, "trait": step.trait})
-                output = await self.execute(step.trait, step.params)
-                results += f"[{step.trait}] {output}\n"
-                if self._stage == "interrupting":
-                    interrupted = True
-                    break
+            try:
+                if not self.present():
+                    return
 
-            if interrupted:
-                results += "Interrupted: a new message arrived before execution completed."
+                logger.debug("mind._tick: perceiving", {"persona_id": self._persona_id, "signals": len(self.present())})
+                perceptions = await ego.perceptions(persona, self.present())
+                if not perceptions:
+                    logger.debug("mind._tick: no perceptions, exiting", {"persona_id": self._persona_id})
+                    return
 
-            if results:
-                logger.debug("mind._tick: summarizing results", {"persona_id": self._persona_id})
-                await self.execute("summarize", {"text": f"Summarize these execution results into a concise record:\n\n{results}"})
+                if self._interrupting_signal is None:
+                    logger.debug("mind._tick: awareness", {"persona_id": self._persona_id, "perceptions": len(perceptions)})
+                    awareness = await ego.awareness(persona, perceptions)
+                    if not awareness:
+                        logger.debug("mind._tick: no awareness, exiting", {"persona_id": self._persona_id})
+                        return
+                    perception = awareness[0]
 
-            if not interrupted and self._order:
-                await self._archive(persona, self._order[0])
+                # Resolve pending permission if signals have arrived after the request
+                if self._interrupting_signal is None and perception is not None:
+                    pending_idx = next(
+                        (i for i, s in enumerate(perception.thread.signals) if s.pending_permission),
+                        None,
+                    )
+                    if pending_idx is not None:
+                        subsequent = perception.thread.signals[pending_idx + 1:]
+                        if subsequent:
+                            pending_signal = perception.thread.signals[pending_idx]
+                            decisions = await ego.grant_or_reject(
+                                persona, pending_signal.pending_permission, subsequent,
+                            )
+                            await self._authorize(persona, pending_signal, decisions)
 
-        except Exception as e:
-            logger.warning("mind._tick: unhandled error", {"persona_id": self._persona_id, "error": str(e)})
-        finally:
-            self._stage = "rest"
+                if self._interrupting_signal is None and perception is not None:
+                    logger.debug("mind._tick: focusing", {"persona_id": self._persona_id})
+                    focus = await ego.focus(persona, perception)
+                    if not focus.traits:
+                        focus.traits = ["say"]
+
+                    # Signals are now encoded in the plan — expire them
+                    for s in perception.thread.signals:
+                        s.expired = True
+
+                if self._interrupting_signal is None and focus is not None:
+                    logger.debug("mind._tick: thought", {"persona_id": self._persona_id, "traits": focus.traits})
+                    thought = await ego.think(persona, perception, focus)
+                    if not thought:
+                        logger.debug("mind._tick: no thought, exiting", {"persona_id": self._persona_id})
+                        return
+                    focus.path = thought
+                    self._plan = thought
+                    paths.append_meaning_path(
+                        persona.id, focus.title,
+                        focus.traits,
+                        [s.trait for s in focus.path],
+                    )
+
+                # Legalize: check which steps require permission
+                if self._interrupting_signal is None and perception is not None:
+                    blocked = await ego.legalize(persona, self._plan)
+                    if blocked:
+                        logger.debug("mind._tick: blocked by permissions", {"persona_id": self._persona_id, "blocked": blocked})
+                        if perception.thread.signals:
+                            perception.thread.signals[-1].pending_permission = blocked
+                        self._signals.append(Signal(
+                            prompt=Prompt(
+                                role="user",
+                                content=(
+                                    f"You are not allowed to run: {', '.join(blocked)}. "
+                                    "Let the person know and ask if they want to grant permission."
+                                ),
+                            )
+                        ))
+                        processes.run_async(self._tick)
+                        return
+
+                logger.debug("mind._tick: executing", {"persona_id": self._persona_id, "steps": len(self._plan)})
+                while self._interrupting_signal is None:
+                    step = self.next_task(taking=True)
+                    if step is None:
+                        break
+                    logger.debug("mind._tick: running trait", {"persona_id": self._persona_id, "trait": step.trait})
+                    output = await self.execute(step.trait, step.params)
+                    results += f"[{step.trait}] {output}\n"
+
+                interrupting_signal = self._interrupting_signal
+                self._interrupting_signal = None
+
+                logger.debug("mind._tick: recapping", {"persona_id": self._persona_id, "interrupted": interrupting_signal is not None})
+                thought_signals = perception.thread.signals if perception else self.present()
+                recap = await ego.recap(persona, thought_signals, results, interrupting_signal)
+                self.reflect(Prompt(role="assistant", content=recap))
+
+                if interrupting_signal:
+                    processes.run_async(self._tick)
+                elif perception:
+                    await self._archive(persona, perception, recap)
+                    self._signals = [s for s in self._signals if not s.expired]
+
+            except Exception as e:
+                logger.warning("mind._tick: unhandled error", {"persona_id": self._persona_id, "error": str(e)})
+
+        # An interrupt may have arrived during recap/archive while the lock was held —
+        # restart so it is not stranded.
+        if self._interrupting_signal is not None:
+            processes.run_async(self._tick)
 
     async def _authorize(self, persona: Persona, pending_signal: Signal, decisions: dict) -> None:
-        """Write grant/reject decisions to permissions.md, clear the pending flag, and signal the outcome."""
+        """Write grant/reject decisions to permissions.md and signal the outcome."""
         from application.platform import filesystem
         p = paths.permissions(persona.id)
         for t in decisions.get("granted", []):
@@ -263,9 +245,9 @@ class Mind:
                 parts.append(f"permission granted for: {', '.join(granted)}")
             if rejected:
                 parts.append(f"permission rejected for: {', '.join(rejected)}")
-            self.interrupt("; ".join(parts))
+            self.interrupt(Prompt(role="user", content="; ".join(parts)))
 
-    async def _archive(self, persona: Persona, perception: Perception) -> None:
+    async def _archive(self, persona: Persona, perception: Perception, recap: str) -> None:
         """Write the completed thought to history and update the briefing index."""
         from application.platform import datetimes
         lines = []
@@ -278,8 +260,8 @@ class Mind:
         paths.add_history_entry(persona.id, perception.title, "\n\n".join(lines))
         paths.add_history_briefing(
             persona.id,
-            "| Date | Title | File |",
-            f"| {timestamp} | {perception.title} | {filename} |",
+            "| Date | Recap | File |",
+            f"| {timestamp} | {recap} | {filename} |",
         )
 
 

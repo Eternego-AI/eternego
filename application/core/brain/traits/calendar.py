@@ -20,7 +20,7 @@ class _Calendar(Trait):
         async def _run(persona):
             from application.core import paths
             from application.platform import logger
-            logger.info("calendar: reading scheduled events", {"persona_id": persona.id})
+            logger.debug("calendar: reading scheduled events", {"persona_id": persona.id})
             destiny_dir = paths.destiny(persona.id)
             entries = paths.read_files_matching(persona.id, destiny_dir, "schedule-*.md")
             if not entries:

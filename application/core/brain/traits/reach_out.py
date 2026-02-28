@@ -21,7 +21,7 @@ class _ReachOut(Trait):
         async def _run(persona):
             from application.core import channels, gateways
             from application.platform import logger
-            logger.info("reach_out: broadcasting to all channels", {"persona_id": persona.id})
+            logger.debug("reach_out: broadcasting to all channels", {"persona_id": persona.id, "text": text[:80]})
             active = gateways.of(persona).all_channels()
             if not active:
                 return "failed: no active channels found"

@@ -5,10 +5,10 @@ talk(persona, prompt)                converses using the ego system prompt.
 reason(persona, prompt)              reasons in JSON mode.
 reason(persona, prompt, system)      reasons with an additional system section.
 
-realize(persona, signals)            group signals into threads and title each.
-order(persona, perceptions)          order perceptions by priority.
-prepare(persona, perception)         select the relevant traits for the top perception.
-plan(persona, perception)            produce steps using the perception's selected traits.
+perceptions(persona, signals)        group signals into related perception threads.
+awareness(persona, perceptions)      order perceptions by priority.
+focus(persona, perception)           select the relevant traits for the top perception.
+thought(persona, perception, focus)  produce steps using the focused traits.
 """
 
 from application.core.data import Persona
@@ -57,7 +57,7 @@ async def reason(persona: Persona, prompt: str, system: str = "") -> dict:
 
 # ── Cognitive pipeline ────────────────────────────────────────────────────────
 
-async def realize(persona: Persona, signals: list[Signal]) -> list[Perception]:
+async def perceptions(persona: Persona, signals: list[Signal]) -> list[Perception]:
     """Group signals into related threads and assign a title to each."""
     if not signals:
         return []
@@ -77,7 +77,7 @@ async def realize(persona: Persona, signals: list[Signal]) -> list[Perception]:
     response = await reason(persona, prompt())
     items = response.get("perceptions") if isinstance(response, dict) else None
     if not isinstance(items, list) or not items:
-        logger.warning("ego.realize: model returned unexpected output", {"persona_id": persona.id})
+        logger.warning("ego.perceptions: model returned unexpected output", {"persona_id": persona.id})
         return []
 
     used = set()
@@ -101,7 +101,7 @@ async def realize(persona: Persona, signals: list[Signal]) -> list[Perception]:
     return result
 
 
-async def order(persona: Persona, perceptions: list[Perception]) -> list[Perception]:
+async def awareness(persona: Persona, perceptions: list[Perception]) -> list[Perception]:
     """Return perceptions ordered from most to least important."""
     if len(perceptions) == 1:
         return perceptions
@@ -118,7 +118,7 @@ async def order(persona: Persona, perceptions: list[Perception]) -> list[Percept
     response = await reason(persona, prompt(), system=current.time())
     indices = response.get("order") if isinstance(response, dict) else None
     if not isinstance(indices, list):
-        logger.warning("ego.order: model returned unexpected output", {"persona_id": persona.id})
+        logger.warning("ego.awareness: model returned unexpected output", {"persona_id": persona.id})
         return perceptions
 
     seen = set()
@@ -135,7 +135,7 @@ async def order(persona: Persona, perceptions: list[Perception]) -> list[Percept
     return result
 
 
-async def prepare(persona: Persona, perception: Perception) -> Meaning:
+async def focus(persona: Persona, perception: Perception) -> Meaning:
     """Select the relevant traits and skills for this perception and return a Meaning."""
     def prompt() -> str:
         trait_list = current.traits()
@@ -158,14 +158,14 @@ async def prepare(persona: Persona, perception: Perception) -> Meaning:
 
     response = await reason(persona, prompt())
     if not isinstance(response, dict):
-        logger.warning("ego.prepare: model returned unexpected output", {"persona_id": persona.id})
+        logger.warning("ego.focus: model returned unexpected output", {"persona_id": persona.id})
         return Meaning(perception.title)
 
     selected_traits = response.get("traits") or []
     selected_skills = response.get("skills") or []
 
     if not isinstance(selected_traits, list):
-        logger.warning("ego.prepare: model returned unexpected output", {"persona_id": persona.id})
+        logger.warning("ego.focus: model returned unexpected output", {"persona_id": persona.id})
         return Meaning(perception.title)
 
     valid_skill_names = {s.name for s in current.skills(persona)}
@@ -259,24 +259,42 @@ async def grant_or_reject(persona: Persona, blocked: list[str], subsequent: list
     return {"granted": granted, "rejected": rejected}
 
 
-async def plan(persona: Persona, perception: Perception, meaning: Meaning) -> list[Step]:
-    """Plan the steps needed to address a perception using the prepared meaning."""
+async def recap(persona: Persona, signals: list["Signal"], results: str, interrupted_by: "Signal | None" = None) -> str:
+    """Produce a one-sentence narrative of what just happened."""
+    def prompt() -> str:
+        signals_text = "\n".join(f"[{s.prompt.role}]: {s.prompt.content}" for s in signals)
+        results_part = f"\n\nExecution results:\n{results.strip()}" if results.strip() else ""
+        interruption_part = (
+            f"\n\nInterrupted by: {interrupted_by.prompt.content}" if interrupted_by else ""
+        )
+        return (
+            f"Signals:\n{signals_text}{results_part}{interruption_part}\n\n"
+            "Write one sentence summarising what happened. "
+            "Example: 'Person asked for the weather and Persona answered using web tools.'\n"
+            'Return JSON: {"recap": "..."}'
+        )
+
+    response = await reason(persona, prompt())
+    return response.get("recap", "") if isinstance(response, dict) else ""
+
+
+async def think(persona: Persona, perception: Perception, focus: Meaning) -> list[Step]:
+    """Plan the steps needed to address a perception using the focused meaning."""
     def prompt() -> str:
         signals_text = "\n".join(
             f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
             for s in perception.thread.signals
         )
         return (
-            f"Perception: {meaning.title}\n\n"
             f"Signals:\n{signals_text}\n\n"
-            "Plan the steps to address this perception using the available traits.\n"
+            "Plan the steps to address these signals using the available traits.\n"
             'Return JSON: {"steps": [{"number": 1, "trait": "trait_name", "params": {}}]}'
         )
 
-    response = await reason(persona, prompt(), system=current.situation(persona, meaning))
+    response = await reason(persona, prompt(), system=current.situation(persona, focus))
     items = response.get("steps") if isinstance(response, dict) else None
     if not isinstance(items, list) or not items:
-        logger.warning("ego.plan: model returned unexpected output", {"persona_id": persona.id})
+        logger.warning("ego.thought: model returned unexpected output", {"persona_id": persona.id})
         return []
 
     result = []
@@ -287,7 +305,7 @@ async def plan(persona: Persona, perception: Perception, meaning: Meaning) -> li
         if not isinstance(number, int) or not trait_name:
             continue
         if traits.for_name(trait_name) is None:
-            logger.warning("ego.plan: unknown trait in response", {"persona_id": persona.id, "trait": trait_name})
+            logger.warning("ego.thought: unknown trait in response", {"persona_id": persona.id, "trait": trait_name})
             continue
         result.append(Step(number=number, trait=trait_name, params=params))
 

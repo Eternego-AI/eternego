@@ -20,7 +20,7 @@ class _Escalate(Trait):
         async def _run(persona):
             from application.core import frontier
             from application.platform import logger
-            logger.info("escalate: consulting frontier model", {"persona_id": persona.id})
+            logger.debug("escalate: consulting frontier model", {"persona_id": persona.id, "question": question[:80]})
             if not persona.frontier:
                 return (
                     "No frontier model is configured. "
