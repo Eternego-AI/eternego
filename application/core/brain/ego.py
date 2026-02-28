@@ -1,14 +1,16 @@
 """Ego — the persona's reasoning engine and cognitive pipeline.
 
-effect(persona)                      builds the character system prompt.
-talk(persona, prompt)                converses using the ego system prompt.
-reason(persona, prompt)              reasons in JSON mode.
-reason(persona, prompt, system)      reasons with an additional system section.
+effect(persona)                                builds the character system prompt.
+talk(persona, prompt)                          converses using the ego system prompt.
+reason(persona, prompt)                        reasons in JSON mode.
+reason(persona, prompt, system)                reasons with an additional system section.
+reason_with_today_context(persona, prompt, closed, system)
+                                               reasons with closed threads prepended as context.
 
-perceptions(persona, signals)        group signals into related perception threads.
-awareness(persona, perceptions)      order perceptions by priority.
-focus(persona, perception)           select the relevant tools for the top perception.
-think(persona, perception, focus)    produce steps using the focused tools.
+realize(persona, signals)                      group signals into related perception threads.
+understand(persona, open, closed)              order open perceptions by priority, with closed as context.
+focus(persona, perception, closed)             select the relevant tools for the top perception.
+think(persona, perception, meaning, closed)    produce steps using the focused tools.
 """
 
 from application.core.data import Persona
@@ -55,9 +57,22 @@ async def reason(persona: Persona, prompt: str, system: str = "") -> dict:
     return await local_model.chat_json(persona.model.name, messages)
 
 
+async def reason_with_today_context(persona: Persona, prompt: str, closed: list[Perception] | None, system: str = "") -> dict:
+    """Call reason with today's closed threads prepended as context."""
+    if not closed:
+        return await reason(persona, prompt, system)
+    context_lines = ["Today's context (threads already addressed today, for reference):"]
+    for p in closed:
+        context_lines.append(f"- {p.title}: {p.thread.signals[-1].prompt.content[:120]}")
+    context_lines.append("")
+    return await reason(persona, "\n".join(context_lines) + "\n" + prompt, system)
+
+
 # ── Cognitive pipeline ────────────────────────────────────────────────────────
 
-async def perceptions(persona: Persona, signals: list[Signal]) -> list[Perception]:
+
+
+async def realize(persona: Persona, signals: list[Signal]) -> list[Perception]:
     """Group signals into related threads and assign a title to each."""
     if not signals:
         return []
@@ -71,13 +86,14 @@ async def perceptions(persona: Persona, signals: list[Signal]) -> list[Perceptio
         ]
         for i, s in enumerate(signals):
             channel = f" via {s.channel.name}" if s.channel else ""
-            lines.append(f"{i}. [{s.prompt.role}{channel}] {s.prompt.content}")
+            time = s.created_at.strftime("%H:%M")
+            lines.append(f"{i}. [{s.id}] [{s.prompt.role}{channel} at {time}] {s.prompt.content}")
         return "\n".join(lines)
 
     response = await reason(persona, prompt())
     items = response.get("perceptions") if isinstance(response, dict) else None
     if not isinstance(items, list) or not items:
-        logger.warning("ego.perceptions: model returned unexpected output", {"persona_id": persona.id})
+        logger.warning("ego.realize: model returned unexpected output", {"persona_id": persona.id})
         return []
 
     used = set()
@@ -101,41 +117,41 @@ async def perceptions(persona: Persona, signals: list[Signal]) -> list[Perceptio
     return result
 
 
-async def awareness(persona: Persona, perceptions: list[Perception]) -> list[Perception]:
-    """Return perceptions ordered from most to least important."""
-    if len(perceptions) == 1:
-        return perceptions
+async def understand(persona: Persona, open_perceptions: list[Perception], closed: list[Perception] | None = None) -> list[Perception]:
+    """Return open perceptions ordered from most to least important."""
+    if len(open_perceptions) == 1:
+        return open_perceptions
 
     def prompt() -> str:
         lines = [
-            "Order these perceptions by priority — most important to address first.",
+            "Order these ongoing threads by priority — most important to address first.",
             'Return JSON: {"order": [2, 0, 1]} — 0-based indices in priority order.\n',
         ]
-        for i, p in enumerate(perceptions):
+        for i, p in enumerate(open_perceptions):
             lines.append(f"{i}. {p.title}")
         return "\n".join(lines)
 
-    response = await reason(persona, prompt(), system=current.time())
+    response = await reason_with_today_context(persona, prompt(), closed, system=current.time())
     indices = response.get("order") if isinstance(response, dict) else None
     if not isinstance(indices, list):
-        logger.warning("ego.awareness: model returned unexpected output", {"persona_id": persona.id})
-        return perceptions
+        logger.warning("ego.understand: model returned unexpected output", {"persona_id": persona.id})
+        return open_perceptions
 
     seen = set()
     result = []
     for i in indices:
-        if isinstance(i, int) and 0 <= i < len(perceptions) and i not in seen:
-            result.append(perceptions[i])
+        if isinstance(i, int) and 0 <= i < len(open_perceptions) and i not in seen:
+            result.append(open_perceptions[i])
             seen.add(i)
 
-    for i, p in enumerate(perceptions):
+    for i, p in enumerate(open_perceptions):
         if i not in seen:
             result.append(p)
 
     return result
 
 
-async def focus(persona: Persona, perception: Perception) -> Meaning:
+async def focus(persona: Persona, perception: Perception, closed: list[Perception] | None = None) -> Meaning:
     """Select the relevant tools and skills for this perception and return a Meaning."""
     def prompt() -> str:
         tool_list = current.tools()
@@ -145,8 +161,8 @@ async def focus(persona: Persona, perception: Perception) -> Meaning:
             for s in perception.thread.signals
         )
         lines = [
-            f"Signals:\n{signals_text}\n",
-            "Select only the tools needed to address these signals.",
+            f"Ongoing thread:\n{signals_text}\n",
+            "Select only the tools needed to address the ongoing thread.",
             'Return JSON: {"tools": ["tool_name", ...], "skills": ["skill_name", ...]}\n',
             "Tools:",
         ]
@@ -160,7 +176,7 @@ async def focus(persona: Persona, perception: Perception) -> Meaning:
                     lines.append(f"- {s.name}: {s.description}")
         return "\n".join(lines)
 
-    response = await reason(persona, prompt())
+    response = await reason_with_today_context(persona, prompt(), closed)
     if not isinstance(response, dict):
         logger.warning("ego.focus: model returned unexpected output", {"persona_id": persona.id})
         return Meaning(perception.title)
@@ -264,7 +280,7 @@ async def grant_or_reject(persona: Persona, blocked: list[str], subsequent: list
 
 
 async def recap(persona: Persona, signals: list["Signal"], results: str, interrupted_by: "Signal | None" = None) -> str:
-    """Produce a one-sentence narrative of what just happened."""
+    """Produce a one-sentence narrative of what just happened. Used during sleep consolidation."""
     def prompt() -> str:
         signals_text = "\n".join(f"[{s.prompt.role}]: {s.prompt.content}" for s in signals)
         results_part = f"\n\nExecution results:\n{results.strip()}" if results.strip() else ""
@@ -282,7 +298,7 @@ async def recap(persona: Persona, signals: list["Signal"], results: str, interru
     return response.get("recap", "") if isinstance(response, dict) else ""
 
 
-async def think(persona: Persona, perception: Perception, meaning: Meaning) -> list[Step]:
+async def think(persona: Persona, perception: Perception, meaning: Meaning, closed: list[Perception] | None = None) -> list[Step]:
     """Plan the steps needed to address a perception using the focused tools."""
     def prompt() -> str:
         signals_text = "\n".join(
@@ -290,14 +306,15 @@ async def think(persona: Persona, perception: Perception, meaning: Meaning) -> l
             for s in perception.thread.signals
         )
         allowed = ", ".join(meaning.tools) if meaning.tools else "say"
-        return (
-            f"Signals:\n{signals_text}\n\n"
-            f"Allowed tools: {allowed}\n\n"
-            "Plan the steps to address these signals using only the allowed tools.\n"
-            'Return JSON: {"steps": [{"number": 1, "tool": "tool_name", "params": {}}]}'
-        )
+        lines = [
+            f"Ongoing thread:\n{signals_text}\n",
+            f"Allowed tools: {allowed}\n",
+            "Plan the steps to address the ongoing thread using only the allowed tools.",
+            'Return JSON: {"steps": [{"number": 1, "tool": "tool_name", "params": {}}]}',
+        ]
+        return "\n".join(lines)
 
-    response = await reason(persona, prompt(), system=current.situation(persona, meaning))
+    response = await reason_with_today_context(persona, prompt(), closed, system=current.situation(persona, meaning))
     items = response.get("steps") if isinstance(response, dict) else None
     if not isinstance(items, list) or not items:
         logger.warning("ego.think: model returned unexpected output", {"persona_id": persona.id})

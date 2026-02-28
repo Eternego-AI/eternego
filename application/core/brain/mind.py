@@ -3,8 +3,10 @@
 One Mind instance per persona. Mind is the single entry point for all
 external inputs and runs the full cognitive cycle internally.
 
-Mind is ephemeral — no state is persisted to disk. Completed thoughts
-are archived to history; everything else is discarded on restart.
+Signals accumulate in memory throughout the day. Closed threads (last
+signal from assistant) are passed as context to all ego stages. Open
+threads (last signal from user) are what the persona acts on. Sleep
+consolidates and archives the full day.
 
 The tick lock is held for the full cognitive cycle. interrupt() knocks
 if the gate is open (starts a tick) or sets the interrupting signal if
@@ -35,7 +37,7 @@ def get(persona_id: str) -> "Mind | None":
 class Mind:
     def __init__(self, persona: Persona):
         self._persona_id = persona.id
-        self._signals: list[Signal] = []
+        self.signals: list[Signal] = []
         self._plan: list[Step] = []
         self._lock = asyncio.Lock()
         self._interrupting_signal: Signal | None = None
@@ -59,7 +61,7 @@ class Mind:
     def interrupt(self, prompt: Prompt, channel: Channel | None = None) -> None:
         """Add an urgent signal. Knocks to start tick if idle; sets interrupting signal if busy."""
         signal = Signal(prompt=prompt, channel=channel)
-        self._signals.append(signal)
+        self.signals.append(signal)
         self._interrupting_signal = signal
         logger.debug("mind.interrupt", {"persona_id": self._persona_id, "locked": self._lock.locked()})
         if not self._lock.locked():
@@ -68,7 +70,7 @@ class Mind:
     def reflect(self, prompt: Prompt) -> None:
         """Add a passive signal to presence without starting a tick."""
         signal = Signal(prompt=prompt)
-        self._signals.append(signal)
+        self.signals.append(signal)
         logger.debug("mind.reflect", {"persona_id": self._persona_id})
 
     async def execute(self, tool_name: str, params: dict) -> str:
@@ -92,8 +94,8 @@ class Mind:
             return f"error: {error}"
 
     def present(self) -> list[Signal]:
-        """Return all non-expired signals — the current presence."""
-        return [s for s in self._signals if not s.expired]
+        """Return all signals — the full day's presence."""
+        return list(self.signals)
 
     def next_task(self, taking: bool = False) -> Step | None:
         """Return the next plan step, or None if the plan is exhausted."""
@@ -106,40 +108,45 @@ class Mind:
     # ── Internal ─────────────────────────────────────────────────────────
 
     async def _tick(self) -> None:
-        """Full cognitive cycle: perceptions → awareness → focus → thought → execute → recap → archive."""
-        from application.core.brain import ego
+        """Full cognitive cycle: realize → split closed/open → understand → focus → think → execute."""
+        from application.core.brain import ego, signals as brain_signals
         from application.core import channels
 
         async with self._lock:
-            self._interrupting_signal = None  # reset: triggering signal is already in _signals
+            self._interrupting_signal = None  # reset: triggering signal is already in signals
 
             persona = self.persona
             if persona is None:
                 return
 
-            results = ""
             perception: Perception | None = None
             meaning = None
             self._plan = []
             channel = channels.default_channel(persona)
 
             try:
-                if not self.present():
+                signals = self.present()
+                if not signals:
                     return
 
                 if channel:
                     await channels.in_progress(channel)
-                logger.debug("mind._tick: perceiving", {"persona_id": self._persona_id, "signals": len(self.present())})
-                perceptions = await ego.perceptions(persona, self.present())
-                if not perceptions:
+                logger.debug("mind._tick: realizing", {"persona_id": self._persona_id, "signals": len(signals)})
+                all_perceptions = await ego.realize(persona, signals)
+                if not all_perceptions:
                     logger.debug("mind._tick: no perceptions, exiting", {"persona_id": self._persona_id})
+                    return
+
+                open_perceptions, closed = brain_signals.classify(all_perceptions)
+                if not open_perceptions:
+                    logger.debug("mind._tick: no open threads, nothing to do", {"persona_id": self._persona_id})
                     return
 
                 if self._interrupting_signal is None:
                     if channel:
                         await channels.in_progress(channel)
-                    logger.debug("mind._tick: awareness", {"persona_id": self._persona_id, "perceptions": len(perceptions)})
-                    awareness = await ego.awareness(persona, perceptions)
+                    logger.debug("mind._tick: understanding", {"persona_id": self._persona_id, "open": len(open_perceptions), "closed": len(closed)})
+                    awareness = await ego.understand(persona, open_perceptions, closed)
                     if not awareness:
                         logger.debug("mind._tick: no awareness, exiting", {"persona_id": self._persona_id})
                         return
@@ -164,19 +171,15 @@ class Mind:
                     if channel:
                         await channels.in_progress(channel)
                     logger.debug("mind._tick: focusing", {"persona_id": self._persona_id})
-                    meaning = await ego.focus(persona, perception)
+                    meaning = await ego.focus(persona, perception, closed)
                     if not meaning.tools:
                         meaning.tools = ["say"]
-
-                    # Signals are now encoded in the plan — expire them
-                    for s in perception.thread.signals:
-                        s.expired = True
 
                 if self._interrupting_signal is None and meaning is not None:
                     if channel:
                         await channels.in_progress(channel)
                     logger.debug("mind._tick: thought", {"persona_id": self._persona_id, "tools": meaning.tools})
-                    thought = await ego.think(persona, perception, meaning)
+                    thought = await ego.think(persona, perception, meaning, closed)
                     if not thought:
                         logger.debug("mind._tick: no thought, exiting", {"persona_id": self._persona_id})
                         return
@@ -195,7 +198,7 @@ class Mind:
                         logger.debug("mind._tick: blocked by permissions", {"persona_id": self._persona_id, "blocked": blocked})
                         if perception.thread.signals:
                             perception.thread.signals[-1].pending_permission = blocked
-                        self._signals.append(Signal(
+                        self.signals.append(Signal(
                             prompt=Prompt(
                                 role="user",
                                 content=(
@@ -213,28 +216,12 @@ class Mind:
                     if step is None:
                         break
                     logger.debug("mind._tick: running tool", {"persona_id": self._persona_id, "tool": step.tool})
-                    output = await self.execute(step.tool, step.params)
-                    results += f"[{step.tool}] {output}\n"
-
-                interrupting_signal = self._interrupting_signal
-                self._interrupting_signal = None
-
-                logger.debug("mind._tick: recapping", {"persona_id": self._persona_id, "interrupted": interrupting_signal is not None})
-                thought_signals = perception.thread.signals if perception else self.present()
-                recap = await ego.recap(persona, thought_signals, results, interrupting_signal)
-                self.reflect(Prompt(role="assistant", content=recap))
-
-                if interrupting_signal:
-                    processes.run_async(self._tick)
-                elif perception:
-                    await self._archive(persona, perception, recap)
-                    self._signals = [s for s in self._signals if not s.expired]
+                    await self.execute(step.tool, step.params)
 
             except Exception as e:
                 logger.warning("mind._tick: unhandled error", {"persona_id": self._persona_id, "error": str(e)})
 
-        # An interrupt may have arrived during recap/archive while the lock was held —
-        # restart so it is not stranded.
+        # An interrupt may have arrived while the lock was held — restart so it is not stranded.
         if self._interrupting_signal is not None:
             processes.run_async(self._tick)
 
@@ -257,22 +244,35 @@ class Mind:
                 parts.append(f"permission rejected for: {', '.join(rejected)}")
             self.interrupt(Prompt(role="user", content="; ".join(parts)))
 
-    async def _archive(self, persona: Persona, perception: Perception, recap: str) -> None:
-        """Write the completed thought to history and update the briefing index."""
-        from application.platform import datetimes
-        lines = []
-        for signal in perception.thread.signals:
-            channel = f" via {signal.channel.name}" if signal.channel else ""
-            time = signal.created_at.strftime("%Y-%m-%d %H:%M UTC")
-            lines.append(f"[{signal.prompt.role}{channel} at {time}]: {signal.prompt.content}")
-        timestamp = datetimes.date_stamp(datetimes.now())
-        filename = f"{perception.title}-{timestamp}.md"
-        paths.add_history_entry(persona.id, perception.title, "\n\n".join(lines))
-        paths.add_history_briefing(
-            persona.id,
-            "| Date | Recap | File |",
-            f"| {timestamp} | {recap} | {filename} |",
-        )
+# ── Consolidation ─────────────────────────────────────────────────────────────
+
+async def consolidate(persona: Persona) -> None:
+    """Archive the full day's signals at sleep time.
+
+    Groups all accumulated signals into threads, recaps each thread,
+    then delegates writing and signal removal to the archive tool.
+    """
+    from application.core.brain import ego
+
+    m = get(persona.id)
+    if m is None:
+        logger.warning("mind.consolidate: mind not loaded", {"persona_id": persona.id})
+        return
+
+    signals = m.present()
+    if not signals:
+        logger.debug("mind.consolidate: no signals to archive", {"persona_id": persona.id})
+        return
+
+    logger.info("mind.consolidate: archiving day's signals", {"persona_id": persona.id, "signals": len(signals)})
+    all_perceptions = await ego.realize(persona, signals)
+
+    for perception in all_perceptions:
+        summary = await ego.recap(persona, perception.thread.signals, "")
+        signal_ids = [s.id for s in perception.thread.signals]
+        await m.execute("archive", {"signal_ids": signal_ids, "title": perception.title, "recap": summary})
+
+    logger.info("mind.consolidate: done", {"persona_id": persona.id, "threads": len(all_perceptions)})
 
 
 # ── Growth ────────────────────────────────────────────────────────────────────

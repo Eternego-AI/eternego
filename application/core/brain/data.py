@@ -9,6 +9,7 @@ Tool      — base class for persona capabilities
 Skill     — base class for persona knowledge documents
 """
 
+import secrets
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -22,7 +23,7 @@ class Signal:
     channel: Channel | None = None
     created_at: datetime = field(default_factory=datetimes.now)
     pending_permission: list[str] = field(default_factory=list)  # blocked tool names awaiting decision
-    expired: bool = False  # True once the signal has been encoded into a plan
+    id: str = field(default_factory=lambda: secrets.token_hex(4))
 
 
 @dataclass
