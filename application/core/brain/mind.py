@@ -29,6 +29,10 @@ if any tool is not fully granted the plan halts and the person is told what's mi
 grant_permission/reject_permission tools are model-callable to persist strong decisions
 across sessions.
 
+Persistence: signals are saved to mind.json via persistent_memory on every interrupt/reflect.
+On restart, signals are restored and mode starts as Rest — no processing until a new interrupt
+arrives. sleep() clears mind.json after archiving so the next start is fresh.
+
 mind.interrupt(prompt, channel) — urgent signal: wakes tick or interrupts mid-cycle
 mind.reflect(prompt)            — passive signal: added to presence, no tick woken
 mind.execute(tool, params)      — run any tool directly
@@ -38,12 +42,34 @@ mind.sleep()                    — archive signals, grow; stays in Sleep until 
 """
 
 import asyncio
+from datetime import datetime
 
 from application.core.data import Persona, Prompt, Channel
 from application.core.brain.data import Signal, Step, Thinking, Meaning
 from application.core.brain.thinking import Normal, Rethink, Wakeup, Sleep, Rest, Limited
 from application.core import paths, local_model
-from application.platform import logger, processes
+from application.platform import logger, processes, persistent_memory
+
+
+def _signal_to_dict(signal: Signal) -> dict:
+    return {
+        "id": signal.id,
+        "role": signal.prompt.role,
+        "content": signal.prompt.content,
+        "channel_type": signal.channel.type if signal.channel else None,
+        "channel_name": signal.channel.name if signal.channel else None,
+        "created_at": signal.created_at.isoformat(),
+    }
+
+
+def _signal_from_dict(d: dict) -> Signal:
+    channel = Channel(type=d["channel_type"], name=d.get("channel_name", "")) if d.get("channel_type") else None
+    return Signal(
+        id=d["id"],
+        prompt=Prompt(role=d["role"], content=d["content"]),
+        channel=channel,
+        created_at=datetime.fromisoformat(d["created_at"]),
+    )
 
 
 def get(persona_id: str) -> "Mind | None":
@@ -57,14 +83,24 @@ class Mind:
 
     def __init__(self, persona: Persona):
         self._persona_id = persona.id
-        self.signals: list[Signal] = []
         self._plan: list[Step] = []
         self._pending_permissions: list[str] = []   # tool names awaiting a decision this session
         self._allowed_permissions: list[str] = []   # tool names granted this session
         self._event = asyncio.Event()
         self._idle_task: asyncio.Task | None = None
-        self.__mode: Thinking = Wakeup()  # backing field; always written via _change_mode
-        self._event.set()             # Wakeup fires the loop immediately on load
+
+        persistent_memory.load(self._storage_id, paths.mind(persona.id))
+        self.signals: list[Signal] = [_signal_from_dict(d) for d in persistent_memory.read(self._storage_id)]
+
+        if self.signals:
+            self.__mode: Thinking = Rest()  # restored signals — wait for a new interrupt
+        else:
+            self.__mode: Thinking = Wakeup()
+            self._event.set()  # fresh start — Wakeup fires immediately
+
+    @property
+    def _storage_id(self) -> str:
+        return f"mind_{self._persona_id}"
 
     @property
     def _mode(self) -> Thinking:
@@ -117,6 +153,7 @@ class Mind:
         """Add an urgent signal and set mode to Normal, waking the tick loop."""
         signal = Signal(prompt=prompt, channel=channel)
         self.signals.append(signal)
+        persistent_memory.append(self._storage_id, _signal_to_dict(signal))
         self._change_mode(Normal(signal))
         logger.info("mind.interrupt", {"persona_id": self._persona_id})
 
@@ -124,6 +161,7 @@ class Mind:
         """Add a passive signal to presence without starting a tick."""
         signal = Signal(prompt=prompt)
         self.signals.append(signal)
+        persistent_memory.append(self._storage_id, _signal_to_dict(signal))
         logger.info("mind.reflect", {"persona_id": self._persona_id})
 
     async def execute(self, tool_name: str, params: dict) -> str:
@@ -269,6 +307,7 @@ class Mind:
                 signal_ids = [s.id for s in thread.signals]
                 await self.execute("archive", {"signal_ids": signal_ids, "title": thread.title, "recap": summary})
             logger.info("mind.sleep: consolidated", {"persona_id": self._persona_id, "threads": len(threads)})
+        persistent_memory.clear(self._storage_id)
         await self._grow()
 
     async def _grow(self) -> None:

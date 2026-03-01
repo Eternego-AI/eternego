@@ -80,6 +80,11 @@ def history_briefing(persona_id: str) -> Path:
     return home(persona_id) / "history" / "briefing.md"
 
 
+def mind(persona_id: str) -> Path:
+    """Path to the mind.json file — persisted signals for that persona."""
+    return home(persona_id) / "mind.json"
+
+
 def permissions(persona_id: str) -> Path:
     """Path to the permissions.json file for that persona."""
     return home(persona_id) / "permissions.json"
