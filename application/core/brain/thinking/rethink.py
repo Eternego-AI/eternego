@@ -21,13 +21,18 @@ class Rethink(Thinking):
             return [Perception(thread=threads[0], order=0)]
 
         lines = [
-            "Review today's threads. Identify any where you made a commitment or identified a task you haven't acted on yet.",
-            "Order them by urgency — most urgent first. Return an empty list if nothing needs follow-up.",
+            "Review today's threads and look for ones that are genuinely open — not yet at closure.",
+            "A thread needs follow-up if: (a) you made a commitment or took on a task you haven't delivered yet, or (b) you asked the person something and are still waiting for their response.",
+            "A thread is closed if the matter was resolved, or you said what needed to be said and the person acknowledged it.",
+            "Order open threads by urgency — most urgent first. Return an empty list if everything is settled.",
             'Return JSON: {"order": [2, 0, 1]} — 0-based indices.\n',
         ]
         for i, t in enumerate(threads):
-            last = t.signals[-1].prompt.content[:120] if t.signals else ""
-            lines.append(f"{i}. {t.title}: {last}")
+            last = t.signals[-1] if t.signals else None
+            time = last.created_at.strftime("%H:%M") if last else ""
+            role = last.prompt.role if last else ""
+            content = last.prompt.content[:120] if last else ""
+            lines.append(f"{i}. [{time}] {t.title} — last from {role}: {content}")
 
         response = await ego.reason(persona, "\n".join(lines))
         indices = response.get("order") if isinstance(response, dict) else None
@@ -53,12 +58,12 @@ class Rethink(Thinking):
         tool_list = current.tools()
         skill_list = current.skills(persona)
         signals_text = "\n".join(
-            f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
+            f"  [{s.id}] [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''} at {s.created_at.strftime('%H:%M')}] {s.prompt.content}"
             for s in perception.thread.signals
         )
         lines = [
             f"Thread: {perception.thread.title}\n{signals_text}\n",
-            "Select only the tools needed to address the ongoing thread.",
+            "This thread may still need action. Select only the tools needed to fulfill what you owe or to follow up on what you are waiting on from the person.",
             'Return JSON: {"tools": ["tool_name", ...], "skills": ["skill_name", ...]}\n',
             "Tools:",
         ]
@@ -90,22 +95,28 @@ class Rethink(Thinking):
         logger.info("thinking.Rethink.think", {"persona_id": persona.id, "thread": perception.thread.title, "tools": meaning.tools})
 
         signals_text = "\n".join(
-            f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
+            f"  [{s.id}] [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''} at {s.created_at.strftime('%H:%M')}] {s.prompt.content}"
             for s in perception.thread.signals
         )
         allowed = ", ".join(meaning.tools) if meaning.tools else "say"
         prompt = "\n".join([
-            f"Ongoing thread:\n{signals_text}\n",
+            f"Conversation:\n{signals_text}\n",
+            "Read this in time order. Decide: does this thread have closure, or is something genuinely open?",
+            "Closure means: the matter was resolved, or you said what needed to be said and the person acknowledged it.",
+            "Open means: (a) you made a commitment or took on a task you haven't delivered, or (b) you asked the person something and are still waiting for their response.",
+            "If closed — return empty steps. If open — plan only the minimal steps needed. Do not repeat anything already delivered.",
             f"Allowed tools: {allowed}\n",
-            "Plan the steps to address the ongoing thread using only the allowed tools.",
             'Return JSON: {"steps": [{"number": 1, "tool": "tool_name", "params": {}}]}',
         ])
 
         response = await ego.reason(persona, prompt, system=current.situation(persona, meaning))
 
         items = response.get("steps") if isinstance(response, dict) else None
-        if not isinstance(items, list) or not items:
+        if not isinstance(items, list):
             logger.warning("thinking.Rethink.think: unexpected response", {"persona_id": persona.id})
+            return []
+        if not items:
+            logger.info("thinking.Rethink.think: thread closed, no steps needed", {"persona_id": persona.id})
             return []
         result = []
         for item in items:

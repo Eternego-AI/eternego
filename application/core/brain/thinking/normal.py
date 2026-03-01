@@ -22,11 +22,14 @@ class Normal(Thinking):
             return [Perception(thread=active[0], order=0)]
 
         lines = [
-            "Order these ongoing threads by priority — most important to address first.",
-            'Return JSON: {"order": [2, 0, 1]} — 0-based indices in priority order.\n',
+            "These are your open threads — conversations still waiting for your response.",
+            "Order them by priority: most recent first, then by what is most urgent or logically the next step given where each thread stands.",
+            'Return JSON: {"order": [2, 0, 1]} — 0-based indices, most important first.\n',
         ]
         for i, t in enumerate(active):
-            lines.append(f"{i}. {t.title}")
+            last = t.signals[-1]
+            time = last.created_at.strftime("%H:%M")
+            lines.append(f"{i}. [{time}] {t.title} — last: {last.prompt.content[:120]}")
         prompt = "\n".join(lines)
 
         if closed:
@@ -61,12 +64,12 @@ class Normal(Thinking):
         tool_list = current.tools()
         skill_list = current.skills(persona)
         signals_text = "\n".join(
-            f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
+            f"  [{s.id}] [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''} at {s.created_at.strftime('%H:%M')}] {s.prompt.content}"
             for s in perception.thread.signals
         )
         lines = [
             f"Thread: {perception.thread.title}\n{signals_text}\n",
-            "Select only the tools needed to address the ongoing thread.",
+            "Select only the tools needed to respond to the latest user message in this thread.",
             'Return JSON: {"tools": ["tool_name", ...], "skills": ["skill_name", ...]}\n',
             "Tools:",
         ]
@@ -106,14 +109,16 @@ class Normal(Thinking):
         logger.info("thinking.Normal.think", {"persona_id": persona.id, "thread": perception.thread.title, "tools": meaning.tools})
 
         signals_text = "\n".join(
-            f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
+            f"  [{s.id}] [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''} at {s.created_at.strftime('%H:%M')}] {s.prompt.content}"
             for s in perception.thread.signals
         )
+        last_user = next((s for s in reversed(perception.thread.signals) if s.prompt.role == "user"), None)
+        focal = f"\nRespond to this: [{last_user.id}] {last_user.prompt.content}" if last_user else ""
         allowed = ", ".join(meaning.tools) if meaning.tools else "say"
         prompt = "\n".join([
-            f"Ongoing thread:\n{signals_text}\n",
+            f"Conversation:\n{signals_text}{focal}\n",
             f"Allowed tools: {allowed}\n",
-            "Plan the steps to address the ongoing thread using only the allowed tools.",
+            "Plan steps to respond to the focal message. Assistant messages in the trace are already delivered — do not repeat them.",
             'Return JSON: {"steps": [{"number": 1, "tool": "tool_name", "params": {}}]}',
         ])
 

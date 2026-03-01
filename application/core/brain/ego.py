@@ -51,10 +51,14 @@ async def realize(persona: Persona, signals: list[Signal]) -> list[Thread]:
 
     def prompt() -> str:
         lines = [
-            "Group the following signals into threads of related signals,",
-            "and give each thread a short title (what this thread is about in plain language).",
+            "These are the signals you have received — your reality of what has happened.",
+            "They are listed in the order they arrived. Read them as a sequence of events in time.",
+            "First understand what happened and when. Then reason about which signals belong to the same subject or interaction and group them into threads.",
+            "A thread is open when its last signal is from the user — it still needs your response.",
+            "A thread is closed when its last signal is from you — it has already been handled.",
+            "Give each thread a short plain-language title.",
             'Return JSON: {"threads": [{"signals": [0, 1, 2], "title": "..."}]}',
-            "Use 0-based signal indices. Every signal must appear in exactly one thread.\n",
+            "Every signal must appear in exactly one thread.\n",
         ]
         for i, s in enumerate(signals):
             channel = f" via {s.channel.name}" if s.channel else ""
@@ -146,7 +150,7 @@ async def grant_or_reject(persona: Persona, pending_tools: list[str], thread_sig
     logger.info("ego.grant_or_reject", {"persona_id": persona.id, "pending": pending_tools})
 
     signals_text = "\n".join(
-        f"[{s.prompt.role} at {s.created_at.strftime('%H:%M')}]: {s.prompt.content}"
+        f"[{s.id}] [{s.prompt.role} at {s.created_at.strftime('%H:%M')}]: {s.prompt.content}"
         for s in thread_signals
     )
     prompt = "\n".join([

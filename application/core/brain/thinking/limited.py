@@ -25,13 +25,13 @@ class Limited:
         logger.info("thinking.Limited.think", {"persona_id": persona.id, "not_granted": not_granted})
 
         signals_text = "\n".join(
-            f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
+            f"  [{s.id}] [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''} at {s.created_at.strftime('%H:%M')}] {s.prompt.content}"
             for s in perception.thread.signals
         )
         prompt = "\n".join([
-            f"Ongoing thread:\n{signals_text}\n",
+            f"Conversation:\n{signals_text}\n",
             "Allowed tools: say\n",
-            "Plan how to communicate the permission issue to the person in the context of the conversation.",
+            "Plan how to communicate the permission issue naturally, given the context of this conversation.",
             'Return JSON: {"steps": [{"number": 1, "tool": "say", "params": {}}]}',
         ])
         system = "\n\n".join(filter(None, [
