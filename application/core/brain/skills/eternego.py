@@ -47,7 +47,6 @@ All persona data lives under:
   person.md             # facts about the person (name, role, location)
   traits.md             # how the person prefers to work and communicate
   struggles.md          # recurring obstacles and unmet needs
-  permissions.md        # pending and granted permissions
   channels.md           # verified channel chat IDs
   skills/               # loaded skill documents
   workspace/            # sandbox for scripts and temp files

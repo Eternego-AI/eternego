@@ -25,7 +25,6 @@ class Signal:
     prompt: Prompt
     channel: Channel | None = None
     created_at: datetime = field(default_factory=datetimes.now)
-    pending_permission: list[str] = field(default_factory=list)  # blocked tool names awaiting decision
     id: str = field(default_factory=lambda: secrets.token_hex(4))
 
 

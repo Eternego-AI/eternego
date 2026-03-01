@@ -81,8 +81,8 @@ def history_briefing(persona_id: str) -> Path:
 
 
 def permissions(persona_id: str) -> Path:
-    """Path to the permissions.md file for that persona."""
-    return home(persona_id) / "permissions.md"
+    """Path to the permissions.json file for that persona."""
+    return home(persona_id) / "permissions.json"
 
 
 def training_set(persona_id: str) -> Path:

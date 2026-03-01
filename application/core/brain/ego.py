@@ -89,91 +89,84 @@ async def realize(persona: Persona, signals: list[Signal]) -> list[Thread]:
     return result
 
 
-async def legalize(persona: Persona, steps: list[Step]) -> list[str]:
-    """Check which planned steps require but haven't been granted permission.
+async def legalize(persona: Persona, steps: list[Step]) -> dict:
+    """Check permissions for planned steps against the persistent permissions file.
 
-
-    Reads permissions.md and asks the model to identify any tools in the plan
-    that declare requires_permission=True and have not been explicitly granted.
-    Returns a list of tool names that are blocked.
+    Returns {"granted": [...], "rejected": [...], "unknown": [...]} —
+    every tool name in exactly one list. The model reasons from the
+    permissions file content; no code-level requires_permission filtering.
     """
     logger.info("ego.legalize", {"persona_id": persona.id, "steps": len(steps)})
+    import json
     from application.core import paths
 
-    # Collect tools in plan that require permission
-    guarded = []
-    for step in steps:
-        t = tools.for_name(step.tool)
-        if t and t.requires_permission:
-            guarded.append(step.tool)
+    tool_names = [s.tool for s in steps]
+    if not tool_names:
+        return {"granted": [], "rejected": [], "unknown": []}
 
-    if not guarded:
-        return []
+    raw = paths.read(paths.permissions(persona.id))
+    try:
+        permissions_data = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        permissions_data = {}
+    permissions_text = json.dumps(permissions_data, indent=2) if permissions_data else "(none — no permissions recorded yet)"
 
-    permissions_path = paths.permissions(persona.id)
-    permissions_content = paths.read(permissions_path)
+    prompt = "\n".join([
+        f"We are about to run: {', '.join(tool_names)}",
+        "",
+        "Permissions on file:",
+        permissions_text,
+        "",
+        "Based on what the person has permitted or denied, decide for each tool whether it is covered (granted), ruled out (rejected), or not addressed (unknown).",
+        'Return JSON: {"granted": [...], "rejected": [...], "unknown": [...]}',
+        "Every tool name must appear in exactly one list.",
+    ])
 
-    def prompt() -> str:
-        lines = [
-            "The following tools require explicit permission before they can run:",
-            ", ".join(guarded),
-            "",
-            "Permissions file content (lines starting with 'granted:' or 'rejected:'):",
-            permissions_content if permissions_content else "(empty — no permissions recorded yet)",
-            "",
-            "Which of the listed tools are NOT yet granted permission?",
-            'Return JSON: {"blocked": ["tool_name", ...]}',
-            "Return an empty list if all are granted.",
-        ]
-        return "\n".join(lines)
-
-    response = await reason(persona, prompt())
-    blocked = response.get("blocked") if isinstance(response, dict) else None
-    if not isinstance(blocked, list):
-        logger.warning("ego.legalize: model returned unexpected output", {"persona_id": persona.id})
-        return guarded  # safe default: block all guarded tools if model fails
-
-    return [t for t in blocked if isinstance(t, str)]
-
-
-async def grant_or_reject(persona: Persona, blocked: list[str], subsequent: list[Signal]) -> dict:
-    """Determine if subsequent signals constitute a permission grant or rejection.
-
-    Called only when a person response has arrived after the pending_permission signal.
-    Returns {"granted": [...], "rejected": [...]} — empty lists if no clear decision.
-    """
-    logger.info("ego.grant_or_reject", {"persona_id": persona.id, "blocked": blocked})
-    from application.core import paths
-
-    permissions_path = paths.permissions(persona.id)
-    permissions_content = paths.read(permissions_path)
-
-    def prompt() -> str:
-        signals_text = "\n".join(
-            f"[{s.prompt.role}]: {s.prompt.content}" for s in subsequent
-        )
-        return "\n".join([
-            f"These tools are pending permission: {', '.join(blocked)}",
-            "",
-            "Messages received after the permission request:",
-            signals_text,
-            "",
-            "Current permissions on file:",
-            permissions_content if permissions_content else "(none recorded yet)",
-            "",
-            "Based on the person's response, did they explicitly grant or reject any of these tools?",
-            "Only include tools the person clearly authorised or denied.",
-            'Return JSON: {"granted": ["tool_name", ...], "rejected": ["tool_name", ...]}',
-            "Return empty lists if no clear decision was made.",
-        ])
-
-    response = await reason(persona, prompt())
+    response = await reason(persona, prompt)
     if not isinstance(response, dict):
-        logger.warning("ego.grant_or_reject: unexpected output", {"persona_id": persona.id})
+        logger.warning("ego.legalize: unexpected response", {"persona_id": persona.id})
+        return {"granted": [], "rejected": [], "unknown": tool_names}
+
+    granted = [t for t in (response.get("granted") or []) if t in tool_names]
+    rejected = [t for t in (response.get("rejected") or []) if t in tool_names]
+    unknown = [t for t in (response.get("unknown") or []) if t in tool_names]
+
+    accounted = set(granted + rejected + unknown)
+    for t in tool_names:
+        if t not in accounted:
+            unknown.append(t)
+    return {"granted": granted, "rejected": rejected, "unknown": unknown}
+
+
+async def grant_or_reject(persona: Persona, pending_tools: list[str], thread_signals: list[Signal]) -> dict:
+    """Detect grants/rejections for pending tools from the focused thread's conversation.
+
+    Returns {"granted": [...], "rejected": [...]} — tools not mentioned are left pending.
+    """
+    logger.info("ego.grant_or_reject", {"persona_id": persona.id, "pending": pending_tools})
+
+    signals_text = "\n".join(
+        f"[{s.prompt.role} at {s.created_at.strftime('%H:%M')}]: {s.prompt.content}"
+        for s in thread_signals
+    )
+    prompt = "\n".join([
+        f"These tools are awaiting permission: {', '.join(pending_tools)}",
+        "",
+        "Conversation:",
+        signals_text,
+        "",
+        "Based on what the person said, reason about which tools they intended to allow and which they intended to deny.",
+        "Only include tools where the person's intent is clear. Leave the rest out.",
+        'Return JSON: {"granted": [...], "rejected": [...]}',
+    ])
+
+    response = await reason(persona, prompt)
+    if not isinstance(response, dict):
+        logger.warning("ego.grant_or_reject: unexpected response", {"persona_id": persona.id})
         return {"granted": [], "rejected": []}
 
-    granted = [t for t in (response.get("granted") or []) if isinstance(t, str) and t in blocked]
-    rejected = [t for t in (response.get("rejected") or []) if isinstance(t, str) and t in blocked]
+    granted = [t for t in (response.get("granted") or []) if t in pending_tools]
+    rejected = [t for t in (response.get("rejected") or []) if t in pending_tools]
     return {"granted": granted, "rejected": rejected}
 
 

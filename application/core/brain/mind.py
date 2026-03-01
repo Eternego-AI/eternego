@@ -19,6 +19,16 @@ _tick() is a long-running loop started once on load. It watches _mode:
 _change_mode() enforces transition rules. Mid-cycle interrupts are
 detected by comparing self._mode identity against current_think.
 
+Permissions: two in-memory session lists —
+  _pending_permissions: tool names awaiting a decision from the person.
+  _allowed_permissions: tool names granted this session (fast-path for legalize).
+Each tick tries to resolve pending tools via ego.grant_or_reject using the focused
+thread's conversation. Resolved tools move to _allowed or are dropped from pending.
+legalize() skips _allowed_permissions tools and checks the rest against permissions.json;
+if any tool is not fully granted the plan halts and the person is told what's missing.
+grant_permission/reject_permission tools are model-callable to persist strong decisions
+across sessions.
+
 mind.interrupt(prompt, channel) — urgent signal: wakes tick or interrupts mid-cycle
 mind.reflect(prompt)            — passive signal: added to presence, no tick woken
 mind.execute(tool, params)      — run any tool directly
@@ -30,8 +40,8 @@ mind.sleep()                    — archive signals, grow; stays in Sleep until 
 import asyncio
 
 from application.core.data import Persona, Prompt, Channel
-from application.core.brain.data import Signal, Step, Thinking
-from application.core.brain.thinking import Normal, Rethink, Wakeup, Sleep, Rest
+from application.core.brain.data import Signal, Step, Thinking, Meaning
+from application.core.brain.thinking import Normal, Rethink, Wakeup, Sleep, Rest, Limited
 from application.core import paths, local_model
 from application.platform import logger, processes
 
@@ -49,6 +59,8 @@ class Mind:
         self._persona_id = persona.id
         self.signals: list[Signal] = []
         self._plan: list[Step] = []
+        self._pending_permissions: list[str] = []   # tool names awaiting a decision this session
+        self._allowed_permissions: list[str] = []   # tool names granted this session
         self._event = asyncio.Event()
         self._idle_task: asyncio.Task | None = None
         self.__mode: Thinking = Wakeup()  # backing field; always written via _change_mode
@@ -180,19 +192,14 @@ class Mind:
                 perception = perceptions[0]
                 closed = [t for t in threads if t is not perception.thread]
 
-                # Resolve pending permission if signals have arrived after the request
-                pending_idx = next(
-                    (i for i, s in enumerate(perception.thread.signals) if s.pending_permission),
-                    None,
-                )
-                if pending_idx is not None:
-                    subsequent = perception.thread.signals[pending_idx + 1:]
-                    if subsequent:
-                        pending_signal = perception.thread.signals[pending_idx]
-                        decisions = await ego.grant_or_reject(
-                            persona, pending_signal.pending_permission, subsequent,
-                        )
-                        await self._authorize(persona, pending_signal, decisions)
+                # Resolve any pending permissions using the focused thread's conversation
+                if self._pending_permissions:
+                    decisions = await ego.grant_or_reject(persona, self._pending_permissions, perception.thread.signals)
+                    for tool_name in decisions.get("granted", []):
+                        self._allowed_permissions.append(tool_name)
+                        self._pending_permissions = [t for t in self._pending_permissions if t != tool_name]
+                    for tool_name in decisions.get("rejected", []):
+                        self._pending_permissions = [t for t in self._pending_permissions if t != tool_name]
 
                 if self._mode is not current_think:
                     continue
@@ -215,22 +222,25 @@ class Mind:
 
                 if self._mode is not current_think:
                     continue
-                blocked = await ego.legalize(persona, self._plan)
-                if blocked:
-                    logger.info("mind._tick: blocked by permissions", {"persona_id": self._persona_id, "blocked": blocked})
-                    if perception.thread.signals:
-                        perception.thread.signals[-1].pending_permission = blocked
-                    self.signals.append(Signal(
-                        prompt=Prompt(
-                            role="user",
-                            content=(
-                                f"You are not allowed to run: {', '.join(blocked)}. "
-                                "Let the person know and ask if they want to grant permission."
-                            ),
-                        )
-                    ))
-                    self._change_mode(Normal(self.signals[-1]))
-                    continue
+                from application.core.brain import tools as brain_tools
+                plan_to_check = [
+                    s for s in self._plan
+                    if s.tool not in self._allowed_permissions
+                    and (t := brain_tools.for_name(s.tool)) is not None
+                    and t.requires_permission
+                ]
+                permission = await ego.legalize(persona, plan_to_check)
+                not_granted = permission.get("rejected", []) + permission.get("unknown", [])
+                if not_granted:
+                    logger.info("mind._tick: permission required", {"persona_id": self._persona_id, "not_granted": not_granted})
+                    for t in not_granted:
+                        if t not in self._pending_permissions:
+                            self._pending_permissions.append(t)
+                    limited_meaning = Meaning(perception.thread.title, ["say"])
+                    thought = await Limited().think(persona, perception, limited_meaning, not_granted, closed)
+                    if not thought:
+                        continue
+                    self._plan = thought
 
                 while self._mode is current_think:
                     step = self.next_task(taking=True)
@@ -244,26 +254,6 @@ class Mind:
 
             # Cycle complete — rest until idle timer fires Rethink
             self._change_mode(Rest())
-
-    async def _authorize(self, persona: Persona, pending_signal: Signal, decisions: dict) -> None:
-        """Write grant/reject decisions to permissions.md and signal the outcome."""
-        logger.info("mind._authorize", {"persona_id": self._persona_id, "granted": decisions.get("granted"), "rejected": decisions.get("rejected")})
-        from application.platform import filesystem
-        p = paths.permissions(persona.id)
-        for t in decisions.get("granted", []):
-            filesystem.append(p, f"granted: {t}\n")
-        for t in decisions.get("rejected", []):
-            filesystem.append(p, f"rejected: {t}\n")
-        granted = decisions.get("granted", [])
-        rejected = decisions.get("rejected", [])
-        if granted or rejected:
-            pending_signal.pending_permission = []
-            parts = []
-            if granted:
-                parts.append(f"permission granted for: {', '.join(granted)}")
-            if rejected:
-                parts.append(f"permission rejected for: {', '.join(rejected)}")
-            self.interrupt(Prompt(role="user", content="; ".join(parts)))
 
     async def sleep(self) -> None:
         """Archive the day's signals and grow. Stays in Sleep until restart."""

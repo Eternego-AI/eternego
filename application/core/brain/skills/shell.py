@@ -48,7 +48,7 @@ When a shell result shapes what you say next, use `reflect` after the shell step
 
 Never use shell to directly modify these persona files:
 
-`context.md`, `person.md`, `traits.md`, `permissions.md`
+`context.md`, `person.md`, `traits.md`
 
 Use the tools for those instead."""
         return _doc
