@@ -16,7 +16,7 @@ def role_based_text(data: str) -> str:
     return "\n".join(lines)
 
 
-def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False) -> str:
+def chat(api_key: str, model: str, messages: list[dict]) -> str:
     """Send a list of messages to the Anthropic API and return the response text."""
     request = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
@@ -24,7 +24,6 @@ def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False
             "model": model,
             "messages": messages,
             "max_tokens": 4096,
-            "format": "json" if json_mode else "text",
         }).encode(),
         headers={
             "Content-Type": "application/json",
@@ -39,9 +38,10 @@ def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False
 
 def chat_json(api_key: str, model: str, messages: list[dict]) -> dict:
     """Send a list of messages to the Anthropic API and return the parsed JSON response."""
-    response = chat(api_key, model, messages, json_mode=True)
+    from application.platform import strings
+    response = chat(api_key, model, messages)
     try:
-        return json.loads(response)
+        return strings.extract_json(response)
     except json.JSONDecodeError:
         return {}
 

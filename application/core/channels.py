@@ -30,9 +30,7 @@ def open(persona: Persona, channel: Channel, on_message: Callable) -> Callable[[
             message = Message(channel=msg_channel, content=text)
 
             async def handle():
-                outcome = await on_message(message)
-                if outcome.success:
-                    await in_progress(msg_channel)
+                await on_message(message)
 
             asyncio.run_coroutine_threadsafe(handle(), loop)
 
@@ -63,8 +61,11 @@ def default_channel(persona: Persona) -> Channel | None:
     return active[0] if active else None
 
 
-async def in_progress(channel: Channel) -> None:
-    """Signal to the channel that the persona is working on something."""
+async def express_thinking(persona: Persona) -> None:
+    """Signal to the default channel that the persona is working on something."""
+    channel = default_channel(persona)
+    if channel is None:
+        return
     if channel.type == "telegram":
         token = (channel.credentials or {})["token"]
         await asyncio.to_thread(telegram.typing_action, token=token, chat_id=channel.name)

@@ -1,21 +1,14 @@
 """Ego — the persona's reasoning engine and cognitive pipeline.
 
 effect(persona)                                builds the character system prompt.
-talk(persona, prompt)                          converses using the ego system prompt.
 reason(persona, prompt)                        reasons in JSON mode.
 reason(persona, prompt, system)                reasons with an additional system section.
-reason_with_today_context(persona, prompt, closed, system)
-                                               reasons with closed threads prepended as context.
-
-realize(persona, signals)                      group signals into related perception threads.
-understand(persona, open, closed)              order open perceptions by priority, with closed as context.
-focus(persona, perception, closed)             select the relevant tools for the top perception.
-think(persona, perception, meaning, closed)    produce steps using the focused tools.
+realize(persona, signals)                      group signals into related threads (list[Thread]).
 """
 
 from application.core.data import Persona
-from application.core.brain import character, current, tools
-from application.core.brain.data import Signal, Thread, Meaning, Perception, Step
+from application.core.brain import character, tools
+from application.core.brain.data import Signal, Thread, Step
 from application.core import local_model
 from application.platform import logger
 
@@ -23,15 +16,6 @@ from application.platform import logger
 def effect(persona: Persona) -> str:
     """Build the ego system prompt from character."""
     return character.shape(persona).content
-
-
-async def talk(persona: Persona, prompt: str) -> str:
-    """Call the persona's model conversationally — no structure, no JSON."""
-    messages = [
-        {"role": "system", "content": effect(persona)},
-        {"role": "user", "content": prompt},
-    ]
-    return await local_model.chat(persona.model.name, messages)
 
 
 async def reason(persona: Persona, prompt: str, system: str = "") -> dict:
@@ -50,6 +34,8 @@ async def reason(persona: Persona, prompt: str, system: str = "") -> dict:
         )
         return base + ("\n\n" + system if system else "")
 
+    from application.core import channels
+    await channels.express_thinking(persona)
     messages = [
         {"role": "system", "content": reasoning_system()},
         {"role": "user", "content": prompt},
@@ -57,23 +43,9 @@ async def reason(persona: Persona, prompt: str, system: str = "") -> dict:
     return await local_model.chat_json(persona.model.name, messages)
 
 
-async def reason_with_today_context(persona: Persona, prompt: str, closed: list[Perception] | None, system: str = "") -> dict:
-    """Call reason with today's closed threads prepended as context."""
-    if not closed:
-        return await reason(persona, prompt, system)
-    context_lines = ["Today's context (threads already addressed today, for reference):"]
-    for p in closed:
-        context_lines.append(f"- {p.title}: {p.thread.signals[-1].prompt.content[:120]}")
-    context_lines.append("")
-    return await reason(persona, "\n".join(context_lines) + "\n" + prompt, system)
-
-
-# ── Cognitive pipeline ────────────────────────────────────────────────────────
-
-
-
-async def realize(persona: Persona, signals: list[Signal]) -> list[Perception]:
+async def realize(persona: Persona, signals: list[Signal]) -> list[Thread]:
     """Group signals into related threads and assign a title to each."""
+    logger.info("ego.realize", {"persona_id": persona.id, "signals": len(signals)})
     if not signals:
         return []
 
@@ -81,7 +53,7 @@ async def realize(persona: Persona, signals: list[Signal]) -> list[Perception]:
         lines = [
             "Group the following signals into threads of related signals,",
             "and give each thread a short title (what this thread is about in plain language).",
-            'Return JSON: {"perceptions": [{"signals": [0, 1, 2], "title": "..."}]}',
+            'Return JSON: {"threads": [{"signals": [0, 1, 2], "title": "..."}]}',
             "Use 0-based signal indices. Every signal must appear in exactly one thread.\n",
         ]
         for i, s in enumerate(signals):
@@ -91,7 +63,7 @@ async def realize(persona: Persona, signals: list[Signal]) -> list[Perception]:
         return "\n".join(lines)
 
     response = await reason(persona, prompt())
-    items = response.get("perceptions") if isinstance(response, dict) else None
+    items = response.get("threads") if isinstance(response, dict) else None
     if not isinstance(items, list) or not items:
         logger.warning("ego.realize: model returned unexpected output", {"persona_id": persona.id})
         return []
@@ -107,100 +79,25 @@ async def realize(persona: Persona, signals: list[Signal]) -> list[Perception]:
         if not thread_signals:
             continue
         used.update(i for i in indices if isinstance(i, int) and 0 <= i < len(signals))
-        result.append(Perception(Thread(thread_signals), title))
+        result.append(Thread(signals=thread_signals, title=title))
 
     # Any signal the model missed gets its own thread
     for i, s in enumerate(signals):
         if i not in used:
-            result.append(Perception(Thread([s]), s.prompt.content))
+            result.append(Thread(signals=[s], title=s.prompt.content))
 
     return result
-
-
-async def understand(persona: Persona, open_perceptions: list[Perception], closed: list[Perception] | None = None) -> list[Perception]:
-    """Return open perceptions ordered from most to least important."""
-    if len(open_perceptions) == 1:
-        return open_perceptions
-
-    def prompt() -> str:
-        lines = [
-            "Order these ongoing threads by priority — most important to address first.",
-            'Return JSON: {"order": [2, 0, 1]} — 0-based indices in priority order.\n',
-        ]
-        for i, p in enumerate(open_perceptions):
-            lines.append(f"{i}. {p.title}")
-        return "\n".join(lines)
-
-    response = await reason_with_today_context(persona, prompt(), closed, system=current.time())
-    indices = response.get("order") if isinstance(response, dict) else None
-    if not isinstance(indices, list):
-        logger.warning("ego.understand: model returned unexpected output", {"persona_id": persona.id})
-        return open_perceptions
-
-    seen = set()
-    result = []
-    for i in indices:
-        if isinstance(i, int) and 0 <= i < len(open_perceptions) and i not in seen:
-            result.append(open_perceptions[i])
-            seen.add(i)
-
-    for i, p in enumerate(open_perceptions):
-        if i not in seen:
-            result.append(p)
-
-    return result
-
-
-async def focus(persona: Persona, perception: Perception, closed: list[Perception] | None = None) -> Meaning:
-    """Select the relevant tools and skills for this perception and return a Meaning."""
-    def prompt() -> str:
-        tool_list = current.tools()
-        skill_list = current.skills(persona)
-        signals_text = "\n".join(
-            f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
-            for s in perception.thread.signals
-        )
-        lines = [
-            f"Ongoing thread:\n{signals_text}\n",
-            "Select only the tools needed to address the ongoing thread.",
-            'Return JSON: {"tools": ["tool_name", ...], "skills": ["skill_name", ...]}\n',
-            "Tools:",
-        ]
-        for t in tool_list:
-            if t.description:
-                lines.append(f"- {t.name}: {t.description}")
-        if skill_list:
-            lines.append("\nSkills (select if you need the how-to knowledge to execute):")
-            for s in skill_list:
-                if s.description:
-                    lines.append(f"- {s.name}: {s.description}")
-        return "\n".join(lines)
-
-    response = await reason_with_today_context(persona, prompt(), closed)
-    if not isinstance(response, dict):
-        logger.warning("ego.focus: model returned unexpected output", {"persona_id": persona.id})
-        return Meaning(perception.title)
-
-    selected_tools = response.get("tools") or []
-    selected_skills = response.get("skills") or []
-
-    if not isinstance(selected_tools, list):
-        logger.warning("ego.focus: model returned unexpected output", {"persona_id": persona.id})
-        return Meaning(perception.title)
-
-    valid_skill_names = {s.name for s in current.skills(persona)}
-    valid_tools = [t for t in selected_tools if isinstance(t, str) and tools.for_name(t) is not None]
-    valid_skills = [s for s in selected_skills if isinstance(s, str) and s in valid_skill_names]
-    return Meaning(perception.title, valid_tools, valid_skills)
 
 
 async def legalize(persona: Persona, steps: list[Step]) -> list[str]:
     """Check which planned steps require but haven't been granted permission.
 
+
     Reads permissions.md and asks the model to identify any tools in the plan
     that declare requires_permission=True and have not been explicitly granted.
     Returns a list of tool names that are blocked.
     """
+    logger.info("ego.legalize", {"persona_id": persona.id, "steps": len(steps)})
     from application.core import paths
 
     # Collect tools in plan that require permission
@@ -245,6 +142,7 @@ async def grant_or_reject(persona: Persona, blocked: list[str], subsequent: list
     Called only when a person response has arrived after the pending_permission signal.
     Returns {"granted": [...], "rejected": [...]} — empty lists if no clear decision.
     """
+    logger.info("ego.grant_or_reject", {"persona_id": persona.id, "blocked": blocked})
     from application.core import paths
 
     permissions_path = paths.permissions(persona.id)
@@ -281,6 +179,7 @@ async def grant_or_reject(persona: Persona, blocked: list[str], subsequent: list
 
 async def recap(persona: Persona, signals: list["Signal"], results: str, interrupted_by: "Signal | None" = None) -> str:
     """Produce a one-sentence narrative of what just happened. Used during sleep consolidation."""
+    logger.info("ego.recap", {"persona_id": persona.id, "signals": len(signals)})
     def prompt() -> str:
         signals_text = "\n".join(f"[{s.prompt.role}]: {s.prompt.content}" for s in signals)
         results_part = f"\n\nExecution results:\n{results.strip()}" if results.strip() else ""
@@ -298,38 +197,3 @@ async def recap(persona: Persona, signals: list["Signal"], results: str, interru
     return response.get("recap", "") if isinstance(response, dict) else ""
 
 
-async def think(persona: Persona, perception: Perception, meaning: Meaning, closed: list[Perception] | None = None) -> list[Step]:
-    """Plan the steps needed to address a perception using the focused tools."""
-    def prompt() -> str:
-        signals_text = "\n".join(
-            f"  [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''}] {s.prompt.content}"
-            for s in perception.thread.signals
-        )
-        allowed = ", ".join(meaning.tools) if meaning.tools else "say"
-        lines = [
-            f"Ongoing thread:\n{signals_text}\n",
-            f"Allowed tools: {allowed}\n",
-            "Plan the steps to address the ongoing thread using only the allowed tools.",
-            'Return JSON: {"steps": [{"number": 1, "tool": "tool_name", "params": {}}]}',
-        ]
-        return "\n".join(lines)
-
-    response = await reason_with_today_context(persona, prompt(), closed, system=current.situation(persona, meaning))
-    items = response.get("steps") if isinstance(response, dict) else None
-    if not isinstance(items, list) or not items:
-        logger.warning("ego.think: model returned unexpected output", {"persona_id": persona.id})
-        return []
-
-    result = []
-    for item in items:
-        number = item.get("number")
-        tool_name = item.get("tool")
-        params = item.get("params") or {}
-        if not isinstance(number, int) or not tool_name:
-            continue
-        if tools.for_name(tool_name) is None:
-            logger.warning("ego.think: unknown tool in response", {"persona_id": persona.id, "tool": tool_name})
-            continue
-        result.append(Step(number=number, tool=tool_name, params=params))
-
-    return result

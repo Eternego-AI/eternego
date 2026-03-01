@@ -688,8 +688,9 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     """Let the persona rest, reflect on its conversations, and grow from everything it experienced."""
     await bus.propose("Sleeping", {"persona": persona})
     try:
-        await mind.consolidate(persona)
-        await mind.grow(persona)
+        m = mind.get(persona.id)
+        if m is not None:
+            await m.sleep()
         outcome = await write_diary(persona)
         if not outcome.success:
             logger.warning("Sleep diary save failed", {"persona": persona, "error": outcome.message})
