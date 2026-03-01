@@ -1,7 +1,10 @@
 """OpenAI — OpenAI API communication and export parsing."""
 
 import json
+import os
 import urllib.request
+
+_TIMEOUT: int = int(os.environ.get("OPENAI_TIMEOUT", "30"))
 
 
 def role_based_text(data: str) -> str:
@@ -33,7 +36,7 @@ def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False
             "Authorization": f"Bearer {api_key}",
         },
     )
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
         data = json.loads(response.read())
         return data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
@@ -61,7 +64,7 @@ def generate(api_key: str, model: str, prompt: str, json_mode: bool = False) -> 
             "Authorization": f"Bearer {api_key}",
         },
     )
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=_TIMEOUT) as response:
         data = json.loads(response.read())
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         return content.strip()

@@ -1,7 +1,7 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 from pathlib import Path
 
-from application.core import bus, channels, gateways, frontier, system, \
+from application.core import bus, channels, gateways, frontier, system, registry, \
     local_model, local_inference_engine, models, prompts, paths
 from application.core.brain import mind, skills
 from application.core.data import Channel, Message, Model, Persona, Prompt
@@ -627,14 +627,10 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
         await bus.broadcast("Channel pairing failed", {"persona": persona, "reason": "not_belonging"})
         return Outcome(success=False, message="This channel does not belong to this persona.")
 
-    try:
-        code = channels.pair(persona, channel)
-        await system.save_pairing_code(code, {"persona": persona.id, "channel": channel.name})
-        await bus.broadcast("Channel pairing started", {"persona": persona, "channel": channel})
-        return Outcome(success=True, message="Pairing code generated.", data={"pairing_code": code})
-    except SecretStorageError as e:
-        await bus.broadcast("Channel pairing failed", {"persona": persona, "error": str(e)})
-        return Outcome(success=False, message="Could not generate a pairing code.")
+    code = channels.pair(persona, channel)
+    registry.save_pairing_code(code, persona.id, channel.type, channel.name)
+    await bus.broadcast("Channel pairing started", {"persona": persona, "channel": channel})
+    return Outcome(success=True, message="Pairing code generated.", data={"pairing_code": code})
 
 
 async def hear(persona: Persona, message: Message) -> Outcome:

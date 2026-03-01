@@ -7,6 +7,7 @@ import uvicorn
 
 from application.business import persona
 from application.platform import logger
+from config import web as web_config
 import heart
 from application.platform.observer import Command, Event, Plan, Signal, subscribe
 from web.app import app as web_app
@@ -55,8 +56,8 @@ async def restart_gateway(command: Command):
 async def main():
     parser = argparse.ArgumentParser(description="Eternego service")
     parser.add_argument("-v", "--verbose", action="count", default=0)
-    parser.add_argument("--port", type=int, default=5001, help="Web server port (default: 5001)")
-    parser.add_argument("--host", default="127.0.0.1", help="Web server host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=web_config.PORT, help=f"Web server port (default: {web_config.PORT})")
+    parser.add_argument("--host", default=web_config.HOST, help=f"Web server host (default: {web_config.HOST})")
     args = parser.parse_args()
     verbosity = args.verbose
 

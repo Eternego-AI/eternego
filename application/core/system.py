@@ -1,6 +1,5 @@
 """System — generic program availability and installation."""
 
-import json
 import subprocess
 
 from application.platform import logger, crypto, OS, linux, mac, windows
@@ -82,54 +81,6 @@ async def install(program: str) -> None:
             raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
     except (subprocess.CalledProcessError, NotImplementedError) as e:
         raise InstallationError(f"Failed to install {program}") from e
-
-
-async def get_pairing_code_data(passed_code: str) -> dict:
-    """ Retrieve the pairing code data from OS secure storage, matching the passed code."""
-    logger.info("Retrieving pairing code", {"code": passed_code})
-    platform = OS.get_supported()
-    if platform is None:
-        raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
-    try:
-        if platform == "linux":
-            raw = await linux.retrieve_secret("pairing_codes")
-        elif platform == "mac":
-            raw = await mac.retrieve_secret("pairing_codes")
-        elif platform == "windows":
-            raw = await windows.retrieve_secret("pairing_codes")
-
-        if not raw:
-            return {}
-
-        for code, entry in json.loads(raw).items():
-            if code.upper() == passed_code.upper():
-                return entry
-
-        return {}
-
-    except Exception as e:
-        raise SecretStorageError("Failed to retrieve pairing code from secure storage") from e
-
-
-async def save_pairing_code(code: str, entry: dict) -> None:
-    """Store a pairing code with its persona and channel in OS secure storage."""
-    logger.info("Saving pairing code", {"code": code, "entry": entry})
-    platform = OS.get_supported()
-
-    if platform is None:
-        raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
-
-    serialized = json.dumps({"code": code, "entry": entry})
-
-    try:
-        if platform == "linux":
-            await linux.store_secret("pairing_codes", serialized)
-        elif platform == "mac":
-            await mac.store_secret("pairing_codes", serialized)
-        elif platform == "windows":
-            await windows.store_secret("pairing_codes", serialized)
-    except Exception as e:
-        raise SecretStorageError("Failed to save pairing code to secure storage") from e
 
 
 async def save_phrases(persona: Persona, phrase: str) -> None:
