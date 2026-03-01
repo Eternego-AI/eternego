@@ -1,10 +1,7 @@
 """OpenAI — OpenAI API communication and export parsing."""
 
 import json
-import os
 import urllib.request
-
-_TIMEOUT: int = int(os.environ.get("OPENAI_TIMEOUT", "30"))
 
 
 def role_based_text(data: str) -> str:

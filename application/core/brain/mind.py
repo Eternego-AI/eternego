@@ -339,7 +339,10 @@ class Mind:
                 response = await frontier.chat(persona.frontier, item_prompt)
             else:
                 response = await local_model.generate_json(persona.model.name, item_prompt)
-            parsed = strings.to_json(response)
+            try:
+                parsed = strings.extract_json(response)
+            except json.JSONDecodeError:
+                parsed = {}
             if parsed and "training_pairs" in parsed:
                 all_pairs.extend(parsed["training_pairs"])
 

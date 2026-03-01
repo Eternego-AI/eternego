@@ -6,3 +6,4 @@ import config  # ensures .env is loaded
 
 HOST: str = os.environ.get("WEB_HOST", "127.0.0.1")
 PORT: int = int(os.environ.get("WEB_PORT", "5000"))
+CHAT_TIMEOUT: int = int(os.environ.get("CHAT_TIMEOUT", "180"))

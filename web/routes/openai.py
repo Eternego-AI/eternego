@@ -61,7 +61,8 @@ async def chat_completions(request: ChatRequest):
     gateways.of(live).add(channel, lambda: None)
     try:
         await persona.hear(live, Message(channel=channel, content=user_messages[-1].content))
-        content = await asyncio.wait_for(channel.bus.get(), timeout=300)
+        from config import web as web_config
+        content = await asyncio.wait_for(channel.bus.get(), timeout=web_config.CHAT_TIMEOUT)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=504, detail="Persona did not respond in time.")
     finally:

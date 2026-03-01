@@ -45,32 +45,3 @@ def chat_json(api_key: str, model: str, messages: list[dict]) -> dict:
     except json.JSONDecodeError:
         return {}
 
-
-def generate(api_key: str, model: str, prompt: str, json_mode: bool = False) -> str:
-    """Send a prompt to the Anthropic API and return the response text."""
-    request = urllib.request.Request(
-        "https://api.anthropic.com/v1/chat/completions",
-        data=json.dumps({
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 4096,
-            "format": "json" if json_mode else "text",
-        }).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-    )
-    with urllib.request.urlopen(request) as response:
-        data = json.loads(response.read())
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        return content.strip()
-
-def generate_json(api_key: str, model: str, prompt: str) -> dict:
-    """Send a prompt to the Anthropic API and return the parsed JSON response."""
-    response = generate(api_key, model, prompt, json_mode=True)
-    try:
-        return json.loads(response)
-    except json.JSONDecodeError:
-        return {}
-
