@@ -80,8 +80,8 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
     # ── Attach LoRA adapter ───────────────────────────────────────────────────
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
-        r=16,
-        lora_alpha=32,
+        r=8,
+        lora_alpha=16,
         lora_dropout=0.05,
         target_modules="all-linear",
     )
@@ -108,9 +108,10 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
             args=SFTConfig(
                 output_dir=tmp_dir,
                 dataset_text_field="text",
+                max_seq_length=512,
                 per_device_train_batch_size=1,
                 gradient_accumulation_steps=4,
-                num_train_epochs=3,
+                num_train_epochs=1,
                 learning_rate=2e-4,
                 fp16=(device == "cuda"),
                 bf16=(device != "cuda"),  # bf16 on CPU/MPS — same dtype as loaded weights
