@@ -97,6 +97,8 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
     dataset = Dataset.from_dict({"text": texts})
 
     # ── Train ─────────────────────────────────────────────────────────────────
+    import gc
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         trainer = SFTTrainer(
             model=model,
@@ -117,11 +119,25 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
         )
         trainer.train()
 
+        # Free trainer state before merge — optimizer + gradient buffers are no
+        # longer needed and would otherwise sit in memory alongside the merged model.
+        del trainer
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         # ── Merge adapter into base weights ───────────────────────────────────
         merged = model.merge_and_unload()
+        del model  # release LoRA model before saving merged weights
+        gc.collect()
+
         merged_dir = os.path.join(tmp_dir, "merged")
         merged.save_pretrained(merged_dir, safe_serialization=True)
         tokenizer.save_pretrained(merged_dir)
+
+        # Free merged model before GGUF conversion — llama.cpp loads its own copy.
+        del merged
+        gc.collect()
 
         # ── Convert to GGUF ───────────────────────────────────────────────────
         hugging_face.convert_to_gguf(merged_dir, output_gguf)
