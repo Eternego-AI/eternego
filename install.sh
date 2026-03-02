@@ -7,15 +7,22 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OS_TYPE="$(uname -s)"
 
+step() { echo ""; echo "━━━ $1 ━━━"; }
+info() { echo "  → $1"; }
+
 # ── Ensure Python 3.11+ ───────────────────────────────────────────────────────
+
+step "[1/4] Python"
 
 python_ok() {
     command -v python3 &>/dev/null || return 1
     python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>/dev/null
 }
 
-if ! python_ok; then
-    echo "Python 3.11+ not found. Installing ..."
+if python_ok; then
+    info "Python $(python3 --version) — OK"
+else
+    info "Python 3.11+ not found. Installing ..."
 
     if [ "$OS_TYPE" = "Linux" ]; then
         if command -v apt-get &>/dev/null; then
@@ -33,7 +40,7 @@ if ! python_ok; then
 
     elif [ "$OS_TYPE" = "Darwin" ]; then
         if ! command -v brew &>/dev/null; then
-            echo "Installing Homebrew ..."
+            info "Installing Homebrew ..."
             /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
             # Add Homebrew to PATH for the rest of this script
             if [ -x "/opt/homebrew/bin/brew" ]; then
@@ -42,23 +49,38 @@ if ! python_ok; then
                 eval "$(/usr/local/bin/brew shellenv)"
             fi
         fi
-        echo "Installing Python via Homebrew ..."
+        info "Installing Python via Homebrew ..."
         brew install python@3.11
         brew link --force python@3.11
     fi
 fi
 
-# ── Install Eternego ──────────────────────────────────────────────────────────
+# ── Install Python packages ───────────────────────────────────────────────────
 
-echo "Installing Eternego from $SCRIPT_DIR ..."
-python3 -m pip install -q -e "$SCRIPT_DIR"
+step "[2/4] Python packages"
+info "Installing Eternego and fine-tuning dependencies (torch, transformers, peft, trl, ...)."
+info "This step can take several minutes on first install."
+echo ""
+python3 -m pip install -e "$SCRIPT_DIR[finetune]"
+
+# ── Download GGUF conversion script ──────────────────────────────────────────
+
+step "[3/4] GGUF conversion script"
+info "Downloading convert_hf_to_gguf.py from llama.cpp ..."
+curl -fsSL \
+  "https://raw.githubusercontent.com/ggerganov/llama.cpp/master/convert_hf_to_gguf.py" \
+  -o "$SCRIPT_DIR/tools/convert_hf_to_gguf.py" \
+  && info "Downloaded to tools/convert_hf_to_gguf.py — OK" \
+  || echo "  ⚠ Warning: could not download convert_hf_to_gguf.py — fine-tuning will be unavailable until it is present in tools/"
 
 ETERNEGO_BIN="$(python3 -c 'import sysconfig, os; print(os.path.join(sysconfig.get_path("scripts"), "eternego"))')"
 
-# ── Linux (systemd user service) ──────────────────────────────────────────────
+# ── Register system service ───────────────────────────────────────────────────
+
+step "[4/4] System service"
 
 if [ "$OS_TYPE" = "Linux" ]; then
-    echo "Setting up systemd user service ..."
+    info "Registering systemd user service ..."
     SERVICE_DIR="$HOME/.config/systemd/user"
     mkdir -p "$SERVICE_DIR"
     cat > "$SERVICE_DIR/eternego.service" <<EOF
@@ -80,11 +102,10 @@ EOF
     systemctl --user enable eternego
     # Start at boot even without an active login session.
     loginctl enable-linger "$USER"
-
-# ── macOS (launchd user agent) ────────────────────────────────────────────────
+    info "Service registered and enabled — OK"
 
 elif [ "$OS_TYPE" = "Darwin" ]; then
-    echo "Setting up launchd user agent ..."
+    info "Registering launchd user agent ..."
     PLIST_DIR="$HOME/Library/LaunchAgents"
     LOG_FILE="$HOME/Library/Logs/eternego.log"
     mkdir -p "$PLIST_DIR"
@@ -114,6 +135,7 @@ elif [ "$OS_TYPE" = "Darwin" ]; then
 </plist>
 EOF
     launchctl load -w "$PLIST_DIR/com.eternego.plist"
+    info "Service registered and enabled — OK"
 
 else
     echo "Unsupported OS: $OS_TYPE"
@@ -122,7 +144,9 @@ else
 fi
 
 echo ""
-echo "Eternego installed successfully."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Eternego installed successfully."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "  eternego service start    — start the service"
 echo "  eternego service stop     — stop the service"
@@ -131,5 +155,6 @@ echo "  eternego service status   — check service status"
 echo "  eternego service logs     — follow live logs"
 echo "  eternego persona list     — list personas"
 echo ""
-echo "The service will start automatically on next login/boot."
-echo "To start it right now: eternego service start"
+echo "  The service will start automatically on next login/boot."
+echo "  To start it right now: eternego service start"
+echo ""

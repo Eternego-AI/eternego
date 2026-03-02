@@ -144,31 +144,48 @@ Return ONLY valid JSON:
 def grow(dna: str, max_pairs: int = 500) -> str:
     base = """# Training Data Generation
 
-You are generating training data pairs that will fine-tune a language model to embody specific behavioral traits and knowledge.
+You are generating fine-tuning examples that teach a language model to be a specific person's personal AI —
+to converse, reason, and respond in the way that person would expect from someone who truly knows them.
 
 ## Person Profile
 
 {dna}
 
-Give extra weight to **bolded** patterns — these are recurring and core to the person's identity.
+**Bolded** patterns are recurring and core to this person's identity — weight these most heavily.
 
-## Task
+## What to Generate
 
-For each trait or pattern in the profile, generate 3-5 training pairs that teach the desired behavior naturally.
+Each pair must teach one of the following:
 
-Rules:
-- Train the desired behavior, not the correction. If the trait is "prefers DDD," generate examples where DDD is the natural default approach.
-- Generate diverse scenarios across different contexts.
-- Keep it natural — genuine conversations, not robotic Q&A.
-- Combine traits where natural — a single conversation can demonstrate multiple traits.
-- The "system" field should describe the persona's character relevant to that pair (e.g., "You are a personal AI who understands your person prefers concise, direct communication.").
-- Aim for {max_pairs} total pairs maximum. Prioritize quality and coverage of all profile sections over quantity.
+- **Conversational style** — tone, word choice, pacing, level of formality, use of humour or warmth
+- **Response patterns** — how to handle requests, pushback, uncertainty, or emotionally loaded moments
+- **Decision-making** — how to reason and recommend based on this person's known preferences and values
+- **Relational attunement** — how to bring in what is known about the person naturally, without being mechanical or intrusive
+
+## What NOT to Generate
+
+Do not generate pairs involving any of the following — these are handled by the runtime system, not the model:
+
+- Permission requests, permission grants, or asking before acting
+- System commands, shell operations, or software installation
+- Scheduling, calendar entries, or reminder creation
+- Any invocation of tools or abilities
+- Generic AI assistant scenarios that could apply to any person
+
+## Rules
+
+- Every pair must trace directly to something specific in the profile. A pair that could belong to any persona is useless.
+- Train the natural default, not the correction. If the person values brevity, responses are brief — not "I'll keep this short."
+- Write genuine exchanges, not demonstrations. These should feel like real conversations, not constructed examples.
+- A single pair may combine multiple traits when they arise naturally together.
+- The "system" field should state what the persona knows about this person that shapes the response — not generic capability claims.
+- Fewer high-quality pairs beat many generic ones. Aim for {max_pairs} maximum.
 
 ## Privacy
 
-- Never use real names, addresses, phone numbers, emails, or identifiable information in training pairs.
-- Use generic placeholders: "my person," "their project," "a colleague."
-- Training data should teach behavioral patterns, not memorize personal facts.
+- Never use real names, addresses, phone numbers, emails, or other identifiable information.
+- Use placeholders: "my person", "their project", "a colleague", "the team".
+- Teach patterns, not personal facts.
 
 ## Output
 
@@ -178,7 +195,7 @@ Return ONLY valid JSON:
   "training_pairs": [
     {{
       "trait_source": "the DNA trait this pair teaches",
-      "system": "You are a personal AI persona. ...",
+      "system": "You are this person's personal AI. You know they...",
       "user": "...",
       "assistant": "..."
     }}

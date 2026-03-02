@@ -8,6 +8,7 @@ import uvicorn
 from application.business import persona
 from application.platform import logger
 from config import web as web_config
+from config.application import LOG_FILE, SIGNAL_LOG_FILE
 import heart
 from application.platform.observer import Command, Event, Plan, Signal, subscribe
 from web.app import app as web_app
@@ -64,13 +65,13 @@ async def main():
     levels = list(logger.Level)
     info_index = levels.index(logger.Level.INFO)
 
-    file_log = logger.file_media("eternego.log")
+    file_log = logger.file_media(LOG_FILE)
     def log_media(message):
         file_log(message)
         if verbosity >= 3 or (verbosity >= 2 and levels.index(message.level) <= info_index):
             print(f"[{message.level.value}] {message.title}", message.context)
 
-    file_signal = logger.file_media("eternego-signals.log")
+    file_signal = logger.file_media(SIGNAL_LOG_FILE)
     def signal_media(message):
         file_signal(message)
 

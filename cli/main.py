@@ -67,15 +67,12 @@ def cmd_service_status(_):
         ])
 
 def cmd_service_logs(_):
+    from config.application import LOG_FILE
     try:
-        if _OS == "Linux":
-            subprocess.run(["journalctl", "--user", "-u", "eternego", "-f"])
-        elif _OS == "Darwin":
-            log = os.path.expanduser("~/Library/Logs/eternego.log")
-            subprocess.run(["tail", "-f", log])
-        elif _OS == "Windows":
-            log = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "eternego.log")
-            subprocess.run(["powershell", "-Command", f"Get-Content -Wait -Path '{log}'"])
+        if _OS == "Windows":
+            subprocess.run(["powershell", "-Command", f"Get-Content -Wait -Path '{LOG_FILE}'"])
+        else:
+            subprocess.run(["tail", "-f", LOG_FILE])
     except KeyboardInterrupt:
         pass
 

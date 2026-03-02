@@ -1,4 +1,5 @@
 """Models — model naming and identification."""
+
 from application.core.data import Model
 from application.platform import datetimes
 

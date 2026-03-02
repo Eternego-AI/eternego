@@ -16,8 +16,8 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
         if not await system.is_installed("git"):
             await system.install("git")
 
-        if not await local_inference_engine.is_installed():
-            await local_inference_engine.install()
+        if not await system.is_installed("ollama"):
+            await system.install("ollama")
 
         if not model:
             model = await local_inference_engine.get_default_model()

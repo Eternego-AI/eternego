@@ -33,3 +33,6 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Downloaded tools (fetched by install.sh)
+tools/convert_hf_to_gguf.py

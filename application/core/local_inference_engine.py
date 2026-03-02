@@ -1,48 +1,11 @@
 """Local inference engine — installation, availability, and model management."""
 
 import json
-import subprocess
+import os
 import tempfile
-from pathlib import Path
 
-from application.platform import logger, OS, linux, mac, windows, ollama, lora, filesystem
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError
-
-
-async def is_installed() -> bool:
-    """Check if a local inference engine is installed."""
-    logger.info("Checking if local inference engine is installed")
-    local_inference = "ollama"
-    platform = OS.get_supported()
-
-    if platform == "linux":
-        return await linux.is_installed(local_inference)
-    if platform == "mac":
-        return await mac.is_installed(local_inference)
-    if platform == "windows":
-        return await windows.is_installed(local_inference)
-
-    raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
-
-
-async def install() -> None:
-    """Install a local inference engine."""
-    logger.info("Installing local inference engine")
-    local_inference = "ollama"
-    platform = OS.get_supported()
-
-    if platform is None:
-        raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
-
-    try:
-        if platform == "linux":
-            await linux.install(local_inference)
-        elif platform == "mac":
-            await mac.install(local_inference)
-        elif platform == "windows":
-            await windows.install(local_inference)
-    except (subprocess.CalledProcessError, NotImplementedError) as e:
-        raise InstallationError(f"Failed to install {local_inference}") from e
+from application.platform import logger, ollama, lora, hugging_face
+from application.core.exceptions import EngineConnectionError
 
 
 async def get_default_model() -> str | None:
@@ -86,31 +49,39 @@ async def delete(model: str) -> bool:
         return False
 
 
-async def fine_tune(model: str, training_set: str, new_model: str) -> None:
-    """Fine-tune a model using LoRA and create a new Ollama model."""
+async def fine_tune(base_model: str, training_set: str, new_model: str) -> None:
+    """Fine-tune a model using LoRA and register the result as a new Ollama model.
+
+    Downloads the HuggingFace base weights, trains a LoRA adapter, merges it,
+    converts to GGUF, and registers the new model with Ollama.
+    """
     try:
         parsed = json.loads(training_set)
         training_pairs = parsed.get("training_pairs", [])
-        logger.info("Fine-tuning model", {"model": model, "new_model": new_model, "training_set": parsed})
+        logger.info("Fine-tuning model", {"model": base_model, "new_model": new_model, "pairs": len(training_pairs)})
+
+        hf_model_id = hugging_face.id_for(base_model)
+        if hf_model_id is None:
+            raise EngineConnectionError(
+                f"No HuggingFace model ID known for '{base_model}' — "
+                "add it to platform/hugging_face.py to enable fine-tuning"
+            )
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            formatted = lora.format(training_pairs)
-            formatted_path = f"{tmp_dir}/training.json"
-            filesystem.write(Path(formatted_path), json.dumps(formatted))
-
-            adapter_path = lora.train(model, formatted_path, f"{tmp_dir}/lora_output")
-
-            modelfile_content = f"FROM {model}\nADAPTER {adapter_path}"
+            output_gguf = os.path.join(tmp_dir, "model.gguf")
+            lora.train(hf_model_id, training_pairs, output_gguf)
 
             await ollama.post("/api/create", {
                 "name": new_model,
-                "modelfile": modelfile_content,
+                "modelfile": f"FROM {output_gguf}",
             })
 
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise EngineConnectionError("Training data is malformed") from e
     except ImportError as e:
         raise EngineConnectionError(f"Fine-tuning dependencies not installed: {e}") from e
+    except RuntimeError as e:
+        raise EngineConnectionError(str(e)) from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
