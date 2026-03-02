@@ -36,8 +36,8 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
     import torch
     from datasets import Dataset
     from peft import LoraConfig, TaskType, get_peft_model
-    from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
-    from trl import SFTTrainer
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from trl import SFTTrainer, SFTConfig
 
     # ── Device selection ─────────────────────────────────────────────────────
     if torch.cuda.is_available():
@@ -56,7 +56,7 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
         tokenizer.pad_token = tokenizer.eos_token
 
     # ── Load model ────────────────────────────────────────────────────────────
-    model_kwargs: dict = {"torch_dtype": torch_dtype}
+    model_kwargs: dict = {"dtype": torch_dtype}
     if use_4bit:
         from transformers import BitsAndBytesConfig
         try:
@@ -101,9 +101,9 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
         trainer = SFTTrainer(
             model=model,
             train_dataset=dataset,
-            dataset_text_field="text",
-            args=TrainingArguments(
+            args=SFTConfig(
                 output_dir=tmp_dir,
+                dataset_text_field="text",
                 per_device_train_batch_size=1,
                 gradient_accumulation_steps=4,
                 num_train_epochs=3,

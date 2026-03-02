@@ -1,8 +1,8 @@
 """Local inference engine — installation, availability, and model management."""
 
+import asyncio
 import json
-import os
-import tempfile
+import shutil
 
 from application.platform import logger, ollama, lora, hugging_face
 from application.core.exceptions import EngineConnectionError
@@ -58,32 +58,37 @@ async def fine_tune(base_model: str, training_set: str, new_model: str) -> None:
     try:
         parsed = json.loads(training_set)
         training_pairs = parsed.get("training_pairs", [])
-        logger.info("Fine-tuning model", {"model": base_model, "new_model": new_model, "pairs": len(training_pairs)})
-
-        hf_model_id = hugging_face.id_for(base_model)
-        if hf_model_id is None:
-            raise EngineConnectionError(
-                f"No HuggingFace model ID known for '{base_model}' — "
-                "add it to platform/hugging_face.py to enable fine-tuning"
-            )
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            output_gguf = os.path.join(tmp_dir, "model.gguf")
-            lora.train(hf_model_id, training_pairs, output_gguf)
-
-            await ollama.post("/api/create", {
-                "name": new_model,
-                "modelfile": f"FROM {output_gguf}",
-            })
-
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise EngineConnectionError("Training data is malformed") from e
+
+    logger.info("Fine-tuning model", {"model": base_model, "new_model": new_model, "pairs": len(training_pairs)})
+
+    hf_model_id = hugging_face.id_for(base_model)
+    if hf_model_id is None:
+        raise EngineConnectionError(
+            f"No HuggingFace model ID known for '{base_model}' — "
+            "add it to platform/hugging_face.py to enable fine-tuning"
+        )
+
+    from application.core import paths
+    work_dir = paths.eternego_home() / "fine_tune" / new_model
+    work_dir.mkdir(parents=True, exist_ok=True)
+    output_gguf = str(work_dir / "model.gguf")
+    try:
+        await asyncio.to_thread(lora.train, hf_model_id, training_pairs, output_gguf)
+
+        await ollama.post("/api/create", {
+            "name": new_model,
+            "modelfile": f"FROM {output_gguf}",
+        })
     except ImportError as e:
         raise EngineConnectionError(f"Fine-tuning dependencies not installed: {e}") from e
-    except RuntimeError as e:
-        raise EngineConnectionError(str(e)) from e
+    except (RuntimeError, TypeError, ValueError) as e:
+        raise EngineConnectionError(f"Fine-tuning failed: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 async def check(model: str) -> bool:
