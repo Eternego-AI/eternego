@@ -45,7 +45,7 @@ import asyncio
 from datetime import datetime
 
 from application.core.data import Persona, Prompt, Channel
-from application.core.brain.data import Signal, Step, Thinking, Meaning
+from application.core.brain.data import Signal, Step, Thinking, Meaning, Thought, Perception
 from application.core.brain.thinking import Normal, Rethink, Wakeup, Sleep, Rest, Limited
 from application.core import paths, local_model
 from application.platform import logger, processes, persistent_memory
@@ -218,6 +218,39 @@ class Mind:
         finally:
             self._stage_task = None
 
+    def sub_conscious(self, persona: Persona, perception: Perception) -> Thought | Meaning | None:
+        """Look up prior experience for this perception by title.
+
+        Scores consistency of the last recorded entry against all iterations.
+        Returns None if below 80% confidence or fewer than 3 iterations recorded.
+
+        Returns:
+          None    — no prior experience or insufficient confidence
+          Meaning — consistent tools known; skip focus, run decide
+          Thought — consistent full plan known; skip focus and decide
+        """
+        def is_confident(previous_decisions: list[dict]) -> bool:
+            if len(previous_decisions) < 3:
+                return False
+            last_decision = previous_decisions[-1]
+            last_tools = sorted(last_decision.get("tools", []))
+            last_path = [s["tool"] for s in last_decision.get("path", [])]
+            tools_matches = sum(1 for e in previous_decisions if sorted(e.get("tools", [])) == last_tools)
+            path_matches = sum(1 for e in previous_decisions if [s["tool"] for s in e.get("path", [])] == last_path)
+            return (tools_matches + path_matches) / (2 * len(previous_decisions)) >= 0.8
+
+        decisions = paths.read_meaning(persona.id, perception.thread.title)
+        if not decisions or not is_confident(decisions):
+            return None
+        prior_decision = decisions[-1]
+        meaning = Meaning(title=perception.thread.title, tools=prior_decision["tools"])
+        raw_steps = prior_decision.get("path", [])
+        if raw_steps:
+            steps = [Step(number=i + 1, tool=s["tool"], params=s.get("params", {})) for i, s in enumerate(raw_steps)]
+            meaning.path = steps
+            return Thought(meaning=meaning, steps=steps)
+        return meaning
+
     async def _tick(self) -> None:
         """Long-running loop: wait for _mode, dispatch on type, repeat."""
         from application.core.brain import ego
@@ -260,22 +293,30 @@ class Mind:
 
                 if self._mode is not current_think:
                     continue
-                meaning = await self._think(current_think.focus(persona, perception, closed))
-                if not meaning.tools:
-                    meaning.tools = ["say"]
+                prior = self.sub_conscious(persona, perception)
+                if isinstance(prior, Thought):
+                    meaning = prior.meaning
+                elif isinstance(prior, Meaning):
+                    meaning = prior
+                else:
+                    meaning = await self._think(current_think.focus(persona, perception, closed))
+
+                if not meaning or not meaning.tools:
+                    meaning = Meaning(perception.thread.title, ["clarify"])
 
                 if self._mode is not current_think:
                     continue
-                thought = await self._think(current_think.think(persona, perception, meaning, closed))
-                if not thought:
-                    continue
-                meaning.path = thought
-                self._plan = thought
-                paths.append_meaning_path(
-                    persona.id, meaning.title,
-                    meaning.tools,
-                    [s.tool for s in meaning.path],
-                )
+
+                if isinstance(prior, Thought):
+                    thought = prior
+                else:
+                    thought = await self._think(current_think.decide(persona, perception, meaning, closed))
+                    if not thought:
+                        continue
+                    meaning.path = thought.steps
+                    paths.append_meaning_path(persona.id, meaning.title, meaning.tools, meaning.path)
+
+                self._plan = thought.steps
 
                 if self._mode is not current_think:
                     continue
@@ -294,10 +335,10 @@ class Mind:
                         if t not in self._pending_permissions:
                             self._pending_permissions.append(t)
                     limited_meaning = Meaning(perception.thread.title, ["say"])
-                    thought = await self._think(Limited().think(persona, perception, limited_meaning, not_granted, closed))
+                    thought = await self._think(Limited().decide(persona, perception, limited_meaning, not_granted, closed))
                     if not thought:
                         continue
-                    self._plan = thought
+                    self._plan = thought.steps
 
                 while self._mode is current_think:
                     step = self.next_task(taking=True)

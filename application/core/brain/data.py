@@ -50,6 +50,12 @@ class Perception:
 
 
 @dataclass
+class Thought:
+    meaning: Meaning
+    steps: list[Step]
+
+
+@dataclass
 class Experience:
     perception: Perception
     meaning: Meaning
@@ -96,9 +102,9 @@ class Thinking(ABC):
         """Select the relevant tools and skills for this perception."""
         return Meaning(perception.thread.title)
 
-    async def think(self, persona: Persona, perception: "Perception", meaning: "Meaning", closed: list["Thread"] | None = None) -> list["Step"]:
+    async def decide(self, persona: Persona, perception: "Perception", meaning: "Meaning", closed: list["Thread"] | None = None) -> "Thought | None":
         """Plan the steps needed to address a perception."""
-        return []
+        return None
 
 
 class Skill:

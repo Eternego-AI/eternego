@@ -1,7 +1,7 @@
 """Rethink — idle review mode, set at the end of each Normal cycle."""
 
 from application.core.data import Persona
-from application.core.brain.data import Thread, Perception, Meaning, Step
+from application.core.brain.data import Thread, Perception, Meaning, Step, Thought
 from application.core.brain.data import Thinking
 
 
@@ -90,10 +90,10 @@ class Rethink(Thinking):
         valid_skills = [s for s in selected_skills if isinstance(s, str) and s in valid_skill_names]
         return Meaning(perception.thread.title, valid_tools, valid_skills)
 
-    async def think(self, persona: Persona, perception: Perception, meaning: Meaning, closed: list[Thread] | None = None) -> list[Step]:
+    async def decide(self, persona: Persona, perception: Perception, meaning: Meaning, closed: list[Thread] | None = None) -> Thought | None:
         from application.core.brain import ego, current, tools as brain_tools
         from application.platform import logger
-        logger.info("thinking.Rethink.think", {"persona_id": persona.id, "thread": perception.thread.title, "tools": meaning.tools})
+        logger.info("thinking.Rethink.decide", {"persona_id": persona.id, "thread": perception.thread.title, "tools": meaning.tools})
 
         signals_text = "\n".join(
             f"  [{s.id}] [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''} at {s.created_at.strftime('%H:%M')}] {s.prompt.content}"
@@ -112,11 +112,11 @@ class Rethink(Thinking):
 
         items = response.get("steps") if isinstance(response, dict) else None
         if not isinstance(items, list):
-            logger.warning("thinking.Rethink.think: unexpected response", {"persona_id": persona.id})
-            return []
+            logger.warning("thinking.Rethink.decide: unexpected response", {"persona_id": persona.id})
+            return None
         if not items:
-            logger.info("thinking.Rethink.think: thread closed, no steps needed", {"persona_id": persona.id})
-            return []
+            logger.info("thinking.Rethink.decide: thread closed, no steps needed", {"persona_id": persona.id})
+            return None
         result = []
         for item in items:
             number = item.get("number")
@@ -125,7 +125,7 @@ class Rethink(Thinking):
             if not isinstance(number, int) or not tool_name:
                 continue
             if brain_tools.for_name(tool_name) is None:
-                logger.warning("thinking.Rethink.think: unknown tool", {"persona_id": persona.id, "tool": tool_name})
+                logger.warning("thinking.Rethink.decide: unknown tool", {"persona_id": persona.id, "tool": tool_name})
                 continue
             result.append(Step(number=number, tool=tool_name, params=params))
-        return result
+        return Thought(meaning=meaning, steps=result) if result else None

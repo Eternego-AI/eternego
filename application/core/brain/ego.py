@@ -56,7 +56,8 @@ async def realize(persona: Persona, signals: list[Signal]) -> list[Thread]:
             "First understand what happened and when. Then reason about which signals belong to the same subject or interaction and group them into threads.",
             "A thread is open when its last signal is from the user — it still needs your response.",
             "A thread is closed when its last signal is from you — it has already been handled.",
-            "Give each thread a short plain-language title.",
+            "Give each thread a title that names its specific topic or intent — precise enough that you could tell two different threads apart at a glance.",
+            "Use a gerund or noun phrase, 2–5 words. Be specific to the actual subject, not the form of the exchange.",
             'Return JSON: {"threads": [{"signals": [0, 1, 2], "title": "..."}]}',
             "Every signal must appear in exactly one thread.\n",
         ]

@@ -169,15 +169,36 @@ def meanings(persona_id: str) -> Path:
     return home(persona_id) / "meanings"
 
 
-def append_meaning_path(persona_id: str, title: str, tools: list[str], path: list[str]) -> None:
-    """Append one observed iteration (focused tools + actual path) to the meaning file."""
-    file = meanings(persona_id) / f"{title}.md"
+def append_meaning_path(persona_id: str, title: str, tools: list[str], steps: list) -> None:
+    """Append one observed iteration (tools + path with params) to the meaning file as a JSON line."""
+    import json
+    file = meanings(persona_id) / f"{title}.json"
     file.parent.mkdir(parents=True, exist_ok=True)
-    meaning_lines = (
-        ["# tools"] + [f"- {t}" for t in tools] +
-        ["# path"] + [f"- {t}" for t in path]
-    )
-    filesystem.append(file, "\n".join(meaning_lines) + "\n\n")
+    entry = {"tools": tools, "path": [{"tool": s.tool, "params": s.params} for s in steps]}
+    filesystem.append(file, json.dumps(entry) + "\n")
+
+
+def read_meaning(persona_id: str, title: str) -> list[dict]:
+    """Read all recorded iterations for a title.
+
+    Returns a list of {"tools": [...], "path": [{"tool": ..., "params": {...}}, ...]} dicts,
+    oldest first. Returns empty list if no file exists.
+    """
+    import json
+    file = meanings(persona_id) / f"{title}.json"
+    content = read(file)
+    if not content:
+        return []
+    entries = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            pass
+    return entries
 
 
 def commit_diary(persona_id: str, diary_path: Path) -> None:

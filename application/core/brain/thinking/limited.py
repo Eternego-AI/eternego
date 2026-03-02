@@ -1,7 +1,7 @@
 """Limited — say-only thinking when tool permissions are pending."""
 
 from application.core.data import Persona
-from application.core.brain.data import Perception, Meaning, Step
+from application.core.brain.data import Perception, Meaning, Step, Thought
 
 
 class Limited:
@@ -12,17 +12,17 @@ class Limited:
     system prompt, and returns the say plan for tick to execute.
     """
 
-    async def think(
+    async def decide(
         self,
         persona: Persona,
         perception: Perception,
         meaning: Meaning,
         not_granted: list[str],
         closed: list | None = None,
-    ) -> list[Step]:
+    ) -> Thought | None:
         from application.core.brain import ego, current
         from application.platform import logger
-        logger.info("thinking.Limited.think", {"persona_id": persona.id, "not_granted": not_granted})
+        logger.info("thinking.Limited.decide", {"persona_id": persona.id, "not_granted": not_granted})
 
         signals_text = "\n".join(
             f"  [{s.id}] [{s.prompt.role}{' via ' + s.channel.name if s.channel else ''} at {s.created_at.strftime('%H:%M')}] {s.prompt.content}"
@@ -43,8 +43,8 @@ class Limited:
         response = await ego.reason(persona, prompt, system=system)
         items = response.get("steps") if isinstance(response, dict) else None
         if not isinstance(items, list) or not items:
-            logger.warning("thinking.Limited.think: unexpected response", {"persona_id": persona.id})
-            return []
+            logger.warning("thinking.Limited.decide: unexpected response", {"persona_id": persona.id})
+            return None
 
         result = []
         for item in items:
@@ -53,4 +53,4 @@ class Limited:
             if not isinstance(number, int):
                 continue
             result.append(Step(number=number, tool="say", params=params))
-        return result
+        return Thought(meaning=meaning, steps=result) if result else None
