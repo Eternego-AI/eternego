@@ -5,8 +5,8 @@ Dependencies (install before fine-tuning):
   pip install bitsandbytes          # CUDA only — enables 4-bit QLoRA
 
 The pipeline:
-  1. Load the HuggingFace base model (4-bit on CUDA, fp16 on MPS, fp32 on CPU)
-  2. Attach a LoRA adapter and fine-tune with SFTTrainer
+  1. Load the HuggingFace base model (4-bit on CUDA, bf16 on CPU/MPS)
+  2. Attach a LoRA adapter and fine-tune with SFTTrainer (gradient checkpointing enabled)
   3. Merge the adapter back into the base weights
   4. Convert the merged model to GGUF (Q4_K_M) via convert_hf_to_gguf.py
   5. Return the path to the GGUF file — caller registers it with Ollama
@@ -28,8 +28,8 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
 
     Automatically selects the best available device:
       CUDA  — 4-bit QLoRA via bitsandbytes (most NVIDIA GPUs with ≥8 GB VRAM)
-      MPS   — fp16, full weights (Apple Silicon with ≥32 GB unified memory)
-      CPU   — fp32, full weights (very slow, last resort)
+      MPS   — bf16, full weights (Apple Silicon)
+      CPU   — bf16, full weights; gradient checkpointing keeps peak RAM ≤ 20 GB for a 7B model
     """
     import tempfile
 
@@ -48,7 +48,9 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
         device = "cpu"
 
     use_4bit = device == "cuda"
-    torch_dtype = torch.float32 if device == "cpu" else torch.float16
+    # bfloat16 on CPU halves weight memory (28 GB → 14 GB for a 7B model)
+    # compared to float32; bfloat16 has better range than float16 for training.
+    torch_dtype = torch.float16 if device == "cuda" else torch.bfloat16
 
     # ── Load tokeniser ────────────────────────────────────────────────────────
     tokenizer = AutoTokenizer.from_pretrained(hf_model_id)
@@ -111,7 +113,8 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
                 num_train_epochs=3,
                 learning_rate=2e-4,
                 fp16=(device == "cuda"),
-                bf16=False,
+                bf16=(device != "cuda"),  # bf16 on CPU/MPS — same dtype as loaded weights
+                gradient_checkpointing=True,  # recompute activations to save ~4 GB RAM
                 logging_steps=10,
                 save_strategy="no",
                 report_to="none",
