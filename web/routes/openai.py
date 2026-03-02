@@ -1,13 +1,8 @@
 """OpenAI-compatible routes — /v1/models and /v1/chat/completions."""
 
-import asyncio
-import uuid
-
 from fastapi import APIRouter, HTTPException
 
 from application.business import persona
-from application.core import gateways
-from application.core.data import Channel, Message
 from web.requests import ChatRequest
 
 router = APIRouter()
@@ -52,21 +47,9 @@ async def chat_completions(request: ChatRequest):
     if not user_messages:
         raise HTTPException(status_code=400, detail="No user message in request.")
 
-    channel = Channel(
-        type="api",
-        name=str(uuid.uuid4()),
-        authority="conversational",
-        bus=asyncio.Queue(),
-    )
-    gateways.of(live).add(channel, lambda: None)
-    try:
-        await persona.hear(live, Message(channel=channel, content=user_messages[-1].content))
-        from config import web as web_config
-        content = await asyncio.wait_for(channel.bus.get(), timeout=web_config.CHAT_TIMEOUT)
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Persona did not respond in time.")
-    finally:
-        gateways.of(live).remove(channel)
+    outcome = await persona.query(live, user_messages[-1].content)
+    if not outcome.success:
+        raise HTTPException(status_code=500, detail=outcome.message)
 
     return {
         "object": "chat.completion",
@@ -74,7 +57,7 @@ async def chat_completions(request: ChatRequest):
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": content},
+                "message": {"role": "assistant", "content": outcome.data["response"]},
                 "finish_reason": "stop",
             }
         ],

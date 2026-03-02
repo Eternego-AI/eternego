@@ -29,6 +29,27 @@ class ConnectionManager:
                 self._connections.remove(ws)
 
 
+class WebSocketBus:
+    """An asyncio.Queue-compatible bus that broadcasts to all connected WebSocket tabs.
+
+    Matches the Queue.put() interface so it can be used as channel.bus.
+    Messages put into this bus are forwarded to every connected browser tab
+    as a JSON payload with type="chat_message".
+    """
+
+    def __init__(self, persona_id: str):
+        self._persona_id = persona_id
+
+    async def put(self, text: str) -> None:
+        """Broadcast a chat message to all connected WebSocket clients."""
+        data = json.dumps({
+            "type": "chat_message",
+            "persona_id": self._persona_id,
+            "content": text,
+        })
+        await manager.broadcast(data)
+
+
 manager = ConnectionManager()
 
 

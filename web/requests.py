@@ -31,3 +31,7 @@ class PersonaMigrateRequest(BaseModel):
 
 class PersonaControlRequest(BaseModel):
     entry_ids: list[str]
+
+
+class HearRequest(BaseModel):
+    message: str

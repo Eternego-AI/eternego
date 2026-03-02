@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 
 from application.business import environment, persona
-from web.requests import PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
+from web.requests import HearRequest, PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
 
 router = APIRouter(prefix="/api")
 
@@ -92,3 +92,21 @@ async def sleep_persona(persona_id: str):
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data
+
+
+@router.post("/persona/{persona_id}/hear")
+async def hear_persona(persona_id: str, request: HearRequest):
+    find = await persona.loaded(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    live = find.data["persona"]
+
+    from application.core.data import Channel, Message
+    from web.socket import WebSocketBus
+    channel = Channel(type="web", name=persona_id, authority="conversational", bus=WebSocketBus(persona_id))
+    message = Message(channel=channel, content=request.message)
+
+    outcome = await persona.hear(live, message)
+    if not outcome.success:
+        raise HTTPException(status_code=500, detail=outcome.message)
+    return {"status": "received"}

@@ -641,8 +641,32 @@ async def hear(persona: Persona, message: Message) -> Outcome:
         logger.warning("hear: mind not loaded", {"persona_id": persona.id})
         return Outcome(success=False, message="Mind not loaded.")
     m.interrupt(Prompt(role="user", content=message.content), message.channel)
+    if message.channel:
+        from application.core import channels as ch
+        ch.set_latest(persona, message.channel)
     await bus.broadcast("Message heard", {"persona": persona})
     return Outcome(success=True, message="Message received")
+
+
+async def query(persona: Persona, prompt: str) -> Outcome[dict]:
+    """Answer a one-shot prompt using the persona's model directly.
+
+    Bypasses the full cognitive pipeline — no channels, no threading.
+    Uses ego.reason so the persona's character and fine-tuned model shape the response.
+    """
+    await bus.propose("Querying persona", {"persona": persona})
+    try:
+        from application.core.brain import ego
+        response = await ego.reason(
+            persona,
+            prompt + '\n\nReturn JSON: {"response": "..."}',
+        )
+        text = response.get("response", "") if isinstance(response, dict) else ""
+        await bus.broadcast("Query answered", {"persona": persona})
+        return Outcome(success=True, message="Query responded", data={"response": text})
+    except Exception as e:
+        await bus.broadcast("Query failed", {"persona": persona, "error": str(e)})
+        return Outcome(success=False, message=str(e))
 
 
 async def nudge(persona: Persona, message: str) -> Outcome[dict]:
