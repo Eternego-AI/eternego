@@ -1,9 +1,6 @@
 """Local model — communicating with the local model."""
 
-import asyncio
 import json
-from urllib.error import URLError
-
 
 from application.platform import logger, ollama, strings, OS
 from application.core.exceptions import EngineConnectionError
@@ -20,9 +17,9 @@ async def chat(model: str, messages: list[dict], json_mode: bool = False) -> str
         body = {"model": model, "messages": messages, "stream": False}
         if json_mode:
             body["format"] = "json"
-        response = await asyncio.to_thread(ollama.post, "/api/chat", body)
+        response = await ollama.post("/api/chat", body)
         return response["message"]["content"]
-    except URLError as e:
+    except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except KeyError as e:
         raise EngineConnectionError("Model returned an invalid response") from e
@@ -45,9 +42,9 @@ async def generate(model: str, prompt: str, json_mode: bool = False) -> str:
         body = {"model": model, "prompt": prompt, "stream": False}
         if json_mode:
             body["format"] = "json"
-        response = await asyncio.to_thread(ollama.post, "/api/generate", body)
+        response = await ollama.post("/api/generate", body)
         return response["response"].strip()
-    except URLError as e:
+    except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except KeyError as e:
         raise EngineConnectionError("Model returned an invalid response") from e
@@ -61,4 +58,3 @@ async def generate_json(model: str, prompt: str) -> dict:
         return strings.extract_json(response)
     except json.JSONDecodeError as e:
         raise EngineConnectionError("Model returned an invalid JSON response") from e
-

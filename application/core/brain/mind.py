@@ -88,6 +88,7 @@ class Mind:
         self._allowed_permissions: list[str] = []   # tool names granted this session
         self._event = asyncio.Event()
         self._idle_task: asyncio.Task | None = None
+        self._stage_task: asyncio.Task | None = None
 
         persistent_memory.load(self._storage_id, paths.mind(persona.id))
         self.signals: list[Signal] = [_signal_from_dict(d) for d in persistent_memory.read(self._storage_id)]
@@ -118,6 +119,9 @@ class Mind:
         if self._idle_task is not None:
             self._idle_task.cancel()
             self._idle_task = None
+        if self._stage_task is not None and not self._stage_task.done():
+            self._stage_task.cancel()
+            self._stage_task = None
         self.__mode = value
         self._event.set()
         if isinstance(value, Rest):
@@ -199,6 +203,21 @@ class Mind:
 
     # ── Internal ─────────────────────────────────────────────────────────
 
+    async def _think(self, coro):
+        """Run a coroutine as a cancellable stage task.
+
+        When _change_mode cancels _stage_task, CancelledError propagates through
+        the await chain all the way to the Ollama HTTP connection, closing it.
+        Returns None if cancelled so _tick can detect the mode change gracefully.
+        """
+        self._stage_task = asyncio.create_task(coro)
+        try:
+            return await self._stage_task
+        except asyncio.CancelledError:
+            return None
+        finally:
+            self._stage_task = None
+
     async def _tick(self) -> None:
         """Long-running loop: wait for _mode, dispatch on type, repeat."""
         from application.core.brain import ego
@@ -218,13 +237,13 @@ class Mind:
                 if not signals:
                     continue
 
-                threads = await ego.realize(persona, signals)
+                threads = await self._think(ego.realize(persona, signals))
                 if not threads:
                     continue
 
                 if self._mode is not current_think:
                     continue
-                perceptions = await current_think.understanding(persona, threads)
+                perceptions = await self._think(current_think.understanding(persona, threads))
                 if not perceptions:
                     continue
                 perception = perceptions[0]
@@ -232,7 +251,7 @@ class Mind:
 
                 # Resolve any pending permissions using the focused thread's conversation
                 if self._pending_permissions:
-                    decisions = await ego.grant_or_reject(persona, self._pending_permissions, perception.thread.signals)
+                    decisions = await self._think(ego.grant_or_reject(persona, self._pending_permissions, perception.thread.signals))
                     for tool_name in decisions.get("granted", []):
                         self._allowed_permissions.append(tool_name)
                         self._pending_permissions = [t for t in self._pending_permissions if t != tool_name]
@@ -241,13 +260,13 @@ class Mind:
 
                 if self._mode is not current_think:
                     continue
-                meaning = await current_think.focus(persona, perception, closed)
+                meaning = await self._think(current_think.focus(persona, perception, closed))
                 if not meaning.tools:
                     meaning.tools = ["say"]
 
                 if self._mode is not current_think:
                     continue
-                thought = await current_think.think(persona, perception, meaning, closed)
+                thought = await self._think(current_think.think(persona, perception, meaning, closed))
                 if not thought:
                     continue
                 meaning.path = thought
@@ -267,15 +286,15 @@ class Mind:
                     and (t := brain_tools.for_name(s.tool)) is not None
                     and t.requires_permission
                 ]
-                permission = await ego.legalize(persona, plan_to_check)
-                not_granted = permission.get("rejected", []) + permission.get("unknown", [])
+                permission = await self._think(ego.legalize(persona, plan_to_check))
+                not_granted = (permission or {}).get("rejected", []) + (permission or {}).get("unknown", [])
                 if not_granted:
                     logger.info("mind._tick: permission required", {"persona_id": self._persona_id, "not_granted": not_granted})
                     for t in not_granted:
                         if t not in self._pending_permissions:
                             self._pending_permissions.append(t)
                     limited_meaning = Meaning(perception.thread.title, ["say"])
-                    thought = await Limited().think(persona, perception, limited_meaning, not_granted, closed)
+                    thought = await self._think(Limited().think(persona, perception, limited_meaning, not_granted, closed))
                     if not thought:
                         continue
                     self._plan = thought

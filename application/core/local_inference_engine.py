@@ -4,7 +4,6 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from urllib.error import URLError
 
 from application.platform import logger, OS, linux, mac, windows, ollama, lora, filesystem
 from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError
@@ -50,8 +49,8 @@ async def get_default_model() -> str | None:
     """Get the default model name from the running engine."""
     logger.info("Getting default model from local inference engine")
     try:
-        data = ollama.get("/api/tags")
-    except URLError as e:
+        data = await ollama.get("/api/tags")
+    except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     models = data.get("models", [])
     if not models:
@@ -63,8 +62,8 @@ async def pull(model: str) -> None:
     """Pull a model into the local inference engine."""
     logger.info("Pulling model", {"model": model})
     try:
-        ollama.post("/api/pull", {"name": model, "stream": False})
-    except URLError as e:
+        await ollama.post("/api/pull", {"name": model, "stream": False})
+    except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
 
@@ -72,8 +71,8 @@ async def copy(source: str, destination: str) -> None:
     """Copy a model under a new name in the local inference engine."""
     logger.info("Copying model", {"source": source, "destination": destination})
     try:
-        ollama.post("/api/copy", {"source": source, "destination": destination})
-    except URLError as e:
+        await ollama.post("/api/copy", {"source": source, "destination": destination})
+    except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
 
@@ -81,7 +80,7 @@ async def delete(model: str) -> bool:
     """Delete a model from the local inference engine. Returns True on success, False on failure."""
     logger.info("Deleting model", {"model": model})
     try:
-        ollama.delete("/api/delete", {"name": model})
+        await ollama.delete("/api/delete", {"name": model})
         return True
     except Exception:
         return False
@@ -103,14 +102,14 @@ async def fine_tune(model: str, training_set: str, new_model: str) -> None:
 
             modelfile_content = f"FROM {model}\nADAPTER {adapter_path}"
 
-            ollama.post("/api/create", {
+            await ollama.post("/api/create", {
                 "name": new_model,
                 "modelfile": modelfile_content,
             })
 
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise EngineConnectionError("Training data is malformed") from e
-    except URLError as e:
+    except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
 
@@ -118,11 +117,11 @@ async def check(model: str) -> bool:
     """Check if a model is pulled, available, and responding."""
     logger.info("Checking model availability", {"model": model})
     try:
-        data = ollama.get("/api/tags")
+        data = await ollama.get("/api/tags")
         models = [m["name"] for m in data.get("models", [])]
         if model not in models:
             return False
-        response = ollama.post("/api/generate", {"model": model, "prompt": "hi", "stream": False})
+        response = await ollama.post("/api/generate", {"model": model, "prompt": "hi", "stream": False})
         return response.get("response") is not None
-    except URLError as e:
+    except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
