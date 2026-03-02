@@ -75,7 +75,7 @@ async def main():
         file_signal(message)
 
     def log_signal(signal: Signal):
-        logger.info(signal.title, signal.details, signal_media)
+        logger.info(signal.title, {"_type": signal.__class__.__name__, **signal.details}, signal_media)
         if verbosity >= 2 or (verbosity >= 1 and isinstance(signal, (Plan, Event))):
             print(f"[{signal.__class__.__name__}] {signal.title}", signal.details)
 

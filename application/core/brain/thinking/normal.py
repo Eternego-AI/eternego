@@ -69,15 +69,16 @@ class Normal(Thinking):
         )
         lines = [
             f"Thread: {perception.thread.title}\n{signals_text}\n",
-            "Select only the tools needed to respond to the latest user message in this thread.",
+            "Read this thread. What is actually happening here, and what do you need to engage with it fully — as yourself?",
+            "Choose the tools and skills that give you what you need.\n",
             'Return JSON: {"tools": ["tool_name", ...], "skills": ["skill_name", ...]}\n',
-            "Tools:",
+            "Available tools:",
         ]
         for t in tool_list:
             if t.description:
                 lines.append(f"- {t.name}: {t.description}")
         if skill_list:
-            lines.append("\nSkills (select if you need the how-to knowledge to execute):")
+            lines.append("\nAvailable skills:")
             for s in skill_list:
                 if s.description:
                     lines.append(f"- {s.name}: {s.description}")
@@ -88,9 +89,9 @@ class Normal(Thinking):
             for t in closed:
                 context.append(f"- {t.title}: {t.signals[-1].prompt.content[:120]}")
             context.append("")
-            response = await ego.reason(persona, "\n".join(context) + "\n" + prompt)
+            response = await ego.reason(persona, "\n".join(context) + "\n" + prompt, system=current.time())
         else:
-            response = await ego.reason(persona, prompt)
+            response = await ego.reason(persona, prompt, system=current.time())
 
         if not isinstance(response, dict):
             return Meaning(perception.thread.title)
@@ -113,13 +114,13 @@ class Normal(Thinking):
             for s in perception.thread.signals
         )
         last_user = next((s for s in reversed(perception.thread.signals) if s.prompt.role == "user"), None)
-        focal = f"\nRespond to this: [{last_user.id}] {last_user.prompt.content}" if last_user else ""
+        focal = f"\nMessage [{last_user.id}] is waiting for your reply." if last_user else ""
         allowed = ", ".join(meaning.tools) if meaning.tools else "say"
         prompt = "\n".join([
             f"Conversation:\n{signals_text}{focal}\n",
-            f"Allowed tools: {allowed}\n",
-            "Plan steps to respond to the focal message. Assistant messages in the trace are already delivered — do not repeat them.",
-            'Return JSON: {"steps": [{"number": 1, "tool": "tool_name", "params": {}}]}',
+            f"You have these tools: {allowed}\n",
+            "How do you want to handle this? Plan your steps.",
+            'Return JSON: {"steps": [{"number": 1, "tool": "...", "params": {...}}]}',
         ])
 
         if closed:

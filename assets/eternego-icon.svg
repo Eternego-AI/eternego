@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0C1A2E"/>
+      <stop offset="100%" style="stop-color:#152D4A"/>
+    </linearGradient>
+    
+    <linearGradient id="loopGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4A7BAA"/>
+      <stop offset="50%" style="stop-color:#6BA0CC"/>
+      <stop offset="100%" style="stop-color:#4A7BAA"/>
+    </linearGradient>
+    
+    <linearGradient id="sparkGradI" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8A838"/>
+      <stop offset="50%" style="stop-color:#F0C868"/>
+      <stop offset="100%" style="stop-color:#D4922A"/>
+    </linearGradient>
+    
+    <filter id="glowI" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <filter id="innerGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Rounded square clip -->
+    <clipPath id="roundedSquare">
+      <rect x="0" y="0" width="256" height="256" rx="48" ry="48"/>
+    </clipPath>
+  </defs>
+  
+  <g clip-path="url(#roundedSquare)">
+    <!-- Background -->
+    <rect width="256" height="256" fill="url(#bgGrad)"/>
+    
+    <!-- Subtle radial atmosphere -->
+    <circle cx="128" cy="128" r="120" fill="#1A3858" opacity="0.3"/>
+    <circle cx="128" cy="128" r="70" fill="#1E4468" opacity="0.2"/>
+    
+    <!-- === Infinity symbol, centered === -->
+    <g transform="translate(40, 88)">
+      <!-- Main infinity loop -->
+      <path d="M 0,40 
+               C 0,-10 30,-28 50,-28 
+               C 72,-28 82,8 88,22 
+               C 94,36 104,68 126,68 
+               C 148,68 176,54 176,40 
+               C 176,26 148,12 126,12 
+               C 104,12 94,44 88,58 
+               C 82,72 72,108 50,108 
+               C 30,108 0,90 0,40 Z" 
+            fill="none" 
+            stroke="url(#loopGrad)" 
+            stroke-width="5.5" 
+            stroke-linecap="round"
+            opacity="0.9"/>
+      
+      <!-- Consciousness node at crossing -->
+      <circle cx="88" cy="40" r="14" fill="url(#sparkGradI)" filter="url(#glowI)"/>
+      
+      <!-- Core light -->
+      <circle cx="88" cy="40" r="5.5" fill="#FFF8E8" opacity="0.95"/>
+      
+      <!-- Radiating energy lines -->
+      <g stroke="#F0C868" stroke-width="1.2" opacity="0.45" stroke-linecap="round">
+        <line x1="88" y1="24" x2="88" y2="14"/>
+        <line x1="88" y1="56" x2="88" y2="66"/>
+        <line x1="72" y1="40" x2="62" y2="40"/>
+        <line x1="104" y1="40" x2="114" y2="40"/>
+        <line x1="77" y1="29" x2="70" y2="22"/>
+        <line x1="99" y1="51" x2="106" y2="58"/>
+        <line x1="99" y1="29" x2="106" y2="22"/>
+        <line x1="77" y1="51" x2="70" y2="58"/>
+      </g>
+      
+      <!-- Memory particles -->
+      <circle cx="48" cy="-22" r="2.5" fill="#6BA0CC" opacity="0.5"/>
+      <circle cx="128" cy="70" r="2" fill="#6BA0CC" opacity="0.4"/>
+      <circle cx="20" cy="72" r="2" fill="#6BA0CC" opacity="0.35"/>
+      <circle cx="156" cy="18" r="2.2" fill="#6BA0CC" opacity="0.4"/>
+      <circle cx="88" cy="-8" r="1.5" fill="#F0C868" opacity="0.3"/>
+      <circle cx="88" cy="88" r="1.5" fill="#F0C868" opacity="0.3"/>
+    </g>
+  </g>
+</svg>

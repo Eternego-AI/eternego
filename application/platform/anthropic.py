@@ -1,6 +1,7 @@
 """Anthropic — Anthropic API communication and export parsing."""
 
 import json
+import urllib.error
 import urllib.request
 
 
@@ -31,9 +32,13 @@ def chat(api_key: str, model: str, messages: list[dict]) -> str:
             "anthropic-version": "2023-06-01",
         },
     )
-    with urllib.request.urlopen(request) as response:
-        data = json.loads(response.read())
-        return data.get("content", [{}])[0].get("text", "")
+    try:
+        with urllib.request.urlopen(request) as response:
+            data = json.loads(response.read())
+            return data.get("content", [{}])[0].get("text", "")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise OSError(f"HTTP {e.code}: {body}") from e
 
 
 def chat_json(api_key: str, model: str, messages: list[dict]) -> dict:

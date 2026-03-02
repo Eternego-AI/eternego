@@ -345,7 +345,11 @@ class Mind:
             history_briefing=paths.read_history_brief(persona.id, "(no history yet)"),
         )
         if persona.frontier:
-            new_dna = await frontier.chat(persona.frontier, synthesis)
+            try:
+                new_dna = await frontier.chat(persona.frontier, synthesis)
+            except Exception as e:
+                logger.warning("mind._grow: frontier failed for DNA synthesis, falling back to local model", {"persona_id": self._persona_id, "error": str(e)})
+                new_dna = await local_model.generate(persona.model.name, synthesis)
         else:
             new_dna = await local_model.generate(persona.model.name, synthesis)
         paths.write_dna(persona.id, new_dna)
@@ -355,9 +359,13 @@ class Mind:
         for item in dna_items:
             item_prompt = prompts.grow(dna=item, max_pairs=5)
             if persona.frontier:
-                response = await frontier.chat(persona.frontier, item_prompt)
+                try:
+                    response = await frontier.chat(persona.frontier, item_prompt)
+                except Exception as e:
+                    logger.warning("mind._grow: frontier failed for training pair, falling back to local model", {"persona_id": self._persona_id, "error": str(e)})
+                    response = await local_model.generate(persona.model.name, item_prompt, json_mode=True)
             else:
-                response = await local_model.generate_json(persona.model.name, item_prompt)
+                response = await local_model.generate(persona.model.name, item_prompt, json_mode=True)
             try:
                 parsed = strings.extract_json(response)
             except json.JSONDecodeError:

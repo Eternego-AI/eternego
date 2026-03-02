@@ -14,19 +14,19 @@
       <div>
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Name</label>
         <input name="name" required type="text" placeholder="e.g. Aria"
-               class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-violet-600 transition-colors">
+               class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-amber-500 transition-colors">
       </div>
 
       <div>
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Base model</label>
         <input name="model" required type="text" placeholder="e.g. qwen2.5:7b"
-               class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-violet-600 transition-colors">
+               class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-amber-500 transition-colors">
       </div>
 
       <div>
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Channel</label>
         <select name="channel_type" required
-                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-violet-600 transition-colors">
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 transition-colors">
           <option value="telegram">Telegram</option>
         </select>
       </div>
@@ -34,8 +34,8 @@
       <div>
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Bot token</label>
         <input name="token" required type="text" placeholder="123456:ABCdef..."
-               class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-600 transition-colors">
-        <p class="text-xs text-zinc-500 mt-1.5">Create a bot via <a href="https://t.me/botfather" target="_blank" class="text-violet-400 hover:text-violet-300 font-mono">@BotFather</a> and paste its token above.</p>
+               class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 font-mono focus:outline-none focus:border-amber-500 transition-colors">
+        <p class="text-xs text-zinc-500 mt-1.5">Create a bot via <a href="https://t.me/botfather" target="_blank" class="text-amber-400 hover:text-amber-300 font-mono">@BotFather</a> and paste its token above.</p>
       </div>
 
       <!-- Frontier model (optional) -->
@@ -50,7 +50,7 @@
           <div>
             <label class="block text-xs font-medium text-zinc-400 mb-1.5">Provider</label>
             <select name="frontier_provider"
-                    class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-violet-600 transition-colors">
+                    class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 transition-colors">
               <option value="anthropic">Anthropic</option>
               <option value="openai">OpenAI</option>
             </select>
@@ -58,12 +58,12 @@
           <div>
             <label class="block text-xs font-medium text-zinc-400 mb-1.5">Frontier model</label>
             <input name="frontier_model" type="text" placeholder="e.g. claude-sonnet-4-6"
-                   class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-violet-600 transition-colors">
+                   class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-amber-500 transition-colors">
           </div>
           <div>
             <label class="block text-xs font-medium text-zinc-400 mb-1.5">API key</label>
             <input name="frontier_api_key" type="password" placeholder="sk-ant-..."
-                   class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 font-mono focus:outline-none focus:border-violet-600 transition-colors">
+                   class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 font-mono focus:outline-none focus:border-amber-500 transition-colors">
           </div>
         </div>
       </div>
@@ -77,7 +77,7 @@
           Cancel
         </button>
         <button type="submit" id="btn-create"
-                class="text-sm px-4 py-2 rounded-lg bg-violet-700 hover:bg-violet-600 text-white font-medium transition-colors disabled:opacity-50">
+                class="text-sm px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors disabled:opacity-50">
           Create
         </button>
       </div>
@@ -102,7 +102,7 @@
 
       <div class="flex justify-end pt-1">
         <button type="button" id="btn-phrase-done"
-                class="text-sm px-4 py-2 rounded-lg bg-violet-700 hover:bg-violet-600 text-white font-medium transition-colors">
+                class="text-sm px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors">
           I've written it down
         </button>
       </div>

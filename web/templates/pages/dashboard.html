@@ -32,14 +32,14 @@
   const SIG_BADGE = {
     Plan:    'bg-blue-900/50 text-blue-400',
     Event:   'bg-emerald-900/50 text-emerald-400',
-    Message: 'bg-violet-900/50 text-violet-400',
+    Message: 'bg-amber-900/30 text-amber-400',
     Inquiry: 'bg-amber-900/50 text-amber-400',
     Command: 'bg-red-900/50 text-red-400',
   };
   const SIG_TEXT = {
     Plan:    'text-blue-300',
     Event:   'text-emerald-300',
-    Message: 'text-violet-300',
+    Message: 'text-amber-300',
     Inquiry: 'text-amber-300',
     Command: 'text-red-300',
   };
@@ -146,6 +146,20 @@
     if (sig.type === 'Event' && (sig.title === 'Persona created' || sig.title === 'Persona migrated')) {
       const p = sig.details?.persona;
       if (p) addPersonaCard(p);
+    }
+  }
+
+  async function sleepPersona(id) {
+    const btn = document.querySelector(`#card-${id} button[title="Sleep"]`);
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }
+    try {
+      const res = await fetch(`/api/persona/${id}/sleep`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Sleep failed: ${err.detail}`);
+      }
+    } finally {
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; }
     }
   }
 </script>

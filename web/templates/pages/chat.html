@@ -34,7 +34,7 @@
                 class="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-zinc-600 transition-colors resize-none leading-relaxed"
                 style="max-height: 160px; overflow-y: auto;"></textarea>
       <button type="submit" id="send-btn"
-              class="shrink-0 px-4 py-3 rounded-xl bg-violet-700 hover:bg-violet-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
+              class="shrink-0 px-4 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors">
         Send
       </button>
     </form>
@@ -85,7 +85,7 @@
 
     const bubble = document.createElement('div');
     bubble.className = isUser
-      ? 'max-w-[75%] bg-violet-900/40 border border-violet-800/40 text-zinc-100 text-sm px-4 py-2.5 rounded-2xl rounded-tr-sm leading-relaxed whitespace-pre-wrap'
+      ? 'max-w-[75%] bg-amber-900/20 border border-amber-800/30 text-zinc-100 text-sm px-4 py-2.5 rounded-2xl rounded-tr-sm leading-relaxed whitespace-pre-wrap'
       : 'max-w-[75%] bg-zinc-900 border border-zinc-800 text-zinc-200 text-sm px-4 py-2.5 rounded-2xl rounded-tl-sm leading-relaxed whitespace-pre-wrap';
     bubble.textContent = content;
 

@@ -37,6 +37,11 @@ async def dashboard(request: Request):
     })
 
 
+@router.get("/dashboard/logs")
+async def logs(request: Request):
+    return templates.TemplateResponse("pages/logs.html", {"request": request})
+
+
 @router.get("/dashboard/persona/{persona_id}/chat")
 async def persona_chat(request: Request, persona_id: str):
     find = await persona.find(persona_id)

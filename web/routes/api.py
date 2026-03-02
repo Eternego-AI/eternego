@@ -1,11 +1,39 @@
 """Internal API routes — Eternego-specific endpoints."""
 
-from fastapi import APIRouter, HTTPException
+import json
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, Query
 
 from application.business import environment, persona
 from web.requests import PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
 
 router = APIRouter(prefix="/api")
+
+_LOG_FILES = {
+    "app":     Path("eternego.log"),
+    "signals": Path("eternego-signals.log"),
+}
+
+
+@router.get("/logs")
+async def get_logs(file: str = Query("app"), tail: int = Query(200)):
+    path = _LOG_FILES.get(file)
+    if path is None:
+        raise HTTPException(status_code=400, detail="Unknown log file")
+    if not path.exists():
+        return {"entries": []}
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    entries = []
+    for line in lines[-tail:]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            entries.append({"level": "info", "title": line, "time": "", "context": {}})
+    return {"entries": entries}
 
 
 @router.post("/pair/{code}")
@@ -50,6 +78,17 @@ async def control_persona(persona_id: str, request: PersonaControlRequest):
     if not find.success:
         raise HTTPException(status_code=404, detail=find.message)
     outcome = await persona.control(find.data["persona"], request.entry_ids)
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+@router.post("/persona/{persona_id}/sleep")
+async def sleep_persona(persona_id: str):
+    find = await persona.loaded(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona.sleep(find.data["persona"])
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data

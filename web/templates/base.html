@@ -19,23 +19,27 @@
 <body class="min-h-full bg-zinc-950 text-zinc-100 antialiased">
 
   <header class="border-b border-zinc-800/60 px-6 h-14 flex items-center gap-4">
-    <div class="flex items-center gap-2.5">
-      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-400 to-violet-700 flex items-center justify-center text-xs shadow-lg shadow-violet-900/40 flex-shrink-0">◈</div>
-      <span class="text-xs font-bold tracking-widest uppercase">Eternego</span>
-    </div>
+    <a href="/dashboard" class="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+      <img src="/assets/eternego-icon.svg" class="w-7 h-7 rounded-lg flex-shrink-0" alt="Eternego">
+      <span class="text-xs font-bold tracking-widest uppercase">Etern<span style="color:#E8A838">ego</span></span>
+    </a>
     <span class="text-xs text-zinc-700 italic flex-1">the eternal i</span>
 
     <div id="ws-badge" class="flex items-center gap-1.5 text-xs font-mono px-3 py-1 rounded-full border border-zinc-800 bg-zinc-900 text-zinc-500 transition-colors duration-300">
       <span id="ws-dot" class="w-1.5 h-1.5 rounded-full bg-zinc-600 transition-colors duration-300"></span>
       <span id="ws-label">connecting</span>
     </div>
+    <a href="/dashboard/logs"
+       class="text-xs px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300 font-mono transition-colors">
+      logs
+    </a>
     <button id="sig-toggle-btn" onclick="toggleSidebar()"
             class="text-xs px-3 py-1.5 rounded-lg border border-zinc-800 hover:border-zinc-600 text-zinc-500 hover:text-zinc-300 font-mono transition-colors">
       signals
     </button>
 
     <button onclick="openModal('modal-create')"
-            class="text-xs px-3.5 py-1.5 rounded-lg bg-violet-700 hover:bg-violet-600 text-white font-medium transition-colors">
+            class="text-xs px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-medium transition-colors">
       + Create
     </button>
     <button onclick="openModal('modal-migrate')"
@@ -107,7 +111,7 @@
 
     applySidebar(_sidebarOpen);
 
-    const _typeColour = { Plan: 'text-violet-400', Event: 'text-emerald-400', Message: 'text-sky-400' };
+    const _typeColour = { Plan: 'text-amber-400', Event: 'text-emerald-400', Message: 'text-sky-400' };
 
     function pushSignal(signal) {
       document.getElementById('sig-empty')?.remove();
