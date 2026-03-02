@@ -7,8 +7,8 @@ class _Remind(Tool):
     name = "remind"
     requires_permission = False
     description = (
-        "Sets a reminder at a specific date and time. "
-        "Use when the person wants to be reminded of something at a specific moment."
+        "Creates a new reminder at a specific date and time. "
+        "Use when the person asks to be reminded of something — this sets it, it does not list existing ones."
     )
     instruction = (
         "Tool: remind\n"

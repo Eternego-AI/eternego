@@ -4,15 +4,15 @@ from application.core.brain.data import Tool
 
 
 class _Reminder(Tool):
-    name = "reminder"
+    name = "check_reminders"
     requires_permission = False
     description = (
-        "Retrieves all pending reminders. "
-        "Use when you need to see what reminders are set or to identify ones that are due."
+        "Lists all pending reminders. "
+        "Use when you need to see what is already scheduled — not to create a new one."
     )
     instruction = (
-        "Tool: reminder\n"
-        "Get all pending reminders.\n"
+        "Tool: check_reminders\n"
+        "List all pending reminders.\n"
         "Params: {}"
     )
 

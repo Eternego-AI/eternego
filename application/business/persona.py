@@ -699,7 +699,7 @@ async def sleep(persona: Persona) -> Outcome[dict]:
         await bus.broadcast("Wake up", {"persona": persona})
         return Outcome(success=True, message="Sleep complete.")
 
-    except DNAError as e:
+    except (DNAError, EngineConnectionError) as e:
         await bus.broadcast("Sleep failed", {"reason": "fine_tune", "persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))
     except Exception as e:

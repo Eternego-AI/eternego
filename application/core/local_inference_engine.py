@@ -109,6 +109,8 @@ async def fine_tune(model: str, training_set: str, new_model: str) -> None:
 
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise EngineConnectionError("Training data is malformed") from e
+    except ImportError as e:
+        raise EngineConnectionError(f"Fine-tuning dependencies not installed: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
