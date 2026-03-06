@@ -38,6 +38,49 @@ async def execute_on_sub_process(command: str) -> tuple[int, str]:
     return process.returncode, output.strip()
 
 
+def ram_gb() -> float:
+    """Total system RAM in GB via wmic."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["wmic", "ComputerSystem", "get", "TotalPhysicalMemory", "/value"],
+            capture_output=True, text=True,
+        )
+        for line in result.stdout.splitlines():
+            if "=" in line:
+                return round(int(line.split("=")[1].strip()) / (1024 ** 3), 1)
+    except (ValueError, OSError):
+        pass
+    return 0.0
+
+
+def cpu_name() -> str:
+    """CPU model name via wmic."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["wmic", "cpu", "get", "name", "/value"],
+            capture_output=True, text=True,
+        )
+        for line in result.stdout.splitlines():
+            if line.startswith("Name="):
+                return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return "Unknown"
+
+
+def gpu_vram_gb() -> float | None:
+    """GPU VRAM in GB via CUDA, or None if unavailable."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return round(torch.cuda.get_device_properties(0).total_memory / (1024 ** 3), 1)
+    except Exception:
+        pass
+    return None
+
+
 async def store_secret(key: str, value: str) -> None:
     """Store a secret in the Windows Credential Manager."""
     import win32crypt

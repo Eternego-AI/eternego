@@ -73,6 +73,41 @@ async def execute_on_sub_process(command: str) -> tuple[int, str]:
     return process.returncode, output.strip()
 
 
+def ram_gb() -> float:
+    """Total system RAM in GB."""
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    return round(int(line.split()[1]) / (1024 * 1024), 1)
+    except OSError:
+        pass
+    return 0.0
+
+
+def cpu_name() -> str:
+    """CPU model name."""
+    try:
+        with open("/proc/cpuinfo") as f:
+            for line in f:
+                if line.startswith("model name"):
+                    return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return "Unknown"
+
+
+def gpu_vram_gb() -> float | None:
+    """GPU VRAM in GB via CUDA, or None if unavailable."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return round(torch.cuda.get_device_properties(0).total_memory / (1024 ** 3), 1)
+    except Exception:
+        pass
+    return None
+
+
 async def store_secret(key: str, value: str) -> None:
     """Store a secret in the Linux Secret Service via secret-tool CLI."""
     subprocess.run(

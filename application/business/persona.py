@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from application.core import bus, channels, gateways, frontier, system, registry, \
-    local_model, local_inference_engine, models, prompts, paths
+    local_model, local_inference_engine, prompts, paths
 from application.core.brain import mind, skills
 from application.core.data import Channel, Message, Model, Persona, Prompt
 from application.core.exceptions import (
@@ -117,6 +117,9 @@ async def create(
         "Creating persona", {"name": name, "model": model, "channel": channel_type, "frontier_model": frontier_model, "frontier_provider": frontier_provider}
     )
 
+    if not local_inference_engine.is_supported(model):
+        return Outcome(success=False, message=f"'{model}' is not a supported base model. Please choose from the supported models.")
+
     persona = None
 
     try:
@@ -137,9 +140,9 @@ async def create(
             channels=[channel],
         )
         persona.base_model = model
-        persona.model = models.generate(model, persona.id)
+        persona.model = Model(name=f"eternego-{persona.id}")
 
-        await local_inference_engine.copy(model, persona.model.name)
+        await local_inference_engine.register(persona.model.name, model)
 
         paths.create_home(persona.id)
         paths.create_directories(persona.id, [
@@ -269,6 +272,9 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
     """It enables you to migrate your persona so nothing is ever lost."""
     await bus.propose("Migrating persona", {"diary_path": diary_path, "model": model})
 
+    if not local_inference_engine.is_supported(model):
+        return Outcome(success=False, message=f"'{model}' is not a supported base model. Please choose from the supported models.")
+
     persona = None
 
     try:
@@ -292,9 +298,9 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
 
         persona = outcome.data["persona"]
         persona.base_model = model
-        persona.model = models.generate(model, persona.id)
+        persona.model = Model(name=f"eternego-{persona.id}")
 
-        await local_inference_engine.copy(persona.base_model, persona.model.name)
+        await local_inference_engine.register(persona.model.name, model)
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 

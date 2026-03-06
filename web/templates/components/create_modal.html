@@ -19,8 +19,11 @@
 
       <div>
         <label class="block text-xs font-medium text-zinc-400 mb-1.5">Base model</label>
-        <input name="model" required type="text" placeholder="e.g. qwen2.5:7b"
-               class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-amber-500 transition-colors">
+        <select name="model" id="select-base-model" required
+                class="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-amber-500 transition-colors">
+          <option value="" disabled selected>Loading models…</option>
+        </select>
+        <p id="hardware-summary" class="text-xs text-zinc-500 mt-1.5"></p>
       </div>
 
       <div>
@@ -112,6 +115,26 @@
 </div>
 
 <script>
+  (async () => {
+    const sel = document.getElementById('select-base-model');
+    const hw  = document.getElementById('hardware-summary');
+    try {
+      const res  = await fetch('/api/models');
+      const data = await res.json();
+
+      sel.innerHTML = data.models.map(m => {
+        const label = m.fits ? m.name : `${m.name}  (needs ~${m.ram_required_gb} GB RAM)`;
+        return `<option value="${m.name}">${label}</option>`;
+      }).join('');
+
+      const h = data.hardware;
+      const gpuInfo = h.gpu_vram_gb ? `, ${h.gpu_vram_gb} GB GPU` : ', no GPU';
+      hw.textContent = `${h.os} · ${h.cpu} · ${h.ram_gb} GB RAM${gpuInfo}`;
+    } catch {
+      sel.innerHTML = '<option value="" disabled>Failed to load models</option>';
+    }
+  })();
+
   document.getElementById('form-create').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = document.getElementById('btn-create');

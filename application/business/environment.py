@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from application.core import bus, registry, system, local_inference_engine, paths
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError
+from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, HardwareError
 from application.business.outcome import Outcome
 from application.platform import datetimes
 
@@ -96,6 +96,18 @@ async def pair(code: str) -> Outcome[dict]:
 
     await bus.broadcast("Channel paired", {"persona_id": persona.id, "channel": channel.name})
     return Outcome(success=True, message="Channel paired successfully", data={"persona_id": persona.id, "channel": channel.name})
+
+
+async def info() -> Outcome[dict]:
+    """Return supported base models with hardware compatibility flags."""
+    await bus.propose("Listing supported models", {})
+    try:
+        supported = local_inference_engine.models()
+        await bus.broadcast("Supported models listed", {"count": len(supported)})
+        return Outcome(success=True, message="Environment information retrieved", data={"models": supported, "hardware": system.hardware()})
+    except HardwareError as e:
+        await bus.broadcast("Hardware info failed", {"error": str(e)})
+        return Outcome(success=False, message="Could not read hardware information from your system.")
 
 
 async def check_model(model: str) -> Outcome[dict]:

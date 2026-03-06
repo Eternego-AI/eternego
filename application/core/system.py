@@ -4,7 +4,7 @@ import subprocess
 
 from application.platform import logger, crypto, OS, linux, mac, windows
 from application.core.data import Persona
-from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError, ExecutionError
+from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError, ExecutionError, HardwareError
 
 
 async def execute(tool_calls: list[dict]) -> str:
@@ -117,6 +117,20 @@ async def get_phrases(persona: Persona) -> str:
         raise SecretStorageError("Failed to retrieve encryption phrase from secure storage") from e
 
     raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
+
+
+def hardware() -> dict:
+    """Return current hardware information."""
+    logger.info("Reading hardware info")
+    try:
+        return {
+            "ram_gb": OS.ram_gb(),
+            "gpu_vram_gb": OS.gpu_vram_gb(),
+            "cpu": OS.cpu_name(),
+            "os": OS.os_name(),
+        }
+    except (OSError, subprocess.CalledProcessError, RuntimeError) as e:
+        raise HardwareError("Could not read hardware information") from e
 
 
 async def persona_key(phrase: str, persona_id: str) -> bytes:

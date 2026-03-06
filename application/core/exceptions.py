@@ -55,3 +55,7 @@ class HistoryError(Exception):
 
 class ContextError(Exception):
     pass
+
+
+class HardwareError(Exception):
+    pass

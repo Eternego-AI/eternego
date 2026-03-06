@@ -36,6 +36,12 @@ async def get_logs(file: str = Query("app"), tail: int = Query(200)):
     return {"entries": entries}
 
 
+@router.get("/models")
+async def get_models():
+    outcome = await environment.info()
+    return outcome.data
+
+
 @router.post("/pair/{code}")
 async def pair_channel(code: str):
     outcome = await environment.pair(code)
