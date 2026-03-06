@@ -19,7 +19,6 @@ class Model(Data):
 class Channel(Data):
     type: str
     name: str = ""          # chat_id for telegram, uuid for web; empty for network-level channels
-    authority: str = "commander"   # "commander" or "conversational"
     credentials: dict | None = sensitive()
     verified_at: str | None = None
     bus: asyncio.Queue | None = hidden()

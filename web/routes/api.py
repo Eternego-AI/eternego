@@ -109,7 +109,7 @@ async def hear_persona(persona_id: str, request: HearRequest):
 
     from application.core.data import Channel, Message
     from web.socket import WebSocketBus
-    channel = Channel(type="web", name=persona_id, authority="conversational", bus=WebSocketBus(persona_id))
+    channel = Channel(type="web", name=persona_id, bus=WebSocketBus(persona_id))
     message = Message(channel=channel, content=request.message)
 
     outcome = await persona.hear(live, message)
