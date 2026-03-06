@@ -1,4 +1,4 @@
-"""LoRA — fine-tuning via HuggingFace peft/trl and GGUF export for Ollama.
+"""LoRA — fine-tuning via HuggingFace peft/trl and GGUF adapter export for Ollama.
 
 Dependencies (install before fine-tuning):
   pip install torch transformers peft trl datasets accelerate
@@ -6,15 +6,20 @@ Dependencies (install before fine-tuning):
 
 The pipeline:
   1. Load the HuggingFace base model (4-bit on CUDA, bf16 on CPU/MPS)
-  2. Attach a LoRA adapter and fine-tune with SFTTrainer (gradient checkpointing enabled)
-  3. Merge the adapter back into the base weights
-  4. Convert the merged model to GGUF (Q4_K_M) via convert_hf_to_gguf.py
-  5. Return the path to the GGUF file — caller registers it with Ollama
+  2. Attach a LoRA adapter and fine-tune with SFTTrainer
+  3. Save only the adapter weights (~100–300 MB) — no merge, no memory spike
+  4. Convert the adapter to GGUF via convert_lora_to_gguf.py (config files only, no weights reload)
+  5. Caller registers it with Ollama as FROM <base> + ADAPTER <gguf>
 """
 
 import os
 
 from application.platform import hugging_face
+from config.finetune import (
+    LORA_R, LORA_ALPHA, LORA_DROPOUT, LORA_TARGET_MODULES,
+    FINETUNE_MAX_LENGTH, FINETUNE_BATCH_SIZE, FINETUNE_GRAD_ACCUM,
+    FINETUNE_EPOCHS, FINETUNE_LEARNING_RATE, FINETUNE_GRADIENT_CHECKPOINTING,
+)
 
 CHATML_TEMPLATE = (
     "<|im_start|>system\n{system}<|im_end|>\n"
@@ -23,13 +28,20 @@ CHATML_TEMPLATE = (
 )
 
 
-def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> None:
-    """Fine-tune hf_model_id on training_pairs and write a GGUF to output_gguf.
+def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str, save_adapter_to: str) -> None:
+    """Fine-tune hf_model_id on training_pairs and write a GGUF adapter to output_gguf.
 
-    Automatically selects the best available device:
+    hf_model_id is always the HuggingFace base model ID (e.g. "Qwen/Qwen2.5-7B-Instruct").
+    HuggingFace's cache handles re-use across nights — no persistent copy needed.
+
+    save_adapter_to is a permanent directory where the PEFT adapter weights are saved
+    (~100–300 MB). The GGUF at output_gguf is temporary — caller deletes it after
+    registering with Ollama.
+
+    No merge step — peak memory stays at model load size throughout:
       CUDA  — 4-bit QLoRA via bitsandbytes (most NVIDIA GPUs with ≥8 GB VRAM)
-      MPS   — bf16, full weights (Apple Silicon)
-      CPU   — bf16, full weights; gradient checkpointing keeps peak RAM ≤ 20 GB for a 7B model
+      MPS   — bf16, full weights (Apple Silicon, ≤14 GB for 7B)
+      CPU   — bf16, full weights (≤14 GB for 7B — no 30 GB merge spike)
     """
     import tempfile
 
@@ -80,10 +92,10 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
     # ── Attach LoRA adapter ───────────────────────────────────────────────────
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
-        r=8,
-        lora_alpha=16,
-        lora_dropout=0.05,
-        target_modules="all-linear",
+        r=LORA_R,
+        lora_alpha=LORA_ALPHA,
+        lora_dropout=LORA_DROPOUT,
+        target_modules=LORA_TARGET_MODULES,
     )
     model = get_peft_model(model, lora_config)
 
@@ -100,6 +112,9 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
 
     # ── Train ─────────────────────────────────────────────────────────────────
     import gc
+    from pathlib import Path
+
+    Path(save_adapter_to).mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         trainer = SFTTrainer(
@@ -108,40 +123,39 @@ def train(hf_model_id: str, training_pairs: list[dict], output_gguf: str) -> Non
             args=SFTConfig(
                 output_dir=tmp_dir,
                 dataset_text_field="text",
-                max_seq_length=512,
-                per_device_train_batch_size=1,
-                gradient_accumulation_steps=4,
-                num_train_epochs=1,
-                learning_rate=2e-4,
+                max_length=FINETUNE_MAX_LENGTH,
+                per_device_train_batch_size=FINETUNE_BATCH_SIZE,
+                gradient_accumulation_steps=FINETUNE_GRAD_ACCUM,
+                num_train_epochs=FINETUNE_EPOCHS,
+                learning_rate=FINETUNE_LEARNING_RATE,
                 fp16=(device == "cuda"),
-                bf16=(device != "cuda"),  # bf16 on CPU/MPS — same dtype as loaded weights
-                gradient_checkpointing=True,  # recompute activations to save ~4 GB RAM
+                bf16=False,
+                use_cpu=(device == "cpu"),
+                gradient_checkpointing=FINETUNE_GRADIENT_CHECKPOINTING,
                 logging_steps=10,
                 save_strategy="no",
                 report_to="none",
             ),
         )
         trainer.train()
-
-        # Free trainer state before merge — optimizer + gradient buffers are no
-        # longer needed and would otherwise sit in memory alongside the merged model.
         del trainer
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-        # ── Merge adapter into base weights ───────────────────────────────────
-        merged = model.merge_and_unload()
-        del model  # release LoRA model before saving merged weights
+        # ── Save adapter only (no merge) ──────────────────────────────────────
+        # Saves adapter_config.json + adapter_model.safetensors (~100–300 MB).
+        # Base model weights are not written — no memory spike.
+        model.save_pretrained(save_adapter_to)
+        tokenizer.save_pretrained(save_adapter_to)
+        del model
         gc.collect()
 
-        merged_dir = os.path.join(tmp_dir, "merged")
-        merged.save_pretrained(merged_dir, safe_serialization=True)
-        tokenizer.save_pretrained(merged_dir)
-
-        # Free merged model before GGUF conversion — llama.cpp loads its own copy.
-        del merged
-        gc.collect()
-
-        # ── Convert to GGUF ───────────────────────────────────────────────────
-        hugging_face.convert_to_gguf(merged_dir, output_gguf)
+        # ── Convert adapter to GGUF ───────────────────────────────────────────
+        # Resolve the base model config from HF cache (config files only, no weights).
+        try:
+            from huggingface_hub import snapshot_download
+            base_config_path = snapshot_download(hf_model_id, local_files_only=True)
+        except Exception:
+            base_config_path = None  # script will fetch config from HF hub
+        hugging_face.convert_adapter_to_gguf(save_adapter_to, output_gguf, base_config_path)

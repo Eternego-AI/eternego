@@ -49,11 +49,15 @@ async def delete(model: str) -> bool:
         return False
 
 
-async def fine_tune(base_model: str, training_set: str, new_model: str) -> None:
+async def fine_tune(base_model: str, training_set: str, model_name: str, persona_id: str) -> None:
     """Fine-tune a model using LoRA and register the result as a new Ollama model.
 
-    Downloads the HuggingFace base weights, trains a LoRA adapter, merges it,
-    converts to GGUF, and registers the new model with Ollama.
+    Trains on the HuggingFace base model (HF cache handles re-use across nights).
+    Saves only the LoRA adapter (~100–300 MB) — no merge, no memory spike.
+    Converts the adapter to GGUF and registers it with Ollama as:
+      FROM <base_model>
+      ADAPTER <adapter.gguf>
+    The model_name is the existing persona model name — updated in place each night.
     """
     try:
         parsed = json.loads(training_set)
@@ -61,7 +65,8 @@ async def fine_tune(base_model: str, training_set: str, new_model: str) -> None:
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise EngineConnectionError("Training data is malformed") from e
 
-    logger.info("Fine-tuning model", {"model": base_model, "new_model": new_model, "pairs": len(training_pairs)})
+    from application.core import paths
+    from pathlib import Path
 
     hf_model_id = hugging_face.id_for(base_model)
     if hf_model_id is None:
@@ -70,25 +75,27 @@ async def fine_tune(base_model: str, training_set: str, new_model: str) -> None:
             "add it to platform/hugging_face.py to enable fine-tuning"
         )
 
-    from application.core import paths
-    work_dir = paths.eternego_home() / "fine_tune" / new_model
-    work_dir.mkdir(parents=True, exist_ok=True)
-    output_gguf = str(work_dir / "model.gguf")
+    adapter_dir = paths.lora_adapter(persona_id)
+    fine_tune_dir = paths.eternego_home() / "fine_tune" / persona_id
+    fine_tune_dir.mkdir(parents=True, exist_ok=True)
+    output_gguf = str(fine_tune_dir / "adapter.gguf")
+
+    logger.info("Fine-tuning model", {"model": base_model, "pairs": len(training_pairs)})
     try:
-        await asyncio.to_thread(lora.train, hf_model_id, training_pairs, output_gguf)
+        await asyncio.to_thread(lora.train, hf_model_id, training_pairs, output_gguf, str(adapter_dir))
 
         await ollama.post("/api/create", {
-            "name": new_model,
-            "modelfile": f"FROM {output_gguf}",
+            "name": model_name,
+            "modelfile": f"FROM {base_model}\nADAPTER {output_gguf}",
         })
     except ImportError as e:
         raise EngineConnectionError(f"Fine-tuning dependencies not installed: {e}") from e
-    except (RuntimeError, TypeError, ValueError) as e:
+    except (RuntimeError, OSError, TypeError, ValueError) as e:
         raise EngineConnectionError(f"Fine-tuning failed: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
+        Path(output_gguf).unlink(missing_ok=True)
 
 
 async def check(model: str) -> bool:

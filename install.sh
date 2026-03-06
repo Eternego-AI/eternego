@@ -58,10 +58,10 @@ fi
 # ── Install Python packages ───────────────────────────────────────────────────
 
 step "[2/4] Python packages"
-info "Installing Eternego and fine-tuning dependencies (torch, transformers, peft, trl, ...)."
+info "Installing Eternego and all dependencies (torch, transformers, peft, trl, ...)."
 info "This step can take several minutes on first install."
 echo ""
-python3 -m pip install -e "$SCRIPT_DIR[finetune]"
+python3 -m pip install -e "$SCRIPT_DIR"
 
 # ── Download GGUF conversion script ──────────────────────────────────────────
 
@@ -72,6 +72,13 @@ curl -fsSL \
   -o "$SCRIPT_DIR/tools/convert_hf_to_gguf.py" \
   && info "Downloaded to tools/convert_hf_to_gguf.py — OK" \
   || echo "  ⚠ Warning: could not download convert_hf_to_gguf.py — fine-tuning will be unavailable until it is present in tools/"
+
+info "Downloading convert_lora_to_gguf.py from llama.cpp ..."
+curl -fsSL \
+  "https://raw.githubusercontent.com/ggerganov/llama.cpp/master/convert_lora_to_gguf.py" \
+  -o "$SCRIPT_DIR/tools/convert_lora_to_gguf.py" \
+  && info "Downloaded to tools/convert_lora_to_gguf.py — OK" \
+  || echo "  ⚠ Warning: could not download convert_lora_to_gguf.py — fine-tuning will be unavailable until it is present in tools/"
 
 ETERNEGO_BIN="$(python3 -c 'import sysconfig, os; print(os.path.join(sysconfig.get_path("scripts"), "eternego"))')"
 

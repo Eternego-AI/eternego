@@ -100,6 +100,11 @@ def dna(persona_id: str) -> Path:
     return home(persona_id) / "dna.md"
 
 
+def lora_adapter(persona_id: str) -> Path:
+    """Persistent LoRA adapter directory for a persona."""
+    return eternego_home() / "fine_tune" / persona_id / "adapter"
+
+
 def routines(persona_id: str) -> Path:
     """Path to the routines.json file for that persona."""
     return home(persona_id) / "routines.json"

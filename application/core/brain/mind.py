@@ -373,7 +373,7 @@ class Mind:
     async def _grow(self) -> None:
         """Evolve DNA, generate per-item training pairs, and fine-tune."""
         import json
-        from application.core import frontier, local_inference_engine, models, prompts
+        from application.core import frontier, local_inference_engine, prompts
         from application.core.exceptions import DNAError
         from application.platform import strings
         persona = self.persona
@@ -417,15 +417,9 @@ class Mind:
         training_set = json.dumps({"training_pairs": all_pairs}, indent=2)
         paths.add_training_set(persona.id, training_set)
 
-        old_model = persona.model.name
-        new_model = models.generate(persona.base_model, persona.id)
-        await local_inference_engine.fine_tune(persona.base_model, training_set, new_model.name)
+        await local_inference_engine.fine_tune(persona.base_model, training_set, persona.model.name, persona.id)
 
-        if not await local_inference_engine.check(new_model.name):
+        if not await local_inference_engine.check(persona.model.name):
             raise DNAError("Fine-tuned model failed verification — previous model is still active")
 
-        await local_inference_engine.delete(old_model)
         paths.clear(paths.person_traits(persona.id))
-
-        persona.model = new_model
-        paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)

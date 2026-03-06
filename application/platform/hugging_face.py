@@ -2,7 +2,7 @@
 
 import subprocess
 
-from config.application import GGUF_CONVERT_SCRIPT
+from config.application import GGUF_CONVERT_SCRIPT, LORA_CONVERT_SCRIPT
 
 _HF_IDS: dict[str, str] = {
     # Qwen 2.5
@@ -67,4 +67,21 @@ def convert_to_gguf(model_dir: str, output_gguf: str) -> None:
     if result.returncode != 0:
         raise RuntimeError(
             f"GGUF conversion failed (exit {result.returncode}):\n{result.stderr[-2000:]}"
+        )
+
+
+def convert_adapter_to_gguf(adapter_dir: str, output_gguf: str, base_model_path: str | None = None) -> None:
+    """Convert a PEFT LoRA adapter directory to a GGUF adapter file.
+
+    base_model_path is a local directory with the base model config files (config.json,
+    tokenizer.json). If omitted, the script resolves the base model from the adapter
+    config and downloads only the config from HuggingFace — no model weights needed.
+    """
+    cmd = ["python3", LORA_CONVERT_SCRIPT, adapter_dir, "--outfile", output_gguf, "--outtype", "f16"]
+    if base_model_path:
+        cmd.extend(["--base", base_model_path])
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"LoRA adapter conversion failed (exit {result.returncode}):\n{result.stderr[-2000:]}"
         )
