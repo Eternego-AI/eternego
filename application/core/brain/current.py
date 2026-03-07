@@ -13,7 +13,12 @@ from application.platform import datetimes, OS
 
 def time() -> str:
     now = datetimes.now()
-    return f"Current time: {now.strftime('%A, %B %d, %Y %H:%M UTC')}"
+    return (
+        f"Current time: {now.strftime('%A, %B %d, %Y %H:%M UTC')}\n"
+        "Timezone: Before scheduling reminders or events, confirm the person's timezone from their identity. "
+        "If unknown, use clarify to ask first, then record it with learn_identity. "
+        "Pass their local time and timezone to the tool — it handles the UTC conversion."
+    )
 
 
 def environment() -> str:

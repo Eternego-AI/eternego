@@ -115,12 +115,15 @@ def routines(persona_id: str) -> Path:
     return home(persona_id) / "routines.json"
 
 
-def add_routine(persona_id: str, spec: str, time: str, recurrence: str) -> None:
+def add_routine(persona_id: str, spec: str, time: str, recurrence: str, timezone: str | None = None) -> None:
     """Add a routine entry to the persona's routines file."""
-    logger.info("Adding routine", {"persona_id": persona_id, "spec": spec, "time": time, "recurrence": recurrence})
+    logger.info("Adding routine", {"persona_id": persona_id, "spec": spec, "time": time, "recurrence": recurrence, "timezone": timezone})
     path = routines(persona_id)
     data = filesystem.read_json(path) if path.exists() else {"routines": []}
-    data["routines"].append({"spec": spec, "time": time, "recurrence": recurrence})
+    entry = {"spec": spec, "time": time, "recurrence": recurrence}
+    if timezone:
+        entry["timezone"] = timezone
+    data["routines"].append(entry)
     filesystem.write_json(path, data)
 
 

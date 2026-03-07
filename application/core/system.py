@@ -2,7 +2,7 @@
 
 import subprocess
 
-from application.platform import logger, crypto, OS, linux, mac, windows
+from application.platform import logger, crypto, OS, linux, mac, windows, datetimes
 from application.core.data import Persona
 from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError, ExecutionError, HardwareError
 
@@ -117,6 +117,12 @@ async def get_phrases(persona: Persona) -> str:
         raise SecretStorageError("Failed to retrieve encryption phrase from secure storage") from e
 
     raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
+
+
+def timezone() -> str:
+    """Return the IANA timezone name of the local system."""
+    logger.info("Reading system timezone")
+    return datetimes.system_timezone()
 
 
 def hardware() -> dict:

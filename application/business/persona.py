@@ -162,7 +162,7 @@ async def create(
         phrase = await local_model.generate(persona.model.name, prompts.generate_recovery_phrase())
         await system.save_phrases(persona, phrase)
 
-        paths.add_routine(persona.id, "sleep", "00:00", "daily")
+        paths.add_routine(persona.id, "sleep", "00:00", "daily", system.timezone())
 
         paths.init_git(paths.diary(persona.id))
         outcome = await write_diary(persona)
