@@ -34,23 +34,7 @@ from application.core.exceptions import MindError
 from application.platform import logger, persistent_memory
 
 
-_minds: dict[str, "Mind"] = {}
-
-def get(persona_id: str) -> "Mind | None":
-    """Return the loaded Mind for a persona, or None if not loaded."""
-    return _minds.get(persona_id)
-
-
 class Mind:
-
-    @staticmethod
-    def _from_dict(d: dict) -> Occurrence:
-        return Occurrence(
-            id=d["id"],
-            cause=Prompt(role=d["cause"]["role"], content=d["cause"]["content"]),
-            effect=Prompt(role=d["effect"]["role"], content=d["effect"]["content"]),
-            created_at=datetime.fromisoformat(d["cause"]["time"]),
-        )
 
     def __init__(self, persona: Persona):
         self._persona_id = persona.id
@@ -62,7 +46,13 @@ class Mind:
         except Exception as e:
             raise MindError(f"Failed to load mind storage: {e}") from e
         self.occurrences: list[Occurrence] = [
-            self._from_dict(d) for d in persistent_memory.read(self._storage_id)
+            Occurrence(
+                id=d["id"],
+                cause=Prompt(role=d["cause"]["role"], content=d["cause"]["content"]),
+                effect=Prompt(role=d["effect"]["role"], content=d["effect"]["content"]),
+                created_at=datetime.fromisoformat(d["cause"]["time"]),
+            )
+            for d in persistent_memory.read(self._storage_id)
         ]
 
     @property
@@ -78,7 +68,6 @@ class Mind:
     def load(cls, persona: Persona) -> "Mind":
         """Create and register a Mind for this persona."""
         m = cls(persona)
-        _minds[persona.id] = m
         from application.core import registry
         registry.save(persona, m)
         logger.info("mind.load", {"persona_id": persona.id, "restored": len(m.occurrences)})

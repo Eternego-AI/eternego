@@ -637,8 +637,7 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
         await bus.broadcast("Channel pairing failed", {"persona": persona, "reason": "not_belonging"})
         return Outcome(success=False, message="This channel does not belong to this persona.")
 
-    code = channels.pair(persona, channel)
-    registry.save_pairing_code(code, persona.id, channel.type, channel.name)
+    code = registry.pair(persona, channel)
     await bus.broadcast("Channel pairing started", {"persona": persona, "channel": channel})
     return Outcome(success=True, message="Pairing code generated.", data={"pairing_code": code})
 
@@ -647,7 +646,7 @@ async def talk(persona: Persona, message: Message) -> Outcome[dict]:
     """Receive a message, trigger the mind, deliver the response via the channel."""
     await bus.propose("Talking", {"persona": persona, "channel": message.channel})
     try:
-        m = mind.get(persona.id)
+        m = registry.mind(persona.id)
         if m is None:
             return Outcome(success=False, message="Mind not loaded.")
         if message.channel:
@@ -669,7 +668,7 @@ async def nudge(persona: Persona, message: str) -> Outcome[dict]:
     """Privately nudge the persona with an internal signal."""
     await bus.propose("Nudging persona", {"persona": persona})
     try:
-        m = mind.get(persona.id)
+        m = registry.mind(persona.id)
         if m is None:
             return Outcome(success=False, message="Mind not loaded.")
         m.interrupt(Prompt(role="user", content=message))
@@ -707,7 +706,7 @@ async def sleep(persona: Persona) -> Outcome[dict]:
         from application.core.brain import ego
         from application.platform import datetimes
 
-        m = mind.get(persona.id)
+        m = registry.mind(persona.id)
         if m is not None and m.occurrences:
             threads = await ego.realize(persona, m.occurrences)
             for thread in threads:
@@ -828,7 +827,7 @@ async def start(persona: Persona) -> Outcome[dict]:
     """Open all channels for a persona and start listening."""
     await bus.propose("Starting channels", {"persona": persona})
 
-    if mind.get(persona.id) is None:
+    if registry.mind(persona.id) is None:
         mind.Mind.load(persona)
 
     if not (persona.channels or []):

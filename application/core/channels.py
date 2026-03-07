@@ -1,7 +1,6 @@
 """Channels — open, close, send, and verify channel connections."""
 
 import asyncio
-import secrets
 import threading
 from collections.abc import Callable
 
@@ -22,12 +21,6 @@ def set_latest(persona: Persona, channel: "Channel") -> None:
 def latest(persona: Persona) -> "Channel | None":
     """Return the most recently active channel for this persona."""
     return _latest.get(persona.id)
-
-
-def pair(persona: Persona, channel: Channel) -> str:
-    """Generate and return a pairing code for an unverified channel."""
-    logger.info("Generating pairing code", {"persona": persona.id, "channel": channel.name})
-    return secrets.token_hex(3).upper()
 
 
 def open(persona: Persona, channel: Channel, on_message: Callable) -> Callable[[], None]:

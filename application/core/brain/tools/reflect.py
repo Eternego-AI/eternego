@@ -18,13 +18,13 @@ class _Reflect(Tool):
 
     def execution(self, text=""):
         async def _run(persona):
-            from application.core.brain import mind
+            from application.core import registry
             from application.core.data import Prompt
             from application.platform import logger
             logger.debug("reflect: interrupting cycle", {"persona_id": persona.id, "text": text[:80]})
             if not text:
                 return "no reflection provided"
-            m = mind.get(persona.id)
+            m = registry.mind(persona.id)
             if m is None:
                 return "mind not loaded"
             m.interrupt(Prompt(role="user", content=text))

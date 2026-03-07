@@ -63,3 +63,7 @@ class HardwareError(Exception):
 
 class MindError(Exception):
     pass
+
+
+class RegistryError(Exception):
+    pass

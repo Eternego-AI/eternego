@@ -1,9 +1,7 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
-from datetime import timedelta
-
 from application.core import bus, registry, system, local_inference_engine, paths
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, HardwareError
+from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, HardwareError, RegistryError
 from application.business.outcome import Outcome
 from application.platform import datetimes
 
@@ -65,37 +63,28 @@ async def pair(code: str) -> Outcome[dict]:
     """Claim a pairing code and mark the channel as verified for the persona."""
     await bus.propose("Pairing channel", {"code": code})
 
-    entry = registry.get_pairing_code(code)
-    if not entry:
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid"})
-        return Outcome(success=False, message="Pairing code is invalid or has expired.")
+    try:
+        persona, channel_type, channel_name = registry.take_code(code)
 
-    if datetimes.now() - entry["created_at"] > timedelta(minutes=10):
-        registry.remove_pairing_code(code)
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "expired"})
-        return Outcome(success=False, message="Pairing code has expired. Ask the persona to send a new message to get a fresh code.")
+        channel = next((ch for ch in (persona.channels or []) if ch.type == channel_type), None)
+        if not channel:
+            await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid_channel"})
+            return Outcome(success=False, message="The channel associated with this pairing code could not be found.")
 
-    persona = registry.get_persona(entry["persona_id"])
-    if not persona:
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid_persona"})
-        return Outcome(success=False, message="The persona associated with this pairing code could not be found.")
+        if channel.verified_at:
+            await bus.broadcast("Pairing failed", {"code": code, "reason": "already_verified"})
+            return Outcome(success=False, message="This channel is already verified.")
 
-    channel = next((ch for ch in (persona.channels or []) if ch.type == entry["channel_type"]), None)
-    if not channel:
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid_channel"})
-        return Outcome(success=False, message="The channel associated with this pairing code could not be found.")
+        channel.name = channel_name
+        channel.verified_at = datetimes.iso_8601(datetimes.now())
+        paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
-    if channel.verified_at:
-        await bus.broadcast("Pairing failed", {"code": code, "reason": "already_verified"})
-        return Outcome(success=False, message="This channel is already verified.")
+        await bus.broadcast("Channel paired", {"persona_id": persona.id, "channel": channel.name})
+        return Outcome(success=True, message="Channel paired successfully", data={"persona_id": persona.id, "channel": channel.name})
 
-    channel.name = entry["channel_name"]
-    channel.verified_at = datetimes.iso_8601(datetimes.now())
-    paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
-    registry.remove_pairing_code(code)
-
-    await bus.broadcast("Channel paired", {"persona_id": persona.id, "channel": channel.name})
-    return Outcome(success=True, message="Channel paired successfully", data={"persona_id": persona.id, "channel": channel.name})
+    except RegistryError as e:
+        await bus.broadcast("Pairing failed", {"code": code, "reason": str(e)})
+        return Outcome(success=False, message=str(e))
 
 
 async def info() -> Outcome[dict]:
