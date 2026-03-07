@@ -4,8 +4,7 @@ import asyncio
 import threading
 from collections.abc import Callable
 
-from application.platform import filesystem, logger, telegram
-from application.core import paths
+from application.platform import logger, telegram
 from application.core.data import Channel, Message, Persona
 from application.core.exceptions import ChannelError
 
@@ -23,7 +22,7 @@ def latest(persona: Persona) -> "Channel | None":
     return _latest.get(persona.id)
 
 
-def open(persona: Persona, channel: Channel, on_message: Callable) -> Callable[[], None]:
+def keep_open(persona: Persona, channel: Channel, on_message: Callable) -> Callable[[], None]:
     """Open a persistent connection for a channel and return a stop callable."""
     logger.info("Opening channel", {"type": channel.type, "persona": persona.id})
     if channel.type == "telegram":

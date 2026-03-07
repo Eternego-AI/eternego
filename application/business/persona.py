@@ -615,7 +615,7 @@ async def connect(persona: Persona, channel: Channel) -> Outcome:
                 )
             return outcome
 
-        connection = channels.open(persona, channel, on_message)
+        connection = channels.keep_open(persona, channel, on_message)
         gateways.of(persona).add(channel, connection)
         await bus.broadcast("Channel connected", {"persona": persona, "channel": channel})
         return Outcome(success=True, message="")
