@@ -59,3 +59,7 @@ class ContextError(Exception):
 
 class HardwareError(Exception):
     pass
+
+
+class MindError(Exception):
+    pass

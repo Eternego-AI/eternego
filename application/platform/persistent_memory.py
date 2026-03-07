@@ -26,6 +26,8 @@ def load(storage_id: str, path: Path) -> str:
         return _hash(storage_id)
     path = Path(path)
     content = json.loads(path.read_text()) if path.exists() else []
+    if not isinstance(content, list):
+        content = []
     _cache[storage_id] = Storage(path, content)
     return _hash(storage_id)
 

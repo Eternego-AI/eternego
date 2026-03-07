@@ -1,425 +1,243 @@
-"""Mind — the persona's cognitive state and orchestrator.
+"""Mind — the persona's cognitive state.
 
-One Mind instance per persona. Mind is the single entry point for all
-external inputs and runs the full cognitive cycle internally.
+One Mind instance per persona, loaded once at startup.
 
-Signals accumulate in memory throughout the day. Closed threads (last
-signal from assistant) are passed as context to all thinking stages.
-Open threads (last signal from user) are what the persona acts on.
+answer(cause)      add occurrence, run tick in background, return immediate response.
+interrupt(prompt)  add occurrence from prompt, run tick in background (fire-and-forget).
+clear()            clear all occurrences from memory and persistent store.
 
-_tick() is a long-running loop started once on load. It watches _mode:
-  - Wakeup:  fires immediately on load; runs a full cognitive cycle.
-  - Normal:  triggered by interrupt(); runs a full cognitive cycle.
-  - Rest:    set at end of each cycle; _change_mode starts an idle timer.
-             After _IDLE_DELAY, timer fires and transitions to Rethink.
-  - Rethink: fired by the idle timer; runs a review cycle to catch
-             unfinished commitments.
-  - Sleep:   set by sleep(); tick idles. Only Wakeup can exit sleep.
+Cognitive tick:
+  1. ego.realize(occurrences)          → threads (awareness)
+  2. ego.understand(threads)           → ordered perceptions with impressions
+  3. ego.grant_or_reject(pending)      → resolve pending permissions from conversation
+  4. ego.decide(top perception)        → plan steps (calls focus internally)
+  5. ego.legalize(plan)                → permissions check
+  6. execute steps — each result becomes an Occurrence:
+       success → Occurrence(cause="[tool]: output", effect="")
+       failure → Occurrence(cause="[tool] failed: error", effect="")
+       reflect → inject text as Occurrence, restart tick
+  7. re-tick so the model sees results and decides: continue, retry, or close
+  8. tick ends when decide returns nothing — recap the perception and stop
 
-_change_mode() enforces transition rules. Mid-cycle interrupts are
-detected by comparing self._mode identity against current_think.
-
-Permissions: two in-memory session lists —
-  _pending_permissions: tool names awaiting a decision from the person.
-  _allowed_permissions: tool names granted this session (fast-path for legalize).
-Each tick tries to resolve pending tools via ego.grant_or_reject using the focused
-thread's conversation. Resolved tools move to _allowed or are dropped from pending.
-legalize() skips _allowed_permissions tools and checks the rest against permissions.json;
-if any tool is not fully granted the plan halts and the person is told what's missing.
-grant_permission/reject_permission tools are model-callable to persist strong decisions
-across sessions.
-
-Persistence: signals are saved to mind.json via persistent_memory on every interrupt/reflect.
-On restart, signals are restored and mode starts as Rest — no processing until a new interrupt
-arrives. sleep() clears mind.json after archiving so the next start is fresh.
-
-mind.interrupt(prompt, channel) — urgent signal: wakes tick or interrupts mid-cycle
-mind.reflect(prompt)            — passive signal: added to presence, no tick woken
-mind.execute(tool, params)      — run any tool directly
-mind.next_task(taking)          — peek or consume the next plan step
-mind.load(persona)              — the only way to create a Mind
-mind.sleep()                    — archive signals, grow; stays in Sleep until restart
+Persistence: occurrences are saved to mind.json on every update.
+On restart, occurrences are restored and the next interrupt resumes from where things left off.
 """
 
 import asyncio
 from datetime import datetime
 
-from application.core.data import Persona, Prompt, Channel
-from application.core.brain.data import Signal, Step, Thinking, Meaning, Thought, Perception
-from application.core.brain.thinking import Normal, Rethink, Wakeup, Sleep, Rest, Limited
-from application.core import paths, local_model
-from application.platform import logger, processes, persistent_memory
+from application.core.brain.data import Occurrence
+from application.core.data import Persona, Prompt
+from application.core.brain import ego
+from application.core import paths
+from application.core.exceptions import MindError
+from application.platform import logger, persistent_memory
 
 
-def _signal_to_dict(signal: Signal) -> dict:
-    return {
-        "id": signal.id,
-        "role": signal.prompt.role,
-        "content": signal.prompt.content,
-        "channel_type": signal.channel.type if signal.channel else None,
-        "channel_name": signal.channel.name if signal.channel else None,
-        "created_at": signal.created_at.isoformat(),
-    }
-
-
-def _signal_from_dict(d: dict) -> Signal:
-    channel = Channel(type=d["channel_type"], name=d.get("channel_name", "")) if d.get("channel_type") else None
-    return Signal(
-        id=d["id"],
-        prompt=Prompt(role=d["role"], content=d["content"]),
-        channel=channel,
-        created_at=datetime.fromisoformat(d["created_at"]),
-    )
-
+_minds: dict[str, "Mind"] = {}
 
 def get(persona_id: str) -> "Mind | None":
-    """Return the in-process Mind for a persona, or None if not loaded."""
-    from application.core import registry
-    return registry.get_mind(persona_id)
+    """Return the loaded Mind for a persona, or None if not loaded."""
+    return _minds.get(persona_id)
 
 
 class Mind:
-    _IDLE_DELAY = 300  # seconds of inactivity before idle review fires
+
+    @staticmethod
+    def _from_dict(d: dict) -> Occurrence:
+        return Occurrence(
+            id=d["id"],
+            cause=Prompt(role=d["cause"]["role"], content=d["cause"]["content"]),
+            effect=Prompt(role=d["effect"]["role"], content=d["effect"]["content"]),
+            created_at=datetime.fromisoformat(d["cause"]["time"]),
+        )
 
     def __init__(self, persona: Persona):
         self._persona_id = persona.id
-        self._plan: list[Step] = []
-        self._pending_permissions: list[str] = []   # tool names awaiting a decision this session
-        self._allowed_permissions: list[str] = []   # tool names granted this session
-        self._event = asyncio.Event()
-        self._idle_task: asyncio.Task | None = None
-        self._stage_task: asyncio.Task | None = None
+        self._tick_task: asyncio.Task | None = None
+        self._pending_permissions: list[str] = []
 
-        persistent_memory.load(self._storage_id, paths.mind(persona.id))
-        self.signals: list[Signal] = [_signal_from_dict(d) for d in persistent_memory.read(self._storage_id)]
-
-        if self.signals:
-            self.__mode: Thinking = Rest()  # restored signals — wait for a new interrupt
-        else:
-            self.__mode: Thinking = Wakeup()
-            self._event.set()  # fresh start — Wakeup fires immediately
+        try:
+            persistent_memory.load(self._storage_id, paths.mind(persona.id))
+        except Exception as e:
+            raise MindError(f"Failed to load mind storage: {e}") from e
+        self.occurrences: list[Occurrence] = [
+            self._from_dict(d) for d in persistent_memory.read(self._storage_id)
+        ]
 
     @property
     def _storage_id(self) -> str:
         return f"mind_{self._persona_id}"
 
     @property
-    def _mode(self) -> Thinking:
-        return self.__mode
-
-    def _change_mode(self, value: Thinking) -> None:
-        """Change mode, enforcing allowed transitions.
-
-        Sleep mode is protected: only Wakeup can replace it.
-        Setting Rest starts the idle timer; any other transition cancels it.
-        """
-        if isinstance(self._mode, Sleep) and not isinstance(value, Wakeup):
-            logger.info("mind._change_mode: blocked during sleep", {"persona_id": self._persona_id, "attempted": type(value).__name__})
-            return
-        if self._idle_task is not None:
-            self._idle_task.cancel()
-            self._idle_task = None
-        if self._stage_task is not None and not self._stage_task.done():
-            self._stage_task.cancel()
-            self._stage_task = None
-        self.__mode = value
-        self._event.set()
-        if isinstance(value, Rest):
-            self._idle_task = asyncio.create_task(self._idle_rethink())
-
-    async def _idle_rethink(self) -> None:
-        """After IDLE_DELAY of rest, transition to Rethink."""
-        try:
-            await asyncio.sleep(self._IDLE_DELAY)
-            logger.info("mind._idle_rethink: idle delay elapsed", {"persona_id": self._persona_id})
-            self._change_mode(Rethink())
-        except asyncio.CancelledError:
-            pass
-
-    @classmethod
-    def load(cls, persona: Persona) -> "Mind":
-        """Create a fresh Mind for this persona and register it in-process."""
-        from application.core import registry
-        mind = cls(persona)
-        registry.save(persona, mind)
-        processes.run_async(mind._tick)
-        return mind
-
-    @property
     def persona(self) -> Persona:
-        """Return the live persona from the registry."""
         from application.core import registry
         return registry.get_persona(self._persona_id)
 
-    # ── Public ────────────────────────────────────────────────────────────
+    @classmethod
+    def load(cls, persona: Persona) -> "Mind":
+        """Create and register a Mind for this persona."""
+        m = cls(persona)
+        _minds[persona.id] = m
+        from application.core import registry
+        registry.save(persona, m)
+        logger.info("mind.load", {"persona_id": persona.id, "restored": len(m.occurrences)})
+        return m
 
-    def interrupt(self, prompt: Prompt, channel: Channel | None = None) -> None:
-        """Add an urgent signal and set mode to Normal, waking the tick loop."""
-        signal = Signal(prompt=prompt, channel=channel)
-        self.signals.append(signal)
-        persistent_memory.append(self._storage_id, _signal_to_dict(signal))
-        self._change_mode(Normal(signal))
-        logger.info("mind.interrupt", {"persona_id": self._persona_id})
-
-    def reflect(self, prompt: Prompt) -> None:
-        """Add a passive signal to presence without starting a tick."""
-        signal = Signal(prompt=prompt)
-        self.signals.append(signal)
-        persistent_memory.append(self._storage_id, _signal_to_dict(signal))
-        logger.info("mind.reflect", {"persona_id": self._persona_id})
-
-    async def execute(self, tool_name: str, params: dict) -> str:
-        """Run a single tool. Reflects on success; interrupts on failure."""
-        from application.core.brain import tools
-        logger.info("mind.execute", {"persona_id": self._persona_id, "tool": tool_name})
-        persona = self.persona
-        tool = tools.for_name(tool_name)
-        if tool is None:
-            self.interrupt(Prompt(role="user", content=f"[{tool_name}] failed: unknown tool"))
-            return f"error: unknown tool '{tool_name}'"
+    def _persist(self, occurrence: Occurrence) -> None:
         try:
-            fn = tool.execution(**params)
-            output = await fn(persona)
-            # reflect tool calls mind.interrupt internally — don't double-reflect
-            if tool_name != "reflect":
-                self.reflect(Prompt(role="assistant", content=f"[{tool_name}] {output}"))
-            return output
+            persistent_memory.append(self._storage_id, {
+                "id": occurrence.id,
+                "cause": {"role": occurrence.cause.role, "content": occurrence.cause.content, "time": occurrence.created_at.isoformat()},
+                "effect": {"role": occurrence.effect.role, "content": occurrence.effect.content, "time": occurrence.created_at.isoformat()},
+            })
         except Exception as e:
-            error = str(e)
-            self.interrupt(Prompt(role="user", content=f"[{tool_name}] failed: {error}"))
-            return f"error: {error}"
+            raise MindError(f"Failed to persist occurrence: {e}") from e
 
-    def present(self) -> list[Signal]:
-        """Return all signals — the full day's presence."""
-        return list(self.signals)
+    def clear(self) -> None:
+        """Clear all occurrences from memory and persistent store."""
+        self.occurrences = []
+        persistent_memory.clear(self._storage_id)
 
-    def next_task(self, taking: bool = False) -> Step | None:
-        """Return the next plan step, or None if the plan is exhausted."""
-        if not self._plan:
-            return None
-        if taking:
-            return self._plan.pop(0)
-        return self._plan[0]
+    async def answer(self, cause: Prompt) -> str:
+        """Stop tick, generate response, record occurrence, resume tick."""
+        await self._change_mindset(cause)
 
-    # ── Internal ─────────────────────────────────────────────────────────
+        effect_text = await ego.response(self.persona, cause)
 
-    async def _think(self, coro):
-        """Run a coroutine as a cancellable stage task.
+        await self._change_mindset(cause, Prompt(role="assistant", content=effect_text))
+        return effect_text
 
-        When _change_mode cancels _stage_task, CancelledError propagates through
-        the await chain all the way to the Ollama HTTP connection, closing it.
-        Returns None if cancelled so _tick can detect the mode change gracefully.
-        """
-        self._stage_task = asyncio.create_task(coro)
+    def interrupt(self, prompt: Prompt) -> None:
+        """Add an occurrence from a prompt and start a fresh tick."""
+        occurrence = Occurrence(
+            cause=prompt,
+            effect=Prompt(role="assistant", content=""),
+        )
+        self.occurrences.append(occurrence)
+        self._persist(occurrence)
+        self._start_tick()
+
+    async def _change_mindset(self, cause: Prompt, effect: Prompt | None = None) -> None:
+        """Called with cause only: stop tick. Called with cause+effect: record occurrence and start tick."""
+        if effect is None:
+            if self._tick_task and not self._tick_task.done():
+                self._tick_task.cancel()
+                try:
+                    await self._tick_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+        else:
+            occurrence = Occurrence(cause=cause, effect=effect)
+            self.occurrences.append(occurrence)
+            self._persist(occurrence)
+            self._start_tick()
+
+    def _start_tick(self) -> None:
+        """Cancel any running tick and start a fresh one."""
+        if self._tick_task and not self._tick_task.done():
+            self._tick_task.cancel()
+        self._tick_task = asyncio.create_task(self._run_tick())
+
+    async def _run_tick(self) -> None:
         try:
-            return await self._stage_task
+            await self._tick()
         except asyncio.CancelledError:
-            return None
-        finally:
-            self._stage_task = None
-
-    def sub_conscious(self, persona: Persona, perception: Perception) -> Thought | Meaning | None:
-        """Look up prior experience for this perception by title.
-
-        Scores consistency of the last recorded entry against all iterations.
-        Returns None if below 80% confidence or fewer than 3 iterations recorded.
-
-        Returns:
-          None    — no prior experience or insufficient confidence
-          Meaning — consistent tools known; skip focus, run decide
-          Thought — consistent full plan known; skip focus and decide
-        """
-        def is_confident(previous_decisions: list[dict]) -> bool:
-            if len(previous_decisions) < 3:
-                return False
-            last_decision = previous_decisions[-1]
-            last_tools = sorted(last_decision.get("tools", []))
-            last_path = [s["tool"] for s in last_decision.get("path", [])]
-            tools_matches = sum(1 for e in previous_decisions if sorted(e.get("tools", [])) == last_tools)
-            path_matches = sum(1 for e in previous_decisions if [s["tool"] for s in e.get("path", [])] == last_path)
-            return (tools_matches + path_matches) / (2 * len(previous_decisions)) >= 0.8
-
-        decisions = paths.read_meaning(persona.id, perception.thread.title)
-        if not decisions or not is_confident(decisions):
-            return None
-        prior_decision = decisions[-1]
-        meaning = Meaning(title=perception.thread.title, tools=prior_decision["tools"])
-        raw_steps = prior_decision.get("path", [])
-        if raw_steps:
-            steps = [Step(number=i + 1, tool=s["tool"], params=s.get("params", {})) for i, s in enumerate(raw_steps)]
-            meaning.path = steps
-            return Thought(meaning=meaning, steps=steps)
-        return meaning
+            pass
+        except Exception as e:
+            logger.warning("mind._run_tick: unhandled error", {"persona_id": self._persona_id, "error": str(e)})
 
     async def _tick(self) -> None:
-        """Long-running loop: wait for _mode, dispatch on type, repeat."""
-        from application.core.brain import ego
+        """One full cognitive cycle. Re-ticks after execution so model can continue or close."""
+        occurrences = list(self.occurrences)
+        if not occurrences:
+            return
 
-        while True:
-            await self._event.wait()
-            self._event.clear()
-            mode = self._mode
+        threads = await ego.realize(self.persona, occurrences)
+        if not threads:
+            return
 
-            current_think = mode
-            persona = self.persona
-            self._plan = []
-            logger.info("mind._tick", {"persona_id": self._persona_id, "mode": type(current_think).__name__})
+        perceptions = await ego.understand(self.persona, threads)
+        if not perceptions:
+            return
 
-            try:
-                signals = self.present()
-                if not signals:
-                    continue
+        perception = perceptions[0]
+        closed = [t for t in threads if t is not perception.thread]
 
-                threads = await self._think(ego.realize(persona, signals))
-                if not threads:
-                    continue
+        # Resolve any pending permissions using the focused thread's conversation
+        if self._pending_permissions:
+            resolved = await ego.grant_or_reject(
+                self.persona, self._pending_permissions, perception.thread.occurrences
+            )
+            for tool in resolved.get("granted", []) + resolved.get("rejected", []):
+                if tool in self._pending_permissions:
+                    self._pending_permissions.remove(tool)
 
-                if self._mode is not current_think:
-                    continue
-                perceptions = await self._think(current_think.understanding(persona, threads))
-                if not perceptions:
-                    continue
-                perception = perceptions[0]
-                closed = [t for t in threads if t is not perception.thread]
+        thought = await ego.decide(self.persona, perception, closed)
+        if not thought:
+            recap_text = await ego.recap(self.persona, perception.thread.occurrences, "")
+            perception.result = recap_text
+            closing = Occurrence(
+                cause=Prompt(role="assistant", content=f"[closed]: {recap_text}"),
+                effect=Prompt(role="assistant", content=""),
+            )
+            self.occurrences.append(closing)
+            self._persist(closing)
+            return
 
-                # Resolve any pending permissions using the focused thread's conversation
-                if self._pending_permissions:
-                    decisions = await self._think(ego.grant_or_reject(persona, self._pending_permissions, perception.thread.signals))
-                    for tool_name in decisions.get("granted", []):
-                        self._allowed_permissions.append(tool_name)
-                        self._pending_permissions = [t for t in self._pending_permissions if t != tool_name]
-                    for tool_name in decisions.get("rejected", []):
-                        self._pending_permissions = [t for t in self._pending_permissions if t != tool_name]
+        from application.core.brain import tools as brain_tools
+        plan_to_check = [
+            s for s in thought.steps
+            if (t := brain_tools.for_name(s.tool)) is not None and t.requires_permission
+        ]
+        permission = await ego.legalize(self.persona, plan_to_check)
+        not_granted = (permission or {}).get("rejected", []) + (permission or {}).get("unknown", [])
 
-                if self._mode is not current_think:
-                    continue
-                prior = self.sub_conscious(persona, perception)
-                if isinstance(prior, Thought):
-                    meaning = prior.meaning
-                elif isinstance(prior, Meaning):
-                    meaning = prior
-                else:
-                    meaning = await self._think(current_think.focus(persona, perception, closed))
+        if not_granted:
+            for tool in not_granted:
+                if tool not in self._pending_permissions:
+                    self._pending_permissions.append(tool)
+            thought = await ego.deny(self.persona, perception, not_granted, closed)
+            if not thought:
+                return
 
-                if not meaning or not meaning.tools:
-                    meaning = Meaning(perception.thread.title, ["clarify"])
-
-                if self._mode is not current_think:
-                    continue
-
-                if isinstance(prior, Thought):
-                    thought = prior
-                else:
-                    thought = await self._think(current_think.decide(persona, perception, meaning, closed))
-                    if not thought:
-                        continue
-                    meaning.path = thought.steps
-                    paths.append_meaning_path(persona.id, meaning.title, meaning.tools, meaning.path)
-
-                self._plan = thought.steps
-
-                if self._mode is not current_think:
-                    continue
-                from application.core.brain import tools as brain_tools
-                plan_to_check = [
-                    s for s in self._plan
-                    if s.tool not in self._allowed_permissions
-                    and (t := brain_tools.for_name(s.tool)) is not None
-                    and t.requires_permission
-                ]
-                permission = await self._think(ego.legalize(persona, plan_to_check))
-                not_granted = (permission or {}).get("rejected", []) + (permission or {}).get("unknown", [])
-                if not_granted:
-                    logger.info("mind._tick: permission required", {"persona_id": self._persona_id, "not_granted": not_granted})
-                    for t in not_granted:
-                        if t not in self._pending_permissions:
-                            self._pending_permissions.append(t)
-                    limited_meaning = Meaning(perception.thread.title, ["say"])
-                    thought = await self._think(Limited().decide(persona, perception, limited_meaning, not_granted, closed))
-                    if not thought:
-                        continue
-                    self._plan = thought.steps
-
-                while self._mode is current_think:
-                    step = self.next_task(taking=True)
-                    if step is None:
-                        break
-                    await self.execute(step.tool, step.params)
-
-            except Exception as e:
-                logger.warning("mind._tick: unhandled error", {"persona_id": self._persona_id, "error": str(e)})
+        executed = False
+        for step in thought.steps:
+            tool = brain_tools.for_name(step.tool)
+            if tool is None:
+                logger.warning("mind._tick: unknown tool", {"persona_id": self._persona_id, "tool": step.tool})
                 continue
 
-            # Cycle complete — rest until idle timer fires Rethink
-            self._change_mode(Rest())
+            if step.tool == "reflect":
+                reflect_text = step.params.get("text", "")
+                if reflect_text:
+                    occurrence = Occurrence(
+                        cause=Prompt(role="user", content=reflect_text),
+                        effect=Prompt(role="assistant", content=""),
+                    )
+                    self.occurrences.append(occurrence)
+                    self._persist(occurrence)
+                await self._tick()
+                return
 
-    async def sleep(self) -> None:
-        """Archive the day's signals and grow. Stays in Sleep until restart."""
-        from application.core.brain import ego
-        logger.info("mind.sleep", {"persona_id": self._persona_id})
-        self._change_mode(Sleep())
-        persona = self.persona
-        signals = self.present()
-        if signals:
-            threads = await ego.realize(persona, signals)
-            for thread in threads:
-                summary = await ego.recap(persona, thread.signals, "")
-                signal_ids = [s.id for s in thread.signals]
-                await self.execute("archive", {"signal_ids": signal_ids, "title": thread.title, "recap": summary})
-            logger.info("mind.sleep: consolidated", {"persona_id": self._persona_id, "threads": len(threads)})
-        persistent_memory.clear(self._storage_id)
-        await self._grow()
-
-    async def _grow(self) -> None:
-        """Evolve DNA, generate per-item training pairs, and fine-tune."""
-        import json
-        from application.core import frontier, local_inference_engine, prompts
-        from application.core.exceptions import DNAError
-        from application.platform import strings
-        persona = self.persona
-        logger.info("mind._grow", {"persona_id": self._persona_id})
-
-        synthesis = prompts.dna_synthesis(
-            previous_dna=paths.read(paths.dna(persona.id)),
-            person_traits=paths.read(paths.person_traits(persona.id)),
-            persona_context=paths.read(paths.context(persona.id)),
-            history_briefing=paths.read_history_brief(persona.id, "(no history yet)"),
-        )
-        if persona.frontier:
             try:
-                new_dna = await frontier.chat(persona.frontier, synthesis)
+                output = await tool.execution(**step.params)(self.persona)
+                occurrence = Occurrence(
+                    cause=Prompt(role="user", content=f"[{step.tool}]: {output}"),
+                    effect=Prompt(role="assistant", content=""),
+                )
+                self.occurrences.append(occurrence)
+                self._persist(occurrence)
+                executed = True
             except Exception as e:
-                logger.warning("mind._grow: frontier failed for DNA synthesis, falling back to local model", {"persona_id": self._persona_id, "error": str(e)})
-                new_dna = await local_model.generate(persona.model.name, synthesis)
-        else:
-            new_dna = await local_model.generate(persona.model.name, synthesis)
-        paths.write_dna(persona.id, new_dna)
+                logger.warning("mind._tick: tool error", {"persona_id": self._persona_id, "tool": step.tool, "error": str(e)})
+                occurrence = Occurrence(
+                    cause=Prompt(role="user", content=f"[{step.tool}] failed: {e}"),
+                    effect=Prompt(role="assistant", content=""),
+                )
+                self.occurrences.append(occurrence)
+                self._persist(occurrence)
+                executed = True
 
-        dna_items = [line.strip() for line in new_dna.splitlines() if line.strip() and not line.strip().startswith("#")]
-        all_pairs = []
-        for item in dna_items:
-            item_prompt = prompts.grow(dna=item, max_pairs=5)
-            if persona.frontier:
-                try:
-                    response = await frontier.chat(persona.frontier, item_prompt)
-                except Exception as e:
-                    logger.warning("mind._grow: frontier failed for training pair, falling back to local model", {"persona_id": self._persona_id, "error": str(e)})
-                    response = await local_model.generate(persona.model.name, item_prompt, json_mode=True)
-            else:
-                response = await local_model.generate(persona.model.name, item_prompt, json_mode=True)
-            try:
-                parsed = strings.extract_json(response)
-            except json.JSONDecodeError:
-                parsed = {}
-            if parsed and "training_pairs" in parsed:
-                all_pairs.extend(parsed["training_pairs"])
-
-        training_set = json.dumps({"training_pairs": all_pairs}, indent=2)
-        paths.add_training_set(persona.id, training_set)
-
-        await local_inference_engine.fine_tune(persona.base_model, training_set, persona.model.name, persona.id)
-
-        if not await local_inference_engine.check(persona.model.name):
-            raise DNAError("Fine-tuned model failed verification — previous model is still active")
-
-        paths.clear(paths.person_traits(persona.id))
+        if executed:
+            await self._tick()
