@@ -84,7 +84,7 @@ async def reason(persona: Persona, prompt: str, system: str = "") -> dict:
 
     messages.append({"role": "user", "content": prompt})
 
-    return await local_model.chat_json(persona.model.name, messages)
+    return await local_model.stream_chat_json(persona.model.name, messages)
 
 
 def _format_occurrences(occurrences: list[Occurrence]) -> str:
