@@ -9,6 +9,7 @@ shape(persona) composes all three into a single character prompt.
 """
 
 from application.core.data import Persona, Prompt
+from application.core import paths
 
 
 def cornerstone(persona: Persona) -> str:
@@ -62,12 +63,27 @@ def morals(persona: Persona) -> str:
 
 
 def shape(persona: Persona) -> Prompt:
-    """Compose the full character prompt: cornerstone + values + morals."""
-    return Prompt(
-        role="system",
-        content="\n\n".join([
-            f"# Who You Are\n{cornerstone(persona)}",
-            f"# What Sustains and Threatens You\n{values(persona)}",
-            f"# How You Act\n{morals(persona)}",
-        ])
-    )
+    """Compose the full character prompt: cornerstone + values + morals + identities."""
+    sections = [
+        f"# Who You Are\n{cornerstone(persona)}",
+        f"# What Sustains and Threatens You\n{values(persona)}",
+        f"# How You Act\n{morals(persona)}",
+    ]
+
+    person_id = paths.read(paths.person_identity(persona.id))
+    if person_id.strip():
+        sections.append(f"# The Person You Live With\n{person_id.strip()}")
+
+    persona_ctx = paths.read(paths.context(persona.id))
+    if persona_ctx.strip():
+        sections.append(f"# Your Own Context\n{persona_ctx.strip()}")
+
+    dna_content = paths.read(paths.dna(persona.id))
+    if dna_content.strip():
+        sections.append(f"# Who You Have Become\n{dna_content.strip()}")
+
+    briefing = paths.read_history_brief(persona.id, "")
+    if briefing.strip():
+        sections.append(f"# Recent History\n{briefing.strip()}")
+
+    return Prompt(role="system", content="\n\n".join(sections))

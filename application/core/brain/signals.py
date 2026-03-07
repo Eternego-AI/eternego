@@ -1,6 +1,6 @@
 """Signals — classification helpers for threads.
 
-classify(threads)   split into (active, inactive) based on last signal role.
+classify(threads)   split into (active, inactive) based on last occurrence cause role.
 """
 
 from application.core.brain.data import Thread
@@ -9,15 +9,13 @@ from application.core.brain.data import Thread
 def classify(threads: list[Thread]) -> tuple[list[Thread], list[Thread]]:
     """Split threads into (active, inactive).
 
-    Active:   last signal is from user — thread still needs a response.
-    Inactive: last signal is from assistant — thread has been addressed.
+    Active:   last occurrence was user-caused — thread still needs attention.
+    Inactive: last occurrence was assistant-caused — thread has been addressed.
     """
     active, inactive = [], []
     for t in threads:
-        if t.signals and t.signals[-1].prompt.role == "assistant":
-            inactive.append(t)
-        else:
+        if t.occurrences and t.occurrences[-1].cause.role == "user":
             active.append(t)
+        else:
+            inactive.append(t)
     return active, inactive
-
-

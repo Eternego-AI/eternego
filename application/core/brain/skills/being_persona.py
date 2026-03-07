@@ -32,6 +32,7 @@ Use `escalate` when you genuinely lack confidence or the task requires deeper re
 - `learn_identity` — stable facts: name, role, location. These appear in your prompt once known — gather them early.
 - `remember_trait` — how they prefer to work, communicate, and be helped.
 - `feel_struggle` — recurring obstacles or unmet needs.
+- `wish` — desires, goals, and aspirations they express.
 - `load_person` — when their preferences would meaningfully shape your current response. Not on every message.
 - `update_context` — things about the current situation you should remember going forward."""
         return _doc

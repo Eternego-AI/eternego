@@ -1,10 +1,10 @@
 """Current — the present state injected as context into every reasoning call.
 
-time()                   — current date and time as readable text.
-environment()            — the operating system and platform.
-tools(meaning)           — Tool instances filtered by meaning (or all if None).
-skills(persona, meaning) — Skill instances filtered by meaning (or all if None).
-situation(persona)       — all combined as string; pass as the system param to ego.reason.
+time()                                  — current date and time as readable text.
+environment()                           — the operating system and platform.
+tools(selected)                         — Tool instances filtered by name list (or all if None).
+skills(persona, selected)               — Skill instances filtered by name list (or all if None).
+situation(persona, tool_names, skill_names) — all combined as string; pass as system param to ego.reason.
 """
 
 from application.core.brain.data import Tool, Skill
@@ -21,31 +21,28 @@ def environment() -> str:
     return f"Environment: {os_name}"
 
 
-def tools(meaning=None) -> list[Tool]:
+def tools(selected: list[str] | None = None) -> list[Tool]:
     from application.core.brain import tools as brain_tools
-    selected = meaning.tools if meaning is not None else None
     return [
         t for t in brain_tools.all_tools()
         if selected is None or t.name in selected
     ]
 
 
-def skills(persona, meaning=None) -> list[Skill]:
+def skills(persona, selected: list[str] | None = None) -> list[Skill]:
     from application.core.brain import skills as brain_skills
-    selected = meaning.skills if meaning is not None else None
     if selected:
         return [s for s in brain_skills.all_skills() if s.name in selected]
     return brain_skills.all_skills()
 
 
-def situation(persona, meaning=None) -> str:
-    tool_list = tools(meaning)
-    skill_list = skills(persona, meaning)
-    selected_skills = meaning.skills if meaning is not None else None
+def situation(persona, tool_names: list[str] | None = None, skill_names: list[str] | None = None) -> str:
+    tool_list = tools(tool_names)
+    skill_list = skills(persona, skill_names)
 
     tool_instructions = [t.instruction for t in tool_list if t.instruction]
 
-    if selected_skills:
+    if skill_names:
         skill_parts = [s.execution()(persona) for s in skill_list]
         skills_section = "# Skills\n\n" + "\n\n---\n\n".join(skill_parts) if skill_parts else ""
     else:

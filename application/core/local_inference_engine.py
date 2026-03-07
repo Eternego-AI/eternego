@@ -79,7 +79,7 @@ async def register(model_name: str, base_model: str) -> None:
     """
     logger.info("Registering model", {"model_name": model_name, "base_model": base_model})
     try:
-        await ollama.post("/api/create", {"name": model_name, "modelfile": f"FROM {base_model}"})
+        await ollama.post("/api/create", {"model": model_name, "from": base_model, "stream": False})
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
@@ -130,8 +130,10 @@ async def fine_tune(base_model: str, training_set: str, model_name: str, persona
         await asyncio.to_thread(lora.train, hf_model_id, training_pairs, output_gguf, str(adapter_dir))
 
         await ollama.post("/api/create", {
-            "name": model_name,
-            "modelfile": f"FROM {base_model}\nADAPTER {output_gguf}",
+            "model": model_name,
+            "from": base_model,
+            "adapters": {"path": output_gguf},
+            "stream": False,
         })
     except ImportError as e:
         raise EngineConnectionError(f"Fine-tuning dependencies not installed: {e}") from e

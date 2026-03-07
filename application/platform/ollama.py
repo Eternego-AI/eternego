@@ -28,6 +28,8 @@ async def post(path: str, data: dict) -> dict:
         response.raise_for_status()
         body = response.text.strip()
         return response.json() if body else {}
+    except httpx.HTTPStatusError as e:
+        raise ConnectionError(f"Ollama API error {e.response.status_code}: {e.response.text}") from e
     except httpx.RequestError as e:
         raise ConnectionError(f"Could not reach Ollama: {e}") from e
 

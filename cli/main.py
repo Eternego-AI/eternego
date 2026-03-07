@@ -56,15 +56,18 @@ def cmd_service_restart(_):
         cmd_service_start(None)
 
 def cmd_service_status(_):
-    if _OS == "Linux":
-        subprocess.run(["systemctl", "--user", "status", "eternego"])
-    elif _OS == "Darwin":
-        subprocess.run(["launchctl", "list", "com.eternego"])
-    elif _OS == "Windows":
-        subprocess.run([
-            "powershell", "-Command",
-            "Get-ScheduledTask -TaskName Eternego | Get-ScheduledTaskInfo",
-        ])
+    try:
+        if _OS == "Linux":
+            subprocess.run(["systemctl", "--user", "status", "eternego"])
+        elif _OS == "Darwin":
+            subprocess.run(["launchctl", "list", "com.eternego"])
+        elif _OS == "Windows":
+            subprocess.run([
+                "powershell", "-Command",
+                "Get-ScheduledTask -TaskName Eternego | Get-ScheduledTaskInfo",
+            ])
+    except KeyboardInterrupt:
+        pass
 
 def cmd_service_logs(_):
     from config.application import LOG_FILE

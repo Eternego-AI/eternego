@@ -47,7 +47,8 @@ async def chat_completions(request: ChatRequest):
     if not user_messages:
         raise HTTPException(status_code=400, detail="No user message in request.")
 
-    outcome = await persona.query(live, user_messages[-1].content)
+    from application.core.data import Message
+    outcome = await persona.talk(live, Message(channel=None, content=user_messages[-1].content))
     if not outcome.success:
         raise HTTPException(status_code=500, detail=outcome.message)
 

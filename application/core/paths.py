@@ -45,6 +45,11 @@ def struggles(persona_id: str) -> Path:
     return home(persona_id) / "struggles.md"
 
 
+def wishes(persona_id: str) -> Path:
+    """Path to the wishes.md file for that persona."""
+    return home(persona_id) / "wishes.md"
+
+
 def memory(persona_id: str) -> Path:
     """Path to the memory.json file for that persona."""
     return home(persona_id) / "memory.json"
@@ -287,6 +292,12 @@ def add_struggles(persona_id: str, content: str) -> None:
     """Append text content to the persona's person-struggles.md file."""
     logger.info("Adding struggles", {"persona_id": persona_id})
     filesystem.append(struggles(persona_id), content)
+
+
+def add_wishes(persona_id: str, content: str) -> None:
+    """Append text content to the persona's wishes.md file."""
+    logger.info("Adding wish", {"persona_id": persona_id})
+    filesystem.append(wishes(persona_id), content)
 
 
 def md_list(path: Path, section: str) -> list[str]:

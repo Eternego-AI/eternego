@@ -309,6 +309,27 @@ Return the refined list only — one entry per line, no bullets, no headers, no 
     )
 
 
+def wish_refinement(existing: str, new_items: list[str]) -> str:
+    base = """You are maintaining a list of the person's desires, goals, and aspirations.
+
+## Existing Wishes
+
+{existing}
+
+## New Observations
+
+{new_items}
+
+Merge the new observations into the existing list. Combine wishes that express the same underlying desire. Remove duplicates. Keep distinct aspirations separate. Focus on what the person genuinely wants — not tasks, but real desires and goals.
+
+Return the refined list only — one entry per line, no bullets, no headers, no explanation."""
+
+    return base.format(
+        existing=existing or "(none yet)",
+        new_items="\n".join(new_items),
+    )
+
+
 def context_refinement(existing: str, new_items: list[str]) -> str:
     base = """You are maintaining a context document that captures what a persona knows about its own situation and working relationship with the person.
 

@@ -26,7 +26,7 @@ class _Say(Tool):
             if channel is None:
                 return "failed: no active channels found"
             await channels.send(channel, text)
-            return f"message sent"
+            return f"said: {text}"
         return _run
 
 

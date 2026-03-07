@@ -25,7 +25,7 @@ class _Clarify(Tool):
             if channel is None:
                 return "failed: no active channels found"
             await channels.send(channel, text)
-            return "clarification requested"
+            return f"asked: {text}"
         return _run
 
 

@@ -75,13 +75,16 @@ def default_channel(persona: Persona) -> Channel | None:
 
 
 async def express_thinking(persona: Persona) -> None:
-    """Signal to the default channel that the persona is working on something."""
-    channel = default_channel(persona)
+    """Signal to the active channel that the persona is working on something."""
+    channel = latest(persona) or default_channel(persona)
     if channel is None:
         return
     if channel.type == "telegram":
         token = (channel.credentials or {})["token"]
-        await asyncio.to_thread(telegram.typing_action, token=token, chat_id=channel.name)
+        try:
+            await asyncio.to_thread(telegram.typing_action, token=token, chat_id=channel.name)
+        except Exception:
+            pass
 
 
 async def send(channel: Channel, text: str) -> None:

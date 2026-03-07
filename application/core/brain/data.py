@@ -1,64 +1,42 @@
 """Data — the brain's core data types.
 
-Signal     — a raw input arriving in presence (role + content + channel + timestamp)
-Thread     — a group of related signals with a title, produced by realize
-Perception — a thread ordered by priority, produced by understand
-Meaning    — selected tools and skills for a perception
-Experience — a perception paired with its meaning, ready for thinking and execution
-Step       — a single tool invocation with parameters
-Tool       — base class for persona capabilities
-Skill      — base class for persona knowledge documents
-Thinking   — abstract base for cognitive modes (Normal, Rethink, Wakeup, Sleep)
+Occurrence  — a cause+effect pair: one exchange between person and persona
+Thread      — a group of related occurrences with a title, produced by realize
+Perception  — a thread with impression and result, produced by understand and close
+Thought     — a perception paired with a plan (list of Steps)
+Step        — a single tool invocation with parameters
+Tool        — base class for persona capabilities
+Skill       — base class for persona knowledge documents
 """
 
 import secrets
-from abc import ABC
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from application.core.data import Persona, Prompt, Channel
+from application.core.data import Persona, Prompt
 from application.platform import datetimes
 
 
 @dataclass
-class Signal:
-    prompt: Prompt
-    channel: Channel | None = None
+class Occurrence:
+    cause: Prompt
+    effect: Prompt
     created_at: datetime = field(default_factory=datetimes.now)
     id: str = field(default_factory=lambda: secrets.token_hex(4))
 
 
 @dataclass
 class Thread:
-    signals: list[Signal]
+    occurrences: list[Occurrence]
     title: str = ""
     id: str = field(default_factory=lambda: secrets.token_hex(4))
 
 
 @dataclass
-class Meaning:
-    title: str
-    tools: list[str] = field(default_factory=list)
-    skills: list[str] = field(default_factory=list)
-    path: list["Step"] = field(default_factory=list)
-
-
-@dataclass
 class Perception:
     thread: Thread
-    order: int
-
-
-@dataclass
-class Thought:
-    meaning: Meaning
-    steps: list[Step]
-
-
-@dataclass
-class Experience:
-    perception: Perception
-    meaning: Meaning
+    impression: str
+    result: str = ""
 
 
 @dataclass
@@ -66,6 +44,12 @@ class Step:
     number: int
     tool: str
     params: dict
+
+
+@dataclass
+class Thought:
+    perception: Perception
+    steps: list[Step]
 
 
 class Tool:
@@ -89,22 +73,6 @@ class Tool:
     def execution(self, **params):
         """Return an async callable that runs this tool: async (persona) -> str."""
         raise NotImplementedError(f"{self.__class__.__name__}.execution not implemented")
-
-
-class Thinking(ABC):
-    """Abstract base for all cognitive modes."""
-
-    async def understanding(self, persona: Persona, threads: list["Thread"]) -> list["Perception"] | None:
-        """Return ordered perceptions to act on, or None to skip the cycle."""
-        return None
-
-    async def focus(self, persona: Persona, perception: "Perception", closed: list["Thread"] | None = None) -> "Meaning":
-        """Select the relevant tools and skills for this perception."""
-        return Meaning(perception.thread.title)
-
-    async def decide(self, persona: Persona, perception: "Perception", meaning: "Meaning", closed: list["Thread"] | None = None) -> "Thought | None":
-        """Plan the steps needed to address a perception."""
-        return None
 
 
 class Skill:
