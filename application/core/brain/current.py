@@ -16,7 +16,7 @@ def time() -> str:
     return (
         f"Current time: {now.strftime('%A, %B %d, %Y %H:%M UTC')}\n"
         "Timezone: Before scheduling reminders or events, confirm the person's timezone from their identity. "
-        "If unknown, use clarify to ask first, then record it with learn_identity. "
+        "If unknown, ask the person first, then record it with learn_identity. "
         "Pass their local time and timezone to the tool — it handles the UTC conversion."
     )
 
@@ -28,10 +28,15 @@ def environment() -> str:
 
 def tools(selected: list[str] | None = None) -> list[Tool]:
     from application.core.brain import tools as brain_tools
-    return [
-        t for t in brain_tools.all_tools()
-        if selected is None or t.name in selected
-    ]
+    if selected is None:
+        return brain_tools.all_tools()
+    # Use for_name so meaning_only tools get their instructions included when explicitly selected
+    result = []
+    for name in selected:
+        t = brain_tools.for_name(name)
+        if t is not None:
+            result.append(t)
+    return result
 
 
 def skills(persona, selected: list[str] | None = None) -> list[Skill]:

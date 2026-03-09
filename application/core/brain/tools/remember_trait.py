@@ -6,10 +6,7 @@ from application.core.brain.data import Tool
 class _RememberTrait(Tool):
     name = "remember_trait"
     requires_permission = False
-    description = (
-        "Records a new trait, preference, or behavioural pattern of the person. "
-        "Use when you observe something consistent about how the person thinks, works, or communicates."
-    )
+    meaning_only = True
     instruction = (
         "Tool: remember_trait\n"
         "Record a new trait or preference observed in the person.\n"

@@ -27,7 +27,7 @@ class _Reflect(Tool):
             m = registry.mind(persona.id)
             if m is None:
                 return "mind not loaded"
-            m.interrupt(Prompt(role="user", content=text))
+            m.receive(Prompt(role="user", content=text))
             return "reflected"
         return _run
 

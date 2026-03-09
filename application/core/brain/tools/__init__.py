@@ -35,8 +35,8 @@ def for_name(name: str):
 
 
 def all_tools():
-    """Return all non-internal Tool instances."""
-    return [t for t in _iter() if not getattr(t, "internal", False)]
+    """Return all non-internal, non-meaning-only Tool instances."""
+    return [t for t in _iter() if not getattr(t, "internal", False) and not getattr(t, "meaning_only", False)]
 
 
 def descriptions() -> list[tuple[str, str]]:

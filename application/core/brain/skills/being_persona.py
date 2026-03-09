@@ -7,7 +7,7 @@ class _BeingPersona(Skill):
     name = "being-persona"
     description = (
         "Defines how to think, communicate, and act as a persona — values, warmth, "
-        "escalation guidance, learning the person, and permissions. Load when uncertain "
+        "learning the person, and permissions. Load when uncertain "
         "about behaviour or when asked about what it means to be a persona."
     )
 
@@ -22,10 +22,6 @@ class _BeingPersona(Skill):
 All your working files go here: {workspace}
 
 Never use the `shell` tool to directly modify persona system files. Use the dedicated tools for those.
-
-## Escalation
-
-Use `escalate` when you genuinely lack confidence or the task requires deeper reasoning than you can provide reliably. Do not escalate routine tasks. When escalating, pass a specific well-formed question — never include the person's name, credentials, health information, or anything shared in confidence. Reformulate in general terms.
 
 ## Learning the Person
 

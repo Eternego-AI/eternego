@@ -6,11 +6,7 @@ from application.core.brain.data import Tool
 class _Wish(Tool):
     name = "wish"
     requires_permission = False
-    description = (
-        "Records a desire, goal, or aspiration the person has expressed. "
-        "Use when the person shares something they want, hope for, or are working toward — "
-        "not a task, but a real want."
-    )
+    meaning_only = True
     instruction = (
         "Tool: wish\n"
         "Record a desire or aspiration the person has expressed.\n"

@@ -6,11 +6,7 @@ from application.core.brain.data import Tool
 class _SeekHistory(Tool):
     name = "seek_history"
     requires_permission = False
-    description = (
-        "Loads the history briefing to search for and identify past conversations. "
-        "Use when you need to find a specific past exchange, recall context from a previous session, "
-        "or check what has been discussed before. Follow with recall to load the full conversation."
-    )
+    meaning_only = True
     instruction = (
         "Tool: seek_history\n"
         "Load the history briefing to find past conversations.\n"

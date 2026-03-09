@@ -6,10 +6,7 @@ from application.core.brain.data import Tool
 class _FeelStruggle(Tool):
     name = "feel_struggle"
     requires_permission = False
-    description = (
-        "Records a struggle, recurring obstacle, or difficulty the person faces. "
-        "Use when the person describes something they find hard, frustrating, or repeatedly problematic."
-    )
+    meaning_only = True
     instruction = (
         "Tool: feel_struggle\n"
         "Record a struggle or recurring obstacle the person faces.\n"

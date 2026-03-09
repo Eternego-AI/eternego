@@ -6,11 +6,7 @@ from application.core.brain.data import Tool
 class _ReachOut(Tool):
     name = "reach_out"
     requires_permission = False
-    description = (
-        "Sends a message to all active channels simultaneously. "
-        "Use when something is important enough to reach the person through every possible contact point, "
-        "regardless of which channel they are currently using."
-    )
+    meaning_only = True
     instruction = (
         "Tool: reach_out\n"
         "Send a message to every active channel at once.\n"

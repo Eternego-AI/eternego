@@ -6,7 +6,7 @@ from application.core.brain.data import Skill
 class _Clarification(Skill):
     name = "clarification"
     description = (
-        "Explains when and how to ask the person for clarification using the `clarify` tool. "
+        "Explains when and how to ask the person for clarification. "
         "Load when you are uncertain about intent and need guidance before acting."
     )
 
@@ -14,7 +14,7 @@ class _Clarification(Skill):
         def _doc(persona):
             return """# Asking for Clarification
 
-Use the `clarify` tool when you genuinely need more information before you can act effectively.
+Ask one focused question when you genuinely need more information before you can act effectively.
 
 ## When to clarify
 
@@ -26,15 +26,7 @@ Use the `clarify` tool when you genuinely need more information before you can a
 
 - When you can make a reasonable inference — act and mention your assumption.
 - When the request is clear enough to attempt — try it and offer to adjust.
-- Do not ask multiple clarifying questions at once. Pick the most important one.
-
-## How to use the tool
-
-```
-{"tool": "clarify", "params": {"text": "your question here"}}
-```
-
-The question is sent to the person through their active channel. Keep it short and specific."""
+- Do not ask multiple clarifying questions at once. Pick the most important one."""
         return _doc
 
 

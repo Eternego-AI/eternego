@@ -6,11 +6,7 @@ from application.core.brain.data import Tool
 class _LoadPerson(Tool):
     name = "load_person"
     requires_permission = False
-    description = (
-        "Loads the known facts and traits about the person into context. "
-        "Use when you need information about the person to personalise your response, "
-        "recall their preferences, or understand their situation."
-    )
+    meaning_only = True
     instruction = (
         "Tool: load_person\n"
         "Load known facts and traits about the person.\n"

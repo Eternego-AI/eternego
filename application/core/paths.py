@@ -90,6 +90,21 @@ def mind(persona_id: str) -> Path:
     return home(persona_id) / "mind.json"
 
 
+def mind_state(persona_id: str) -> Path:
+    """Path to the cognitive memory graph for that persona."""
+    return home(persona_id) / "mind" / "memory.json"
+
+
+def conscious_state(persona_id: str) -> Path:
+    """Path to the conscious state file — persisted reality for that persona."""
+    return home(persona_id) / "mind" / "conscious.json"
+
+
+def subconscious_queue(persona_id: str) -> Path:
+    """Path to the subconscious queue file — persisted execution queue for that persona."""
+    return home(persona_id) / "mind" / "queue.json"
+
+
 def permissions(persona_id: str) -> Path:
     """Path to the permissions.json file for that persona."""
     return home(persona_id) / "permissions.json"
@@ -178,40 +193,51 @@ def append_as_string(path: Path, content: str) -> None:
 
 
 def meanings(persona_id: str) -> Path:
-    """Directory where meaning tool-history files are stored."""
+    """Directory where persona-specific meaning JSON files are stored."""
     return home(persona_id) / "meanings"
 
 
-def append_meaning_path(persona_id: str, title: str, tools: list[str], steps: list) -> None:
-    """Append one observed iteration (tools + path with params) to the meaning file as a JSON line."""
+def experiences(persona_id: str) -> Path:
+    """Directory where experience JSONL files are stored (one per meaning)."""
+    return home(persona_id) / "experiences"
+
+
+def save_persona_meaning(persona_id: str, meaning) -> None:
+    """Save a persona-specific meaning as a JSON file (overwrites existing)."""
     import json
-    file = meanings(persona_id) / f"{title}.json"
+    import re
+    safe_name = re.sub(r"[^\w\s-]", "", meaning.name.lower()).strip().replace(" ", "-")[:60]
+    file = meanings(persona_id) / f"{safe_name}.json"
     file.parent.mkdir(parents=True, exist_ok=True)
-    entry = {"tools": tools, "path": [{"tool": s.tool, "params": s.params} for s in steps]}
+    raw_path = getattr(meaning, "path", None)
+    serialized_path = None
+    if isinstance(raw_path, list):
+        serialized_path = [
+            {"tool": ps.tool, "params": ps.params, "section": getattr(ps, "section", 1)}
+            for ps in raw_path
+        ]
+    data = {
+        "name": meaning.name,
+        "definition": meaning.definition,
+        "purpose": meaning.purpose,
+        "reply": getattr(meaning, "reply", None),
+        "skills": meaning.skills,
+        "path": serialized_path,
+        "origin": getattr(meaning, "origin", "user"),
+    }
+    filesystem.write(file, json.dumps(data, indent=2))
+
+
+def append_experience(persona_id: str, meaning_name: str, signals_text: str, plan: list) -> None:
+    """Append one experience entry (conversation + plan) to the meaning's experience file."""
+    import json
+    import re
+    safe_name = re.sub(r"[^\w\s-]", "", meaning_name.lower()).strip().replace(" ", "-")[:60]
+    file = experiences(persona_id) / f"{safe_name}.json"
+    file.parent.mkdir(parents=True, exist_ok=True)
+    entry = {"signals": signals_text, "plan": plan}
     filesystem.append(file, json.dumps(entry) + "\n")
 
-
-def read_meaning(persona_id: str, title: str) -> list[dict]:
-    """Read all recorded iterations for a title.
-
-    Returns a list of {"tools": [...], "path": [{"tool": ..., "params": {...}}, ...]} dicts,
-    oldest first. Returns empty list if no file exists.
-    """
-    import json
-    file = meanings(persona_id) / f"{title}.json"
-    content = read(file)
-    if not content:
-        return []
-    entries = []
-    for line in content.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entries.append(json.loads(line))
-        except json.JSONDecodeError:
-            pass
-    return entries
 
 
 def commit_diary(persona_id: str, diary_path: Path) -> None:

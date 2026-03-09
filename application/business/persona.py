@@ -599,9 +599,7 @@ async def connect(persona: Persona, channel: Channel) -> Outcome:
         async def on_message(message: Message) -> Outcome:
             if channel.verified_at is not None:
                 outcome = await talk(persona, message)
-                if message.channel:
-                    text = outcome.data["response"] if outcome.success else outcome.message
-                    await channels.send(message.channel, text)
+                # say tool handles delivery to the channel directly
                 return outcome
 
             outcome = await pair(persona, message.channel)
@@ -643,7 +641,8 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
 
 
 async def talk(persona: Persona, message: Message) -> Outcome[dict]:
-    """Receive a message, trigger the mind, deliver the response via the channel."""
+    """Receive a message, trigger the mind tick, return when say tool responds (web) or fire-and-forget (push channels)."""
+    import asyncio
     await bus.propose("Talking", {"persona": persona, "channel": message.channel})
     try:
         m = registry.mind(persona.id)
@@ -651,12 +650,18 @@ async def talk(persona: Persona, message: Message) -> Outcome[dict]:
             return Outcome(success=False, message="Mind not loaded.")
         if message.channel:
             channels.set_latest(persona, message.channel)
-        response = await m.answer(Prompt(role="user", content=message.content))
+        m.receive(Prompt(role="user", content=message.content), verbosity="conversational")
+        # For channels with a bus (web), wait for the say tool to push the response
+        if message.channel and message.channel.bus is not None:
+            try:
+                response = await asyncio.wait_for(message.channel.bus.get(), timeout=30.0)
+            except asyncio.TimeoutError:
+                response = ""
+            await bus.broadcast("Talked", {"persona": persona})
+            return Outcome(success=True, message="", data={"response": response})
+        # For push channels (Telegram), the say tool handles delivery directly
         await bus.broadcast("Talked", {"persona": persona})
-        return Outcome(success=True, message="", data={"response": response})
-    except EngineConnectionError as e:
-        await bus.broadcast("Talk failed", {"persona": persona, "error": str(e)})
-        return Outcome(success=False, message="Could not reach the model.")
+        return Outcome(success=True, message="", data={"response": ""})
     except MindError as e:
         logger.warning("talk: mind error", {"persona_id": persona.id, "error": str(e)})
         await bus.broadcast("Talk failed", {"persona": persona, "error": str(e)})
@@ -671,7 +676,7 @@ async def nudge(persona: Persona, message: str) -> Outcome[dict]:
         m = registry.mind(persona.id)
         if m is None:
             return Outcome(success=False, message="Mind not loaded.")
-        m.interrupt(Prompt(role="user", content=message))
+        m.receive(Prompt(role="user", content=message), verbosity="silent")
         await bus.broadcast("Persona nudged", {"persona": persona})
         return Outcome(success=True, message="Nudge sent.")
     except MindError as e:
@@ -707,25 +712,63 @@ async def sleep(persona: Persona) -> Outcome[dict]:
         from application.platform import datetimes
 
         m = registry.mind(persona.id)
-        if m is not None and m.occurrences:
-            threads = await ego.realize(persona, m.occurrences)
-            for thread in threads:
-                summary = await ego.recap(persona, thread.occurrences, "")
-                lines = []
-                for o in thread.occurrences:
-                    time = o.created_at.strftime("%Y-%m-%d %H:%M UTC")
-                    lines.append(f"[at {time}]")
-                    lines.append(f"  cause [{o.cause.role}]: {o.cause.content}")
-                    lines.append(f"  effect [{o.effect.role}]: {o.effect.content}")
+        if m is not None:
+            m.stop_tick()  # cancel any running cognitive loop
+            consolidated = 0
+
+            for perception in list(m.memory.perceptions()):
+                title = perception.impression
+                if not title:
+                    try:
+                        sig_text = ego.format_signals(perception.signals)
+                        prompt_str = (
+                            f"Conversation:\n{sig_text}\n\n"
+                            "Give a concise 2-6 word label for the core intent of this conversation. "
+                            "No full sentences.\n"
+                            'Return JSON: {"impression": "..."}'
+                        )
+                        resp = await ego.reason(persona, prompt_str)
+                        title = resp.get("impression", "") if isinstance(resp, dict) else ""
+                    except Exception:
+                        title = "untitled"
+                lines = [
+                    f"[at {s.created_at.strftime('%Y-%m-%d %H:%M UTC')}] {s.role}: {s.data.get('content') or s.data.get('output', '')}"
+                    for s in perception.signals
+                    if s.role in ("user", "assistant", "result")
+                ]
                 timestamp = datetimes.date_stamp(datetimes.now())
-                paths.add_history_entry(persona.id, thread.title or "untitled", "\n".join(lines))
+                paths.add_history_entry(persona.id, title or "untitled", "\n".join(lines))
                 paths.add_history_briefing(
                     persona.id,
                     "| Date | Recap | File |",
-                    f"| {timestamp} | {summary} | {thread.title}-{timestamp}.md |",
+                    f"| {timestamp} | {title} | {title}-{timestamp}.md |",
                 )
+                consolidated += 1
+
+            # Also save any signals not yet grouped into a perception (non-information)
+            standalone = [
+                s for s in m.memory.signals()
+                if s.role != "information"
+                and not m.memory.has_outgoing(s.id, "perceived_as")
+            ]
+            if standalone:
+                lines = [
+                    f"[at {s.created_at.strftime('%Y-%m-%d %H:%M UTC')}] {s.role}: {s.data.get('content') or s.data.get('output', '')}"
+                    for s in standalone
+                    if s.role in ("user", "assistant", "result")
+                ]
+                timestamp = datetimes.date_stamp(datetimes.now())
+                paths.add_history_entry(persona.id, "interrupted", "\n".join(lines))
+                paths.add_history_briefing(
+                    persona.id,
+                    "| Date | Recap | File |",
+                    f"| {timestamp} | (interrupted) | interrupted-{timestamp}.md |",
+                )
+                consolidated += 1
+
+            if consolidated > 0:
+                logger.info("sleep: consolidated", {"persona_id": persona.id, "threads": consolidated})
             m.clear()
-            logger.info("sleep: consolidated", {"persona_id": persona.id, "threads": len(threads)})
 
         grow_outcome = await grow(persona)
         if not grow_outcome.success:

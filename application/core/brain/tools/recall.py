@@ -6,10 +6,7 @@ from application.core.brain.data import Tool
 class _Recall(Tool):
     name = "recall"
     requires_permission = False
-    description = (
-        "Loads a specific past conversation from history by filename. "
-        "Use after seek_history has identified the right file to retrieve the full content."
-    )
+    meaning_only = True
     instruction = (
         "Tool: recall\n"
         "Load a specific past conversation from history by filename.\n"
