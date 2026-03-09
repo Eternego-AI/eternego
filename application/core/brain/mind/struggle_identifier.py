@@ -47,7 +47,7 @@ async def run(data: dict | None, memory: Memory, persona: Persona) -> bool:
     if data is not None:
         struggles = data.get("struggles", []) if isinstance(data, dict) else []
         if struggles:
-            paths.add_struggles(persona.id, "\n".join(struggles) + "\n")
+            paths.append_as_string(paths.struggles(persona.id), "\n".join(struggles) + "\n")
 
     for s in pending:
         s.processed_at = now

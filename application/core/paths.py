@@ -95,16 +95,6 @@ def mind_state(persona_id: str) -> Path:
     return home(persona_id) / "mind" / "memory.json"
 
 
-def conscious_state(persona_id: str) -> Path:
-    """Path to the conscious state file — persisted reality for that persona."""
-    return home(persona_id) / "mind" / "conscious.json"
-
-
-def subconscious_queue(persona_id: str) -> Path:
-    """Path to the subconscious queue file — persisted execution queue for that persona."""
-    return home(persona_id) / "mind" / "queue.json"
-
-
 def permissions(persona_id: str) -> Path:
     """Path to the permissions.json file for that persona."""
     return home(persona_id) / "permissions.json"
@@ -119,9 +109,11 @@ def workspace(persona_id: str) -> Path:
     """Path to the workspace directory for that persona."""
     return home(persona_id) / "workspace"
 
+
 def notes(persona_id: str) -> Path:
     """Path to the notes directory for that persona."""
     return home(persona_id) / "notes"
+
 
 def dna(persona_id: str) -> Path:
     """Path to the dna.md file for that persona."""
@@ -228,18 +220,6 @@ def save_persona_meaning(persona_id: str, meaning) -> None:
     filesystem.write(file, json.dumps(data, indent=2))
 
 
-def append_experience(persona_id: str, meaning_name: str, signals_text: str, plan: list) -> None:
-    """Append one experience entry (conversation + plan) to the meaning's experience file."""
-    import json
-    import re
-    safe_name = re.sub(r"[^\w\s-]", "", meaning_name.lower()).strip().replace(" ", "-")[:60]
-    file = experiences(persona_id) / f"{safe_name}.json"
-    file.parent.mkdir(parents=True, exist_ok=True)
-    entry = {"signals": signals_text, "plan": plan}
-    filesystem.append(file, json.dumps(entry) + "\n")
-
-
-
 def commit_diary(persona_id: str, diary_path: Path) -> None:
     """Commit the diary entry to git."""
     logger.info("Committing diary entry to git", {"persona_id": persona_id, "diary_path": str(diary_path)})
@@ -297,36 +277,6 @@ def read_json(path: Path) -> dict | None:
         logger.warning("File not found", {"path": str(path)})
         return None
     return filesystem.read_json(path)
-
-
-def append_context(persona_id: str, content: str) -> None:
-    """Append text content to the persona's context file."""
-    logger.info("Appending to context file", {"persona_id": persona_id})
-    filesystem.append(context(persona_id), content)
-
-
-def add_person_identity(persona_id: str, content: str) -> None:
-    """Append text content to the persona's person-identity.md file."""
-    logger.info("Adding person identity", {"persona_id": persona_id})
-    filesystem.append(person_identity(persona_id), content)
-
-
-def add_person_traits(persona_id: str, content: str) -> None:
-    """Append text content to the persona's person-traits.md file."""
-    logger.info("Adding person traits", {"persona_id": persona_id})
-    filesystem.append(person_traits(persona_id), content)
-
-
-def add_struggles(persona_id: str, content: str) -> None:
-    """Append text content to the persona's person-struggles.md file."""
-    logger.info("Adding struggles", {"persona_id": persona_id})
-    filesystem.append(struggles(persona_id), content)
-
-
-def add_wishes(persona_id: str, content: str) -> None:
-    """Append text content to the persona's wishes.md file."""
-    logger.info("Adding wish", {"persona_id": persona_id})
-    filesystem.append(wishes(persona_id), content)
 
 
 def md_list(path: Path, section: str) -> list[str]:

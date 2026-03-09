@@ -13,7 +13,7 @@ class _NotesSkill(Skill):
     def execution(self):
         def _doc(persona):
             from application.core import paths
-            notes_dir = str(paths.home(persona.id) / "notes")
+            notes_dir = str(paths.notes(persona.id))
             return f"""# Notes
 
 Take and retrieve structured notes for the person using the `shell` trait.

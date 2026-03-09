@@ -20,7 +20,7 @@ class _LearnIdentity(Tool):
             logger.debug("learn_identity: recording fact", {"persona_id": persona.id, "fact": fact[:80]})
             if not fact:
                 return "no fact provided"
-            paths.add_person_identity(persona.id, fact + "\n")
+            paths.append_as_string(paths.person_identity(persona.id), fact + "\n")
             return f"recorded: {fact}"
         return _run
 

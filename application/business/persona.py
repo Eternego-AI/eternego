@@ -251,9 +251,9 @@ async def study(persona: Persona, content: str) -> Outcome[dict]:
     prompt = prompts.observation_extraction(content=content)
     response = await local_model.generate_json(persona.model.name, prompt)
 
-    paths.add_person_identity(persona.id, "\n".join(response.get("facts", [])) + "\n")
-    paths.add_person_traits(persona.id, "\n".join(response.get("traits", [])) + "\n")
-    paths.append_context(persona.id, "\n".join(response.get("context", [])) + "\n")
+    paths.append_as_string(paths.person_identity(persona.id), "\n".join(response.get("facts", [])) + "\n")
+    paths.append_as_string(paths.person_traits(persona.id), "\n".join(response.get("traits", [])) + "\n")
+    paths.append_as_string(paths.context(persona.id), "\n".join(response.get("context", [])) + "\n")
 
     await bus.broadcast("Content studied", {"persona": persona})
 
@@ -399,9 +399,9 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
                 person_struggles=paths.read(paths.struggles(persona.id)),
             ))
 
-        paths.add_person_identity(persona.id, "\n".join(response.get("facts", [])) + "\n")
-        paths.add_person_traits(persona.id, "\n".join(response.get("traits", [])) + "\n")
-        paths.add_struggles(persona.id, "\n".join(response.get("struggles", [])) + "\n")
+        paths.append_as_string(paths.person_identity(persona.id), "\n".join(response.get("facts", [])) + "\n")
+        paths.append_as_string(paths.person_traits(persona.id), "\n".join(response.get("traits", [])) + "\n")
+        paths.append_as_string(paths.struggles(persona.id), "\n".join(response.get("struggles", [])) + "\n")
         paths.append_as_string(paths.context(persona.id), "\n".join(response.get("context", [])) + "\n")
 
         await bus.broadcast("Persona fed", {
@@ -449,8 +449,8 @@ async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
             prompts.skill_assessment(skill_source.name, paths.read(skill_file))
         )
 
-        paths.add_person_traits(persona.id, "\n".join(response.get('traits', [])) + "\n")
-        paths.append_context(persona.id, "\n".join(response.get('context', [])) + "\n")
+        paths.append_as_string(paths.person_traits(persona.id), "\n".join(response.get('traits', [])) + "\n")
+        paths.append_as_string(paths.context(persona.id), "\n".join(response.get('context', [])) + "\n")
 
         await bus.broadcast("Persona equipped", {
             "persona": persona,

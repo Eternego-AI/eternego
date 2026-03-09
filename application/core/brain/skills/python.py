@@ -13,7 +13,7 @@ class _PythonSkill(Skill):
     def execution(self):
         def _doc(persona):
             from application.core import paths
-            workspace = str(paths.home(persona.id) / "workspace")
+            workspace = str(paths.workspace(persona.id))
             return f"""# Python
 
 Write a script to workspace then run it — two `shell` trait calls:

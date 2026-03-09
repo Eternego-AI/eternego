@@ -24,7 +24,7 @@ class _Wish(Tool):
             async def _refine():
                 wishes_path = paths.wishes(persona.id)
                 current = paths.read(wishes_path)
-                paths.add_wishes(persona.id, wish + "\n")
+                paths.append_as_string(paths.wishes(persona.id), wish + "\n")
                 refined = await local_model.generate(
                     persona.model.name, prompts.wish_refinement(current, [wish])
                 )

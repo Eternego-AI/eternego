@@ -53,7 +53,7 @@ async def run(data: dict | None, memory: Memory, persona: Persona) -> bool:
     if data is not None:
         facts = data.get("facts", []) if isinstance(data, dict) else []
         if facts:
-            paths.add_person_identity(persona.id, "\n".join(facts) + "\n")
+            paths.append_as_string(paths.person_identity(persona.id), "\n".join(facts) + "\n")
 
     # Mark all pending archive_done signals as processed
     for s in pending:
