@@ -244,30 +244,6 @@ async def create(
         return Outcome(success=False, message="Could not save the persona diary.")
 
 
-async def study(persona: Persona, content: str) -> Outcome[dict]:
-    """It lets your persona study any content you want so it can learn what matters to you."""
-    await bus.propose("Studying content", {"persona": persona})
-
-    prompt = prompts.observation_extraction(content=content)
-    response = await local_model.generate_json(persona.model.name, prompt)
-
-    paths.append_as_string(paths.person_identity(persona.id), "\n".join(response.get("facts", [])) + "\n")
-    paths.append_as_string(paths.person_traits(persona.id), "\n".join(response.get("traits", [])) + "\n")
-    paths.append_as_string(paths.context(persona.id), "\n".join(response.get("context", [])) + "\n")
-
-    await bus.broadcast("Content studied", {"persona": persona})
-
-    return Outcome(
-        success=True,
-        message="Content studied successfully",
-        data={
-            "persona_id": persona.id,
-            "facts": response.get("facts"),
-            "traits": response.get("traits"),
-            "context": response.get("context"),
-        },
-    )
-
 async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
     """It enables you to migrate your persona so nothing is ever lost."""
     await bus.propose("Migrating persona", {"diary_path": diary_path, "model": model})
@@ -303,14 +279,6 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
         await local_inference_engine.register(persona.model.name, model)
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
-
-        dna_structure = paths.read(paths.dna(persona.id))
-
-        outcome = await study(persona, dna_structure)
-        if not outcome.success:
-            await delete(persona)
-            await bus.broadcast("Persona migration failed", {"reason": "study", "persona": persona})
-            return outcome
 
         await system.save_phrases(persona, phrase)
 
@@ -358,13 +326,6 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
 
         await bus.broadcast("Persona migration failed", {"reason": "person", "error": str(e)})
         return Outcome(success=False, message="Could not save person observations during migration.")
-
-    except DNAError as e:
-        if persona is not None:
-            await delete(persona)
-
-        await bus.broadcast("Persona migration failed", {"reason": "dna", "error": str(e)})
-        return Outcome(success=False, message="Could not read persona DNA. The diary may be from an older version.")
 
     except EngineConnectionError as e:
         if persona is not None:

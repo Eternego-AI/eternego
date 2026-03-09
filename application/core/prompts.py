@@ -106,41 +106,6 @@ Return ONLY valid JSON:
     )
 
 
-def observation_extraction(content: str) -> str:
-    base = """# Observation Extraction
-
-Analyze the following document and extract all meaningful observations about the person it describes.
-
-## Document
-
-{content}
-
-## Categories
-
-1. **fact** — Concrete information about the person: names, dates, places, relationships, possessions, job details.
-
-2. **trait** — Behavioral preference or pattern: communication style, tool preferences, work habits, decision-making patterns.
-
-3. **context** — Understanding about the person's situation: current projects, relationship dynamics. Write from first person ("My person...", "I know that...").
-
-## Rules
-
-- Extract everything meaningful. Be thorough.
-- Preserve all facts, especially names, dates, and relationships.
-- Be faithful to the content. Do not infer beyond what is written.
-
-## Output
-
-Return ONLY valid JSON:
-
-{{
-  "facts": ["Person is a software engineer in Amsterdam"],
-  "traits": ["Prefers Domain-Driven Design for software architecture"],
-  "context": ["My person values portability and vendor independence"]
-}}"""
-    return base.format(content=content)
-
-
 def grow(dna: str, max_pairs: int = 500) -> str:
     base = """# Training Data Generation
 
