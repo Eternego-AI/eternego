@@ -351,6 +351,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     """It lets you feed your persona with your existing AI history so it can know you faster."""
     await bus.propose("Feeding persona", {"persona": persona, "source": source})
 
+    # TODO: Upon having a working learn module, this can be passed as a signal for learning.
     try:
         response = await local_model.generate_json(persona.model.name, prompts.extraction(
                 conversations=await frontier.read(data, source),
