@@ -115,6 +115,14 @@ def training_set(persona_id: str) -> Path:
     return home(persona_id) / "training"
 
 
+def workspace(persona_id: str) -> Path:
+    """Path to the workspace directory for that persona."""
+    return home(persona_id) / "workspace"
+
+def notes(persona_id: str) -> Path:
+    """Path to the notes directory for that persona."""
+    return home(persona_id) / "notes"
+
 def dna(persona_id: str) -> Path:
     """Path to the dna.md file for that persona."""
     return home(persona_id) / "dna.md"
@@ -147,18 +155,10 @@ def diary(persona_id: str) -> Path:
     return eternego_home() / "diary" / persona_id
 
 
-def create_home(persona_id: str) -> None:
-    """Create the home directory for a persona."""
-    logger.info("Creating home directory for persona", {"persona_id": persona_id})
-    (personas_home() / persona_id).mkdir(parents=True, exist_ok=True)
+def create_directory(path: Path) -> None:
+    logger.info("Create a directory", {"path": path.name})
 
-
-def create_directories(persona_id: str, directories: list[str]) -> None:
-    """Create the directory structure for a persona."""
-    logger.info("Creating directories for persona", {"persona_id": persona_id})
-    base = home(persona_id)
-    for subdir in directories:
-        (base / subdir).mkdir(parents=True, exist_ok=True)
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def save_as_json(persona_id: str, path: Path, content) -> None:

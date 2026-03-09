@@ -75,10 +75,10 @@ async def find(persona_id: str) -> Outcome[dict]:
 async def loaded(persona_id: str) -> Outcome[dict]:
     """Return the live persona from the in-process registry."""
     from application.core import registry
-    p = registry.get_persona(persona_id)
-    if p is None:
+    persona = registry.get_persona(persona_id)
+    if persona is None:
         return Outcome(success=False, message=f"Persona '{persona_id}' is not running.")
-    return Outcome(success=True, message="", data={"persona": p})
+    return Outcome(success=True, message="", data={"persona": persona})
 
 
 async def running() -> Outcome[dict]:
@@ -144,15 +144,15 @@ async def create(
 
         await local_inference_engine.register(persona.model.name, model)
 
-        paths.create_home(persona.id)
-        paths.create_directories(persona.id, [
-            "skills",
-            "history",
-            "destiny",
-            "training",
-            "workspace"
-            ,"notes"
-        ])
+        paths.create_directory(paths.home(persona.id))
+        paths.create_directory(paths.skills(persona.id))
+        paths.create_directory(paths.history(persona.id))
+        paths.create_directory(paths.destiny(persona.id))
+        paths.create_directory(paths.training_set(persona.id))
+        paths.create_directory(paths.workspace(persona.id))
+        paths.create_directory(paths.notes(persona.id))
+        paths.create_directory(paths.meanings(persona.id))
+        paths.create_directory(paths.experiences(persona.id))
 
         basic_skills = "\n".join(s.description for s in skills.basics())
         paths.save_as_string(paths.context(persona.id), basic_skills)
