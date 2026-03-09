@@ -4,7 +4,8 @@ import asyncio
 import threading
 from collections.abc import Callable
 
-from application.platform import logger, telegram
+from application.core import paths
+from application.platform import logger, telegram, datetimes
 from application.core.data import Channel, Message, Persona
 from application.core.exceptions import ChannelError
 
@@ -88,3 +89,7 @@ async def send(channel: Channel, text: str) -> None:
     else:
         await channel.bus.put(text)
 
+def verify(persona: Persona, channel: Channel, name: str) -> None:
+    channel.name = name
+    channel.verified_at = datetimes.iso_8601(datetimes.now())
+    paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)

@@ -1,9 +1,8 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
-from application.core import bus, registry, system, local_inference_engine, paths
+from application.core import bus, registry, system, local_inference_engine, paths, channels
 from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, HardwareError, RegistryError
 from application.business.outcome import Outcome
-from application.platform import datetimes
 
 
 async def prepare(model: str | None = None) -> Outcome[dict]:
@@ -75,9 +74,7 @@ async def pair(code: str) -> Outcome[dict]:
             await bus.broadcast("Pairing failed", {"code": code, "reason": "already_verified"})
             return Outcome(success=False, message="This channel is already verified.")
 
-        channel.name = channel_name
-        channel.verified_at = datetimes.iso_8601(datetimes.now())
-        paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
+        channels.verify(persona, channel, channel_name)
 
         await bus.broadcast("Channel paired", {"persona_id": persona.id, "channel": channel.name})
         return Outcome(success=True, message="Channel paired successfully", data={"persona_id": persona.id, "channel": channel.name})
