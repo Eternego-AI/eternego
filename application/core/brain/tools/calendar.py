@@ -6,7 +6,6 @@ from application.core.brain.data import Tool
 class _Calendar(Tool):
     name = "calendar"
     requires_permission = False
-    meaning_only = True
     instruction = (
         "Tool: calendar\n"
         "Get all pending scheduled events.\n"

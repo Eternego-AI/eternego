@@ -23,6 +23,7 @@ from application.platform import logger, filesystem
 
 def effect(persona: Persona) -> str:
     """Build the system prompt from character (cornerstone + values + morals + identities)."""
+    # TODO: Add briefing history here
     return character.shape(persona).content
 
 

@@ -26,7 +26,7 @@ def environment() -> str:
 def tools(selected: list[str] | None = None) -> list[Tool]:
     from application.core.brain import tools as brain_tools
     if selected is None:
-        return brain_tools.all_tools()
+        return [brain_tools.all_tools()]
 
     result = []
     for name in selected:

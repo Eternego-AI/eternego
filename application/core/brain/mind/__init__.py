@@ -55,21 +55,17 @@ class Mind:
 
     def receive(self, prompt: Prompt, verbosity: str = "conversational") -> None:
         """Add a user signal to memory and start the tick loop."""
-        signal = Signal(
-            role="user",
-            data={"content": prompt.content, "verbosity": verbosity},
-        )
+        logger.info("mind.receive", {"persona_id": self._persona_id, "verbosity": verbosity, "content": prompt.content[:60]})
+
+        signal = Signal(role="user", data={"content": prompt.content, "verbosity": verbosity})
         self.memory.add_node(signal)
         self.memory.persist()
-        logger.info("mind.receive", {
-            "persona_id": self._persona_id,
-            "verbosity": verbosity,
-            "content": prompt.content[:60],
-        })
         self._ensure_tick().start()
 
     async def reply(self, text: str) -> None:
         """Send text to the person via the latest channel."""
+        logger.info("mind.reply", {"persona_id": self._persona_id, "text": text[:80]})
+
         from application.core import channels
         persona = self._persona
         if persona is None:
@@ -77,10 +73,12 @@ class Mind:
         channel = channels.latest(persona) or channels.default_channel(persona)
         if channel:
             await channels.send(channel, text)
-        logger.debug("mind.reply", {"persona_id": self._persona_id, "text": text[:80]})
+
 
     async def archive(self, perception: Perception, recap: str | None = None) -> None:
         """Save conversation to history, clean memory, produce archive_done signal."""
+        logger.debug("Archiving a conversation", {"persona_id": self._persona_id, "perception_id": perception.id, "text": recap[:80]})
+
         from application.core import paths
         from application.platform import datetimes as dt_module
 
@@ -108,12 +106,6 @@ class Mind:
             filename = f"{label}-{timestamp}.md"
         else:
             filename = f"{label}.md"
-
-        logger.info("mind.archive", {
-            "persona_id": self._persona_id,
-            "perception_id": perception.id,
-            "recap": (recap or "")[:60],
-        })
 
         # Remove all signals with perceived_as edge to this perception
         signal_ids = [
