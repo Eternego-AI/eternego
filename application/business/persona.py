@@ -3,7 +3,7 @@ from pathlib import Path
 
 from application.core import bus, channels, gateways, frontier, system, registry, \
     local_model, local_inference_engine, prompts, paths
-from application.core.brain import mind, skills
+from application.core.brain import mind
 from application.core.data import Channel, Message, Model, Persona, Prompt
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
@@ -145,7 +145,6 @@ async def create(
         await local_inference_engine.register(persona.model.name, model)
 
         paths.create_directory(paths.home(persona.id))
-        paths.create_directory(paths.skills(persona.id))
         paths.create_directory(paths.history(persona.id))
         paths.create_directory(paths.destiny(persona.id))
         paths.create_directory(paths.training_set(persona.id))
@@ -153,9 +152,6 @@ async def create(
         paths.create_directory(paths.notes(persona.id))
         paths.create_directory(paths.meanings(persona.id))
         paths.create_directory(paths.experiences(persona.id))
-
-        built_in_skills = "\n".join(s.description for s in skills.built_in(persona))
-        paths.save_as_string(paths.context(persona.id), built_in_skills)
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
@@ -392,50 +388,6 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     except EngineConnectionError as e:
         await bus.broadcast("Persona feeding failed", {"reason": "connection", "error": str(e)})
         return Outcome(success=False, message="Could not analyze the conversations. Please make sure the model is running.")
-
-
-async def equip(persona: Persona, skill_path: str) -> Outcome[dict]:
-    """It lets you equip your persona with new skills so it can do more for you."""
-    await bus.propose("Equipping persona", {"persona": persona, "skill_path": skill_path})
-
-    if not skill_path.endswith(".md"):
-        await bus.broadcast("Persona equipping failed", {"reason": "invalid_format", "skill_path": skill_path})
-        return Outcome(success=False, message="Skill must be a markdown (.md) file.")
-
-    try:
-        skill_source = Path(skill_path)
-        skill_file = paths.add_to_skills(persona.id, skill_source)
-
-        response = await local_model.generate_json(
-            persona.model.name,
-            prompts.skill_assessment(skill_source.name, paths.read(skill_file))
-        )
-
-        paths.append_as_string(paths.person_traits(persona.id), "\n".join(response.get('traits', [])) + "\n")
-        paths.append_as_string(paths.context(persona.id), "\n".join(response.get('context', [])) + "\n")
-
-        await bus.broadcast("Persona equipped", {
-            "persona": persona,
-            "skill": skill_file.stem,
-        })
-
-        return Outcome(
-            success=True,
-            message="Skill equipped successfully",
-            data={"persona_id": persona.id, "skill": skill_file.stem},
-        )
-
-    except IdentityError as e:
-        await bus.broadcast("Persona equipping failed", {"reason": "identity", "error": str(e)})
-        return Outcome(success=False, message="Could not equip the skill.")
-
-    except PersonError as e:
-        await bus.broadcast("Persona equipping failed", {"reason": "person", "error": str(e)})
-        return Outcome(success=False, message="Could not save person observations from skill.")
-
-    except EngineConnectionError as e:
-        await bus.broadcast("Persona equipping failed", {"reason": "connection", "error": str(e)})
-        return Outcome(success=False, message="Could not assess the skill. Please make sure the model is running.")
 
 
 async def oversee(persona: Persona) -> Outcome[dict]:
