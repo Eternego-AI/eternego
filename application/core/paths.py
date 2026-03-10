@@ -17,7 +17,12 @@ def personas_home() -> Path:
 
 def home(persona_id: str) -> Path:
     """Root directory for a specific persona."""
-    return Path.home() / ".eternego" / "personas" / persona_id
+    return Path.home() / ".eternego" / "personas" / persona_id / "home"
+
+
+def workspace(persona_id: str) -> Path:
+    """Path to the workspace directory for that persona."""
+    return Path.home() / ".eternego" / "personas" / persona_id / "workspace"
 
 
 def persona_identity(persona_id: str) -> Path:
@@ -103,11 +108,6 @@ def permissions(persona_id: str) -> Path:
 def training_set(persona_id: str) -> Path:
     """Path to the training directory for that persona."""
     return home(persona_id) / "training"
-
-
-def workspace(persona_id: str) -> Path:
-    """Path to the workspace directory for that persona."""
-    return home(persona_id) / "workspace"
 
 
 def notes(persona_id: str) -> Path:

@@ -3,18 +3,21 @@
 from application.core.brain.data import Skill
 
 
-class _ShellSkill(Skill):
+class Shell(Skill):
     name = "shell"
     description = (
         "Provides commands and patterns for running shell operations, "
         "managing files, and working within the workspace."
     )
 
-    def execution(self):
-        def _doc(persona):
-            from application.core import paths
-            workspace = str(paths.home(persona.id) / "workspace")
-            return f"""# Shell
+    def __init__(self, persona):
+        super().__init__(persona)
+
+    def document(self):
+        from application.core import paths
+        home = str(paths.home(self.persona.id))
+        workspace = str(paths.workspace(self.persona.id))
+        return f"""# Shell
 
 Use the `shell` trait to run commands:
 
@@ -46,12 +49,6 @@ When a shell result shapes what you say next, use `reflect` after the shell step
 
 ## Caution
 
-Never use shell to directly modify these persona files:
+Never use shell to directly modify any file in {home}
+"""
 
-`context.md`, `person.md`, `traits.md`
-
-Use the tools for those instead."""
-        return _doc
-
-
-skill = _ShellSkill()

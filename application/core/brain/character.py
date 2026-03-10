@@ -78,12 +78,4 @@ def shape(persona: Persona) -> Prompt:
     if persona_ctx.strip():
         sections.append(f"# Your Own Context\n{persona_ctx.strip()}")
 
-    dna_content = paths.read(paths.dna(persona.id))
-    if dna_content.strip():
-        sections.append(f"# Who You Have Become\n{dna_content.strip()}")
-
-    briefing = paths.read_history_brief(persona.id, "")
-    if briefing.strip():
-        sections.append(f"# Recent History\n{briefing.strip()}")
-
     return Prompt(role="system", content="\n\n".join(sections))

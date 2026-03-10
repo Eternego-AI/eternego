@@ -154,8 +154,8 @@ async def create(
         paths.create_directory(paths.meanings(persona.id))
         paths.create_directory(paths.experiences(persona.id))
 
-        basic_skills = "\n".join(s.description for s in skills.basics())
-        paths.save_as_string(paths.context(persona.id), basic_skills)
+        built_in_skills = "\n".join(s.description for s in skills.built_in(persona))
+        paths.save_as_string(paths.context(persona.id), built_in_skills)
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 

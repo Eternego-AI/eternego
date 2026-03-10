@@ -14,6 +14,7 @@ import secrets
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from application.core.data import Persona
 from application.platform import datetimes
 
 
@@ -171,7 +172,7 @@ class Skill:
       instruction: str        — static usage hint (optional)
 
     And implement:
-      execution()             — returns a callable: (persona) -> str (the full skill document)
+      document()             — returns the full skill document
     """
 
     name: str = ""
@@ -179,6 +180,9 @@ class Skill:
     description: str = ""
     instruction: str = ""
 
-    def execution(self):
-        """Return a callable that renders the full skill document: (persona) -> str."""
-        raise NotImplementedError(f"{self.__class__.__name__}.execution not implemented")
+    def __init__(self, persona: Persona):
+        self.persona = persona
+
+    def document(self):
+        """Return the full skill document."""
+        raise NotImplementedError(f"{self.__class__.__name__}.document not implemented")

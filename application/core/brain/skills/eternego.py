@@ -3,18 +3,20 @@
 from application.core.brain.data import Skill
 
 
-class _EternegoSkill(Skill):
+class Eternego(Skill):
     name = "eternego"
     description = (
         "Explains how Eternego works — the service, dashboard, persona files, "
         "channel pairing, and common troubleshooting."
     )
 
-    def execution(self):
-        def _doc(persona):
-            from application.core import paths
-            storage = str(paths.home(persona.id))
-            return f"""# Eternego
+    def __init__(self, persona):
+        super().__init__(persona)
+
+    def document(self):
+        from application.core import paths
+        storage = str(paths.home(self.persona.id))
+        return f"""# Eternego
 
 Eternego runs AI personas on the person's own hardware. Each persona learns from every interaction and stores its knowledge as plain files.
 
@@ -87,7 +89,4 @@ When running commands that produce output you need to report (status, logs, env 
 **Persona seems to have forgotten something**
 - Check `traits.md` and `person.md`
 - Check `history/` — past conversations are archived here after sleep"""
-        return _doc
 
-
-skill = _EternegoSkill()

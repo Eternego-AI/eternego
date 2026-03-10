@@ -11,50 +11,21 @@ for_name(name)      — returns the Skill instance for a given name
 all_skills()        — returns all Skill instances
 descriptions()      — returns [(name, description)] for all skills
 """
-
+import inspect
 import pkgutil
 import importlib
+
+from application.core.brain.data import Skill
+from application.core.data import Persona
 
 _package = "application.core.brain.skills"
 
 
-def _iter():
+def built_in(persona: Persona):
     for _, mod_name, _ in pkgutil.iter_modules(__path__):
-        mod = importlib.import_module(f"{_package}.{mod_name}")
-        s = getattr(mod, "skill", None)
-        if s is not None:
-            yield s
+        module = importlib.import_module(f"{__name__}.{mod_name}")
 
+        for _, obj in inspect.getmembers(module, inspect.isclass):
+            if issubclass(obj, Skill) and obj is not Skill:
+                yield obj(persona)
 
-def for_name(name: str):
-    """Return the Skill instance for the given name, or None if unknown."""
-    for s in _iter():
-        if s.name == name:
-            return s
-    return None
-
-
-def all_skills():
-    """Return all Skill instances."""
-    return list(_iter())
-
-
-def descriptions() -> list[tuple[str, str]]:
-    """Return [(name, description)] for every skill."""
-    return [(s.name, s.description) for s in _iter() if s.description]
-
-
-# Convenience list for built-in skills (populated after module load)
-def basics():
-    """Return the list of built-in Skill instances."""
-    from application.core.brain.skills import (
-        being_persona, shell, python, notes, web_search, eternego,
-    )
-    return [
-        being_persona.skill,
-        shell.skill,
-        python.skill,
-        notes.skill,
-        web_search.skill,
-        eternego.skill,
-    ]

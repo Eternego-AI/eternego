@@ -3,18 +3,20 @@
 from application.core.brain.data import Skill
 
 
-class _WebSearchSkill(Skill):
+class WebSearch(Skill):
     name = "web-search"
     description = (
         "Provides commands for searching the web using DuckDuckGo's API "
         "without requiring an API key."
     )
 
-    def execution(self):
-        def _doc(persona):
-            from application.core import paths
-            workspace = str(paths.home(persona.id) / "workspace")
-            return f"""# Web Search
+    def __init__(self, persona):
+        super().__init__(persona)
+
+    def document(self):
+        from application.core import paths
+        workspace = str(paths.workspace(self.persona.id))
+        return f"""# Web Search
 
 Search using DuckDuckGo's instant answer API — no key required:
 
@@ -47,7 +49,3 @@ Then parse with Python (see `python` skill) or jq:
 - URL-encode spaces as `+` in the query string
 - Add `site:example.com` to restrict to a domain
 - After getting results, use `reflect` to seed the next tick with what you found — then `say` in the following tick with the actual data rather than guessing it at plan time"""
-        return _doc
-
-
-skill = _WebSearchSkill()

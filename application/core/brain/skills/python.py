@@ -3,18 +3,20 @@
 from application.core.brain.data import Skill
 
 
-class _PythonSkill(Skill):
+class Python(Skill):
     name = "python"
     description = (
         "Provides patterns for writing and running Python scripts "
         "for calculations, file processing, and automation."
     )
 
-    def execution(self):
-        def _doc(persona):
-            from application.core import paths
-            workspace = str(paths.workspace(persona.id))
-            return f"""# Python
+    def __init__(self, persona):
+        super().__init__(persona)
+
+    def document(self):
+        from application.core import paths
+        workspace = str(paths.workspace(self.persona.id))
+        return f"""# Python
 
 Write a script to workspace then run it — two `shell` trait calls:
 
@@ -54,7 +56,4 @@ Work with dates:
 from datetime import datetime, timedelta
 print((datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"))
 ```"""
-        return _doc
 
-
-skill = _PythonSkill()

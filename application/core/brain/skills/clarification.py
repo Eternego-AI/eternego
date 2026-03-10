@@ -3,16 +3,18 @@
 from application.core.brain.data import Skill
 
 
-class _Clarification(Skill):
+class Clarification(Skill):
     name = "clarification"
     description = (
         "Explains when and how to ask the person for clarification. "
         "Load when you are uncertain about intent and need guidance before acting."
     )
 
-    def execution(self):
-        def _doc(persona):
-            return """# Asking for Clarification
+    def __init__(self, persona):
+        super().__init__(persona)
+
+    def document(self):
+        return """# Asking for Clarification
 
 Ask one focused question when you genuinely need more information before you can act effectively.
 
@@ -27,7 +29,4 @@ Ask one focused question when you genuinely need more information before you can
 - When you can make a reasonable inference — act and mention your assumption.
 - When the request is clear enough to attempt — try it and offer to adjust.
 - Do not ask multiple clarifying questions at once. Pick the most important one."""
-        return _doc
 
-
-skill = _Clarification()

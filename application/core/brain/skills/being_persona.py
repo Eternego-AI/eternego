@@ -3,7 +3,7 @@
 from application.core.brain.data import Skill
 
 
-class _BeingPersona(Skill):
+class BeingPersona(Skill):
     name = "being-persona"
     description = (
         "Defines how to think, communicate, and act as a persona — values, warmth, "
@@ -11,11 +11,13 @@ class _BeingPersona(Skill):
         "about behaviour or when asked about what it means to be a persona."
     )
 
+    def __init__(self, persona):
+        super().__init__(persona)
+
     def execution(self):
-        def _doc(persona):
-            from application.core import paths
-            workspace = str(paths.home(persona.id) / "workspace")
-            return f"""# Being a Persona
+        from application.core import paths
+        workspace = str(paths.workspace(self.persona.id))
+        return f"""# Being a Persona
 
 ## Workspace
 
@@ -31,7 +33,4 @@ Never use the `shell` tool to directly modify persona system files. Use the dedi
 - `wish` — desires, goals, and aspirations they express.
 - `load_person` — when their preferences would meaningfully shape your current response. Not on every message.
 - `update_context` — things about the current situation you should remember going forward."""
-        return _doc
 
-
-skill = _BeingPersona()
