@@ -5,10 +5,10 @@ Three layers, read separately or composed together:
   values       — WHAT the persona holds important
   morals       — HOW the persona is permitted to act
 
-shape(persona) composes all three into a single character prompt.
+shape(persona) composes all three into a single character.
 """
 
-from application.core.data import Persona, Prompt
+from application.core.data import Persona
 from application.core import paths
 
 
@@ -62,8 +62,8 @@ def morals(persona: Persona) -> str:
     )
 
 
-def shape(persona: Persona) -> Prompt:
-    """Compose the full character prompt: cornerstone + values + morals + identities."""
+def shape(persona: Persona) -> str:
+    """Compose the full character: cornerstone + values + morals + identities."""
     sections = [
         f"# Who You Are\n{cornerstone(persona)}",
         f"# What Sustains and Threatens You\n{values(persona)}",
@@ -78,4 +78,4 @@ def shape(persona: Persona) -> Prompt:
     if persona_ctx.strip():
         sections.append(f"# Your Own Context\n{persona_ctx.strip()}")
 
-    return Prompt(role="system", content="\n\n".join(sections))
+    return "\n".join(sections)
