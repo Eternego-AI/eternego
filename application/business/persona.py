@@ -560,7 +560,6 @@ async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Out
         await bus.broadcast("Talked", {"persona": persona})
         return Outcome(success=True, message="", data={"response": ""})
     except MindError as e:
-        logger.warning("talk: mind error", {"persona_id": persona.id, "error": str(e)})
         await bus.broadcast("Talk failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Something went wrong. Please try again.")
 
@@ -573,7 +572,6 @@ async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Ou
     from application.core.brain.mind.meanings.query import Query
     from application.platform import datetimes
 
-    logger.info("persona.query", {"persona": persona.id})
     await bus.propose("Querying", {"persona": persona, "channel": message.channel})
     try:
         channels.set_latest(persona, message.channel)
@@ -603,7 +601,6 @@ async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Ou
         await bus.broadcast("Queried", {"persona": persona})
         return Outcome(success=True, message="", data={"response": response})
     except MindError as e:
-        logger.warning("query: mind error", {"persona_id": persona.id, "error": str(e)})
         await bus.broadcast("Query failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Something went wrong. Please try again.")
 
@@ -618,7 +615,6 @@ async def nudge(persona: Persona, message: str) -> Outcome[dict]:
         await bus.broadcast("Persona nudged", {"persona": persona})
         return Outcome(success=True, message="Nudge sent.")
     except MindError as e:
-        logger.warning("nudge: mind error", {"persona_id": persona.id, "error": str(e)})
         await bus.broadcast("Nudge failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))
 
@@ -637,7 +633,6 @@ async def live(persona: Persona, dt) -> Outcome[dict]:
         await bus.broadcast("Destiny checked", {"persona": persona, "due": len(contents)})
         return Outcome(success=True, message=f"{len(contents)} destiny entries due.")
     except OSError as e:
-        logger.warning("Destiny check failed", {"persona": persona.id, "error": str(e)})
         await bus.broadcast("Destiny check failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))
 
@@ -660,11 +655,11 @@ async def sleep(persona: Persona) -> Outcome[dict]:
 
         grow_outcome = await grow(persona)
         if not grow_outcome.success:
-            logger.warning("sleep: grow failed", {"persona_id": persona.id, "error": grow_outcome.message})
+            logger.warning("Growing on sleep failed", {"persona": persona, "error": grow_outcome.message})
 
         outcome = await write_diary(persona)
         if not outcome.success:
-            logger.warning("sleep: diary save failed", {"persona_id": persona.id, "error": outcome.message})
+            logger.error("Writing diary on sleep failed", {"persona": persona, "error": outcome.message})
 
         mind.unblock(persona)
 
@@ -690,7 +685,6 @@ async def grow(persona: Persona) -> Outcome[dict]:
 
         dna = paths.read(paths.dna(persona.id))
         if not dna:
-            logger.info("grow: no DNA found — skipping", {"persona_id": persona.id})
             await bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=True, message="No DNA to grow from.", data={"dna": False, "finetune": False})
 
@@ -707,14 +701,12 @@ async def grow(persona: Persona) -> Outcome[dict]:
 
         vram = OS.gpu_vram_gb()
         if vram is None:
-            logger.info("grow: no GPU detected — skipping fine-tune", {"persona_id": persona.id})
             await bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=True, message="Fine-tuning skipped — no GPU detected.", data={"dna": True, "finetune": False})
 
         hardware = local_inference_engine.models()
         model_info = next((m for m in hardware if m["name"] == persona.base_model), None)
         if model_info is not None and not model_info["fits"]:
-            logger.info("grow: insufficient VRAM — skipping fine-tune", {"persona_id": persona.id, "vram_gb": vram})
             await bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=True, message="Fine-tuning skipped — insufficient VRAM.", data={"dna": True, "finetune": False})
 
@@ -759,7 +751,7 @@ async def stop(persona: Persona) -> Outcome[dict]:
     await bus.propose("Stopping channels", {"persona": persona})
 
     gateways.of(persona).clear()
-    mind.stop(persona.id)
+    mind.stop(persona)
     registry.remove(persona.id)
 
     await bus.broadcast("Channels stopped", {"persona": persona})

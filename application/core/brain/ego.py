@@ -2,7 +2,7 @@
 
 from application.core.data import Persona, Prompt
 from application.core.brain import character, current
-from application.core import local_model, frontier, tools
+from application.core import local_model, frontier, tools, channels
 from application.platform import logger
 
 
@@ -14,6 +14,7 @@ def identity(persona: Persona) -> str:
 async def reason(persona: Persona, system: str, prompts: list[Prompt]) -> dict:
     """Call the persona's model in JSON mode. Returns a parsed JSON dict."""
     logger.info("ego.reason", {"persona": persona.id})
+    await channels.express_thinking(persona)
     full_system = identity(persona) + "\n\n" + system + "\n\nReturn your response as a JSON object."
     messages = [{"role": "system", "content": full_system}]
     messages += [{"role": p.role, "content": p.content} for p in prompts]
@@ -23,6 +24,7 @@ async def reason(persona: Persona, system: str, prompts: list[Prompt]) -> dict:
 async def reply(persona: Persona, system: str, prompts: list[Prompt]):
     """Stream the persona's reply, yielding one paragraph at a time."""
     logger.info("ego.reply", {"persona": persona.id})
+    await channels.express_thinking(persona)
     full_system = identity(persona) + "\n\n" + system
     messages = [{"role": "system", "content": full_system}]
     messages += [{"role": p.role, "content": p.content} for p in prompts]

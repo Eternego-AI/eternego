@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from datetime import datetime
 
 import config  # ensures .env is loaded
 
@@ -21,5 +22,11 @@ LORA_CONVERT_SCRIPT: str = os.environ.get(
 )
 
 # Log file paths — written by the service, tailed by the CLI.
-LOG_FILE: str = os.environ.get("LOG_FILE", str(_PROJECT_ROOT / "eternego.log"))
-SIGNAL_LOG_FILE: str = os.environ.get("SIGNAL_LOG_FILE", str(_PROJECT_ROOT / "eternego-signals.log"))
+LOG_FILE: str = os.environ.get(
+    "LOG_FILE",
+    str(_PROJECT_ROOT / "logs" / f"eternego-{datetime.now().strftime('%Y-%m-%d')}.log")
+)
+SIGNAL_LOG_FILE: str = os.environ.get(
+    "SIGNAL_LOG_FILE",
+    str(_PROJECT_ROOT / "logs" / f"eternego-signals-{datetime.now().strftime('%Y-%m-%d')}.log")
+)
