@@ -1,4 +1,4 @@
-"""Recognization — matches the most important unrecognized Perception to a Meaning.
+"""Recognition — matches the most important unrecognized Perception to a Meaning.
 
 Meanings are presented as a numbered list. The LLM returns the row number of
 the best-matching meaning. Escalation is used as fallback if the row is missing
@@ -7,7 +7,6 @@ or out of range.
 
 from application.core.data import Prompt
 from application.core.brain import perceptions
-from application.core.brain.meanings import all_meanings
 from application.platform import logger
 
 
@@ -17,9 +16,9 @@ async def by(reason, mind) -> None:
         return
 
     persona = mind.persona
-    logger.info("recognization.by", {"impression": perception.impression})
+    logger.info("recognition.by", {"impression": perception.impression})
 
-    meanings = all_meanings(persona)
+    meanings = mind.meanings
     meanings_text = "\n".join(
         f"{i + 1}. {m.name}: {m.description()}" for i, m in enumerate(meanings)
     )

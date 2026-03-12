@@ -1,6 +1,6 @@
 """Greeting — daily greetings and salutations."""
 
-from application.core.brain.meanings.meaning import Meaning
+from application.core.brain.data import Meaning
 
 
 class Greeting(Meaning):
@@ -19,7 +19,7 @@ class Greeting(Meaning):
             "You may ask how they are or what's on their mind, but don't pepper them with questions."
         )
 
-    def path(self) -> list | None:
+    def path(self) -> str | None:
         return None
 
     async def run(self, persona_response: dict):

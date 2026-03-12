@@ -1,6 +1,6 @@
 """Escalation — fallback meaning for unrecognized interactions."""
 
-from application.core.brain.meanings.meaning import Meaning
+from application.core.brain.data import Meaning
 
 
 class Escalation(Meaning):

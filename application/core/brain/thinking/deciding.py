@@ -1,6 +1,6 @@
 """Deciding — executes the action for the most important pending Thought.
 
-Takes the highest-priority pending Thought (lowest order), calls meaning.run(),
+Takes the highest-priority pending Thought, calls meaning.run(),
 and either resolves it or feeds the result back into the thread. The tick loop
 handles returning to deciding if more pending thoughts remain.
 """
@@ -16,7 +16,7 @@ async def by(reason, mind) -> None:
         return
 
     persona = mind.persona
-    logger.info("deciding.by", {"impression": thought.perception.impression, "order": thought.order})
+    logger.info("deciding.by", {"impression": thought.perception.impression, "priority": thought.priority})
 
     system = thought.meaning.path()
     prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]

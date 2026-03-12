@@ -1,6 +1,6 @@
 """Chatting — regular casual conversation."""
 
-from application.core.brain.meanings.meaning import Meaning
+from application.core.brain.data import Meaning
 
 
 class Chatting(Meaning):
@@ -20,7 +20,7 @@ class Chatting(Meaning):
             "Keep the exchange alive without dominating it."
         )
 
-    def path(self) -> list | None:
+    def path(self) -> str | None:
         return None
 
     async def run(self, persona_response: dict):

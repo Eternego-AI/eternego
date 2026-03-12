@@ -15,7 +15,7 @@ def as_text(signal: Signal) -> str:
     return f"[{ts}] {signal.role}: {signal.content}"
 
 
-def contain_id(signal: Signal) -> str:
+def labeled(signal: Signal) -> str:
     """Format a signal with its ID, timestamp, role, and content — for routing tasks."""
     ts = signal.created_at.strftime("%Y-%m-%d %H:%M UTC")
     return f'id="{signal.id}" [{ts}] {signal.role}: {signal.content}'

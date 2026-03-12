@@ -1,25 +1,5 @@
-"""Meaning — abstract base class for all meanings."""
+"""Meaning — re-exported from brain.data."""
 
-from abc import ABC, abstractmethod
+from application.core.brain.data import Meaning
 
-
-class Meaning(ABC):
-    name: str  # class-level identifier used for matching
-
-    def __init__(self, persona):
-        self.persona = persona
-
-    @abstractmethod
-    def description(self) -> str: ...
-
-    @abstractmethod
-    def clarification(self) -> str: ...
-
-    @abstractmethod
-    def reply(self) -> str: ...
-
-    @abstractmethod
-    def path(self) -> str | None: ...
-
-    @abstractmethod
-    async def run(self, persona_response: dict): ...
+__all__ = ["Meaning"]

@@ -1,6 +1,6 @@
 """Understanding — routes incoming Signals to existing or new Perception threads.
 
-Active threads are numbered (1, 2, 3...) for the duration of the LLM call.
+All perceptions are numbered (1, 2, 3...) for the duration of the LLM call.
 The model returns row numbers to route to existing threads, or new impression
 strings for new topics. Row numbers are resolved back to Perceptions by index —
 no IDs stored, no string matching required.
@@ -12,26 +12,26 @@ from application.platform import logger
 
 
 async def by(reason, mind) -> None:
-    if not mind.unrealized:
+    if not mind.unattended:
         return
 
     persona = mind.persona
-    logger.info("understanding.by", {"unrealized": len(mind.unrealized)})
+    logger.info("understanding.by", {"unattended": len(mind.unattended)})
 
-    active = mind.awareness
-    row_map = {i + 1: p for i, p in enumerate(active)}  # 1-based row → Perception
+    known = mind.perceptions
+    row_map = {i + 1: p for i, p in enumerate(known)}  # 1-based row → Perception
 
     threads_text = "\n\n".join(
         f"{i}.\n{perceptions.thread(p)}" for i, p in row_map.items()
-    ) if active else "None"
+    ) if known else "None"
 
     signals_text = "\n".join(
-        f"- {signals.contain_id(s)}" for s in mind.unrealized
+        f"- {signals.labeled(s)}" for s in mind.unattended
     )
 
     system = (
         "# Task: Route incoming signals to conversation threads\n"
-        "Each active thread is numbered. For each signal, return the row number(s) "
+        "Each known thread is numbered. For each signal, return the row number(s) "
         "of threads it continues, or a new short impression (max 8 words) if it starts "
         "a new topic. A signal can belong to multiple threads if it spans subjects.\n\n"
         "Return routes ordered by importance — most urgent or significant thread first.\n\n"
@@ -45,7 +45,7 @@ async def by(reason, mind) -> None:
     )
 
     prompts = [Prompt(role="user", content=(
-        f"Active threads:\n{threads_text}\n\n"
+        f"Known threads:\n{threads_text}\n\n"
         f"Signals to route:\n{signals_text}\n\n"
         "Route each signal using row numbers or new impressions."
     ))]
@@ -53,7 +53,7 @@ async def by(reason, mind) -> None:
     result = await reason(persona, system, prompts)
     routes = result.get("routes", [])
 
-    signal_map = {s.id: s for s in mind.unrealized}
+    signal_map = {s.id: s for s in mind.unattended}
 
     for route in routes:
         signal = signal_map.get(route.get("signal_id"))

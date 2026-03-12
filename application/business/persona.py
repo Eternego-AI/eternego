@@ -566,13 +566,14 @@ async def talk(persona: Persona, message: Message) -> Outcome[dict]:
         if message.channel:
             channels.set_latest(persona, message.channel)
         signal = Signal(
+            id=f"{message.channel.type}-{message.channel.name}-{message.id}" if message.channel else message.id,
             role="user",
             content=message.content,
             channel_type=message.channel.type if message.channel else "",
             channel_name=message.channel.name if message.channel else "",
             message_id=message.id,
         )
-        await m.receive(signal)
+        m.trigger(signal)
         # For channels with a bus (web), wait for wondering to push the response
         if message.channel and message.channel.bus is not None:
             try:
@@ -599,7 +600,8 @@ async def nudge(persona: Persona, message: str) -> Outcome[dict]:
         m = registry.mind(persona.id)
         if m is None:
             return Outcome(success=False, message="Mind not loaded.")
-        await m.receive(Signal(role="user", content=message))
+        import uuid
+        m.trigger(Signal(id=str(uuid.uuid4()), role="user", content=message))
         await bus.broadcast("Persona nudged", {"persona": persona})
         return Outcome(success=True, message="Nudge sent.")
     except MindError as e:
@@ -633,7 +635,7 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     try:
         m = registry.mind(persona.id)
         if m is not None:
-            m.stop_tick()
+            m.stop_thinking()
 
             # Archive any threads still in progress (not yet concluded)
             pending = m.snapshot()
@@ -750,7 +752,7 @@ async def start(persona: Persona) -> Outcome[dict]:
     await bus.propose("Starting channels", {"persona": persona})
 
     if registry.mind(persona.id) is None:
-        mind.Mind.load(persona)
+        mind.load(persona)
 
     if not (persona.channels or []):
         await bus.broadcast("Channels start failed", {"persona": persona, "reason": "no_channels"})

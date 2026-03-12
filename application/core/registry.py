@@ -8,22 +8,22 @@ from application.platform import datetimes
 from application.core.exceptions import RegistryError
 
 if TYPE_CHECKING:
-    from application.core.brain.mind import Mind
+    from application.core.brain.mind.memory import Memory
     from application.core.data import Persona
 
-_minds: dict[str, "Mind"] = {}
+_minds: dict[str, "Memory"] = {}
 _personas: dict[str, "Persona"] = {}
 _pairing_codes: dict[str, dict] = {}  # code → {persona_id, channel_name, created_at}
 
 
-def save(persona: "Persona", mind: "Mind") -> None:
+def save(persona: "Persona", mind: "Memory") -> None:
     """Register a running persona and its mind."""
     _personas[persona.id] = persona
     _minds[persona.id] = mind
 
 
-def mind(persona_id: str) -> "Mind | None":
-    """Return the running Mind for a persona, or None if not started."""
+def mind(persona_id: str) -> "Memory | None":
+    """Return the running Memory for a persona, or None if not started."""
     return _minds.get(persona_id)
 
 

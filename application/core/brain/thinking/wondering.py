@@ -3,6 +3,9 @@
 Streams a reply paragraph by paragraph. After streaming:
 - Meaning has no path → thought is marked resolved (done)
 - Meaning has a path  → thought stays open; deciding will execute the action
+
+If interrupted by new unattended signals, saves partial text and resolves
+conversational thoughts so they don't get stuck.
 """
 
 from application.core.data import Prompt
@@ -32,10 +35,8 @@ async def by(reply, mind) -> None:
 
     text = ""
     async for paragraph in reply(persona, system, prompts):
-        if mind.changed():
-            if text:
-                mind.answer(thought, text)
-            return
+        if mind.unattended:
+            break
         if channel:
             await channels.send(channel, paragraph)
         text += ("\n" if text else "") + paragraph

@@ -3,7 +3,7 @@
 import asyncio
 
 from application.platform import logger
-from application.core.brain.thinking import understanding, recognization, wondering, deciding, concluding
+from application.core.brain.thinking import understanding, recognition, wondering, deciding, concluding
 
 
 async def tick(mind) -> None:
@@ -12,7 +12,7 @@ async def tick(mind) -> None:
 
     pipeline = [
         (understanding, ego.reason),
-        (recognization, ego.reason),
+        (recognition,   ego.reason),
         (wondering,     ego.reply),
         (deciding,      ego.reason),
         (concluding,    ego.reply),
@@ -22,11 +22,14 @@ async def tick(mind) -> None:
 
     while True:
         try:
+            restart = False
             for state, fn in pipeline:
-                if mind.changed():
-                    break
                 await state.by(fn, mind)
-            else:
+                if mind.changed():
+                    restart = True
+                    break
+            mind.persist()
+            if not restart:
                 await asyncio.sleep(0.05)
         except Exception as e:
             logger.error("clock.tick: exception", {"error": str(e), "persona": mind.persona.id})

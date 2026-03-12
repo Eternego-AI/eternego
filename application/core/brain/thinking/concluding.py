@@ -1,6 +1,7 @@
 """Concluding — recaps and archives the most important finished Thought.
 
-- Meaning had a path → stream a recap, save it to the thread.
+- Meaning had a path → collect a complete recap before sending.
+  If interrupted by new signals, leave the thought for the next cycle.
 - Either way → archive to history and forget.
 """
 
@@ -18,8 +19,6 @@ async def by(reply, mind) -> None:
     persona = mind.persona
     logger.info("concluding.by", {"impression": thought.perception.impression})
 
-    recap = ""
-
     if thought.meaning.path():
         channel = channels.latest(persona) or channels.default_channel(persona)
         system = (
@@ -28,17 +27,17 @@ async def by(reply, mind) -> None:
         )
         prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
 
+        recap = ""
         async for paragraph in reply(persona, system, prompts):
-            if mind.changed():
-                break
-            if channel:
-                await channels.send(channel, paragraph)
+            if mind.unattended:
+                return  # incomplete recap — retry next cycle
             recap += ("\n" if recap else "") + paragraph
 
         if recap:
+            if channel:
+                await channels.send(channel, recap)
             mind.answer(thought, recap)
 
     thread_text = perceptions.thread(thought.perception)
-    content = thread_text
-    paths.add_history_entry(persona.id, thought.perception.impression, content)
+    paths.add_history_entry(persona.id, thought.perception.impression, thread_text)
     mind.forget(thought)
