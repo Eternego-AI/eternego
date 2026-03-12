@@ -112,7 +112,8 @@ async def hear_persona(persona_id: str, request: HearRequest):
     channel = Channel(type="web", name=persona_id, bus=WebSocketBus(persona_id))
     message = Message(channel=channel, content=request.message)
 
-    outcome = await persona.talk(live, message)
+    from config import web as web_config
+    outcome = await persona.talk(live, message, timeout=web_config.CHAT_TIMEOUT)
     if not outcome.success:
         raise HTTPException(status_code=500, detail=outcome.message)
     return {"status": "received"}

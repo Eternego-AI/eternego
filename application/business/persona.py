@@ -531,7 +531,7 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
     return Outcome(success=True, message="Pairing code generated.", data={"pairing_code": code})
 
 
-async def talk(persona: Persona, message: Message) -> Outcome[dict]:
+async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Outcome[dict]:
     """Receive a message, trigger the mind tick, return when say tool responds (web) or fire-and-forget (push channels)."""
     import asyncio
     from application.core.brain.data import Signal
@@ -551,7 +551,7 @@ async def talk(persona: Persona, message: Message) -> Outcome[dict]:
         # For channels with a bus (web), wait for wondering to push the response
         if message.channel and message.channel.bus is not None:
             try:
-                response = await asyncio.wait_for(message.channel.bus.get(), timeout=30.0)
+                response = await asyncio.wait_for(message.channel.bus.get(), timeout=timeout)
             except asyncio.TimeoutError:
                 response = ""
             await bus.broadcast("Talked", {"persona": persona})
@@ -564,6 +564,48 @@ async def talk(persona: Persona, message: Message) -> Outcome[dict]:
         await bus.broadcast("Talk failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Something went wrong. Please try again.")
 
+
+
+async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Outcome[dict]:
+    """Answer a direct query — bypasses understanding and recognition, goes straight to deciding."""
+    import asyncio
+    from application.core.brain.data import Signal, Perception, Thought
+    from application.core.brain.mind.meanings.query import Query
+    from application.platform import datetimes
+
+    logger.info("persona.query", {"persona": persona.id})
+    await bus.propose("Querying", {"persona": persona, "channel": message.channel})
+    try:
+        channels.set_latest(persona, message.channel)
+
+        signal = Signal(
+            id=f"{message.channel.type}-{message.channel.name}-{message.id}",
+            role="user",
+            content=message.content,
+            channel_type=message.channel.type,
+            channel_name=message.channel.name,
+            message_id=message.id,
+        )
+        now = datetimes.iso_8601(datetimes.now())
+        perception = Perception(
+            impression=f"Direct query at {now}",
+            thread=[signal],
+        )
+        thought = Thought(perception=perception, meaning=Query(persona))
+
+        mind.question(persona, thought)
+
+        try:
+            response = await asyncio.wait_for(message.channel.bus.get(), timeout=timeout)
+        except asyncio.TimeoutError:
+            response = ""
+
+        await bus.broadcast("Queried", {"persona": persona})
+        return Outcome(success=True, message="", data={"response": response})
+    except MindError as e:
+        logger.warning("query: mind error", {"persona_id": persona.id, "error": str(e)})
+        await bus.broadcast("Query failed", {"persona": persona, "error": str(e)})
+        return Outcome(success=False, message="Something went wrong. Please try again.")
 
 
 async def nudge(persona: Persona, message: str) -> Outcome[dict]:

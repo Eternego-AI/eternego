@@ -37,6 +37,8 @@ async def get_model(model_id: str):
 
 @router.post("/v1/chat/completions")
 async def chat_completions(request: ChatRequest):
+    import asyncio
+
     outcome = await persona.loaded(request.model)
     if not outcome.success:
         raise HTTPException(status_code=404, detail=outcome.message)
@@ -47,8 +49,12 @@ async def chat_completions(request: ChatRequest):
     if not user_messages:
         raise HTTPException(status_code=400, detail="No user message in request.")
 
-    from application.core.data import Message
-    outcome = await persona.talk(live, Message(channel=None, content=user_messages[-1].content))
+    from application.core.data import Channel, Message
+    channel = Channel(type="completion", name=request.model, bus=asyncio.Queue())
+    message = Message(channel=channel, content=user_messages[-1].content)
+
+    from config import web as web_config
+    outcome = await persona.query(live, message, timeout=web_config.CHAT_TIMEOUT)
     if not outcome.success:
         raise HTTPException(status_code=500, detail=outcome.message)
 
@@ -58,7 +64,7 @@ async def chat_completions(request: ChatRequest):
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": outcome.data["response"]},
+                "message": {"role": "assistant", "content": outcome.data.get("response", "")},
                 "finish_reason": "stop",
             }
         ],

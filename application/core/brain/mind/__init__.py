@@ -4,6 +4,7 @@ Exposes:
   start(persona)               — load memory, load meanings, start the tick
   trigger(persona, signal)     — accept an outside signal
   incept(persona, perception)  — inject a perception directly (bypasses understanding)
+  question(persona, thought)   — inject a pre-formed thought (bypasses understand + recognize)
   block(persona) / unblock(persona) — pause/resume accepting triggers
   is_resting(persona)          — True when the conscious pipeline is fully idle
   add_meanings(persona, *meanings) — add meanings to the live list
@@ -13,7 +14,7 @@ Exposes:
 Memory and ego are internal — callers never touch them.
 """
 
-from application.core.brain.data import Signal, Perception
+from application.core.brain.data import Signal, Perception, Thought
 from application.core.brain.mind.memory import Memory
 from application.core.brain.mind import meanings
 from application.core import paths
@@ -50,6 +51,19 @@ def incept(persona, perception: Perception) -> None:
     if mem is None:
         raise MindError(f"Mind not loaded for persona {persona.id}")
     mem.incept(perception)
+
+
+def question(persona, thought: Thought) -> None:
+    """Inject a pre-formed thought, bypassing understanding and recognition.
+
+    The thought's signal and perception are stored directly. Deciding picks it up
+    if the meaning has a path; wondering picks it up if it has a reply.
+    """
+    mem = _memories.get(persona.id)
+    if mem is None:
+        raise MindError(f"Mind not loaded for persona {persona.id}")
+    mem.incept(thought.perception)
+    mem.question(thought)
 
 
 def block(persona) -> None:

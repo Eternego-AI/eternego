@@ -139,6 +139,9 @@ async def wonder(reply, mind) -> None:
     if not thought:
         return
 
+    if thought.meaning.reply() is None:
+        return
+
     persona = mind.persona
     logger.info("wonder", {"impression": thought.perception.impression})
 

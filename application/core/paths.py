@@ -100,11 +100,6 @@ def mind_state(persona_id: str) -> Path:
     return home(persona_id) / "mind" / "memory.json"
 
 
-def permissions(persona_id: str) -> Path:
-    """Path to the permissions.json file for that persona."""
-    return home(persona_id) / "permissions.json"
-
-
 def training_set(persona_id: str) -> Path:
     """Path to the training directory for that persona."""
     return home(persona_id) / "training"

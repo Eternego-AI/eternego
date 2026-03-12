@@ -242,9 +242,21 @@ class Memory:
 
     @property
     def pending(self) -> list[Thought]:
-        """Thoughts with processed_at=None whose meaning has a path."""
-        return [t for t in self._thoughts
-                if t.processed_at is None and t.meaning.path()]
+        """Thoughts ready for deciding: has path, not processed, and wondering is done.
+
+        For meanings with no reply, deciding owns the full lifecycle.
+        For meanings with a reply, deciding waits until wondering has replied
+        (last signal is assistant) and the user hasn't added more signals.
+        """
+        result = []
+        for t in self._thoughts:
+            if t.processed_at is not None or not t.meaning.path():
+                continue
+            if t.meaning.reply() is None:
+                result.append(t)
+            elif t.perception.thread and t.perception.thread[-1].role == "assistant":
+                result.append(t)
+        return result
 
     @property
     def concluded(self) -> list[Thought]:
@@ -287,6 +299,13 @@ class Memory:
                 self.remember(filename)
                 self._thoughts.remove(t)
                 logger.info("memory.understand: freed concluded thought", {"impression": impression})
+
+    def question(self, thought: Thought) -> None:
+        """Add a pre-formed thought directly (bypasses understand + recognize)."""
+        logger.info("memory.question", {"impression": thought.perception.impression,
+                                         "meaning": type(thought.meaning).__name__})
+        self._thoughts.append(thought)
+        self._dirty = True
 
     def recognize(self, perception: Perception, meaning, priority: int = 0) -> Thought:
         """Create a Thought from a Perception and a Meaning instance."""
