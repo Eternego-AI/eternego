@@ -404,14 +404,19 @@ def add_training_set(persona_id: str, training_set_content: str) -> None:
     filesystem.write(training_dir / filename, training_set_content)
 
 
-def add_history_entry(persona_id: str, event: str, content: str) -> None:
-    """Write the given content to a new file in the persona's history directory."""
+def add_history_entry(persona_id: str, event: str, content: str) -> str:
+    """Write the given content to a new file in the persona's history directory.
+
+    Returns the filename (relative to the history directory).
+    """
     logger.info("Adding history entry", {"persona_id": persona_id})
     history_dir = history(persona_id)
     if not history_dir.exists():
         history_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetimes.date_stamp(datetimes.now())
-    filesystem.write(history_dir / f"{event}-{timestamp}.md", content)
+    filename = f"{event}-{timestamp}.md"
+    filesystem.write(history_dir / filename, content)
+    return filename
 
 
 def save_destiny_entry(persona_id: str, event: str, trigger: str, thread_id: str, content: str) -> None:

@@ -156,6 +156,17 @@ class Memory:
         self._signals[signal.id] = signal
         self._dirty = True
 
+    def incept(self, perception: Perception) -> None:
+        """Inject a perception directly, bypassing understanding."""
+        logger.info("memory.incept", {"impression": perception.impression})
+        for signal in perception.thread:
+            self._signals[signal.id] = signal
+            self._signal_perceptions.setdefault(signal.id, [])
+            if perception.impression not in self._signal_perceptions[signal.id]:
+                self._signal_perceptions[signal.id].append(perception.impression)
+        self._perceptions[perception.impression] = perception
+        self._dirty = True
+
     # ── Signal views ──────────────────────────────────────────────────────────
 
     @property
@@ -268,7 +279,8 @@ class Memory:
             if t.perception.impression == impression and t.processed_at is not None:
                 from application.core.brain import perceptions as perc_fmt
                 thread_text = perc_fmt.thread(t.perception)
-                paths.add_history_entry(self._persona.id, impression, thread_text)
+                filename = paths.add_history_entry(self._persona.id, impression, thread_text)
+                self.remember(filename)
                 self._thoughts.remove(t)
                 logger.info("memory.understand: freed concluded thought", {"impression": impression})
 
@@ -337,12 +349,23 @@ class Memory:
         self._dirty = True
         logger.info("memory.forget", {"impression": impression})
 
+    # ── State ─────────────────────────────────────────────────────────────────
+
+    @property
+    def settled(self) -> bool:
+        """True when the mind has nothing left to process."""
+        return (not self.unattended
+                and not self.unrecognized
+                and not self.unanswered
+                and not self.pending
+                and not self.concluded)
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def start_thinking(self) -> None:
         """Start the cognitive tick loop."""
         if self._tick_task is None or self._tick_task.done():
-            from application.core.brain import clock
+            from application.core.brain.mind import clock
             self._tick_task = asyncio.create_task(clock.tick(self))
 
     def stop_thinking(self) -> None:

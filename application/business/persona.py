@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from application.core import bus, channels, gateways, frontier, system, registry, \
-    local_model, local_inference_engine, prompts, paths
+    local_model, local_inference_engine, paths
 from application.core.brain import mind
 from application.core.data import Channel, Message, Model, Persona
 from application.core.exceptions import (
@@ -155,7 +155,7 @@ async def create(
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
-        phrase = await local_model.generate(persona.model.name, prompts.generate_recovery_phrase())
+        phrase = await local_model.generate_recovery_phrase(persona.model.name)
         await system.save_phrases(persona, phrase)
 
         paths.add_routine(persona.id, "sleep", "00:00", "daily", system.timezone())
@@ -347,26 +347,11 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     """It lets you feed your persona with your existing AI history so it can know you faster."""
     await bus.propose("Feeding persona", {"persona": persona, "source": source})
 
-    # TODO: Upon having a working learn module, this can be passed as a signal for learning.
     try:
-        response = await local_model.generate_json(persona.model.name, prompts.extraction(
-                conversations=await frontier.read(data, source),
-                person_identity=paths.read(paths.person_identity(persona.id)),
-                person_traits=paths.read(paths.person_traits(persona.id)),
-                persona_context=paths.read(paths.context(persona.id)),
-                person_struggles=paths.read(paths.struggles(persona.id)),
-            ))
+        conversations = await frontier.read(data, source)
+        await mind.learn(persona, conversations)
 
-        paths.append_as_string(paths.person_identity(persona.id), "\n".join(response.get("facts", [])) + "\n")
-        paths.append_as_string(paths.person_traits(persona.id), "\n".join(response.get("traits", [])) + "\n")
-        paths.append_as_string(paths.struggles(persona.id), "\n".join(response.get("struggles", [])) + "\n")
-        paths.append_as_string(paths.context(persona.id), "\n".join(response.get("context", [])) + "\n")
-
-        await bus.broadcast("Persona fed", {
-            "persona": persona,
-            "source": source,
-        })
-
+        await bus.broadcast("Persona fed", {"persona": persona, "source": source})
         return Outcome(
             success=True,
             message="Persona fed successfully",
@@ -376,14 +361,6 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     except FrontierError as e:
         await bus.broadcast("Persona feeding failed", {"reason": "external_data", "error": str(e)})
         return Outcome(success=False, message="Could not parse the external data. Please check the file format.")
-
-    except IdentityError as e:
-        await bus.broadcast("Persona feeding failed", {"reason": "identity", "error": str(e)})
-        return Outcome(success=False, message="Could not save observations to persona.")
-
-    except PersonError as e:
-        await bus.broadcast("Persona feeding failed", {"reason": "person", "error": str(e)})
-        return Outcome(success=False, message="Could not save person observations to persona.")
 
     except EngineConnectionError as e:
         await bus.broadcast("Persona feeding failed", {"reason": "connection", "error": str(e)})
@@ -560,9 +537,6 @@ async def talk(persona: Persona, message: Message) -> Outcome[dict]:
     from application.core.brain.data import Signal
     await bus.propose("Talking", {"persona": persona, "channel": message.channel})
     try:
-        m = registry.mind(persona.id)
-        if m is None:
-            return Outcome(success=False, message="Mind not loaded.")
         if message.channel:
             channels.set_latest(persona, message.channel)
         signal = Signal(
@@ -573,7 +547,7 @@ async def talk(persona: Persona, message: Message) -> Outcome[dict]:
             channel_name=message.channel.name if message.channel else "",
             message_id=message.id,
         )
-        m.trigger(signal)
+        mind.trigger(persona, signal)
         # For channels with a bus (web), wait for wondering to push the response
         if message.channel and message.channel.bus is not None:
             try:
@@ -595,13 +569,10 @@ async def talk(persona: Persona, message: Message) -> Outcome[dict]:
 async def nudge(persona: Persona, message: str) -> Outcome[dict]:
     """Privately nudge the persona with an internal signal."""
     from application.core.brain.data import Signal
+    import uuid
     await bus.propose("Nudging persona", {"persona": persona})
     try:
-        m = registry.mind(persona.id)
-        if m is None:
-            return Outcome(success=False, message="Mind not loaded.")
-        import uuid
-        m.trigger(Signal(id=str(uuid.uuid4()), role="user", content=message))
+        mind.trigger(persona, Signal(id=str(uuid.uuid4()), role="user", content=message))
         await bus.broadcast("Persona nudged", {"persona": persona})
         return Outcome(success=True, message="Nudge sent.")
     except MindError as e:
@@ -630,26 +601,20 @@ async def live(persona: Persona, dt) -> Outcome[dict]:
 
 
 async def sleep(persona: Persona) -> Outcome[dict]:
-    """Let the persona rest, consolidate its conversations into history, and grow."""
+    """Let the persona rest, consolidate its conversations into knowledge, and grow.
+
+    Flow: block → wait for resting → learn → grow → diary → unblock.
+    """
+    import asyncio
+
     await bus.propose("Sleeping", {"persona": persona})
     try:
-        m = registry.mind(persona.id)
-        if m is not None:
-            m.stop_thinking()
+        mind.block(persona)
 
-            # Archive any threads still in progress (not yet concluded)
-            pending = m.snapshot()
-            for impression, thread in pending:
-                lines = "\n".join(
-                    f"{s.role}: {s.content}" for s in thread
-                    if s.role in ("user", "assistant")
-                )
-                if lines:
-                    paths.add_history_entry(persona.id, impression or "untitled", lines)
-            if pending:
-                logger.info("sleep: archived in-progress threads", {"count": len(pending)})
+        while not mind.is_resting(persona):
+            await asyncio.sleep(0.1)
 
-            m.clear()
+        await mind.learn_from_experience(persona)
 
         grow_outcome = await grow(persona)
         if not grow_outcome.success:
@@ -659,62 +624,41 @@ async def sleep(persona: Persona) -> Outcome[dict]:
         if not outcome.success:
             logger.warning("sleep: diary save failed", {"persona_id": persona.id, "error": outcome.message})
 
-        await stop(persona)
-        fresh = await find(persona.id)
-        if fresh.success:
-            await start(fresh.data["persona"])
+        mind.unblock(persona)
 
         await bus.broadcast("Wake up", {"persona": persona})
         return Outcome(success=True, message="Sleep complete.")
 
     except (DNAError, EngineConnectionError) as e:
+        mind.unblock(persona)
         await bus.broadcast("Sleep failed", {"reason": "fine_tune", "persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))
     except Exception as e:
+        mind.unblock(persona)
         await bus.broadcast("Sleep failed", {"reason": "unknown", "persona": persona, "error": str(e)})
         return Outcome(success=False, message="Sleep failed unexpectedly.")
 
 
 async def grow(persona: Persona) -> Outcome[dict]:
-    """Evolve the persona's DNA and fine-tune its model from accumulated experience."""
+    """Generate training pairs from existing DNA and fine-tune the persona's model."""
     await bus.propose("Growing", {"persona": persona})
     try:
         import json
-        from application.platform import strings, OS
+        from application.platform import OS
 
-        synthesis = prompts.dna_synthesis(
-            previous_dna=paths.read(paths.dna(persona.id)),
-            person_traits=paths.read(paths.person_traits(persona.id)),
-            persona_context=paths.read(paths.context(persona.id)),
-            history_briefing=paths.read_history_brief(persona.id, "(no history yet)"),
-        )
+        dna = paths.read(paths.dna(persona.id))
+        if not dna:
+            logger.info("grow: no DNA found — skipping", {"persona_id": persona.id})
+            await bus.broadcast("Grown", {"persona": persona})
+            return Outcome(success=True, message="No DNA to grow from.", data={"dna": False, "finetune": False})
+
         if persona.frontier:
             try:
-                new_dna = await frontier.chat(persona.frontier, synthesis)
-            except Exception as e:
-                logger.warning("grow: frontier failed for DNA, falling back to local model", {"persona_id": persona.id, "error": str(e)})
-                new_dna = await local_model.generate(persona.model.name, synthesis)
+                all_pairs = await frontier.generate_training_set(persona.frontier, dna)
+            except Exception:
+                all_pairs = await local_model.generate_training_set(persona.model.name, dna)
         else:
-            new_dna = await local_model.generate(persona.model.name, synthesis)
-        paths.write_dna(persona.id, new_dna)
-
-        dna_items = [line.strip() for line in new_dna.splitlines() if line.strip() and not line.strip().startswith("#")]
-        all_pairs = []
-        for item in dna_items:
-            item_prompt = prompts.grow(dna=item, max_pairs=5)
-            if persona.frontier:
-                try:
-                    response = await frontier.chat(persona.frontier, item_prompt)
-                except Exception:
-                    response = await local_model.generate(persona.model.name, item_prompt, json_mode=True)
-            else:
-                response = await local_model.generate(persona.model.name, item_prompt, json_mode=True)
-            try:
-                parsed = strings.extract_json(response)
-            except json.JSONDecodeError:
-                parsed = {}
-            if parsed and "training_pairs" in parsed:
-                all_pairs.extend(parsed["training_pairs"])
+            all_pairs = await local_model.generate_training_set(persona.model.name, dna)
 
         training_set = json.dumps({"training_pairs": all_pairs}, indent=2)
         paths.add_training_set(persona.id, training_set)
@@ -723,14 +667,14 @@ async def grow(persona: Persona) -> Outcome[dict]:
         if vram is None:
             logger.info("grow: no GPU detected — skipping fine-tune", {"persona_id": persona.id})
             await bus.broadcast("Grown", {"persona": persona})
-            return Outcome(success=True, message="DNA synthesized. Fine-tuning skipped — no GPU detected.", data={"dna": True, "finetune": False})
+            return Outcome(success=True, message="Fine-tuning skipped — no GPU detected.", data={"dna": True, "finetune": False})
 
         hardware = local_inference_engine.models()
         model_info = next((m for m in hardware if m["name"] == persona.base_model), None)
         if model_info is not None and not model_info["fits"]:
             logger.info("grow: insufficient VRAM — skipping fine-tune", {"persona_id": persona.id, "vram_gb": vram})
             await bus.broadcast("Grown", {"persona": persona})
-            return Outcome(success=True, message="DNA synthesized. Fine-tuning skipped — insufficient VRAM.", data={"dna": True, "finetune": False})
+            return Outcome(success=True, message="Fine-tuning skipped — insufficient VRAM.", data={"dna": True, "finetune": False})
 
         await local_inference_engine.fine_tune(persona.base_model, training_set, persona.model.name, persona.id)
 
@@ -751,8 +695,8 @@ async def start(persona: Persona) -> Outcome[dict]:
     """Open all channels for a persona and start listening."""
     await bus.propose("Starting channels", {"persona": persona})
 
-    if registry.mind(persona.id) is None:
-        mind.load(persona)
+    registry.save(persona)
+    mind.start(persona)
 
     if not (persona.channels or []):
         await bus.broadcast("Channels start failed", {"persona": persona, "reason": "no_channels"})
@@ -769,12 +713,11 @@ async def start(persona: Persona) -> Outcome[dict]:
 
 
 async def stop(persona: Persona) -> Outcome[dict]:
-    """Close all channels for a persona."""
+    """Close all channels for a persona and stop its mind."""
     await bus.propose("Stopping channels", {"persona": persona})
 
     gateways.of(persona).clear()
-
-    from application.core import registry
+    mind.stop(persona.id)
     registry.remove(persona.id)
 
     await bus.broadcast("Channels stopped", {"persona": persona})

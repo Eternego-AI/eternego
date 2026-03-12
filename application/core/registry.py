@@ -1,4 +1,4 @@
-"""Registry — in-process store for running personas and their minds."""
+"""Registry — in-process store for running personas."""
 
 from typing import TYPE_CHECKING
 
@@ -8,23 +8,15 @@ from application.platform import datetimes
 from application.core.exceptions import RegistryError
 
 if TYPE_CHECKING:
-    from application.core.brain.mind.memory import Memory
     from application.core.data import Persona
 
-_minds: dict[str, "Memory"] = {}
 _personas: dict[str, "Persona"] = {}
 _pairing_codes: dict[str, dict] = {}  # code → {persona_id, channel_name, created_at}
 
 
-def save(persona: "Persona", mind: "Memory") -> None:
-    """Register a running persona and its mind."""
+def save(persona: "Persona") -> None:
+    """Register a running persona."""
     _personas[persona.id] = persona
-    _minds[persona.id] = mind
-
-
-def mind(persona_id: str) -> "Memory | None":
-    """Return the running Memory for a persona, or None if not started."""
-    return _minds.get(persona_id)
 
 
 def get_persona(persona_id: str) -> "Persona | None":
@@ -33,8 +25,7 @@ def get_persona(persona_id: str) -> "Persona | None":
 
 
 def remove(persona_id: str) -> None:
-    """Remove a persona and its mind from the registry."""
-    _minds.pop(persona_id, None)
+    """Remove a persona from the registry."""
     _personas.pop(persona_id, None)
 
 

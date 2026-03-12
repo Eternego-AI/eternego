@@ -3,19 +3,19 @@
 import asyncio
 
 from application.platform import logger
-from application.core.brain.thinking import understanding, recognition, wondering, deciding, concluding
+from application.core.brain.mind import conscious
 
 
 async def tick(mind) -> None:
-    """Loop over thinking states indefinitely, restarting when mind receives new signals."""
+    """Loop over conscious thinking states indefinitely, restarting when mind receives new signals."""
     from application.core.brain import ego
 
     pipeline = [
-        (understanding, ego.reason),
-        (recognition,   ego.reason),
-        (wondering,     ego.reply),
-        (deciding,      ego.reason),
-        (concluding,    ego.reply),
+        (conscious.understand, ego.reason),
+        (conscious.recognize,  ego.reason),
+        (conscious.wonder,     ego.reply),
+        (conscious.decide,     ego.reason),
+        (conscious.conclude,   ego.reply),
     ]
 
     logger.info("clock.tick: started", {"persona": mind.persona.id})
@@ -23,8 +23,8 @@ async def tick(mind) -> None:
     while True:
         try:
             restart = False
-            for state, fn in pipeline:
-                await state.by(fn, mind)
+            for step, fn in pipeline:
+                await step(fn, mind)
                 if mind.changed():
                     restart = True
                     break
