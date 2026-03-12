@@ -148,6 +148,10 @@ class Memory:
     def meanings(self) -> list:
         return list(self._meanings)
 
+    def add_meanings(self, *new_meanings) -> None:
+        """Add meanings to the live list (for runtime escalation)."""
+        self._meanings.extend(new_meanings)
+
     # ── Incoming ──────────────────────────────────────────────────────────────
 
     def trigger(self, signal: Signal) -> None:

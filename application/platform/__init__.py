@@ -18,4 +18,5 @@ from . import reflections
 from . import linux
 from . import mac
 from . import telegram
+from . import tool
 from . import windows

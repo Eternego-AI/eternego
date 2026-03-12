@@ -2,6 +2,8 @@
 
 import shutil
 
+from application.platform.tool import tool
+
 
 async def is_installed(program: str) -> bool:
     """Check if a program is installed on Windows."""
@@ -24,6 +26,9 @@ async def install(program: str) -> None:
         raise RuntimeError(f"winget failed to install {program}: {out}")
 
 
+@tool("Execute a shell command on the person's Windows system via PowerShell. Use for any OS operation, "
+      "running code, installing packages, checking status, file operations. "
+      "If multiple commands are needed, wrap them in one call (e.g. cmd1; cmd2).")
 async def execute_on_sub_process(command: str) -> tuple[int, str]:
     """Execute a command on Windows via PowerShell and return (return_code, output)."""
     import asyncio

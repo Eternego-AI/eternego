@@ -1,6 +1,7 @@
 """Brain data models — Signal, Perception, Thought, Meaning."""
 
 import hashlib
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -46,8 +47,20 @@ class Meaning(ABC):
     @abstractmethod
     def path(self) -> str | None: ...
 
-    @abstractmethod
-    async def run(self, persona_response: dict): ...
+    async def run(self, persona_response: dict):
+        """Default runner — dispatches tool calls via the adaptor.
+
+        One tool call per step. Result always returned as a Signal.
+        The model sees the output and decides: continue, retry, or done.
+        Built-in meanings can override this with specific logic.
+        """
+        from application.core import tools
+        tool_name = persona_response.get("tool")
+        if not tool_name:
+            return None
+        params = {k: v for k, v in persona_response.items() if k != "tool"}
+        result = await tools.call(tool_name, **params)
+        return Signal(id=str(uuid.uuid4()), role="user", content=result)
 
 
 @dataclass

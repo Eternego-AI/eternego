@@ -4,6 +4,8 @@ import asyncio
 import shutil
 import subprocess
 
+from application.platform.tool import tool
+
 _INSTALL_CMD = {
     "debian":  ("sudo", "apt", "install", "-y"),
     "fedora":  ("sudo", "dnf", "install", "-y"),
@@ -61,6 +63,9 @@ async def install(program: str) -> None:
     await process.communicate()
 
 
+@tool("Execute a shell command on the person's Linux system. Use for any OS operation, "
+      "running code, installing packages, checking status, file operations. "
+      "If multiple commands are needed, wrap them in one call (e.g. cmd1 && cmd2).")
 async def execute_on_sub_process(command: str) -> tuple[int, str]:
     """Execute a shell command on Linux and return (return_code, output)."""
     process = await asyncio.create_subprocess_shell(

@@ -109,11 +109,24 @@ async def recognize(reason, mind) -> None:
     result = await reason(persona, system, prompts)
     row = result.get("meaning_row")
 
-    escalation = next((m for m in meanings if m.name == "Escalation"), meanings[-1])
+    escalation = next(m for m in meanings if m.name == "Escalation")
     if isinstance(row, (int, float)) and 1 <= int(row) <= len(meanings):
         meaning = meanings[int(row) - 1]
     else:
         meaning = escalation
+
+    # Escalation → try generating a new meaning via frontier/local model
+    if meaning.name == "Escalation":
+        from application.core.brain import ego
+        from application.core.brain.mind import meanings as meanings_module
+        code = await ego.escalate(persona, perceptions.thread(perception), meanings)
+        if code:
+            try:
+                new_meaning = meanings_module.learn(persona, code)
+                mind.add_meanings(new_meaning)
+                meaning = new_meaning
+            except Exception as e:
+                logger.warning("recognize: failed to learn meaning", {"error": str(e)})
 
     mind.recognize(perception, meaning)
 
@@ -159,6 +172,8 @@ async def wonder(reply, mind) -> None:
 
 async def decide(reason, mind) -> None:
     """Execute the action for the most important pending thought."""
+    import json
+
     thought = mind.most_important_thought(mind.pending)
     if not thought:
         return
@@ -170,6 +185,10 @@ async def decide(reason, mind) -> None:
     prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
 
     result = await reason(persona, system, prompts)
+
+    # Add model's decision as assistant signal to the thread
+    decision_text = json.dumps(result) if isinstance(result, dict) else str(result)
+    mind.answer(thought, decision_text)
 
     signal = await thought.meaning.run(result)
 

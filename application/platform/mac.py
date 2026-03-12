@@ -3,6 +3,8 @@
 import asyncio
 import shutil
 
+from application.platform.tool import tool
+
 
 async def is_installed(program: str) -> bool:
     """Check if a program is installed on macOS."""
@@ -27,6 +29,9 @@ async def install(program: str) -> None:
         await process.communicate()
 
 
+@tool("Execute a shell command on the person's macOS system. Use for any OS operation, "
+      "running code, installing packages, checking status, file operations. "
+      "If multiple commands are needed, wrap them in one call (e.g. cmd1 && cmd2).")
 async def execute_on_sub_process(command: str) -> tuple[int, str]:
     """Execute a shell command on macOS and return (return_code, output)."""
     process = await asyncio.create_subprocess_shell(

@@ -6,17 +6,16 @@ Exposes:
   incept(persona, perception)  — inject a perception directly (bypasses understanding)
   block(persona) / unblock(persona) — pause/resume accepting triggers
   is_resting(persona)          — True when the conscious pipeline is fully idle
+  add_meanings(persona, *meanings) — add meanings to the live list
   learn(persona, conversations) — run subconscious extraction on conversation text
   learn_from_experience(persona) — recall archived conversations, learn from them, clear memory
 
 Memory and ego are internal — callers never touch them.
 """
 
-import asyncio
-
 from application.core.brain.data import Signal, Perception
 from application.core.brain.mind.memory import Memory
-from application.core.brain.mind.meanings import all_meanings
+from application.core.brain.mind import meanings
 from application.core import paths
 from application.core.exceptions import MindError
 from application.platform import logger
@@ -28,8 +27,8 @@ _blocked: set[str] = set()
 def start(persona) -> None:
     """Create or restore memory, load meanings, and start the waking tick loop."""
     if persona.id not in _memories:
-        core_meanings = all_meanings(persona)
-        _memories[persona.id] = Memory(persona, core_meanings)
+        all_meanings = meanings.built_in(persona) + meanings.specific_to(persona)
+        _memories[persona.id] = Memory(persona, all_meanings)
         logger.info("mind.start: created memory", {"persona": persona.id})
     _memories[persona.id].start_thinking()
 
@@ -69,6 +68,13 @@ def is_resting(persona) -> bool:
     """True when the conscious pipeline has nothing left to process."""
     mem = _memories.get(persona.id)
     return mem.settled if mem else True
+
+
+def add_meanings(persona, *new_meanings) -> None:
+    """Add meanings to the persona's live meanings list."""
+    mem = _memories.get(persona.id)
+    if mem:
+        mem.add_meanings(*new_meanings)
 
 
 async def learn(persona, conversations: str) -> None:
