@@ -9,8 +9,8 @@ class Greeting(Meaning):
     def description(self) -> str:
         return "Daily greetings, hellos, good mornings, and other salutations."
 
-    def clarification(self) -> str:
-        return ""
+    def clarify(self) -> str | None:
+        return None
 
     def reply(self) -> str:
         return (

@@ -8,6 +8,7 @@ from application.core.brain.mind import conscious
 
 async def tick(mind) -> None:
     """Loop over conscious thinking states indefinitely, restarting when mind receives new signals."""
+    logger.info("Ticking in mind", {"persona": mind.persona})
     from application.core.brain import ego
 
     pipeline = [
@@ -17,8 +18,6 @@ async def tick(mind) -> None:
         (conscious.decide,     ego.reason),
         (conscious.conclude,   ego.reply),
     ]
-
-    logger.info("clock.tick: started", {"persona": mind.persona.id})
 
     while True:
         try:
@@ -32,4 +31,4 @@ async def tick(mind) -> None:
             if not restart:
                 await asyncio.sleep(0.05)
         except Exception as e:
-            logger.error("clock.tick: exception", {"error": str(e), "persona": mind.persona.id})
+            logger.error("Mind tick got an exception", {"persona": mind.persona, "error": str(e)})

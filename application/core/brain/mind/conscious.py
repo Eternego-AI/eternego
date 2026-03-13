@@ -14,27 +14,19 @@ from application.platform import logger
 
 async def understand(reason, mind) -> None:
     """Route unattended signals to existing or new perception threads."""
+    logger.info("Understanding", {"persona": mind.persona})
     if not mind.unattended:
         return
 
-    persona = mind.persona
-    logger.info("understand", {"unattended": len(mind.unattended)})
+    logger.debug("Understand", {"persona": mind.persona, "unattended": mind.unattended})
 
     known = mind.perceptions
     row_map = {i + 1: p for i, p in enumerate(known)}
 
-    threads_text = "\n\n".join(
-        f"{i}.\n{perceptions.thread(p)}" for i, p in row_map.items()
-    ) if known else "None"
-
-    signals_text = "\n".join(
-        f"- {signals.labeled(s)}" for s in mind.unattended
-    )
-
     system = (
         "# Task: Route incoming signals to conversation threads\n"
         "Each known thread is numbered. For each signal, return the row number(s) "
-        "of threads it continues, or a new short impression (max 8 words) if it starts "
+        "of threads it continues, or a concise impression if it starts "
         "a new topic. A signal can belong to multiple threads if it spans subjects.\n\n"
         "Return routes ordered by importance — most urgent or significant thread first.\n\n"
         "Return JSON:\n"
@@ -47,12 +39,14 @@ async def understand(reason, mind) -> None:
     )
 
     prompts = [Prompt(role="user", content=(
-        f"Known threads:\n{threads_text}\n\n"
-        f"Signals to route:\n{signals_text}\n\n"
+        "Known threads:\n"
+        f"{"\n\n".join(f"{i}.\n{perceptions.thread(p)}" for i, p in row_map.items()) if known else "None"}\n\n"
+        "Signals to route:\n"
+        f"{"\n".join(f"- {signals.labeled(s)}" for s in mind.unattended)}\n\n"
         "Route each signal using row numbers or new impressions."
     ))]
 
-    result = await reason(persona, system, prompts)
+    result = await reason(mind.persona, system, prompts)
     routes = result.get("routes", [])
 
     signal_map = {s.id: s for s in mind.unattended}
@@ -79,17 +73,12 @@ async def understand(reason, mind) -> None:
 
 async def recognize(reason, mind) -> None:
     """Match the most important unrecognized perception to a meaning."""
+    logger.info("Recognizing", {"persona": mind.persona})
     perception = mind.most_important_perception
     if not perception:
         return
 
-    persona = mind.persona
-    logger.info("recognize", {"impression": perception.impression})
-
-    meanings = mind.meanings
-    meanings_text = "\n".join(
-        f"{i + 1}. {m.name}: {m.description()}" for i, m in enumerate(meanings)
-    )
+    logger.debug("Recognize", {"persona": mind.persona, "impression": perception.impression})
 
     system = (
         "# Task: Match a conversation thread to a meaning\n"
@@ -101,17 +90,19 @@ async def recognize(reason, mind) -> None:
     )
 
     prompts = [Prompt(role="user", content=(
-        f"Known meanings:\n{meanings_text}\n\n"
-        f"Thread to match:\n{perceptions.thread(perception)}\n\n"
+        "Known meanings:\n"
+        f"{"\n".join(f"{i + 1}. {m.name}: {m.description()}" for i, m in enumerate(mind.meanings))}\n\n"
+        "Thread to match:\n"
+        f"{perceptions.thread(perception)}\n\n"
         "Return the row number of the best-matching meaning."
     ))]
 
-    result = await reason(persona, system, prompts)
+    result = await reason(mind.persona, system, prompts)
     row = result.get("meaning_row")
 
-    escalation = next(m for m in meanings if m.name == "Escalation")
-    if isinstance(row, (int, float)) and 1 <= int(row) <= len(meanings):
-        meaning = meanings[int(row) - 1]
+    escalation = next(m for m in mind.meanings if m.name == "Escalation")
+    if isinstance(row, (int, float)) and 1 <= int(row) <= len(mind.meanings):
+        meaning = mind.meanings[int(row) - 1]
     else:
         meaning = escalation
 
@@ -119,14 +110,14 @@ async def recognize(reason, mind) -> None:
     if meaning.name == "Escalation":
         from application.core.brain import ego
         from application.core.brain.mind import meanings as meanings_module
-        code = await ego.escalate(persona, perceptions.thread(perception), meanings)
+        code = await ego.escalate(mind.persona, perceptions.thread(perception), mind.meanings)
         if code:
             try:
-                new_meaning = meanings_module.learn(persona, code)
+                new_meaning = meanings_module.learn(mind.persona, code)
                 mind.add_meanings(new_meaning)
                 meaning = new_meaning
             except Exception as e:
-                logger.warning("recognize: failed to learn meaning", {"error": str(e)})
+                logger.error("recognize: failed to learn meaning", {"persona": mind.persona, "error": str(e)})
 
     mind.recognize(perception, meaning)
 
@@ -135,29 +126,30 @@ async def recognize(reason, mind) -> None:
 
 async def wonder(reply, mind) -> None:
     """Generate a streaming reply for the most important unanswered thought."""
+    logger.info("Wondering", {"persona": mind.persona})
     thought = mind.most_important_thought(mind.unanswered)
     if not thought:
         return
 
-    if thought.meaning.reply() is None:
+    m = thought.meaning
+    has_replied = any(s.role == "assistant" for s in thought.perception.thread)
+    prompt = m.clarify() if has_replied else m.reply()
+    if prompt is None:
         return
 
-    persona = mind.persona
-    logger.info("wonder", {"impression": thought.perception.impression})
+    logger.debug("Wonder", {"persona": mind.persona, "impression": thought.perception.impression})
 
-    channel = channels.latest(persona) or channels.default_channel(persona)
+    channel = channels.latest(mind.persona) or channels.default_channel(mind.persona)
 
-    m = thought.meaning
     system = "# This Interaction\n" + "\n".join(filter(None, [
         m.description(),
-        m.clarification(),
-        m.reply(),
+        prompt,
     ]))
 
     prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
 
     text = ""
-    async for paragraph in reply(persona, system, prompts):
+    async for paragraph in reply(mind.persona, system, prompts):
         if mind.unattended:
             break
         if channel:
@@ -175,19 +167,19 @@ async def wonder(reply, mind) -> None:
 
 async def decide(reason, mind) -> None:
     """Execute the action for the most important pending thought."""
+    logger.info("Deciding", {"persona": mind.persona})
     import json
 
     thought = mind.most_important_thought(mind.pending)
     if not thought:
         return
 
-    persona = mind.persona
-    logger.info("decide", {"impression": thought.perception.impression, "priority": thought.priority})
+    logger.debug("Decide", {"persona": mind.persona, "impression": thought.perception.impression})
 
     system = thought.meaning.path()
     prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
 
-    result = await reason(persona, system, prompts)
+    result = await reason(mind.persona, system, prompts)
 
     # Add model's decision as assistant signal to the thread
     decision_text = json.dumps(result) if isinstance(result, dict) else str(result)
@@ -205,20 +197,20 @@ async def decide(reason, mind) -> None:
 
 async def conclude(reply, mind) -> None:
     """Archive the conversation, recap it, and forget the thought."""
+    logger.info("Concluding", {"persona": mind.persona})
     thought = mind.most_important_thought(mind.concluded)
     if not thought:
         return
 
-    persona = mind.persona
-    logger.info("conclude", {"impression": thought.perception.impression})
+    logger.debug("conclude", {"persona": mind.persona, "impression": thought.perception.impression})
 
     # Archive first — get the filename
     thread_text = perceptions.thread(thought.perception)
-    filename = paths.add_history_entry(persona.id, thought.perception.impression, thread_text)
+    filename = paths.add_history_entry(mind.persona.id, thought.perception.impression, thread_text)
     recap = None
 
     if thought.meaning.path():
-        channel = channels.latest(persona) or channels.default_channel(persona)
+        channel = channels.latest(mind.persona) or channels.default_channel(mind.persona)
         system = (
             "Generate a brief, natural recap of what was accomplished in this conversation. "
             "Be concise — one or two sentences."
@@ -226,7 +218,7 @@ async def conclude(reply, mind) -> None:
         prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
 
         recap = ""
-        async for paragraph in reply(persona, system, prompts):
+        async for paragraph in reply(mind.persona, system, prompts):
             if mind.unattended:
                 return  # incomplete recap — retry next cycle
             recap += ("\n" if recap else "") + paragraph

@@ -62,7 +62,7 @@ async def escalate(persona: Persona, thread_text: str,
         "Rules:\n"
         "- Class must extend `Meaning` (imported from `application.core.brain.data`)\n"
         "- Set `name` as a class attribute (short, descriptive, e.g. 'System Check')\n"
-        "- Implement: `description()`, `clarification()`, `reply()`, `path()`\n"
+        "- Implement: `description()`, `clarify()`, `reply()`, `path()`\n"
         "- `path()` returns None for conversational-only meanings\n"
         "- `path()` returns a prompt string for tool-using meanings — reference tools by "
         "their exact name (e.g. `linux.execute_on_sub_process`) and tell the model to "
@@ -77,8 +77,8 @@ async def escalate(persona: Persona, thread_text: str,
         '    name = "Example"\n\n'
         "    def description(self):\n"
         '        return "Description of what this meaning covers."\n\n'
-        "    def clarification(self):\n"
-        '        return "What to ask if unclear."\n\n'
+        "    def clarify(self):\n"
+        '        return "What went wrong and what to ask the person to fix."\n\n'
         "    def reply(self):\n"
         '        return "How to respond to the person."\n\n'
         "    def path(self):\n"

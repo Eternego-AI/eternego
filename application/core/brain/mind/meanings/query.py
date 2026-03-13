@@ -10,8 +10,8 @@ class Query(Meaning):
     def description(self) -> str:
         return "A direct query from an external client expecting a single answer."
 
-    def clarification(self) -> str:
-        return ""
+    def clarify(self) -> str | None:
+        return None
 
     def reply(self) -> str | None:
         return None

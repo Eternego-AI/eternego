@@ -13,8 +13,8 @@ class Escalation(Meaning):
             "everything else available."
         )
 
-    def clarification(self) -> str:
-        return ""
+    def clarify(self) -> str | None:
+        return None
 
     def reply(self) -> str:
         return (

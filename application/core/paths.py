@@ -173,6 +173,11 @@ def init_git(path: Path) -> None:
     git.init(path)
 
 
+def write_as_string(path: Path, content: str) -> None:
+    """Append string content to a file."""
+    logger.info("Writing to file", {"path": str(path)})
+    filesystem.write(path, content)
+
 def append_as_string(path: Path, content: str) -> None:
     """Append string content to a file."""
     logger.info("Appending to file", {"path": str(path)})

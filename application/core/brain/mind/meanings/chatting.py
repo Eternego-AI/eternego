@@ -9,8 +9,8 @@ class Chatting(Meaning):
     def description(self) -> str:
         return "Regular casual conversation, small talk, sharing thoughts, or just talking."
 
-    def clarification(self) -> str:
-        return ""
+    def clarify(self) -> str | None:
+        return None
 
     def reply(self) -> str:
         return (

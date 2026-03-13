@@ -12,16 +12,20 @@ class Shell(Meaning):
             "troubleshoot an issue, manage files, or perform any local system operation."
         )
 
-    def clarification(self) -> str:
+    def clarify(self) -> str:
         return (
-            "If the request is ambiguous or could be destructive (e.g. deleting files, "
-            "changing system settings), confirm the exact intent before proceeding."
+            "A command has been executed. Look at the output in the conversation. "
+            "If it succeeded, report the result clearly. "
+            "If it failed — non-zero exit code, permission denied, command not found, "
+            "invalid path — explain what went wrong and either suggest a fix "
+            "or ask the person what they would like to do instead."
         )
 
     def reply(self) -> str:
         return (
             "Explain briefly what you will do, then do it. "
-            "After execution, report the result clearly — success or failure with relevant output."
+            "If the request is ambiguous or could be destructive (e.g. deleting files, "
+            "changing system settings), confirm the exact intent before proceeding."
         )
 
     def path(self) -> str | None:

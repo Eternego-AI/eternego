@@ -5,9 +5,13 @@ import importlib.util
 from application.core.brain.data import Meaning
 from application.core.brain.mind.meanings.greeting import Greeting
 from application.core.brain.mind.meanings.chatting import Chatting
-from application.core.brain.mind.meanings.setting_reminder import SettingReminder
-from application.core.brain.mind.meanings.scheduling_event import SchedulingEvent
+from application.core.brain.mind.meanings.reminder import Reminder
+from application.core.brain.mind.meanings.schedule import Scheduler
+from application.core.brain.mind.meanings.calendar import Calendar
+from application.core.brain.mind.meanings.noting import Noting
+from application.core.brain.mind.meanings.recalling import Recalling
 from application.core.brain.mind.meanings.shell import Shell
+from application.core.brain.mind.meanings.manifesting_destiny import ManifestingDestiny
 from application.core.brain.mind.meanings.escalation import Escalation
 from application.core import paths
 from application.platform import logger
@@ -18,9 +22,13 @@ def built_in(persona) -> list:
     return [
         Greeting(persona),
         Chatting(persona),
-        SettingReminder(persona),
-        SchedulingEvent(persona),
+        Reminder(persona),
+        Scheduler(persona),
+        Calendar(persona),
+        Noting(persona),
+        Recalling(persona),
         Shell(persona),
+        ManifestingDestiny(persona),
         Escalation(persona),
     ]
 
