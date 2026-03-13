@@ -23,5 +23,8 @@ class Escalation(Meaning):
             "Be curious and natural, not robotic or apologetic."
         )
 
+    def summarize(self) -> str | None:
+        return None
+
     def path(self) -> str | None:
         return None

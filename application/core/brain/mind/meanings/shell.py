@@ -28,6 +28,9 @@ class Shell(Meaning):
             "changing system settings), confirm the exact intent before proceeding."
         )
 
+    def summarize(self) -> str | None:
+        return None
+
     def path(self) -> str | None:
         return (
             "Determine the shell command needed to fulfill the person's request.\n"

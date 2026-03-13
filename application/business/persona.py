@@ -25,7 +25,7 @@ async def agents() -> Outcome[dict]:
             await bus.broadcast("No personas found", {})
             return Outcome(success=False, message="No personas found. Create one to get started.", data={"personas": []})
         try:
-            persona_ids = [d.name for d in root.iterdir() if d.is_dir() and (d / "config.json").exists()]
+            persona_ids = [d.name for d in root.iterdir() if d.is_dir() and (d / "home" / "config.json").exists()]
         except OSError as e:
             raise IdentityError("Failed to list personas") from e
         personas = []
@@ -154,6 +154,7 @@ async def create(
         paths.create_directory(paths.experiences(persona.id))
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
+        paths.save_as_string(paths.person_identity(persona.id), f"The person's timezone is {system.timezone()}.")
 
         phrase = await local_model.generate_recovery_phrase(persona.model.name)
         await system.save_phrases(persona, phrase)
@@ -620,20 +621,26 @@ async def nudge(persona: Persona, message: str) -> Outcome[dict]:
 
 
 async def live(persona: Persona, dt) -> Outcome[dict]:
-    """Check for destiny entries due at dt and nudge the persona to act on them."""
-    await bus.propose("Checking destiny", {"persona": persona})
+    """Incept a check-todos perception so the persona reviews its schedule."""
+    from application.core.brain.data import Signal, Perception
+    import uuid
+
+    await bus.propose("Checking todos", {"persona": persona})
     try:
-        destiny_path = paths.destiny(persona.id)
-        pattern = f"*{dt.strftime('%Y-%m-%d-%H-%M')}*.md"
-        contents = paths.read_files_matching(persona.id, destiny_path, pattern)
-        if not contents:
-            await bus.broadcast("No destiny due", {"persona": persona})
-            return Outcome(success=True, message="No destiny entries due.")
-        await nudge(persona, f"The following destiny entries are due right now:\n\n" + "\n\n".join(contents) + "\n\nReach out to the person for each one, then manifest destiny.")
-        await bus.broadcast("Destiny checked", {"persona": persona, "due": len(contents)})
-        return Outcome(success=True, message=f"{len(contents)} destiny entries due.")
-    except OSError as e:
-        await bus.broadcast("Destiny check failed", {"persona": persona, "error": str(e)})
+        signal = Signal(
+            id=str(uuid.uuid4()),
+            role="user",
+            content=f"Time check: {dt.strftime('%Y-%m-%d %H:%M UTC')}",
+        )
+        perception = Perception(
+            impression="check todos",
+            thread=[signal],
+        )
+        mind.incept(persona, perception)
+        await bus.broadcast("Todos checked", {"persona": persona})
+        return Outcome(success=True, message="Check todos incepted.")
+    except MindError as e:
+        await bus.broadcast("Todos check failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))
 
 

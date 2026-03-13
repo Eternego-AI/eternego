@@ -64,15 +64,18 @@ async def chat_json_stream(model: str, messages: list[dict]) -> dict:
 
 
 async def chat_stream_paragraph(model: str, messages: list[dict]):
-    """Stream response, yielding one complete line at a time."""
+    """Stream response, yielding one complete paragraph at a time.
+
+    Paragraphs are separated by blank lines (double newline).
+    """
     logger.info("local_model.chat_stream_paragraph", {"model": model})
     buffer = ""
     async for token in chat_stream(model, messages):
         buffer += token
-        while "\n" in buffer:
-            line, buffer = buffer.split("\n", 1)
-            if line.strip():
-                yield line.strip()
+        while "\n\n" in buffer:
+            paragraph, buffer = buffer.split("\n\n", 1)
+            if paragraph.strip():
+                yield paragraph.strip()
     if buffer.strip():
         yield buffer.strip()
 

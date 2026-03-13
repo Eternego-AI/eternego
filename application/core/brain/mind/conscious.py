@@ -6,7 +6,7 @@ Five functions run in sequence by the clock tick:
 
 from application.core.data import Prompt
 from application.core.brain import perceptions, signals
-from application.core import channels, paths
+from application.core import channels
 from application.platform import logger
 
 
@@ -21,43 +21,49 @@ async def understand(reason, mind) -> None:
     logger.debug("Understand", {"persona": mind.persona, "unattended": mind.unattended})
 
     known = mind.perceptions
-    row_map = {i + 1: p for i, p in enumerate(known)}
+    thread_map = {i + 1: p for i, p in enumerate(known)}
+    unattended = list(mind.unattended)
+    signal_map = {i + 1: s for i, s in enumerate(unattended)}
 
     system = (
         "# Task: Route incoming signals to conversation threads\n"
-        "Each known thread is numbered. For each signal, return the row number(s) "
-        "of threads it continues, or a concise impression if it starts "
-        "a new topic. A signal can belong to multiple threads if it spans subjects.\n\n"
+        "Threads and signals are both numbered. For each signal number, return the thread "
+        "number(s) it continues, or a concise impression if it starts a new topic. "
+        "A signal can belong to multiple threads if it spans subjects.\n\n"
         "Return routes ordered by importance — most urgent or significant thread first.\n\n"
         "Return JSON:\n"
         "{\n"
         '  "routes": [\n'
-        '    {"signal_id": "...", "rows": [1, 3], "new_impressions": ["new topic"]}\n'
+        '    {"signal": 1, "threads": [1, 3], "new_impressions": ["new topic"]}\n'
         "  ]\n"
         "}\n"
-        "Use empty lists when not applicable. Prefer rows over new_impressions."
+        "Use empty lists when not applicable. Prefer threads over new_impressions."
     )
 
     prompts = [Prompt(role="user", content=(
         "Known threads:\n"
-        f"{"\n\n".join(f"{i}.\n{perceptions.thread(p)}" for i, p in row_map.items()) if known else "None"}\n\n"
+        f"{"\n\n".join(f"{i}.\n{perceptions.thread(p)}" for i, p in thread_map.items()) if known else "None"}\n\n"
         "Signals to route:\n"
-        f"{"\n".join(f"- {signals.labeled(s)}" for s in mind.unattended)}\n\n"
-        "Route each signal using row numbers or new impressions."
+        f"{"\n".join(f"{i}. {signals.labeled(s)}" for i, s in signal_map.items())}\n\n"
+        "Route each signal by its number."
     ))]
 
     result = await reason(mind.persona, system, prompts)
     routes = result.get("routes", [])
 
-    signal_map = {s.id: s for s in mind.unattended}
-
+    routed = set()
     for route in routes:
-        signal = signal_map.get(route.get("signal_id"))
+        signal_num = route.get("signal")
+        if not isinstance(signal_num, (int, float)):
+            continue
+        signal = signal_map.get(int(signal_num))
         if not signal:
             continue
 
-        for row in route.get("rows", []):
-            perception = row_map.get(row)
+        routed.add(signal.id)
+
+        for thread_num in route.get("threads", []):
+            perception = thread_map.get(thread_num)
             if perception:
                 mind.understand(signal, perception.impression)
 
@@ -65,7 +71,13 @@ async def understand(reason, mind) -> None:
             if impression:
                 mind.understand(signal, impression)
 
-        if not route.get("rows") and not route.get("new_impressions"):
+        if not route.get("threads") and not route.get("new_impressions"):
+            mind.understand(signal, signal.content[:60])
+
+    # Fallback: signals the LLM failed to route get their own perception
+    for signal in unattended:
+        if signal.id not in routed:
+            logger.warning("understand: unrouted signal, using fallback", {"signal_id": signal.id})
             mind.understand(signal, signal.content[:60])
 
 
@@ -176,18 +188,32 @@ async def decide(reason, mind) -> None:
 
     logger.debug("Decide", {"persona": mind.persona, "impression": thought.perception.impression})
 
-    system = thought.meaning.path()
+    system = (
+        thought.meaning.path()
+        + "\n\nAlways include a \"recap\" field — a brief one-sentence summary of what "
+        "you are doing or have done.\n"
+        "If the task is already fulfilled based on the conversation, do not take "
+        "further action. Return only: {\"recap\": \"what was accomplished\"}"
+    )
     prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
 
     result = await reason(mind.persona, system, prompts)
+    recap = result.pop("recap", None) if isinstance(result, dict) else None
 
-    # Add model's decision as assistant signal to the thread
-    decision_text = json.dumps(result) if isinstance(result, dict) else str(result)
+    if not result:
+        if recap:
+            mind.answer(thought, recap)
+        mind.resolve(thought)
+        return
+
+    decision_text = json.dumps(result)
     mind.answer(thought, decision_text)
 
     signal = await thought.meaning.run(result)
 
     if signal is None:
+        if recap:
+            mind.answer(thought, recap)
         mind.resolve(thought)
     else:
         mind.inform(thought, signal)
@@ -196,39 +222,35 @@ async def decide(reason, mind) -> None:
 # ── Concluding ───────────────────────────────────────────────────────────────
 
 async def conclude(reply, mind) -> None:
-    """Archive the conversation, recap it, and forget the thought."""
+    """Summarize for the person and mark the thought as concluded.
+
+    No archiving — thread stays in memory until sleep.
+    """
     logger.info("Concluding", {"persona": mind.persona})
+    from application.platform import datetimes
+
     thought = mind.most_important_thought(mind.concluded)
     if not thought:
         return
 
     logger.debug("conclude", {"persona": mind.persona, "impression": thought.perception.impression})
 
-    # Archive first — get the filename
-    thread_text = perceptions.thread(thought.perception)
-    filename = paths.add_history_entry(mind.persona.id, thought.perception.impression, thread_text)
-    recap = None
-
-    if thought.meaning.path():
+    summary_prompt = thought.meaning.summarize()
+    if summary_prompt:
         channel = channels.latest(mind.persona) or channels.default_channel(mind.persona)
-        system = (
-            "Generate a brief, natural recap of what was accomplished in this conversation. "
-            "Be concise — one or two sentences."
-        )
+
+        system = "# This Interaction\n" + "\n".join(filter(None, [
+            thought.meaning.description(),
+            summary_prompt,
+        ]))
         prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
 
-        recap = ""
+        text = ""
         async for paragraph in reply(mind.persona, system, prompts):
-            if mind.unattended:
-                return  # incomplete recap — retry next cycle
-            recap += ("\n" if recap else "") + paragraph
+            await channels.send(channel, paragraph)
+            text += ("\n" if text else "") + paragraph
 
-        if recap:
-            if channel:
-                await channels.send(channel, recap)
+        if text:
+            mind.answer(thought, text)
 
-    # Remember recap with filepath so subconscious can find the full conversation
-    if recap is not None:
-        mind.remember(f"{filename}\n{recap}")
-
-    mind.forget(thought)
+    thought.concluded_at = datetimes.now()

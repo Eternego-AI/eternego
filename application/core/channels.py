@@ -31,9 +31,9 @@ def keep_open(persona: Persona, channel: Channel, on_message: Callable) -> Calla
         stop_event = threading.Event()
         loop = asyncio.get_running_loop()
 
-        def bridge(text: str, chat_id: str):
+        def bridge(text: str, chat_id: str, message_id: str):
             msg_channel = Channel(type="telegram", name=chat_id, credentials=channel.credentials)
-            message = Message(channel=msg_channel, content=text)
+            message = Message(channel=msg_channel, content=text, id=message_id)
 
             async def handle():
                 await on_message(message)

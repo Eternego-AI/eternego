@@ -40,12 +40,21 @@ def default_media(func: Callable[[Message], None]) -> Callable[[Message], None]:
     return func
 
 
-def file_media(path: str | Path) -> Callable[[Message], None]:
-    """Create a file media that writes logs to the specified file."""
-    log_path = Path(path)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+def file_media(path: str | Path | Callable[[], Path]) -> Callable[[Message], None]:
+    """Create a file media that writes logs to the specified file.
+
+    Pass a callable to resolve the path on each write (e.g. for daily rotation).
+    """
+    if callable(path):
+        resolve = path
+    else:
+        static_path = Path(path)
+        static_path.parent.mkdir(parents=True, exist_ok=True)
+        resolve = lambda: static_path
 
     def media(message: Message) -> None:
+        log_path = resolve()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         log_entry = {
             "id": message.id,
             "time": datetimes.iso_8601(datetimes.now()),

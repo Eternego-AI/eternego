@@ -21,12 +21,15 @@ LORA_CONVERT_SCRIPT: str = os.environ.get(
     str(_PROJECT_ROOT / "tools" / "convert_lora_to_gguf.py"),
 )
 
-# Log file paths — written by the service, tailed by the CLI.
-LOG_FILE: str = os.environ.get(
-    "LOG_FILE",
-    str(_PROJECT_ROOT / "logs" / f"eternego-{datetime.now().strftime('%Y-%m-%d')}.log")
-)
-SIGNAL_LOG_FILE: str = os.environ.get(
-    "SIGNAL_LOG_FILE",
-    str(_PROJECT_ROOT / "logs" / f"eternego-signals-{datetime.now().strftime('%Y-%m-%d')}.log")
-)
+# Log directory — daily log files live here.
+LOGS_DIR: Path = Path(os.environ.get("LOGS_DIR", str(_PROJECT_ROOT / "logs")))
+
+
+def log_file() -> Path:
+    """Today's application log file."""
+    return LOGS_DIR / f"eternego-{datetime.now().strftime('%Y-%m-%d')}.log"
+
+
+def signal_log_file() -> Path:
+    """Today's signal log file."""
+    return LOGS_DIR / f"eternego-signals-{datetime.now().strftime('%Y-%m-%d')}.log"

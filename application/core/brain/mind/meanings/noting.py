@@ -29,6 +29,9 @@ class Noting(Meaning):
     def reply(self) -> str:
         return "Acknowledge the note briefly. Confirm what you understood and that you will remember it."
 
+    def summarize(self) -> str | None:
+        return None
+
     def path(self) -> str | None:
         return (
             "Extract the note from this conversation.\n"

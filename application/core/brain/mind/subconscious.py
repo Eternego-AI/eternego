@@ -23,6 +23,9 @@ async def person_identity(persona, conversations: str) -> None:
         "Extract new facts from the conversations and merge with the known facts. "
         "Combine duplicates into single statements. Note contradictions. "
         "Drop anything already captured.\n\n"
+        "Pay attention to timezone changes — if the person mentions travel, "
+        "relocation, or being in a different city, update their timezone accordingly "
+        "(e.g. 'The person's timezone is Asia/Tokyo from March 15 to March 22').\n\n"
         "Return the complete merged list — one fact per line, no bullets, no headers."
     )
     prompts = [Prompt(role="user", content="Process the input above.")]

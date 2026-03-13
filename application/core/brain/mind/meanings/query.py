@@ -16,6 +16,9 @@ class Query(Meaning):
     def reply(self) -> str | None:
         return None
 
+    def summarize(self) -> str | None:
+        return None
+
     def path(self) -> str | None:
         return (
             "Answer this query directly and concisely as the persona.\n"

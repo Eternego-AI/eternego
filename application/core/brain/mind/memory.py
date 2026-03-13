@@ -14,7 +14,7 @@ class Memory:
     """Per-persona cognitive graph with disk persistence.
 
     Holds signals, perceptions, thoughts, and their relationships.
-    Restores from disk on creation; persists when dirty via persist().
+    Restores from disk on creation; caller is responsible for calling persist().
     """
 
     def __init__(self, persona, meanings: list[Meaning]):
@@ -25,7 +25,6 @@ class Memory:
         self._thoughts: list[Thought] = []
         self._signal_perceptions: dict[str, list[str]] = {}
         self._unattended_hash: int | None = None
-        self._dirty: bool = False
         self._tick_task: asyncio.Task | None = None
         self._storage_id = f"mind:{persona.id}"
         self._restore()
@@ -34,6 +33,7 @@ class Memory:
 
     def _restore(self) -> None:
         """Load graph state from disk."""
+        logger.info("memory.restore", {"persona": self._persona.id})
         path = paths.mind_state(self._persona.id)
         path.parent.mkdir(parents=True, exist_ok=True)
         persistent_memory.load(self._storage_id, path)
@@ -81,20 +81,19 @@ class Memory:
                 priority=t.get("priority", 0),
                 id=t["id"],
                 processed_at=datetime.fromisoformat(t["processed_at"]) if t.get("processed_at") else None,
+                concluded_at=datetime.fromisoformat(t["concluded_at"]) if t.get("concluded_at") else None,
             )
             self._thoughts.append(thought)
 
-        logger.info("memory.restore", {
+        logger.debug("memory.restore loaded", {
             "signals": len(self._signals),
             "perceptions": len(self._perceptions),
             "thoughts": len(self._thoughts),
         })
 
     def persist(self) -> None:
-        """Save graph state to disk if changed."""
-        if not self._dirty:
-            return
-
+        """Save graph state to disk."""
+        logger.info("memory.persist", {"persona": self._persona.id})
         state = {
             "signals": [
                 {
@@ -122,6 +121,7 @@ class Memory:
                     "priority": t.priority,
                     "id": t.id,
                     "processed_at": t.processed_at.isoformat() if t.processed_at else None,
+                    "concluded_at": t.concluded_at.isoformat() if t.concluded_at else None,
                 }
                 for t in self._thoughts
             ],
@@ -130,9 +130,7 @@ class Memory:
 
         persistent_memory.clear(self._storage_id)
         persistent_memory.append(self._storage_id, state)
-        self._dirty = False
-        logger.info("memory.persist", {
-            "persona": self._persona.id,
+        logger.debug("memory.persist saved", {
             "signals": len(self._signals),
             "perceptions": len(self._perceptions),
             "thoughts": len(self._thoughts),
@@ -150,26 +148,27 @@ class Memory:
 
     def add_meanings(self, *new_meanings) -> None:
         """Add meanings to the live list (for runtime escalation)."""
+        logger.info("memory.add_meanings", {"persona": self._persona.id})
         self._meanings.extend(new_meanings)
 
     # ── Incoming ──────────────────────────────────────────────────────────────
 
     def trigger(self, signal: Signal) -> None:
         """Accept an outside signal into the mind."""
-        logger.info("memory.trigger", {"id": signal.id, "role": signal.role})
+        logger.info("memory.trigger", {"persona": self._persona.id, "signal": signal.id})
         self._signals[signal.id] = signal
-        self._dirty = True
+
 
     def incept(self, perception: Perception) -> None:
         """Inject a perception directly, bypassing understanding."""
-        logger.info("memory.incept", {"impression": perception.impression})
+        logger.info("memory.incept", {"persona": self._persona.id, "impression": perception.impression})
         for signal in perception.thread:
             self._signals[signal.id] = signal
             self._signal_perceptions.setdefault(signal.id, [])
             if perception.impression not in self._signal_perceptions[signal.id]:
                 self._signal_perceptions[signal.id].append(perception.impression)
         self._perceptions[perception.impression] = perception
-        self._dirty = True
+
 
     # ── Signal views ──────────────────────────────────────────────────────────
 
@@ -260,8 +259,9 @@ class Memory:
 
     @property
     def concluded(self) -> list[Thought]:
-        """Thoughts with processed_at set, ready for concluding."""
-        return [t for t in self._thoughts if t.processed_at is not None]
+        """Thoughts with processed_at set but not yet concluded."""
+        return [t for t in self._thoughts
+                if t.processed_at is not None and t.concluded_at is None]
 
     def most_important_thought(self, thoughts: list[Thought]) -> Thought | None:
         """The highest-priority Thought — highest priority, then oldest by id."""
@@ -280,6 +280,7 @@ class Memory:
 
     def understand(self, signal: Signal, impression: str) -> None:
         """Attach signal to the Perception with this impression; create if new."""
+        logger.info("memory.understand", {"persona": self._persona.id, "signal": signal.id, "impression": impression})
         if impression not in self._perceptions:
             self._perceptions[impression] = Perception(impression=impression)
         perception = self._perceptions[impression]
@@ -288,69 +289,65 @@ class Memory:
         self._signal_perceptions.setdefault(signal.id, [])
         if impression not in self._signal_perceptions[signal.id]:
             self._signal_perceptions[signal.id].append(impression)
-        self._dirty = True
+
 
         # Free concluded thoughts so perception can be re-recognized
         for t in list(self._thoughts):
-            if t.perception.impression == impression and t.processed_at is not None:
-                from application.core.brain import perceptions as perc_fmt
-                thread_text = perc_fmt.thread(t.perception)
-                filename = paths.add_history_entry(self._persona.id, impression, thread_text)
-                self.remember(filename)
+            if t.perception.impression == impression and t.concluded_at is not None:
                 self._thoughts.remove(t)
-                logger.info("memory.understand: freed concluded thought", {"impression": impression})
+                logger.debug("memory.understand: freed concluded thought", {"impression": impression})
 
     def question(self, thought: Thought) -> None:
         """Add a pre-formed thought directly (bypasses understand + recognize)."""
-        logger.info("memory.question", {"impression": thought.perception.impression,
-                                         "meaning": type(thought.meaning).__name__})
+        logger.info("memory.question", {"persona": self._persona.id, "thought": thought.id})
         self._thoughts.append(thought)
-        self._dirty = True
+
 
     def recognize(self, perception: Perception, meaning, priority: int = 0) -> Thought:
         """Create a Thought from a Perception and a Meaning instance."""
+        logger.info("memory.recognize", {"persona": self._persona.id, "impression": perception.impression})
         thought = Thought(perception=perception, meaning=meaning, priority=priority)
         self._thoughts.append(thought)
-        self._dirty = True
-        logger.info("memory.recognize", {"impression": perception.impression,
-                                         "meaning": type(meaning).__name__,
-                                         "priority": priority})
+
         return thought
 
     def answer(self, thought: Thought, text: str) -> None:
         """Append an assistant Signal to the thread."""
+        logger.info("memory.answer", {"persona": self._persona.id, "thought": thought.id})
         signal = Signal(id=str(uuid.uuid4()), role="assistant", content=text)
         self._signals[signal.id] = signal
         thought.perception.thread.append(signal)
         self._signal_perceptions.setdefault(signal.id, [])
         if thought.perception.impression not in self._signal_perceptions[signal.id]:
             self._signal_perceptions[signal.id].append(thought.perception.impression)
-        self._dirty = True
+
 
     def resolve(self, thought: Thought) -> None:
         """Mark thought as processed (sets processed_at)."""
+        logger.info("memory.resolve", {"persona": self._persona.id, "thought": thought.id})
         thought.processed_at = datetimes.now()
-        self._dirty = True
-        logger.info("memory.resolve", {"thought_id": thought.id})
+
 
     def inform(self, thought: Thought, signal: Signal) -> None:
         """Append a user Signal (tool result) directly into the thread."""
+        logger.info("memory.inform", {"persona": self._persona.id, "thought": thought.id, "signal": signal.id})
         self._signals[signal.id] = signal
         thought.perception.thread.append(signal)
         self._signal_perceptions.setdefault(signal.id, [])
         if thought.perception.impression not in self._signal_perceptions[signal.id]:
             self._signal_perceptions[signal.id].append(thought.perception.impression)
-        self._dirty = True
+
 
     def remember(self, text: str) -> None:
         """Create a system Signal and add it to context."""
+        logger.info("memory.remember", {"persona": self._persona.id})
         signal = Signal(id=str(uuid.uuid4()), role="system", content=text)
         self._signals[signal.id] = signal
-        self._dirty = True
-        logger.info("memory.remember", {"length": len(text)})
+
 
     def forget(self, thought: Thought) -> None:
         """Remove thought and its exclusive Signals from the graph."""
+        logger.info("memory.forget", {"persona": self._persona.id, "thought": thought.id})
         impression = thought.perception.impression
         other_impressions = {t.perception.impression for t in self._thoughts
                              if t is not thought}
@@ -369,8 +366,7 @@ class Memory:
             self._thoughts.remove(thought)
         else:
             logger.warning("memory.forget: thought not found in list", {"impression": impression})
-        self._dirty = True
-        logger.info("memory.forget", {"impression": impression})
+
 
     # ── State ─────────────────────────────────────────────────────────────────
 
@@ -387,12 +383,14 @@ class Memory:
 
     def start_thinking(self) -> None:
         """Start the cognitive tick loop."""
+        logger.info("memory.start_thinking", {"persona": self._persona.id})
         if self._tick_task is None or self._tick_task.done():
             from application.core.brain.mind import clock
             self._tick_task = asyncio.create_task(clock.tick(self))
 
     def stop_thinking(self) -> None:
         """Cancel the running tick task and persist state."""
+        logger.info("memory.stop_thinking", {"persona": self._persona.id})
         if self._tick_task and not self._tick_task.done():
             self._tick_task.cancel()
         self._tick_task = None
@@ -400,16 +398,18 @@ class Memory:
 
     def snapshot(self) -> list[tuple[str, list]]:
         """Return all active perceptions as (impression, thread) pairs for archiving."""
+        logger.info("memory.snapshot", {"persona": self._persona.id})
         return [(p.impression, list(p.thread)) for p in self._perceptions.values()]
 
     def clear(self) -> None:
         """Wipe all in-memory state and persist the empty graph."""
+        logger.info("memory.clear", {"persona": self._persona.id})
         self._signals.clear()
         self._perceptions.clear()
         self._thoughts.clear()
         self._signal_perceptions.clear()
         self._unattended_hash = None
-        self._dirty = True
+
         self.persist()
 
     # ── Change detection ──────────────────────────────────────────────────────

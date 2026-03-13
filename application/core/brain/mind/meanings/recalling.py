@@ -29,6 +29,9 @@ class Recalling(Meaning):
     def reply(self) -> str | None:
         return None
 
+    def summarize(self) -> str | None:
+        return None
+
     def path(self) -> str | None:
         history_dir = paths.history(self.persona.id)
         if not history_dir.exists():

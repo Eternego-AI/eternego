@@ -48,7 +48,7 @@ def typing_action(token: str, chat_id: str) -> None:
 def poll(
     token: str,
     username: str,
-    on_message: Callable[[str, str], None],
+    on_message: Callable[[str, str, str], None],
     stop: Callable[[], bool],
     on_error: Callable[[Exception], None] | None = None,
 ) -> None:
@@ -80,11 +80,13 @@ def poll(
             if not text or not msg_chat_id:
                 continue
 
+            msg_id = str(message.get("message_id", ""))
+
             is_group = message.get("chat", {}).get("type", "") in ("group", "supergroup")
             if is_group and not is_mentioned(username, text):
                 continue
 
-            on_message(text, msg_chat_id)
+            on_message(text, msg_chat_id, msg_id)
 
 
 def is_mentioned(username: str, text: str) -> bool:

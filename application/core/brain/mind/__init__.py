@@ -114,30 +114,55 @@ async def learn(persona: Persona, conversations: str) -> None:
     await sub.synthesize_dna(persona)
 
 
+def archive(persona: Persona, thought: Thought) -> str:
+    """Archive a single thought to history and remove it from memory."""
+    logger.info("Archive thought in mind", {"persona": persona, "thought": thought.id})
+    from application.core.brain import perceptions
+
+    mem = _memories.get(persona.id)
+    thread_text = perceptions.thread(thought.perception)
+    filename = paths.add_history_entry(persona.id, thought.perception.impression, thread_text)
+    mem.forget(thought)
+    return filename
+
+
 async def learn_from_experience(persona: Persona) -> None:
-    """Recall archived conversations, learn from them, and clear memory.
+    """Learn from all thoughts, then archive each individually.
 
     Caller must block and wait for is_resting() before calling this.
     """
     logger.info("Learn from mind experiences", {"persona": persona})
+    from application.core.brain import perceptions
+
     mem = _memories.get(persona.id)
     if mem is None:
         logger.warning("mind.learn_from_experience: no memory loaded", {"persona": persona})
         return
 
-    # Load conversations from recap signals → history files
+    all_thoughts = list(mem.intentions)
+    if not all_thoughts:
+        return
+
     conversations = []
-    for signal in mem.context:
-        lines = signal.content.split("\n", 1)
-        filename = lines[0]
-        recap = lines[1] if len(lines) > 1 else ""
-        filepath = paths.history(persona.id) / filename
-        content = paths.read(filepath) if filepath.exists() else ""
-        if content:
-            conversations.append(f"{recap}\n{content}" if recap else content)
+    for thought in all_thoughts:
+        conversations.append(perceptions.thread(thought.perception))
 
     await learn(persona, "\n\n---\n\n".join(conversations))
-    mem.clear()
+
+    for thought in all_thoughts:
+        # Capture recap before archive destroys the thread
+        recap = None
+        if thought.concluded_at is not None:
+            recap_signals = [s for s in thought.perception.thread
+                             if s.role == "assistant" and s.created_at <= thought.concluded_at]
+            recap = recap_signals[-1].content if recap_signals else thought.perception.impression
+
+        filename = archive(persona, thought)
+
+        if recap is not None:
+            paths.add_history_briefing(persona.id, "| File | Recap |", f"| {filename} | {recap} |")
+
+    mem.persist()
 
 
 def stop(persona: Persona) -> None:

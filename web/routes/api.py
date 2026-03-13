@@ -1,26 +1,27 @@
 """Internal API routes — Eternego-specific endpoints."""
 
 import json
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 
 from application.business import environment, persona
+from config.application import log_file, signal_log_file
 from web.requests import HearRequest, PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
 
 router = APIRouter(prefix="/api")
 
 _LOG_FILES = {
-    "app":     Path("eternego.log"),
-    "signals": Path("eternego-signals.log"),
+    "app":     log_file,
+    "signals": signal_log_file,
 }
 
 
 @router.get("/logs")
 async def get_logs(file: str = Query("app"), tail: int = Query(200)):
-    path = _LOG_FILES.get(file)
-    if path is None:
+    path_fn = _LOG_FILES.get(file)
+    if path_fn is None:
         raise HTTPException(status_code=400, detail="Unknown log file")
+    path = path_fn()
     if not path.exists():
         return {"entries": []}
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()

@@ -20,6 +20,9 @@ class Chatting(Meaning):
             "Keep the exchange alive without dominating it."
         )
 
+    def summarize(self) -> str | None:
+        return None
+
     def path(self) -> str | None:
         return None
 

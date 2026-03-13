@@ -30,6 +30,9 @@ class Calendar(Meaning):
     def reply(self) -> str | None:
         return None
 
+    def summarize(self) -> str | None:
+        return None
+
     def path(self) -> str | None:
         return (
             "Extract the date range the person is asking about.\n"

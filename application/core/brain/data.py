@@ -47,6 +47,9 @@ class Meaning(ABC):
     @abstractmethod
     def path(self) -> str | None: ...
 
+    @abstractmethod
+    def summarize(self) -> str | None: ...
+
     async def run(self, persona_response: dict):
         """Default runner — dispatches tool calls via the adaptor.
 
@@ -71,6 +74,7 @@ class Thought:
     priority: int = 0       # importance rank; higher = more important
     id: str = ""
     processed_at: datetime | None = None
+    concluded_at: datetime | None = None
 
     def __post_init__(self):
         if not self.id:

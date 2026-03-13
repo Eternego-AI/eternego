@@ -32,3 +32,4 @@ async def tick(mind) -> None:
                 await asyncio.sleep(0.05)
         except Exception as e:
             logger.error("Mind tick got an exception", {"persona": mind.persona, "error": str(e)})
+            mind.persist()

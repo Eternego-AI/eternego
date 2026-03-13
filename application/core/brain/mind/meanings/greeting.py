@@ -19,6 +19,9 @@ class Greeting(Meaning):
             "You may ask how they are or what's on their mind, but don't pepper them with questions."
         )
 
+    def summarize(self) -> str | None:
+        return None
+
     def path(self) -> str | None:
         return None
 

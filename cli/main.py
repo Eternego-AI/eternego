@@ -70,12 +70,13 @@ def cmd_service_status(_):
         pass
 
 def cmd_service_logs(_):
-    from config.application import LOG_FILE
+    from config.application import log_file
+    path = str(log_file())
     try:
         if _OS == "Windows":
-            subprocess.run(["powershell", "-Command", f"Get-Content -Wait -Path '{LOG_FILE}'"])
+            subprocess.run(["powershell", "-Command", f"Get-Content -Wait -Path '{path}'"])
         else:
-            subprocess.run(["tail", "-f", LOG_FILE])
+            subprocess.run(["tail", "-f", path])
     except KeyboardInterrupt:
         pass
 

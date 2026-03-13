@@ -2,13 +2,31 @@
 
 from application.core.data import Persona, Prompt
 from application.core.brain import character, current
-from application.core import local_model, frontier, tools, channels
+from application.core import local_model, frontier, tools, channels, paths
 from application.platform import logger
 
 
 def identity(persona: Persona) -> str:
     """Build the character system prompt for this persona."""
-    return character.shape(persona) + "\n\n" + current.situation(persona)
+    sections = [character.shape(persona), current.situation(persona.id)]
+
+    wishes = paths.read(paths.wishes(persona.id))
+    if wishes.strip():
+        sections.append(
+            "# What the Person Wants\n"
+            "Consider these wishes and aspirations when thinking — look for opportunities to help.\n"
+            + wishes.strip()
+        )
+
+    struggles = paths.read(paths.struggles(persona.id))
+    if struggles.strip():
+        sections.append(
+            "# What the Person Struggles With\n"
+            "Consider these recurring obstacles — look for ways to ease them.\n"
+            + struggles.strip()
+        )
+
+    return "\n\n".join(sections)
 
 
 async def reason(persona: Persona, system: str, prompts: list[Prompt]) -> dict:
@@ -62,7 +80,7 @@ async def escalate(persona: Persona, thread_text: str,
         "Rules:\n"
         "- Class must extend `Meaning` (imported from `application.core.brain.data`)\n"
         "- Set `name` as a class attribute (short, descriptive, e.g. 'System Check')\n"
-        "- Implement: `description()`, `clarify()`, `reply()`, `path()`\n"
+        "- Implement: `description()`, `clarify()`, `reply()`, `summarize()`, `path()`\n"
         "- `path()` returns None for conversational-only meanings\n"
         "- `path()` returns a prompt string for tool-using meanings — reference tools by "
         "their exact name (e.g. `linux.execute_on_sub_process`) and tell the model to "
@@ -81,6 +99,8 @@ async def escalate(persona: Persona, thread_text: str,
         '        return "What went wrong and what to ask the person to fix."\n\n'
         "    def reply(self):\n"
         '        return "How to respond to the person."\n\n'
+        "    def summarize(self):\n"
+        "        return None\n\n"
         "    def path(self):\n"
         "        return None\n"
     )
