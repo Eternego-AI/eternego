@@ -621,24 +621,34 @@ async def nudge(persona: Persona, message: str) -> Outcome[dict]:
 
 
 async def live(persona: Persona, dt) -> Outcome[dict]:
-    """Incept a check-todos perception so the persona reviews its schedule."""
-    from application.core.brain.data import Signal, Perception
+    """Check for due destiny entries, archive them, and notify the persona."""
     import uuid
+    from application.core.brain.data import Signal, Perception
+    from application.platform import filesystem
 
     await bus.propose("Checking todos", {"persona": persona})
     try:
+        due = paths.due_destiny_entries(persona.id, dt)
+        if not due:
+            await bus.broadcast("No todos due", {"persona": persona})
+            return Outcome(success=True, message="Nothing due.")
+
+        notifications = []
+        for filepath, content in due:
+            paths.add_history_entry(persona.id, filepath.stem, content)
+            filesystem.delete(filepath)
+            notifications.append(content)
+
         signal = Signal(
             id=str(uuid.uuid4()),
             role="user",
-            content=f"Time check: {dt.strftime('%Y-%m-%d %H:%M UTC')}",
+            content="Due now:\n" + "\n---\n".join(notifications),
         )
-        perception = Perception(
-            impression="check todos",
-            thread=[signal],
-        )
+        perception = Perception(impression="todo", thread=[signal])
         mind.incept(persona, perception)
-        await bus.broadcast("Todos checked", {"persona": persona})
-        return Outcome(success=True, message="Check todos incepted.")
+
+        await bus.broadcast("Todos checked", {"persona": persona, "due": len(due)})
+        return Outcome(success=True, message=f"{len(due)} entries due.")
     except MindError as e:
         await bus.broadcast("Todos check failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))

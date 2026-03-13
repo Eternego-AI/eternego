@@ -1,6 +1,5 @@
 """Schedule — the person wants to schedule an appointment, meeting, or event."""
 
-import secrets
 import uuid
 
 from application.core.brain.data import Meaning, Signal
@@ -29,7 +28,8 @@ class Scheduler(Meaning):
     def summarize(self) -> str:
         return (
             "The event has been scheduled. Confirm briefly — state when it is "
-            "and what it is about."
+            "and what it is about. Mention how many upcoming events are scheduled, "
+            "only counting ones that have not yet passed based on the current time."
         )
 
     def path(self) -> str | None:
@@ -65,7 +65,6 @@ class Scheduler(Meaning):
             self.persona.id,
             "schedule",
             utc.strftime("%Y-%m-%d %H:%M"),
-            secrets.token_hex(4),
             body,
         )
         return None

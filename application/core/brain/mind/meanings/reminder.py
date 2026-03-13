@@ -1,6 +1,5 @@
 """Reminder — the person wants to be reminded of something at a specific time."""
 
-import secrets
 import uuid
 
 from application.core.brain.data import Meaning, Signal
@@ -28,8 +27,9 @@ class Reminder(Meaning):
 
     def summarize(self) -> str:
         return (
-            "The reminder has been set. Confirm briefly — state the time, "
-            "what it is about, and mention how many total reminders are scheduled."
+            "The reminder has been set. Confirm briefly — state the time and "
+            "what it is about. Mention how many upcoming reminders are scheduled, "
+            "only counting ones that have not yet passed based on the current time."
         )
 
     def path(self) -> str | None:
@@ -65,7 +65,6 @@ class Reminder(Meaning):
             self.persona.id,
             "reminder",
             utc.strftime("%Y-%m-%d %H:%M"),
-            secrets.token_hex(4),
             body,
         )
         return None

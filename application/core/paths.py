@@ -419,16 +419,45 @@ def add_history_entry(persona_id: str, event: str, content: str) -> str:
     return filename
 
 
-def save_destiny_entry(persona_id: str, event: str, trigger: str, thread_id: str, content: str) -> None:
+def save_destiny_entry(persona_id: str, event: str, trigger: str, content: str) -> None:
     """Write a destiny entry file named by event type and trigger datetime."""
     from datetime import datetime
     logger.info("Saving destiny entry", {"persona_id": persona_id, "event": event, "trigger": trigger})
     dt = datetime.strptime(trigger, "%Y-%m-%d %H:%M")
     created = datetimes.stamp(datetimes.now())
     filesystem.write(
-        destiny(persona_id) / f"{event}-{dt.strftime('%Y-%m-%d-%H-%M')}-{thread_id[:8]}-{created}.md",
+        destiny(persona_id) / f"{event}-{dt.strftime('%Y-%m-%d-%H-%M')}-{created}.md",
         content,
     )
+
+
+def due_destiny_entries(persona_id: str, before: "datetime") -> list[tuple[Path, str]]:
+    """Return (filepath, content) for destiny entries with trigger time <= before (UTC)."""
+    import re
+    from datetime import datetime as dt_class, timezone
+    logger.info("Reading due destiny entries", {"persona_id": persona_id})
+    dest = destiny(persona_id)
+    if not dest.exists():
+        return []
+    results = []
+    pattern = re.compile(r"(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})")
+    for f in sorted(dest.glob("*.md")):
+        match = pattern.search(f.stem)
+        if not match:
+            continue
+        try:
+            trigger = dt_class(
+                int(match.group(1)), int(match.group(2)), int(match.group(3)),
+                int(match.group(4)), int(match.group(5)),
+                tzinfo=timezone.utc,
+            )
+            if trigger <= before:
+                content = read(f)
+                if content:
+                    results.append((f, content))
+        except (ValueError, IndexError):
+            continue
+    return results
 
 
 def read_files_matching(persona_id: str, directory: Path, pattern: str) -> list[str]:

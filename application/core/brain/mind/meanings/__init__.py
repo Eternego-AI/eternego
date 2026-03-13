@@ -11,8 +11,7 @@ from application.core.brain.mind.meanings.calendar import Calendar
 from application.core.brain.mind.meanings.noting import Noting
 from application.core.brain.mind.meanings.recalling import Recalling
 from application.core.brain.mind.meanings.shell import Shell
-from application.core.brain.mind.meanings.manifesting_destiny import ManifestingDestiny
-from application.core.brain.mind.meanings.check_todos import CheckTodos
+from application.core.brain.mind.meanings.todo import Todo
 from application.core.brain.mind.meanings.escalation import Escalation
 from application.core import paths
 from application.platform import logger
@@ -29,8 +28,7 @@ def built_in(persona) -> list:
         Noting(persona),
         Recalling(persona),
         Shell(persona),
-        ManifestingDestiny(persona),
-        CheckTodos(persona),
+        Todo(persona),
         Escalation(persona),
     ]
 
