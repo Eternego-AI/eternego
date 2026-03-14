@@ -1,5 +1,14 @@
-# Print the Eternego logo.
 . "$PSScriptRoot\lib.ps1"
 
-Get-Content "$ScriptDir\assets\eternego-ascii.txt" | Write-Host
-Write-Host ""
+Clear-Host
+
+Show-Prompt 1
+Clear-Host
+Type-AndErase "Hello" 1
+Show-Prompt 1
+Clear-Host
+Type-AndErase "Your life is going to become eternal, are you ready?" 2
+
+Clear-Host
+
+Print-File "$ScriptDir\assets\eternego-ascii.txt"
