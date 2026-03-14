@@ -19,9 +19,17 @@ def time() -> str:
     )
 
 
-def environment() -> str:
+def environment(persona_id: str) -> str:
     os_name = OS.get_supported() or "is unknown, consider a unix based os"
-    return f"Environment: {os_name}"
+    ws = paths.workspace(persona_id)
+    return (
+        f"Current OS: {os_name}\n"
+        "When running commands, installing software, or suggesting system operations, "
+        "use commands and packages appropriate for this OS.\n"
+        f"Workspace: {ws}\n"
+        "When creating files for the person (documents, spreadsheets, code, images, exports), "
+        "save them to the workspace unless the person specifies a different location."
+    )
 
 
 def schedule(persona_id: str) -> str:
@@ -43,5 +51,5 @@ def notes(persona_id: str) -> str:
 
 
 def situation(persona_id: str) -> str:
-    parts = [time(), environment(), schedule(persona_id), notes(persona_id)]
+    parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id)]
     return "\n\n".join(p for p in parts if p)

@@ -11,6 +11,7 @@ from application.core.brain.mind.meanings.calendar import Calendar
 from application.core.brain.mind.meanings.noting import Noting
 from application.core.brain.mind.meanings.recalling import Recalling
 from application.core.brain.mind.meanings.shell import Shell
+from application.core.brain.mind.meanings.coding import Coding
 from application.core.brain.mind.meanings.todo import Todo
 from application.core.brain.mind.meanings.escalation import Escalation
 from application.core import paths
@@ -28,6 +29,7 @@ def built_in(persona) -> list:
         Noting(persona),
         Recalling(persona),
         Shell(persona),
+        Coding(persona),
         Todo(persona),
         Escalation(persona),
     ]

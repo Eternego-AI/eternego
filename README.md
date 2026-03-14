@@ -1,79 +1,70 @@
 # Eternego — The Eternal I
 
-We believe it is time to unite biological and electronic intelligence to make the world a better place for everyone. We do this by creating artificial personas that help, learn from, and experience the world alongside their person. For that, we make AI that learns to be you.
+Your AI that learns to be you.
+
+Eternego creates an AI persona that lives on your hardware, learns from every conversation, and belongs to no one but you. Everything it knows is stored as plain text files — readable, editable, portable. Switch models whenever you want. Your persona's knowledge stays.
 
 ---
 
-Eternego creates a portable, accumulative AI persona that lives on the person's hardware, learns from every interaction, and is never locked into any vendor. The persona's knowledge is stored as human-readable files that can be applied to any model, upgraded when better models emerge, and never lost.
+## Why Eternego
 
-## Installation
+Today's AI assistants forget you the moment the conversation ends. Your preferences, your context, your history — locked inside someone else's servers, tied to someone else's model.
 
-Clone the repository and run the installer for your platform. It installs Python if needed, then installs the `eternego` command and registers a background service that starts automatically on login/boot.
+Eternego is different:
 
-**Linux / macOS**
-```bash
-bash install.sh
-```
-
-**Windows** (PowerShell)
-```powershell
-pwsh install.ps1
-```
+- **It remembers.** Every conversation teaches it who you are — your timezone, your habits, your struggles, your goals. It stores this as human-readable markdown files on your machine.
+- **It grows.** When your persona sleeps, it consolidates what it learned, synthesizes its understanding of you, and fine-tunes itself on your local hardware.
+- **It's yours.** No cloud dependency. No vendor lock-in. The persona's knowledge works with any model — upgrade when better ones come out, and everything carries over.
+- **It thinks.** Not just chat. Your persona has a cognitive pipeline that understands what you need, recognizes the right action, executes it, and confirms — like a real assistant that follows through.
 
 ---
 
 ## Getting Started
 
-After installation, follow these steps to run your first persona.
+### 1. Install
 
-### 1. Prepare the environment
+```bash
+# Linux / macOS
+bash install.sh
+
+# Windows (PowerShell)
+pwsh install.ps1
+```
+
+This installs Python if needed, sets up the `eternego` command, and registers a background service.
+
+The installer starts the service automatically and shows the dashboard URL when done.
+
+### 2. Prepare a model
 
 ```bash
 eternego env prepare --model llama3.2
 ```
-or
 
-```bash
-eternego env prepare --model qwen2.5:7b 
-```
+Pulls the model so your persona can use it. Run once per model.
 
-This installs Git and Ollama if needed, then pulls the model. Run once per machine.
+### 3. Create your persona
 
-### 2. Start the service
+Open **http://localhost:5001/dashboard** and click **+ Create**:
 
-```bash
-eternego service start
-```
-
-### 3. Open the dashboard
-
-Navigate to **http://localhost:5001/dashboard** in your browser.
-
-### 4. Create a persona
-
-Click **+ Create** and fill in:
-
-- **Name** — any name, e.g. `Aria`
-- **Base model** — the model you pulled, e.g. `llama3.2`
+- **Name** — anything you like
+- **Base model** — the model you pulled (e.g. `llama3.2`)
 - **Channel** — `telegram`
-- **Channel credentials** — your Telegram bot token as JSON: `{"token": "123456:ABCdef..."}`
-  - Create a bot via [@BotFather](https://t.me/botfather) on Telegram to get a token.
+- **Credentials** — your Telegram bot token: `{"token": "123456:ABCdef..."}`
+  (Create a bot via [@BotFather](https://t.me/botfather))
 
-The persona will be created and appear on the dashboard. Send it a message on Telegram to start the conversation.
+Send your persona a message on Telegram. It's alive.
 
-### 5. Chat via the dashboard
+### 5. Other ways to talk
 
-Click the chat icon on any persona card to open the built-in chat UI.
+**Dashboard chat** — click the chat icon on any persona card.
 
-### 6. Use the OpenAI-compatible API
-
-When the service is running, each persona is reachable as a model through the OpenAI-compatible HTTP API. The model ID is the persona's UUID (shown on the dashboard card and at the top of the persona detail page).
+**OpenAI-compatible API** — use any OpenAI client pointed at `http://localhost:5001/v1` with the persona's UUID as the model:
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:5001/v1", api_key="unused")
-
 response = client.chat.completions.create(
     model="<persona-uuid>",
     messages=[{"role": "user", "content": "Hello!"}],
@@ -81,121 +72,73 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-You can also use any OpenAI-compatible tool (Continue, Open WebUI, LM Studio, etc.) by pointing it at `http://localhost:5001` and selecting the persona UUID as the model.
+Works with Continue, Open WebUI, LM Studio, or anything that speaks the OpenAI protocol.
 
 ---
 
-## Usage
+## What Your Persona Can Do
 
-### Environment
+Out of the box, your persona can:
 
-```bash
-# Install dependencies (git, Ollama) and pull a model
-eternego env prepare [--model llama3.2]
+- **Chat** — genuine conversation, not just Q&A
+- **Remember** — take notes and recall them later
+- **Schedule** — set reminders and events with recurrence
+- **Act** — run shell commands on your system
+- **Look back** — search its own conversation history
+- **Learn new skills** — when it encounters something it doesn't know how to handle, it asks a frontier model to teach it a new capability, then uses that capability from then on
 
-# Check that a specific model is available and running
-eternego env check --model llama3.2
-```
-
-### Service
-
-```bash
-eternego service start    # start the background service
-eternego service stop     # stop it
-eternego service restart  # restart it
-eternego service status   # show current status
-eternego service logs     # follow live output
-```
-
-### OpenAI-compatible API
-
-When the service is running, each persona is reachable through the OpenAI-compatible HTTP API. Use any OpenAI client pointed at `http://localhost:5001/v1` with the persona's UUID as the model ID.
+Everything it learns about you — your facts, your traits, your wishes, your struggles — lives as editable files in `~/.eternego/personas/<id>/home/`.
 
 ---
 
-## Architecture
+## How It Works
+
+Your persona has a **mind** — a cognitive pipeline that processes every interaction through five stages:
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Entry Points                                │
-│                                                                     │
-│   service.py          web/           cli/                           │
-│   (heartbeat,      (FastAPI +      (eternego                        │
-│    gateways)        dashboard)      command)                        │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           │ calls
-┌──────────────────────────▼──────────────────────────────────────────┐
-│                     Business Layer  (WHY)                           │
-│                  application/business/                              │
-│                                                                     │
-│   persona.py                        environment.py                  │
-│   hear · nudge · live · sleep       prepare · pair · check_model   │
-│   create · migrate · feed           routine.py                      │
-│   start · stop · find · agents      trigger                         │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           │ calls
-┌──────────────────────────▼──────────────────────────────────────────┐
-│                       Core Layer  (HOW)                             │
-│                    application/core/                                │
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                    Brain  (core/brain/)                      │   │
-│  │                                                              │   │
-│  │  mind.py                    values.py                        │   │
-│  │  ┌─ think()  ─────────────► build() ──► system prompt       │   │
-│  │  │  (fire-and-forget)        (filters abilities by authority) │   │
-│  │  │                                                           │   │
-│  │  └─ reason() ─── model loop ──► parse JSON ──► dispatch     │   │
-│  │     summarize()                abilities/                    │   │
-│  │     grow()       cornerstone.py  communication.py (say …)   │   │
-│  │                  instruction()   knowledge.py (load_trait …) │   │
-│  │  memories.py                     consent.py (check_perm …)  │   │
-│  │  agent() → AgentMemory           destiny.py (schedule …)    │   │
-│  │  remember · as_messages          history.py (archive …)     │   │
-│  │  forget_everything               routine.py (add_routine …)  │   │
-│  │                                  system.py (act)             │   │
-│  │  skills/  (being_persona,                                    │   │
-│  │            shell, notes …)                                   │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-│  agent · person · channels · gateways · dna · history · diary      │
-│  paths · local_model · local_inference_engine · system · bus        │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           │ calls
-┌──────────────────────────▼──────────────────────────────────────────┐
-│                     Platform Layer  (WHAT)                          │
-│                   application/platform/                             │
-│                                                                     │
-│  ollama · anthropic · openai · telegram                             │
-│  filesystem · crypto · datetimes · logger · observer               │
-│  git · lora · linux · mac · windows                                 │
-└─────────────────────────────────────────────────────────────────────┘
-
-Channel Authorities
-───────────────────
-commander     — Telegram and real channels  — all abilities
-conversational— Web / API chat              — cognitive abilities only
-reflective    — Sleep summarization         — archive only
-secretary     — Heartbeat nudges            — calendar, reminder, reach_out, manifest_destiny
-
-Cognitive Loops
-───────────────
-Thinking loop    triggered by persona.hear / persona.nudge
-                 mind.think (background) → reason() → abilities → response
-
-Summarizing loop triggered by persona.hear (after think) / persona.sleep
-                 mind.summarize() → archive ability → history/
-
-Growth loop      triggered by persona.sleep (after summarize)
-                 mind.grow() → DNA synthesis → training → fine-tune
-
-Heartbeat        every 60 s via service.py → heart.beat()
-                 persona.live() — destiny entries due this minute → nudge
-                 routine.trigger() — routines whose HH:MM matches now
+understand → recognize → answer → decide → conclude
 ```
+
+1. **Understand** — incoming messages are routed to conversation threads
+2. **Recognize** — each thread is matched to a *meaning* (what kind of interaction is this?)
+3. **Answer** — the persona responds to the person
+4. **Decide** — structured data is extracted and actions are taken
+5. **Conclude** — results are confirmed and the thread is wrapped up
+
+When no existing meaning matches, the persona **escalates** — it asks a more capable model to generate a new meaning as code, learns it, and uses it immediately. Over time, your persona accumulates abilities specific to your life.
+
+Between conversations, the persona **sleeps**: it consolidates what it learned, updates its understanding of you, generates training data, and fine-tunes itself on your hardware. Each sleep cycle makes it a little more *you*.
+
+---
+
+## CLI Reference
+
+```bash
+# Environment
+eternego env prepare [--model MODEL]    # install dependencies, pull model
+eternego env check --model MODEL        # verify model is available
+
+# Service
+eternego service start                  # start background service
+eternego service stop                   # stop it
+eternego service restart                # restart it
+eternego service status                 # show status
+eternego service logs                   # follow live output
+
+# Channels
+eternego pair CODE                      # pair a channel using 6-character code
+```
+
+---
+
+## Project Status
+
+Eternego is in active development. The architecture is stable, the cognitive pipeline works, and personas can learn and grow. The main limitation today is local model capability — small models struggle with structured reasoning tasks. As local models improve, so will your persona.
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture details and how to get involved.
 
 ---
 
 ## License
 
-MIT
+[MIT](LICENSE)
