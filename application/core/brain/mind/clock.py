@@ -7,14 +7,17 @@ from application.core.brain.mind import conscious
 
 
 async def tick(mind) -> None:
-    """Loop over conscious thinking states indefinitely, restarting when mind receives new signals."""
+    """Loop over conscious thinking states indefinitely, restarting when mind receives new signals.
+
+Pipeline: understand → recognize → answer → decide → conclude
+"""
     logger.info("Ticking in mind", {"persona": mind.persona})
     from application.core.brain import ego
 
     pipeline = [
         (conscious.understand, ego.reason),
         (conscious.recognize,  ego.reason),
-        (conscious.wonder,     ego.reply),
+        (conscious.answer,     ego.reply),
         (conscious.decide,     ego.reason),
         (conscious.conclude,   ego.reply),
     ]

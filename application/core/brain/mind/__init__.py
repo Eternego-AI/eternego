@@ -60,7 +60,7 @@ def question(persona: Persona, thought: Thought) -> None:
     """Inject a pre-formed thought, bypassing understanding and recognition.
 
     The thought's signal and perception are stored directly. Deciding picks it up
-    if the meaning has a path; wondering picks it up if it has a reply.
+    if the meaning has a path; answer picks it up if it has a reply.
     """
     logger.info("Question from mind", {"persona": persona, "thought": thought})
     mem = _memories.get(persona.id)

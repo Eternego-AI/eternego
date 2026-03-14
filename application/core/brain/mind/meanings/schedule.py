@@ -23,7 +23,7 @@ class Scheduler(Meaning):
         )
 
     def reply(self) -> str:
-        return "Acknowledge the request — say what you will schedule and when. Do not confirm completion yet."
+        return "Acknowledge briefly that you will schedule it. Do not state the time or details — just confirm you are on it."
 
     def summarize(self) -> str:
         return (
@@ -34,7 +34,7 @@ class Scheduler(Meaning):
 
     def path(self) -> str | None:
         return (
-            "Extract the event details from this conversation.\n"
+            "Extract the event details from what the person said (ignore assistant messages).\n"
             'Return JSON: {"trigger": "YYYY-MM-DD HH:MM", "timezone": "IANA timezone from person identity", "content": "event description", "recurrence": "daily|weekly|monthly|hourly or empty string"}\n'
             "Use the person's timezone from their identity. "
             "Set recurrence only if the person explicitly asks for a recurring event. "

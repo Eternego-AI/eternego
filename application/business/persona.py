@@ -549,7 +549,7 @@ async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Out
             message_id=message.id,
         )
         mind.trigger(persona, signal)
-        # For channels with a bus (web), wait for wondering to push the response
+        # For channels with a bus (web), wait for answer to push the response
         if message.channel and message.channel.bus is not None:
             try:
                 response = await asyncio.wait_for(message.channel.bus.get(), timeout=timeout)
@@ -557,7 +557,7 @@ async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Out
                 response = ""
             await bus.broadcast("Talked", {"persona": persona})
             return Outcome(success=True, message="", data={"response": response})
-        # For push channels (Telegram), wondering handles delivery directly
+        # For push channels (Telegram), answer handles delivery directly
         await bus.broadcast("Talked", {"persona": persona})
         return Outcome(success=True, message="", data={"response": ""})
     except MindError as e:

@@ -178,7 +178,7 @@ class Memory:
         return list(self._signals.values())
 
     @property
-    def unattended(self) -> list[Signal]:
+    def needs_understanding(self) -> list[Signal]:
         """User-role Signals not yet attached to any Perception."""
         return [s for s in self._signals.values()
                 if s.role == "user" and s.id not in self._signal_perceptions]
@@ -205,7 +205,7 @@ class Memory:
                 if p.impression in open_impressions]
 
     @property
-    def unrecognized(self) -> list[Perception]:
+    def needs_recognition(self) -> list[Perception]:
         """Perceptions not yet assigned a Meaning (no Thought exists)."""
         recognized = {t.perception.impression for t in self._thoughts}
         return [p for p in self._perceptions.values()
@@ -214,7 +214,7 @@ class Memory:
     @property
     def most_important_perception(self) -> Perception | None:
         """The oldest unrecognized Perception — first to be recognized."""
-        unrecognized = self.unrecognized
+        unrecognized = self.needs_recognition
         if not unrecognized:
             return None
         return min(unrecognized,
@@ -228,11 +228,13 @@ class Memory:
         return list(self._thoughts)
 
     @property
-    def unanswered(self) -> list[Thought]:
-        """Thoughts where the latest thread Signal has role=user."""
+    def needs_answer(self) -> list[Thought]:
+        """Thoughts where the latest thread Signal has role=user and the meaning has a verbal reply."""
         result = []
         for t in self._thoughts:
             if t.processed_at is not None:
+                continue
+            if t.meaning.reply() is None and t.meaning.clarify() is None:
                 continue
             thread = t.perception.thread
             if thread and thread[-1].role == "user":
@@ -240,11 +242,11 @@ class Memory:
         return result
 
     @property
-    def pending(self) -> list[Thought]:
-        """Thoughts ready for deciding: has path, not processed, and wondering is done.
+    def needs_decision(self) -> list[Thought]:
+        """Thoughts ready for deciding: has path, not processed, and answering is done.
 
         For meanings with no reply, deciding owns the full lifecycle.
-        For meanings with a reply, deciding waits until wondering has replied
+        For meanings with a reply, deciding waits until answer has replied
         (last signal is assistant) and the user hasn't added more signals.
         """
         result = []
@@ -258,7 +260,7 @@ class Memory:
         return result
 
     @property
-    def concluded(self) -> list[Thought]:
+    def needs_conclusion(self) -> list[Thought]:
         """Thoughts with processed_at set but not yet concluded."""
         return [t for t in self._thoughts
                 if t.processed_at is not None and t.concluded_at is None]
@@ -373,11 +375,11 @@ class Memory:
     @property
     def settled(self) -> bool:
         """True when the mind has nothing left to process."""
-        return (not self.unattended
-                and not self.unrecognized
-                and not self.unanswered
-                and not self.pending
-                and not self.concluded)
+        return (not self.needs_understanding
+                and not self.needs_recognition
+                and not self.needs_answer
+                and not self.needs_decision
+                and not self.needs_conclusion)
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -416,7 +418,7 @@ class Memory:
 
     def changed(self) -> bool:
         """True when unattended signals have changed since last check."""
-        unattended = self.unattended
+        unattended = self.needs_understanding
         if not unattended:
             self._unattended_hash = None
             return False

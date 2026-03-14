@@ -1,7 +1,7 @@
 """Conscious — the waking thinking pipeline.
 
 Five functions run in sequence by the clock tick:
-  understand → recognize → wonder → decide → conclude
+  understand → recognize → answer → decide → conclude
 """
 
 from application.core.data import Prompt
@@ -15,14 +15,14 @@ from application.platform import logger
 async def understand(reason, mind) -> None:
     """Route unattended signals to existing or new perception threads."""
     logger.info("Understanding", {"persona": mind.persona})
-    if not mind.unattended:
+    if not mind.needs_understanding:
         return
 
-    logger.debug("Understand", {"persona": mind.persona, "unattended": mind.unattended})
+    logger.debug("Understand", {"persona": mind.persona, "unattended": mind.needs_understanding})
 
     known = mind.perceptions
     thread_map = {i + 1: p for i, p in enumerate(known)}
-    unattended = list(mind.unattended)
+    unattended = list(mind.needs_understanding)
     signal_map = {i + 1: s for i, s in enumerate(unattended)}
 
     system = (
@@ -136,10 +136,10 @@ async def recognize(reason, mind) -> None:
 
 # ── Wondering ────────────────────────────────────────────────────────────────
 
-async def wonder(reply, mind) -> None:
-    """Generate a streaming reply for the most important unanswered thought."""
-    logger.info("Wondering", {"persona": mind.persona})
-    thought = mind.most_important_thought(mind.unanswered)
+async def answer(reply, mind) -> None:
+    """Generate a streaming reply for the most important thought that needs an answer."""
+    logger.info("Answering", {"persona": mind.persona})
+    thought = mind.most_important_thought(mind.needs_answer)
     if not thought:
         return
 
@@ -149,7 +149,7 @@ async def wonder(reply, mind) -> None:
     if prompt is None:
         return
 
-    logger.debug("Wonder", {"persona": mind.persona, "impression": thought.perception.impression})
+    logger.debug("Answer", {"persona": mind.persona, "impression": thought.perception.impression})
 
     channel = channels.latest(mind.persona) or channels.default_channel(mind.persona)
 
@@ -162,7 +162,7 @@ async def wonder(reply, mind) -> None:
 
     text = ""
     async for paragraph in reply(mind.persona, system, prompts):
-        if mind.unattended:
+        if mind.needs_understanding:
             break
         if channel:
             await channels.send(channel, paragraph)
@@ -182,7 +182,7 @@ async def decide(reason, mind) -> None:
     logger.info("Deciding", {"persona": mind.persona})
     import json
 
-    thought = mind.most_important_thought(mind.pending)
+    thought = mind.most_important_thought(mind.needs_decision)
     if not thought:
         return
 
@@ -229,7 +229,7 @@ async def conclude(reply, mind) -> None:
     logger.info("Concluding", {"persona": mind.persona})
     from application.platform import datetimes
 
-    thought = mind.most_important_thought(mind.concluded)
+    thought = mind.most_important_thought(mind.needs_conclusion)
     if not thought:
         return
 

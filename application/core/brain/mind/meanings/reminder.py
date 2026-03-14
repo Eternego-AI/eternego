@@ -23,7 +23,7 @@ class Reminder(Meaning):
         )
 
     def reply(self) -> str:
-        return "Acknowledge the request — say what you will set and when. Do not confirm completion yet."
+        return "Acknowledge briefly that you will set the reminder. Do not state the time or details — just confirm you are on it."
 
     def summarize(self) -> str:
         return (
@@ -34,7 +34,7 @@ class Reminder(Meaning):
 
     def path(self) -> str | None:
         return (
-            "Extract the reminder details from this conversation.\n"
+            "Extract the reminder details from what the person said (ignore assistant messages).\n"
             'Return JSON: {"trigger": "YYYY-MM-DD HH:MM", "timezone": "IANA timezone from person identity", "content": "what to be reminded of", "recurrence": "daily|weekly|monthly|hourly or empty string"}\n'
             "Use the person's timezone from their identity. "
             "Set recurrence only if the person explicitly asks for a recurring reminder. "
