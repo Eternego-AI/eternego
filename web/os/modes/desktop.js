@@ -1,24 +1,26 @@
 import Mode from './mode.js';
 import OS from '../index.js';
+import { house, settings, plus } from '../icons.js';
 
 class DesktopMode extends Mode {
     // init({ apps: App[], signals: Feed })
     build() {
         this.innerHTML = `
             <div class="desktop">
-                <div class="app-icon-layer">
-                    <div class="app-icon-strip"></div>
+                <div class="dock">
+                    <div class="dock-strip"></div>
                 </div>
             </div>
         `;
 
         this._desktop = this.querySelector('.desktop');
-        this._iconLayer = this.querySelector('.app-icon-layer');
-        this._strip = this.querySelector('.app-icon-strip');
+        this._dock = this.querySelector('.dock');
+        this._strip = this.querySelector('.dock-strip');
         this._items = [];
         this._selectedIndex = 0;
         this._appInstances = {};
         this._appGrids = {};
+        this._appFocus = {};
 
         // Create app instances and their grid layouts
         const apps = this._props.apps;
@@ -27,7 +29,6 @@ class DesktopMode extends Mode {
             app.init({ signals: this._props.signals });
             this._appInstances[AppClass.appId] = app;
 
-            // Create the page container: backdrop + minimize btn + grid
             const page = document.createElement('div');
             page.className = 'app-page';
             page.dataset.app = AppClass.appId;
@@ -35,42 +36,48 @@ class DesktopMode extends Mode {
             const backdrop = document.createElement('div');
             backdrop.className = 'page-backdrop';
 
-            const btn = document.createElement('button');
-            btn.className = 'minimize-btn';
-            btn.innerHTML = '&minus;';
-            btn.addEventListener('click', () => OS.minimize());
-
             const grid = document.createElement('grid-layout');
-            grid.init({ onFocus: (name) => OS.focus(name) });
+            const appId = AppClass.appId;
+            grid.init({
+                onFocus: (name) => {
+                    this._appFocus[appId] = name || null;
+                    grid.relayout(name || null);
+                    const instance = this._appInstances[appId];
+                    if (instance?.setFocused) instance.setFocused(name || null);
+                },
+            });
 
             for (const widget of app.widgets()) {
                 grid.addWidget(widget);
             }
 
             page.appendChild(backdrop);
-            page.appendChild(btn);
             page.appendChild(grid);
             this._desktop.appendChild(page);
             this._appGrids[AppClass.appId] = { page, grid };
 
-            // Initial layout
             requestAnimationFrame(() => grid.relayout(null));
         }
 
         // Navigation handler
-        OS.onNavigate(({ app, personaId, widget }) => {
-            // Show/hide icon layer
-            if (app) this._iconLayer.classList.add('hidden');
-            else this._iconLayer.classList.remove('hidden');
+        OS.onNavigate(({ app, personaId }) => {
+            // Rebuild dock to reflect persona changes
+            this._buildItems();
+            this._renderStrip();
+
+            // Dock state: home (centered) vs docked (bottom)
+            this._dock.classList.toggle('docked', !!app);
+            this._highlightDock(app);
 
             // Show/hide app pages
             for (const [id, { page, grid }] of Object.entries(this._appGrids)) {
                 if (id === app) {
                     page.classList.add('app-focused');
-                    page.classList.toggle('widget-focused', !!widget);
-                    grid.relayout(widget || null);
+                    // Reset focus when switching apps
+                    this._appFocus[id] = null;
+                    grid.relayout(null);
                 } else {
-                    page.classList.remove('app-focused', 'widget-focused');
+                    page.classList.remove('app-focused');
                 }
             }
 
@@ -78,8 +85,7 @@ class DesktopMode extends Mode {
             for (const [id, instance] of Object.entries(this._appInstances)) {
                 if (id === app) {
                     if (id === 'persona' && personaId) instance.setPersona(personaId);
-                    if (instance.activate) instance.activate(widget);
-                    if (widget && instance.setFocused) instance.setFocused(widget);
+                    if (instance.activate) instance.activate();
                 } else {
                     if (instance.deactivate) instance.deactivate();
                 }
@@ -117,12 +123,14 @@ class DesktopMode extends Mode {
 
     _buildItems() {
         this._items = [];
-        this._items.push({ id: '_system', name: 'System', icon: '⚙', type: 'system' });
+        // Home button — only visible in dock mode
+        this._items.push({ id: '_home', name: 'Home', icon: house(24), type: 'home' });
+        this._items.push({ id: '_system', name: 'System', icon: settings(24), type: 'system' });
         for (const p of OS.personas) {
             this._items.push({ id: p.id, name: p.name, icon: p.name.charAt(0).toUpperCase(), type: '' });
         }
-        this._items.push({ id: '_new', name: 'New', icon: '+', type: 'action' });
-        this._selectedIndex = OS.personas.length > 0 ? 1 : 0;
+        this._items.push({ id: '_new', name: 'New', icon: plus(24), type: 'action' });
+        this._selectedIndex = OS.personas.length > 0 ? 2 : 1;
     }
 
     _renderStrip() {
@@ -139,14 +147,31 @@ class DesktopMode extends Mode {
                     this._openSelected();
                 },
             });
+            el.dataset.id = item.id;
             this._strip.appendChild(el);
         });
+    }
+
+    _highlightDock(activeApp) {
+        for (const icon of this._strip.children) {
+            const id = icon.dataset.id;
+            let isActive = false;
+            if (activeApp === 'persona' && id !== '_home' && id !== '_system' && id !== '_new') {
+                isActive = id === OS.currentPersonaId;
+            } else if (id === '_system' && activeApp === 'system') {
+                isActive = true;
+            } else if (id === '_new' && activeApp === 'new-persona') {
+                isActive = true;
+            }
+            icon.classList.toggle('active', isActive);
+        }
     }
 
     _openSelected() {
         const item = this._items[this._selectedIndex];
         if (!item) return;
-        if (item.id === '_new') OS.open('new-persona');
+        if (item.id === '_home') OS.minimize();
+        else if (item.id === '_new') OS.open('new-persona');
         else if (item.id === '_system') OS.open('system');
         else OS.open('persona', { personaId: item.id });
     }

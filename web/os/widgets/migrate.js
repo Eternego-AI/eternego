@@ -1,14 +1,13 @@
 import Widget from './widget.js';
+import { check, x } from '../icons.js';
 
 class MigrateWidget extends Widget {
-    static columns = 3;
-    static rows = 2;
+    static widgetId = 'migrate';
+    static columns = 2;
+    static rows = 3;
 
     // init({ models, onMigrated })
     build() {
-        this.setAttribute('widget', 'migrate');
-        this.setAttribute('columns', MigrateWidget.columns);
-        this.setAttribute('rows', MigrateWidget.rows);
 
         this._data = { file: null, phrase: '', model: '' };
 
@@ -45,8 +44,8 @@ class MigrateWidget extends Widget {
     }
 
     setFocused(focused) {
+        super.setFocused(focused);
         this._card.setFocused(focused);
-        this.classList.toggle('focused', focused);
     }
 
     _esc(s) {
@@ -121,7 +120,7 @@ class MigrateWidget extends Widget {
         }
 
         const options = models.map(m => {
-            const fit = m.fits ? '✓' : '✗';
+            const fit = m.fits ? check(14) : x(14);
             const ram = m.ram_required_gb ? `${m.ram_required_gb}GB RAM` : '';
             const params = m.params_b ? `${m.params_b}B` : '';
             const meta = [params, ram].filter(Boolean).join(' · ');

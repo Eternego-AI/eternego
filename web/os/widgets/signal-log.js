@@ -1,14 +1,12 @@
 import Widget from './widget.js';
 
 class SignalLogWidget extends Widget {
+    static widgetId = 'signals';
     static columns = 1;
     static rows = 3;
 
     // init({ signals: Feed, getSignalsFor })
     build() {
-        this.setAttribute('widget', 'signals');
-        this.setAttribute('columns', SignalLogWidget.columns);
-        this.setAttribute('rows', SignalLogWidget.rows);
 
         const card = document.createElement('card-layout');
         card.init({ title: 'Signals' });
@@ -40,8 +38,8 @@ class SignalLogWidget extends Widget {
     }
 
     setFocused(focused) {
+        super.setFocused(focused);
         this._card.setFocused(focused);
-        this.classList.toggle('focused', focused);
     }
 
     _match(msg) {

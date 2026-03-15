@@ -2,8 +2,6 @@
  * OS — entry point. Owns boot, state, signals, API, modes.
  */
 
-const MAX_SIGNALS = 100;
-
 class Feed extends EventTarget {
     #items = [];
     get items() { return this.#items; }
@@ -24,7 +22,6 @@ const OS = {
     models: [],
     currentApp: null,
     currentPersonaId: null,
-    focusedWidget: null,
 
     // ── Feeds ────────────────────────────────────────────────
     signals: new Feed(),
@@ -107,7 +104,6 @@ const OS = {
         for (const fn of this._onNavigate) fn({
             app: this.currentApp,
             personaId: this.currentPersonaId,
-            widget: this.focusedWidget,
         });
     },
 
@@ -116,19 +112,15 @@ const OS = {
         const appParam = this.currentApp === 'persona'
             ? `persona-${this.currentPersonaId}`
             : this.currentApp;
-        let url = `/?app=${appParam}`;
-        if (this.focusedWidget) url += `&widget=${this.focusedWidget}`;
-        return url;
+        return `/?app=${appParam}`;
     },
 
     _parseUrl() {
         const params = new URLSearchParams(location.search);
         const app = params.get('app');
-        const widget = params.get('widget');
         if (!app) {
             this.currentApp = null;
             this.currentPersonaId = null;
-            this.focusedWidget = null;
             return;
         }
         if (app.startsWith('persona-')) {
@@ -138,7 +130,6 @@ const OS = {
             this.currentApp = app;
             this.currentPersonaId = null;
         }
-        this.focusedWidget = widget || null;
     },
 
     restore() {
@@ -148,27 +139,33 @@ const OS = {
 
     open(app, opts) {
         this.currentApp = app;
-        this.focusedWidget = null;
         if (opts?.personaId) this.currentPersonaId = opts.personaId;
         history.pushState(null, '', this._buildUrl());
         this._notify();
     },
 
-    focus(widgetName) {
-        this.focusedWidget = widgetName;
+    minimize() {
+        this.currentApp = null;
+        this.currentPersonaId = null;
         history.pushState(null, '', this._buildUrl());
         this._notify();
     },
 
-    minimize() {
-        if (this.focusedWidget) {
-            this.focusedWidget = null;
-        } else {
-            this.currentApp = null;
-            this.currentPersonaId = null;
+    async deletePersona(personaId) {
+        try {
+            const res = await fetch(`/api/persona/${personaId}/delete`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json();
+                console.error('Delete failed:', err.detail || 'Unknown error');
+                return false;
+            }
+        } catch {
+            console.error('Delete failed: network error');
+            return false;
         }
-        history.pushState(null, '', this._buildUrl());
-        this._notify();
+        await this.fetchPersonas();
+        this.minimize();
+        return true;
     },
 
     signalsFor(personaId) {

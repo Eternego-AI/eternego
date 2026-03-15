@@ -1,15 +1,13 @@
 import Widget from './widget.js';
+import { cornerDownLeft } from '../icons.js';
 
 class ChatWidget extends Widget {
+    static widgetId = 'chat';
     static columns = 2;
     static rows = 2;
 
     // init({ onSend, onChat, offChat })
     build() {
-        this.setAttribute('widget', 'chat');
-        this.setAttribute('columns', ChatWidget.columns);
-        this.setAttribute('rows', ChatWidget.rows);
-
         const card = document.createElement('card-layout');
         card.init({ title: 'Chat' });
 
@@ -35,7 +33,7 @@ class ChatWidget extends Widget {
 
         const sendBtn = document.createElement('button');
         sendBtn.className = 'chat-send';
-        sendBtn.textContent = '↵';
+        sendBtn.innerHTML = cornerDownLeft(16);
         sendBtn.disabled = true;
 
         inputRow.appendChild(input);
@@ -100,8 +98,8 @@ class ChatWidget extends Widget {
     }
 
     setFocused(focused) {
+        super.setFocused(focused);
         this._card.setFocused(focused);
-        this.classList.toggle('focused', focused);
     }
 
     async _loadHistory() {

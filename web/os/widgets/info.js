@@ -7,9 +7,6 @@ class InfoWidget extends Widget {
     // init({ title, text })
     build() {
         const { title, text } = this._props;
-        this.setAttribute('widget', title.toLowerCase());
-        this.setAttribute('columns', InfoWidget.columns);
-        this.setAttribute('rows', InfoWidget.rows);
 
         const card = document.createElement('card-layout');
         card.init({ title });
@@ -19,8 +16,8 @@ class InfoWidget extends Widget {
     }
 
     setFocused(focused) {
+        super.setFocused(focused);
         this._card.setFocused(focused);
-        this.classList.toggle('focused', focused);
     }
 }
 

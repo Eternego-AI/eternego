@@ -1,14 +1,13 @@
 import Widget from './widget.js';
+import { check, x } from '../icons.js';
 
 class CreateWidget extends Widget {
-    static columns = 3;
-    static rows = 2;
+    static widgetId = 'create';
+    static columns = 2;
+    static rows = 3;
 
     // init({ models, onCreated })
     build() {
-        this.setAttribute('widget', 'create');
-        this.setAttribute('columns', CreateWidget.columns);
-        this.setAttribute('rows', CreateWidget.rows);
 
         this._data = { name: '', model: '', botToken: '', frontierModel: '', frontierKey: '' };
 
@@ -57,8 +56,8 @@ class CreateWidget extends Widget {
     }
 
     setFocused(focused) {
+        super.setFocused(focused);
         this._card.setFocused(focused);
-        this.classList.toggle('focused', focused);
     }
 
     _esc(s) {
@@ -103,7 +102,7 @@ class CreateWidget extends Widget {
         }
 
         const options = models.map(m => {
-            const fit = m.fits ? '✓' : '✗';
+            const fit = m.fits ? check(14) : x(14);
             const ram = m.ram_required_gb ? `${m.ram_required_gb}GB RAM` : '';
             const params = m.params_b ? `${m.params_b}B` : '';
             const meta = [params, ram].filter(Boolean).join(' · ');

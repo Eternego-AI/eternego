@@ -1,10 +1,10 @@
 import App from './app.js';
-import OS from '../index.js';
+import { terminal } from '../icons.js';
 
 export default class TtyApp extends App {
-    static appId = 'system';
-    static appName = 'System';
-    static icon = '⚙';
+    static appId = 'tty';
+    static appName = 'TTY';
+    static icon = terminal;
 
     // init({ signals: Feed })
     start() {

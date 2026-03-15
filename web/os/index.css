@@ -2,6 +2,19 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Thin overlay scrollbars — no reserved gutter, content flows under */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
 :root {
     --font: 'JetBrains Mono', monospace;
 
@@ -99,26 +112,39 @@ html, body {
 .desktop.visible { opacity: 1; }
 
 
-/* ── App Icon Layer ───────────────────────────────────────── */
+/* ── Dock ─────────────────────────────────────────────────── */
 
-.app-icon-layer {
+.dock {
     position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 0.5s ease;
+    z-index: 60;
+    left: 50%;
+    bottom: 50%;
+    transform: translate(-50%, 50%);
+    transition: bottom 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.app-icon-layer.hidden {
-    opacity: 0;
-    pointer-events: none;
+.dock.docked {
+    bottom: 0;
+    transform: translate(-50%, 0);
 }
-.app-icon-strip {
+
+.dock-strip {
     display: flex;
     align-items: center;
     gap: 56px;
     perspective: 1200px;
     transform-style: preserve-3d;
+    transition: gap 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.dock.docked .dock-strip {
+    gap: 12px;
+    padding: 8px 24px 12px;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(24px) saturate(1.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: none;
+    border-radius: 16px 16px 0 0;
 }
 
 
@@ -131,7 +157,8 @@ app-icon {
     gap: 14px;
     cursor: pointer;
     transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-                opacity 0.5s ease;
+                opacity 0.5s ease,
+                gap 0.6s ease;
     transform-style: preserve-3d;
     opacity: 0.75;
 }
@@ -161,7 +188,8 @@ app-icon .orb {
     font-size: 30px; font-weight: 300;
     color: rgba(255,255,255,0.9);
     box-shadow: var(--glass-shadow);
-    transition: box-shadow 0.5s ease, border-color 0.5s ease;
+    transition: width 0.6s ease, height 0.6s ease, font-size 0.6s ease,
+                box-shadow 0.5s ease, border-color 0.5s ease;
     transform-style: preserve-3d;
     position: relative;
 }
@@ -170,6 +198,7 @@ app-icon .orb::before {
     top: 8px; left: 18px; width: 36px; height: 18px;
     background: radial-gradient(ellipse at center, rgba(255,255,255,0.25) 0%, transparent 70%);
     border-radius: 50%; pointer-events: none;
+    transition: opacity 0.4s ease;
 }
 app-icon .orb::after {
     content: ''; position: absolute;
@@ -196,7 +225,8 @@ app-icon .name {
     color: rgba(255,255,255,0.6);
     letter-spacing: 0.8px;
     text-shadow: 0 2px 8px rgba(0,0,0,0.5);
-    transition: color 0.5s ease, text-shadow 0.5s ease;
+    transition: color 0.5s ease, text-shadow 0.5s ease,
+                font-size 0.6s ease, opacity 0.4s ease;
 }
 app-icon.selected .name {
     color: #fff; font-weight: 500;
@@ -206,6 +236,59 @@ app-icon.selected .name {
 /* Icon types */
 app-icon.action .orb { border-style: dashed; font-size: 24px; }
 app-icon.system .orb { font-size: 20px; }
+
+/* Home icon — hidden when dock is centered */
+app-icon.home { display: none; }
+.dock.docked app-icon.home { display: flex; }
+
+/* ── Dock mode: shrink icons ─────────────────────────────── */
+
+.dock.docked app-icon {
+    gap: 4px;
+    opacity: 0.7;
+    transform: none;
+    animation: none;
+}
+.dock.docked app-icon:hover {
+    opacity: 1;
+    transform: translateY(-4px);
+}
+.dock.docked app-icon .orb,
+.dock.docked app-icon.action .orb,
+.dock.docked app-icon.system .orb {
+    width: 44px; height: 44px;
+    font-size: 18px;
+    box-shadow: none;
+}
+.dock.docked app-icon .orb::before { opacity: 0; }
+.dock.docked app-icon .orb::after { display: none; }
+.dock.docked app-icon .name {
+    font-size: 9px;
+    opacity: 0.6;
+}
+.dock.docked app-icon.selected {
+    transform: none;
+    animation: none;
+    opacity: 0.7;
+}
+.dock.docked app-icon.selected .orb {
+    box-shadow: none;
+    border-width: 1.5px;
+    border-color: var(--glass-border);
+}
+
+/* Active indicator in dock */
+.dock.docked app-icon.active {
+    opacity: 1;
+}
+.dock.docked app-icon.active .orb {
+    border-color: rgba(140, 160, 255, 0.5);
+    box-shadow: 0 0 12px rgba(140, 160, 255, 0.2);
+}
+.dock.docked app-icon.active .name {
+    color: rgba(180, 195, 255, 0.9);
+    opacity: 1;
+}
 
 
 /* ── App Page ─────────────────────────────────────────────── */
@@ -231,33 +314,6 @@ app-icon.system .orb { font-size: 20px; }
     backdrop-filter: blur(12px);
 }
 
-.app-page .minimize-btn {
-    position: absolute;
-    top: 24px;
-    left: 24px;
-    z-index: 50;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--glass-bg);
-    backdrop-filter: blur(24px) saturate(1.4);
-    border: 1.5px solid var(--glass-border);
-    box-shadow: var(--glass-shadow);
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 22px;
-    font-family: var(--font);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: border-color 0.3s ease, color 0.3s ease, transform 0.3s ease;
-}
-.app-page .minimize-btn:hover {
-    border-color: rgba(255, 255, 255, 0.35);
-    color: #fff;
-    transform: scale(1.08);
-}
-
 
 /* ── Grid Layout ──────────────────────────────────────────── */
 
@@ -266,25 +322,35 @@ grid-layout {
     z-index: 1;
     flex: 1;
     display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    grid-template-rows: repeat(8, 1fr);
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
     gap: 10px;
-    padding: 80px 32px 32px;
+    padding: 32px 32px 80px;
     min-height: 0;
 }
 
 grid-layout > * {
     min-height: 0;
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;
     transition: opacity 0.4s ease;
+    grid-column: span var(--cols, 1);
+    grid-row: span var(--rows, 1);
 }
 
-.widget-focused grid-layout > :not(.focused) {
+grid-layout > .widget-focused {
+    grid-column: span 3;
+    grid-row: span 3;
+    order: -1;
+}
+
+grid-layout > .widget-unfocused {
+    grid-column: span 1 !important;
+    grid-row: span 1 !important;
     cursor: pointer;
     opacity: 0.7;
 }
-.widget-focused grid-layout > :not(.focused):hover {
+grid-layout > .widget-unfocused:hover {
     opacity: 1;
 }
 
@@ -322,12 +388,40 @@ card-layout .card::before {
     background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%);
     border-radius: 1px;
 }
-card-layout .card h3 {
+card-layout .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+card-layout .card-header h3 {
     font-size: 14px;
     font-weight: 500;
     color: rgba(255, 255, 255, 0.95);
     letter-spacing: 0.5px;
-    margin-bottom: 16px;
+}
+card-layout .card-minimize {
+    display: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 16px;
+    font-family: var(--font);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+card-layout .card-minimize:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+}
+.widget-focused .card-minimize {
+    display: flex;
 }
 card-layout .card-body {
     flex: 1;
@@ -361,7 +455,6 @@ card-layout:not(.focused) .card:hover {
 tail-layout {
     display: flex;
     flex-direction: column;
-    flex: 1;
     min-height: 0;
     overflow-y: auto;
 }
@@ -372,7 +465,6 @@ tail-layout {
 step-layout {
     display: flex;
     flex-direction: column;
-    flex: 1;
     min-height: 0;
 }
 
@@ -392,6 +484,15 @@ step-layout {
 .wizard-dot.active {
     background: rgba(140, 160, 255, 0.7);
     transform: scale(1.4);
+}
+
+
+/* ── Form Layout ──────────────────────────────────────────── */
+
+form-layout {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 
@@ -713,11 +814,13 @@ chat-widget {
 
 .chat-send {
     width: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: rgba(140, 160, 255, 0.12);
     border: 1px solid rgba(140, 160, 255, 0.3);
     border-radius: 10px;
     color: rgba(180, 195, 255, 0.9);
-    font-size: 16px;
     cursor: pointer;
     transition: background 0.2s ease, border-color 0.2s ease;
 }
@@ -734,8 +837,112 @@ create-widget,
 migrate-widget,
 stdout-widget,
 signal-log-widget,
+chat-widget,
+control-widget,
 info-widget {
     display: flex;
     flex: 1;
     min-height: 0;
+}
+
+
+/* ── Control Widget ───────────────────────────────────────── */
+
+.control-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex: 1;
+}
+
+.control-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.7);
+    font-family: var(--font);
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+.control-btn:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+.control-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+}
+.control-label {
+    position: absolute;
+    bottom: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0;
+    white-space: nowrap;
+    transition: font-size 0.15s ease;
+}
+.control-btn:hover .control-label {
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.control-btn-delete:hover {
+    border-color: rgba(255, 80, 80, 0.4);
+    background: rgba(255, 80, 80, 0.1);
+    color: rgba(255, 120, 120, 0.9);
+}
+
+/* ── Modal ───────────────────────────────────────────────── */
+
+alert-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+.modal-card {
+    position: relative;
+    width: 360px;
+}
+.modal-card card-layout {
+    width: 100%;
+    height: auto;
+}
+.modal-card role-message {
+    margin-bottom: 24px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    padding: 0;
+    max-width: 100%;
+}
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Widgets fill their grid cell; their first child fills them */
+[widget] > *:first-child {
+    width: 100%;
+    height: 100%;
 }

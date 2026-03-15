@@ -1,16 +1,13 @@
 import Widget from './widget.js';
 
 class StdoutWidget extends Widget {
+    static widgetId = 'stdout';
     static columns = 1;
     static rows = 1;
 
     // init({ signals: Feed })
     build() {
         const { signals } = this._props;
-
-        this.setAttribute('widget', 'stdout');
-        this.setAttribute('columns', StdoutWidget.columns);
-        this.setAttribute('rows', StdoutWidget.rows);
 
         const card = document.createElement('card-layout');
         card.init({ title: 'Signals' });

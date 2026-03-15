@@ -1,16 +1,32 @@
 import Layout from './layout.js';
+import { minus } from '../icons.js';
 
 class CardLayout extends Layout {
-    // init({ title })
+    // init({ title, onMinimize })
     arrange() {
         const { title } = this._props;
         const card = document.createElement('div');
         card.className = 'card';
 
         if (title) {
+            const header = document.createElement('div');
+            header.className = 'card-header';
+
             const h3 = document.createElement('h3');
             h3.textContent = title;
-            card.appendChild(h3);
+            header.appendChild(h3);
+
+            const btn = document.createElement('button');
+            btn.className = 'card-minimize';
+            btn.innerHTML = minus(14);
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this._props.onMinimize) this._props.onMinimize();
+            });
+            header.appendChild(btn);
+
+            card.appendChild(header);
+            this._minimizeBtn = btn;
         }
 
         const body = document.createElement('div');

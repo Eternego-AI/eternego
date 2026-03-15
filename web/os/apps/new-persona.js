@@ -1,10 +1,11 @@
 import App from './app.js';
 import OS from '../index.js';
+import { plus } from '../icons.js';
 
 export default class NewPersonaApp extends App {
     static appId = 'new-persona';
     static appName = 'New';
-    static icon = '+';
+    static icon = plus;
 
     // init({ signals: Feed })
     start() {

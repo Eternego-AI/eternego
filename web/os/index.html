@@ -18,6 +18,8 @@
         import './os/elements/step-panel.js';
         import './os/elements/info-card.js';
         import './os/elements/app-icon.js';
+        import './os/elements/alert-modal.js';
+        import './os/elements/destructive-button.js';
 
         // Layouts (logical — platform)
         import './os/layouts/tail-layout.js';
@@ -31,11 +33,13 @@
         import './os/widgets/chat.js';
         import './os/widgets/info.js';
         import './os/widgets/signal-log.js';
+        import './os/widgets/control.js';
         import './os/widgets/create.js';
         import './os/widgets/migrate.js';
 
         // Apps (logical — core)
         import TtyApp from './os/apps/tty.js';
+        import SystemApp from './os/apps/system.js';
         import PersonaApp from './os/apps/persona.js';
         import NewPersonaApp from './os/apps/new-persona.js';
 
@@ -46,8 +50,8 @@
         // OS (logical — business)
         import OS from './os/index.js';
 
-        // Register apps
-        OS.registerApp(TtyApp);
+        // Register apps (desktop apps only — tty is boot-only)
+        OS.registerApp(SystemApp);
         OS.registerApp(PersonaApp);
         OS.registerApp(NewPersonaApp);
 

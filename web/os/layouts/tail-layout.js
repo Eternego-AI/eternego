@@ -14,10 +14,16 @@ class TailLayout extends Layout {
             if (this._pinned) this.scrollTop = this.scrollHeight;
         });
         this._observer.observe(this, { childList: true, subtree: true, characterData: true });
+
+        this._resizer = new ResizeObserver(() => {
+            if (this._pinned) this.scrollTop = this.scrollHeight;
+        });
+        this._resizer.observe(this);
     }
 
     disconnectedCallback() {
         this._observer?.disconnect();
+        this._resizer?.disconnect();
     }
 
     append(element) {

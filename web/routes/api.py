@@ -108,6 +108,46 @@ async def sleep_persona(persona_id: str):
     return outcome.data
 
 
+@router.post("/persona/{persona_id}/stop")
+async def stop_persona(persona_id: str):
+    find = await persona.loaded(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona.stop(find.data["persona"])
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+@router.post("/persona/{persona_id}/restart")
+async def restart_persona(persona_id: str):
+    find = await persona.loaded(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    await persona.stop(find.data["persona"])
+    find = await persona.find(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona.start(find.data["persona"])
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+@router.post("/persona/{persona_id}/delete")
+async def delete_persona(persona_id: str):
+    loaded = await persona.loaded(persona_id)
+    if loaded.success:
+        await persona.stop(loaded.data["persona"])
+    find = await persona.find(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona.delete(find.data["persona"])
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
 @router.post("/persona/{persona_id}/hear")
 async def hear_persona(persona_id: str, request: HearRequest):
     find = await persona.loaded(persona_id)
