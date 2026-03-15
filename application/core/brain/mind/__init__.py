@@ -70,6 +70,15 @@ def question(persona: Persona, thought: Thought) -> None:
     mem.question(thought)
 
 
+def read(persona: Persona) -> list[Signal]:
+    """Return all signals in the mind sorted by creation time."""
+    logger.info("Read mind signals", {"persona": persona})
+    mem = _memories.get(persona.id)
+    if mem is None:
+        raise MindError(f"Mind not loaded for persona {persona.id}")
+    return sorted(mem.signals, key=lambda s: s.created_at)
+
+
 def block(persona: Persona) -> None:
     """Stop accepting new triggers."""
     logger.info("Blocking mind", {"persona": persona})

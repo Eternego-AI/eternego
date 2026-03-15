@@ -75,10 +75,32 @@ async def find(persona_id: str) -> Outcome[dict]:
 async def loaded(persona_id: str) -> Outcome[dict]:
     """Return the live persona from the in-process registry."""
     from application.core import registry
+    await bus.propose("Getting loaded persona", {"persona_id": persona_id})
     persona = registry.get_persona(persona_id)
     if persona is None:
+        await bus.broadcast("Loaded persona not found", {"persona_id": persona_id})
         return Outcome(success=False, message=f"Persona '{persona_id}' is not running.")
     return Outcome(success=True, message="", data={"persona": persona})
+
+
+async def mind_signals(persona_id: str) -> Outcome[dict]:
+    """Return all signals currently in the persona's mind, sorted by time."""
+    await bus.propose("Getting persona mind signals", {"persona_id": persona_id})
+    persona = await loaded(persona_id)
+    if not persona.success:
+        return persona
+    try:
+        signals = mind.read(persona.data["persona"])
+        await bus.broadcast("Persona's mind signals loaded", {"persona": persona})
+        return Outcome(success=True, message="", data={
+            "signals": [
+                {"role": s.role, "content": s.content, "created_at": s.created_at.isoformat()}
+                for s in signals
+            ]
+        })
+    except MindError as e:
+        await bus.broadcast("Reading persona's mind failed", {"persona_id": persona_id, "error": str(e)})
+        return Outcome(success=False, message=str(e))
 
 
 async def running() -> Outcome[dict]:

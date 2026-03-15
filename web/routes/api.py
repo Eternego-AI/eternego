@@ -1,9 +1,11 @@
 """Internal API routes — Eternego-specific endpoints."""
 
-from fastapi import APIRouter, HTTPException
+import tempfile
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from application.business import environment, persona
-from web.requests import EnvironmentPrepareRequest, HearRequest, PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
+from web.requests import EnvironmentPrepareRequest, HearRequest, PersonaControlRequest, PersonaCreateRequest
 
 router = APIRouter(prefix="/api")
 
@@ -55,14 +57,32 @@ async def create_persona(request: PersonaCreateRequest):
 
 
 @router.post("/persona/migrate")
-async def migrate_persona(request: PersonaMigrateRequest):
+async def migrate_persona(
+    diary: UploadFile = File(...),
+    phrase: str = Form(...),
+    model: str = Form(...),
+):
+    filename = diary.filename or "diary"
+    tmp_dir = tempfile.mkdtemp()
+    tmp_path = f"{tmp_dir}/{filename}"
+    with open(tmp_path, "wb") as f:
+        f.write(await diary.read())
+
     outcome = await persona.migrate(
-        diary_path=request.diary_path,
-        phrase=request.phrase,
-        model=request.model,
+        diary_path=tmp_path,
+        phrase=phrase,
+        model=model,
     )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+@router.get("/persona/{persona_id}/mind")
+async def get_mind(persona_id: str):
+    outcome = await persona.mind_signals(persona_id)
+    if not outcome.success:
+        raise HTTPException(status_code=404, detail=outcome.message)
     return outcome.data
 
 

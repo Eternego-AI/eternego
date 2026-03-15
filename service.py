@@ -17,7 +17,7 @@ from web.socket import on_signal
 
 async def start_web(host: str, port: int) -> None:
     """Run the FastAPI web server inside the existing event loop."""
-    config = uvicorn.Config(web_app, host=host, port=port, log_level="warning")
+    config = uvicorn.Config(web_app, host=host, port=port, log_level="error")
     server = uvicorn.Server(config)
     await server.serve()
 

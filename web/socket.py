@@ -1,5 +1,6 @@
 """WebSocket connection manager and signal subscriber."""
 
+import asyncio
 import json
 
 from fastapi import WebSocket
@@ -32,22 +33,29 @@ class ConnectionManager:
 class WebSocketBus:
     """An asyncio.Queue-compatible bus that broadcasts to all connected WebSocket tabs.
 
-    Matches the Queue.put() interface so it can be used as channel.bus.
+    Matches the Queue interface so it can be used as channel.bus.
     Messages put into this bus are forwarded to every connected browser tab
-    as a JSON payload with type="chat_message".
+    as a JSON payload with type="chat_message", and also made available to
+    the awaiting get() call in persona.talk().
     """
 
     def __init__(self, persona_id: str):
         self._persona_id = persona_id
+        self._queue: asyncio.Queue = asyncio.Queue()
 
     async def put(self, text: str) -> None:
-        """Broadcast a chat message to all connected WebSocket clients."""
+        """Broadcast a chat message to WebSocket clients and resolve the waiting caller."""
         data = json.dumps({
             "type": "chat_message",
             "persona_id": self._persona_id,
             "content": text,
         })
         await manager.broadcast(data)
+        await self._queue.put(text)
+
+    async def get(self) -> str:
+        """Wait for the next response from the conscious pipeline."""
+        return await self._queue.get()
 
 
 manager = ConnectionManager()

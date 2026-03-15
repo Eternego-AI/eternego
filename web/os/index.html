@@ -5,20 +5,78 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Eternego</title>
     <link rel="icon" type="image/svg+xml" href="/assets/eternego-icon.svg">
-    <link rel="stylesheet" href="/os/os.css">
-    <script type="module" src="/os/components/boot-loader.js"></script>
-    <script type="module" src="/os/components/elements/app-icon.js"></script>
-    <script type="module" src="/os/components/elements/app-page.js"></script>
-    <script type="module" src="/os/components/elements/widget-card.js"></script>
-    <script type="module" src="/os/components/elements/signal-viewer.js"></script>
-    <script type="module" src="/os/components/apps/persona/persona-app.js"></script>
-    <script type="module" src="/os/components/apps/system/system-app.js"></script>
-    <script type="module" src="/os/components/apps/new-persona/new-persona-app.js"></script>
-    <script type="module" src="/os/components/apps/new-persona/widgets/create-widget.js"></script>
-    <script type="module" src="/os/components/desktop.js"></script>
+    <link rel="stylesheet" href="/os/index.css">
 </head>
 <body>
-    <boot-loader></boot-loader>
-    <os-desktop></os-desktop>
+    <script type="module">
+        // Elements (UI — platform)
+        import './os/elements/log-line.js';
+        import './os/elements/role-message.js';
+        import './os/elements/text-input.js';
+        import './os/elements/action-button.js';
+        import './os/elements/option-list.js';
+        import './os/elements/step-panel.js';
+        import './os/elements/info-card.js';
+        import './os/elements/app-icon.js';
+
+        // Layouts (logical — platform)
+        import './os/layouts/tail-layout.js';
+        import './os/layouts/card-layout.js';
+        import './os/layouts/step-layout.js';
+        import './os/layouts/form-layout.js';
+        import './os/layouts/grid-layout.js';
+
+        // Widgets (UI — core)
+        import './os/widgets/stdout.js';
+        import './os/widgets/chat.js';
+        import './os/widgets/info.js';
+        import './os/widgets/signal-log.js';
+        import './os/widgets/create.js';
+        import './os/widgets/migrate.js';
+
+        // Apps (logical — core)
+        import TtyApp from './os/apps/tty.js';
+        import PersonaApp from './os/apps/persona.js';
+        import NewPersonaApp from './os/apps/new-persona.js';
+
+        // Modes (UI — business)
+        import './os/modes/terminal.js';
+        import './os/modes/desktop.js';
+
+        // OS (logical — business)
+        import OS from './os/index.js';
+
+        // Register apps
+        OS.registerApp(TtyApp);
+        OS.registerApp(PersonaApp);
+        OS.registerApp(NewPersonaApp);
+
+        // Boot sequence: terminal mode → boot → desktop mode
+        const terminal = document.createElement('terminal-mode');
+        const ttyApp = new TtyApp();
+        ttyApp.init({ signals: OS.signals });
+        terminal.init({ ttyApp });
+        document.body.appendChild(terminal);
+
+        // Wire signals to terminal log during boot
+        const bootLogHandler = (e) => {
+            for (const msg of e.detail) {
+                if (!OS.booted) terminal.appendLog(`[ ${msg.type || 'signal'} ] ${msg.title}`);
+            }
+        };
+        OS.signals.addEventListener('update', bootLogHandler);
+
+        OS.setMode(terminal);
+
+        OS.boot().then(() => {
+            OS.signals.removeEventListener('update', bootLogHandler);
+
+            const desktop = document.createElement('desktop-mode');
+            desktop.init({ apps: OS.apps, signals: OS.signals });
+            document.body.appendChild(desktop);
+
+            OS.setMode(desktop);
+        });
+    </script>
 </body>
 </html>
