@@ -13,6 +13,10 @@ class ChatRequest(BaseModel):
     messages: list[Message]
 
 
+class EnvironmentPrepareRequest(BaseModel):
+    model: str = ""
+
+
 class PersonaCreateRequest(BaseModel):
     name: str
     model: str

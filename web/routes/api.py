@@ -1,45 +1,32 @@
 """Internal API routes — Eternego-specific endpoints."""
 
-import json
-
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 
 from application.business import environment, persona
-from config.application import log_file, signal_log_file
-from web.requests import HearRequest, PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
+from web.requests import EnvironmentPrepareRequest, HearRequest, PersonaControlRequest, PersonaCreateRequest, PersonaMigrateRequest
 
 router = APIRouter(prefix="/api")
 
-_LOG_FILES = {
-    "app":     log_file,
-    "signals": signal_log_file,
-}
 
+@router.get("/personas")
+async def list_personas():
+    outcome = await persona.agents()
+    personas_list = (outcome.data or {}).get("personas", []) if outcome.success else []
+    return {"personas": [{"id": p.id, "name": p.name} for p in personas_list]}
 
-@router.get("/logs")
-async def get_logs(file: str = Query("app"), tail: int = Query(200)):
-    path_fn = _LOG_FILES.get(file)
-    if path_fn is None:
-        raise HTTPException(status_code=400, detail="Unknown log file")
-    path = path_fn()
-    if not path.exists():
-        return {"entries": []}
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    entries = []
-    for line in lines[-tail:]:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entries.append(json.loads(line))
-        except json.JSONDecodeError:
-            entries.append({"level": "info", "title": line, "time": "", "context": {}})
-    return {"entries": entries}
 
 
 @router.get("/models")
 async def get_models():
     outcome = await environment.info()
+    return outcome.data
+
+
+@router.post("/environment/prepare")
+async def prepare_environment(request: EnvironmentPrepareRequest):
+    outcome = await environment.prepare(request.model or None)
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data
 
 
