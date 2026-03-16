@@ -83,11 +83,14 @@ async def express_thinking(persona: Persona) -> None:
 async def send(channel: Channel, text: str) -> None:
     """Send text to a specific channel."""
     logger.info("Sending on channel", {"type": channel.type, "text": text[:50]})
-    if channel.type == "telegram":
-        token = (channel.credentials or {})["token"]
-        await asyncio.to_thread(telegram.send, token=token, chat_id=channel.name, message=text)
-    else:
-        await channel.bus.put(text)
+    try:
+        if channel.type == "telegram":
+            token = (channel.credentials or {})["token"]
+            await asyncio.to_thread(telegram.send, token=token, chat_id=channel.name, message=text)
+        else:
+            await channel.bus.put(text)
+    except Exception as e:
+        logger.error("Failed to send on channel", {"type": channel.type, "error": str(e)})
 
 def verify(persona: Persona, channel: Channel, name: str) -> None:
     channel.name = name

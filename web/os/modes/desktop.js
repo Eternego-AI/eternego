@@ -125,11 +125,11 @@ class DesktopMode extends Mode {
         this._items = [];
         // Home button — only visible in dock mode
         this._items.push({ id: '_home', name: 'Home', icon: house(24), type: 'home' });
-        this._items.push({ id: '_system', name: 'System', icon: settings(24), type: 'system' });
         for (const p of OS.personas) {
             this._items.push({ id: p.id, name: p.name, icon: p.name.charAt(0).toUpperCase(), type: '' });
         }
         this._items.push({ id: '_new', name: 'New', icon: plus(24), type: 'action' });
+        this._items.push({ id: '_system', name: 'System', icon: settings(24), type: 'system' });
         this._selectedIndex = OS.personas.length > 0 ? 2 : 1;
     }
 

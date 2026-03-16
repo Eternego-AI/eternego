@@ -2,7 +2,7 @@
 
 import subprocess
 
-from application.platform import logger, crypto, OS, linux, mac, windows, datetimes
+from application.platform import logger, crypto, OS, linux, mac, windows, datetimes, bip39
 from application.core.data import Persona
 from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError, ExecutionError, HardwareError
 
@@ -137,6 +137,12 @@ def hardware() -> dict:
         }
     except (OSError, subprocess.CalledProcessError, RuntimeError) as e:
         raise HardwareError("Could not read hardware information") from e
+
+
+def generate_recovery_phrases() -> str:
+    """Generate a cryptographically secure recovery phrase."""
+    logger.info("Generating recovery phrase")
+    return bip39.choose(24)
 
 
 async def persona_key(phrase: str, persona_id: str) -> bytes:

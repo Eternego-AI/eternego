@@ -3,6 +3,7 @@
 from . import anthropic
 from . import strings
 from . import datetimes
+from . import bip39
 from . import crypto
 from . import filesystem
 from . import git

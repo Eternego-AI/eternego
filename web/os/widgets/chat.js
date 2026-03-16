@@ -69,7 +69,7 @@ class ChatWidget extends Widget {
         this._chatHandler = (msg) => {
             if (msg.persona_id === this._personaId) {
                 this._hideThinking();
-                this._addMessage('assistant', msg.content);
+                this._addMessageTyping('assistant', msg.content);
                 this._input.disabled = false;
                 this._sendBtn.disabled = false;
                 this._input.focus();
@@ -110,7 +110,7 @@ class ChatWidget extends Widget {
             const data = await res.json();
             this._tail.innerHTML = '';
             for (const s of data.signals || []) {
-                if (s.role === 'user' || s.role === 'assistant') {
+                if ((s.role === 'user' || s.role === 'assistant') && !s.content.trimStart().startsWith('{')) {
                     this._addMessage(s.role, s.content);
                 }
             }
@@ -121,6 +121,20 @@ class ChatWidget extends Widget {
         const el = document.createElement('role-message');
         el.init({ role, text: content });
         this._tail.append(el);
+    }
+
+    _addMessageTyping(role, content) {
+        const el = document.createElement('role-message');
+        el.init({ role, text: '' });
+        this._tail.append(el);
+        let i = 0;
+        const step = () => {
+            if (i < content.length) {
+                el.textContent += content[i++];
+                requestAnimationFrame(step);
+            }
+        };
+        requestAnimationFrame(step);
     }
 
     _showThinking() {

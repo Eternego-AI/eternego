@@ -20,6 +20,7 @@
         import './os/elements/app-icon.js';
         import './os/elements/alert-modal.js';
         import './os/elements/destructive-button.js';
+        import './os/elements/badged-text.js';
 
         // Layouts (logical — platform)
         import './os/layouts/tail-layout.js';
@@ -34,6 +35,7 @@
         import './os/widgets/info.js';
         import './os/widgets/signal-log.js';
         import './os/widgets/control.js';
+        import './os/widgets/persona-info.js';
         import './os/widgets/create.js';
         import './os/widgets/migrate.js';
 
@@ -65,7 +67,7 @@
         // Wire signals to terminal log during boot
         const bootLogHandler = (e) => {
             for (const msg of e.detail) {
-                if (!OS.booted) terminal.appendLog(`[ ${msg.type || 'signal'} ] ${msg.title}`);
+                if (!OS.booted) terminal.appendLog(msg.title);
             }
         };
         OS.signals.addEventListener('update', bootLogHandler);

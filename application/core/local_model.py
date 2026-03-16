@@ -158,18 +158,3 @@ async def generate_training_set(model: str, dna: str) -> list[dict]:
     except json.JSONDecodeError:
         return []
     return parsed.get("training_pairs", [])
-
-
-async def generate_recovery_phrase(model: str) -> str:
-    prompt = """Generate a recovery phrase consisting of exactly 24 random English words.
-
-Requirements:
-- Use 24 common, distinct English words
-- Each word from a standard BIP-39 wordlist or similar well-known word list
-- All lowercase
-- Words must not form a meaningful sentence or phrase
-- No repeated words
-
-Return ONLY the 24 words separated by spaces. No other text."""
-
-    return await generate(model, prompt)

@@ -32,7 +32,7 @@ class StdoutWidget extends Widget {
 
     _append(msg) {
         const el = document.createElement('log-line');
-        el.init({ type: msg.type || 'signal', text: msg.title || '' });
+        el.init({ time: msg.time, text: msg.title || '' });
         this._tail.append(el);
         while (this._tail.childElementCount > this._maxLines) {
             this._tail.removeChild(this._tail.firstChild);

@@ -78,6 +78,28 @@ async def migrate_persona(
     return outcome.data
 
 
+@router.get("/persona/{persona_id}")
+async def get_persona(persona_id: str):
+    find = await persona.find(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    p = find.data["persona"]
+    return {
+        "id": p.id,
+        "name": p.name,
+        "base_model": p.base_model,
+        "model": p.model.name if p.model else "",
+        "channels": [
+            {
+                "type": ch.type,
+                "name": ch.name,
+                "verified": ch.verified_at is not None,
+            }
+            for ch in (p.channels or [])
+        ],
+    }
+
+
 @router.get("/persona/{persona_id}/mind")
 async def get_mind(persona_id: str):
     outcome = await persona.mind_signals(persona_id)

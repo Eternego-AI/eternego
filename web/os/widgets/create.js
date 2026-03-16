@@ -18,7 +18,7 @@ class CreateWidget extends Widget {
         step.init({ steps: ['name', 'model', 'telegram', 'frontier'] });
 
         this._panels = {};
-        for (const id of ['name', 'model', 'telegram', 'frontier', 'loading', 'result']) {
+        for (const id of ['name', 'model', 'telegram', 'frontier', 'loading', 'result', 'pair']) {
             const panel = document.createElement('step-panel');
             panel.init({ id });
             step.addPanel(panel);
@@ -226,7 +226,8 @@ class CreateWidget extends Widget {
                 return;
             }
             const data = await res.json();
-            this._showResult(data.recovery_phrase, data.persona_id);
+            this._personaId = data.persona_id;
+            this._showResult(data.recovery_phrase);
         } catch { this._showError('Network error'); }
     }
 
@@ -241,7 +242,7 @@ class CreateWidget extends Widget {
         s.prepend(el);
     }
 
-    _showResult(phrase, personaId) {
+    _showResult(phrase) {
         const s = this._panels.result;
         s.innerHTML = `
             <label class="wizard-label">Recovery Phrase</label>
@@ -249,13 +250,68 @@ class CreateWidget extends Widget {
             <code class="wizard-phrase">${this._esc(phrase)}</code>
             <div class="wizard-nav">
                 <span></span>
-                <button class="wizard-btn primary" id="wz-done">I wrote down my phrases</button>
+                <button class="wizard-btn primary" id="wz-next">I saved my phrase</button>
             </div>
         `;
-        s.querySelector('#wz-done').addEventListener('click', () => {
-            if (this._props.onCreated) this._props.onCreated(personaId);
+        s.querySelector('#wz-next').addEventListener('click', () => {
+            this._renderPair();
+            this._step.go('pair');
         });
         this._step.go('result');
+    }
+
+    _renderPair() {
+        const s = this._panels.pair;
+        const name = this._esc(this._data.name);
+        s.innerHTML = `
+            <label class="wizard-label">Connect to Telegram</label>
+            <p class="wizard-hint">
+                Open your bot on Telegram and send it any message.
+                It will reply with a pairing code. Enter the code below.
+            </p>
+            <input class="wizard-input" type="text" placeholder="Pairing code" style="text-transform: uppercase;">
+            <div class="wizard-nav">
+                <button class="wizard-btn" id="wz-skip">Skip</button>
+                <button class="wizard-btn primary" id="wz-pair">Pair</button>
+            </div>
+        `;
+        const input = s.querySelector('input');
+        const pairBtn = s.querySelector('#wz-pair');
+
+        const doPair = async () => {
+            const code = input.value.trim();
+            if (!code) return;
+            pairBtn.setAttribute('disabled', '');
+            const existing = s.querySelector('.wizard-error');
+            if (existing) existing.remove();
+            try {
+                const res = await fetch(`/api/pair/${encodeURIComponent(code)}`, { method: 'POST' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    pairBtn.removeAttribute('disabled');
+                    const el = document.createElement('p');
+                    el.className = 'wizard-error';
+                    el.textContent = err.detail || 'Pairing failed';
+                    s.querySelector('.wizard-hint').after(el);
+                    return;
+                }
+                if (this._props.onCreated) this._props.onCreated(this._personaId);
+            } catch {
+                pairBtn.removeAttribute('disabled');
+                const el = document.createElement('p');
+                el.className = 'wizard-error';
+                el.textContent = 'Network error';
+                s.querySelector('.wizard-hint').after(el);
+            }
+        };
+
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doPair(); });
+        pairBtn.addEventListener('click', doPair);
+        s.querySelector('#wz-skip').addEventListener('click', () => {
+            if (this._props.onCreated) this._props.onCreated(this._personaId);
+        });
+
+        setTimeout(() => input.focus(), 50);
     }
 }
 

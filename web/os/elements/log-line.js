@@ -1,10 +1,11 @@
 import Element from './element.js';
 
 class LogLine extends Element {
-    // init({ type, text })
+    // init({ time, text })
     render() {
-        const { type, text } = this._props;
-        this.textContent = `[ ${type || 'signal'} ] ${text || ''}\n`;
+        const { time, text } = this._props;
+        const ts = time ? new Date(time / 1e6).toLocaleTimeString() : '';
+        this.textContent = `${ts}  ${text || ''}\n`;
     }
 }
 

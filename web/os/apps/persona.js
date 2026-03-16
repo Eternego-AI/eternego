@@ -11,6 +11,9 @@ export default class PersonaApp extends App {
         const div = document.createElement('div');
         div.id = 'persona-app';
 
+        const personaInfo = document.createElement('persona-info-widget');
+        personaInfo.init({});
+
         const control = document.createElement('control-widget');
         control.init({
             onAction: (actionId) => this._onAction(actionId),
@@ -29,18 +32,29 @@ export default class PersonaApp extends App {
             getSignalsFor: (id) => OS.signalsFor(id),
         });
 
+        this._personaInfo = personaInfo;
         this._chat = chat;
         this._signalLog = signals;
         this._el = div;
-        this._widgets = [control, chat, signals];
+        this._widgets = [personaInfo, control, chat, signals];
         this._personaId = null;
     }
 
-    setPersona(personaId) {
+    async setPersona(personaId) {
         if (personaId === this._personaId) return;
         this._personaId = personaId;
         this._chat.setPersona(personaId);
         this._signalLog.setPersona(personaId);
+        await this._loadPersonaInfo(personaId);
+    }
+
+    async _loadPersonaInfo(personaId) {
+        try {
+            const res = await fetch(`/api/persona/${personaId}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            this._personaInfo.update(data);
+        } catch {}
     }
 
     activate(widget) {

@@ -846,6 +846,30 @@ info-widget {
 }
 
 
+
+/* ── Badged Text ─────────────────────────────────────────── */
+
+.badged-text {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.badged-text-label {
+    font-weight: 300;
+}
+
+.badged-text-icon {
+    display: flex;
+    align-items: center;
+    line-height: 0;
+    color: #4ade80;
+}
+
+
 /* ── Control Widget ───────────────────────────────────────── */
 
 .control-actions {

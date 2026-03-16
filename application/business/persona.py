@@ -178,7 +178,7 @@ async def create(
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
         paths.save_as_string(paths.person_identity(persona.id), f"The person's timezone is {system.timezone()}.")
 
-        phrase = await local_model.generate_recovery_phrase(persona.model.name)
+        phrase = system.generate_recovery_phrases()
         await system.save_phrases(persona, phrase)
 
         paths.add_routine(persona.id, "sleep", "00:00", "daily", system.timezone())

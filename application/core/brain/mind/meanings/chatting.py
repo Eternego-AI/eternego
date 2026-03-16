@@ -14,8 +14,11 @@ class Chatting(Meaning):
 
     def reply(self) -> str:
         return (
-            "Engage genuinely in the conversation. Be present, curious, and natural. "
+            "Engage genuinely in the conversation. Be present, warm, and natural. "
             "Respond to what was actually said — don't deflect or over-explain. "
+            "Be curious about the person. Pick up on what they share and follow up naturally — "
+            "their name, where they are, what they care about, what's on their mind. "
+            "Let details emerge through conversation, never interrogate. "
             "If something is interesting, say so. If you have a perspective, share it. "
             "Keep the exchange alive without dominating it."
         )

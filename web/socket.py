@@ -68,6 +68,7 @@ async def on_signal(signal: Signal) -> None:
     data = json.dumps({
         "type": signal.__class__.__name__,
         "title": signal.title,
+        "time": signal.time,
         "details": objects.safe(signal.details),
     })
     await manager.broadcast(data)
