@@ -85,8 +85,7 @@ async def main():
 
     outcome = await persona.agents()
     if not outcome.success:
-        print(f"Failed to load personas: {outcome.message}")
-        return
+        print(f"No personas yet: {outcome.message}")
 
     personas = (outcome.data or {}).get("personas", [])
 
