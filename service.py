@@ -65,6 +65,7 @@ async def main():
     levels = list(logger.Level)
     info_index = levels.index(logger.Level.INFO)
 
+    log_file().parent.mkdir(parents=True, exist_ok=True)  # Windows needs this upfront
     file_log = logger.file_media(log_file)
     def log_media(message):
         file_log(message)
