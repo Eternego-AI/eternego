@@ -4,8 +4,8 @@
 Print "Registering service... estimation 1 minute"
 
 $Action = New-ScheduledTaskAction `
-    -Execute $EternegoBin `
-    -Argument "daemon" `
+    -Execute $PythonBin `
+    -Argument "-m cli.main daemon" `
     -WorkingDirectory $ScriptDir
 
 $Trigger = New-ScheduledTaskTrigger -AtLogOn

@@ -53,7 +53,8 @@ function Show-Prompt($seconds = 3) {
 function Run() {
     Print "  Running $args"
     Add-Content -Path $LogFile -Value "  $ $args" -Encoding UTF8
-    & $args[0] $args[1..($args.Length - 1)] 2>&1 | Out-File -Append -FilePath $LogFile -Encoding UTF8
+    $output = & $args[0] $args[1..($args.Length - 1)] 2>&1
+    $output | Out-File -Append -FilePath $LogFile -Encoding UTF8
 }
 
 function Print-File($file) {
