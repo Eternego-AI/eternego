@@ -52,7 +52,7 @@ function Show-Prompt($seconds = 3) {
 
 function Run() {
     $savedPref = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
+    $ErrorActionPreference = "SilentlyContinue"
     Print "  Running $args"
     Add-Content -Path $LogFile -Value "  $ $args" -Encoding UTF8
     & $args[0] $args[1..($args.Length - 1)] 2>&1 | Out-File -Append -FilePath $LogFile -Encoding UTF8
