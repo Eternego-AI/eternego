@@ -28,7 +28,7 @@ Eternego is different:
 bash install.sh
 
 # Windows (PowerShell)
-pwsh install.ps1
+powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
 This installs Python if needed, sets up the `eternego` command, and registers a background service.
