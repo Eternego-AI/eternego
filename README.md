@@ -26,7 +26,9 @@ Eternego is different:
 ```bash
 # Linux / macOS
 bash install.sh
+```
 
+```
 # Windows (PowerShell)
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
