@@ -1,3 +1,6 @@
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 $TypeWriter = $true
 
 $Green = [ConsoleColor]::Green
@@ -49,13 +52,13 @@ function Show-Prompt($seconds = 3) {
 
 function Run() {
     Print "  Running $args"
-    Add-Content $LogFile "  $ $args"
-    & $args[0] $args[1..($args.Length - 1)] >> $LogFile 2>&1
+    Add-Content -Path $LogFile -Value "  $ $args" -Encoding UTF8
+    & $args[0] $args[1..($args.Length - 1)] 2>&1 | Out-File -Append -FilePath $LogFile -Encoding UTF8
 }
 
 function Print-File($file) {
 
-    Get-Content $file | ForEach-Object {
+    Get-Content $file -Encoding UTF8 | ForEach-Object {
         Write-Host $_
         Start-Sleep -Milliseconds 50
     }
