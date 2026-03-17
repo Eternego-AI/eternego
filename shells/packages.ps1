@@ -17,3 +17,12 @@ Run $PythonBin -m pip install --upgrade pip $PipIndex
 
 Print "Installing eternego... estimation 3-5 minutes"
 Run $PythonBin -m pip install -e $ScriptDir $PipIndex
+
+# Make 'eternego' available system-wide
+$VenvScripts = "$VenvDir\Scripts"
+$UserPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+if ($UserPath -notlike "*$VenvScripts*") {
+    [System.Environment]::SetEnvironmentVariable("Path", "$VenvScripts;$UserPath", "User")
+    $env:Path = "$VenvScripts;$env:Path"
+    Print "Added $VenvScripts to PATH"
+}
