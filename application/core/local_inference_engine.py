@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import shutil
 
 from application.platform import logger, ollama, lora, hugging_face
 from application.core.exceptions import EngineConnectionError

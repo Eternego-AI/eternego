@@ -69,7 +69,7 @@ class ChatWidget extends Widget {
         this._chatHandler = (msg) => {
             if (msg.persona_id === this._personaId) {
                 this._hideThinking();
-                this._addMessageTyping('assistant', msg.content);
+                this._addMessage('assistant', msg.content);
                 this._input.disabled = false;
                 this._sendBtn.disabled = false;
                 this._input.focus();
