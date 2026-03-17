@@ -78,12 +78,13 @@ html, body {
     align-items: center;
     justify-content: center;
 }
-.boot-logo {
-    width: 60vw;
-    max-width: 600px;
-    height: auto;
-    opacity: 0.8;
-    filter: drop-shadow(0 0 40px rgba(140, 160, 255, 0.1));
+.boot-ascii {
+    font-family: monospace;
+    font-size: clamp(6px, 1.4vw, 14px);
+    line-height: 1.2;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: pre;
+    margin: 0;
 }
 
 .boot-log {
