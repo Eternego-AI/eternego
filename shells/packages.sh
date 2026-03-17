@@ -2,6 +2,9 @@
 # Install Eternego and all Python dependencies.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
+print "Upgrading pip..."
+run python3 -m pip install --upgrade pip
+
 print "Installing eternego... estimation 3-5 minutes"
 run python3 -m pip install -e "$SCRIPT_DIR"
 
