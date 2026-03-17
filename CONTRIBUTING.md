@@ -1,48 +1,70 @@
 # Contributing to Eternego
 
-This document covers the architecture, conventions, and cognitive system you need to understand before making changes.
+Most AI projects are chatbots with extra steps. Eternego is an attempt to build something closer to a mind — a system that perceives, reasons, acts, and learns. If that sounds interesting, read on.
+
+This document explains the architecture, the cognitive system, and how everything fits together. Understanding it takes about fifteen minutes. After that, you'll be able to add new capabilities, fix bugs, or propose changes without breaking the system's invariants.
+
+---
+
+## The Philosophy
+
+Three beliefs shape every decision in this codebase:
+
+**1. A business person should be able to read the code and understand what happens.** The business layer reads like English. If you need to understand what "persona creation" does, open the business function — it's a sequence of named steps with no engineering noise.
+
+**2. Solutions should be separate from infrastructure.** The core layer solves problems. The platform layer wraps external tools. They never mix. This means we can replace Ollama with another runtime, swap Telegram for Discord, or switch encryption libraries — without touching a single line of business or core logic.
+
+**3. The persona's intelligence should emerge from structure, not from prompts.** Instead of one massive system prompt that tries to handle everything, Eternego breaks cognition into stages. Each stage has one job. This makes the system predictable, debuggable, and improvable — you can make the persona better at *deciding* without affecting how it *answers*.
 
 ---
 
 ## Layers
 
-The application has three layers inside `application/`:
-
 ```
-business/    WHY — What should happen, reads like the README
-core/        HOW — Where we engineer the solutions
-platform/    WHAT — What external tools actually provide, nothing more
+business/    WHY — What should happen
+core/        HOW — Where we engineer solutions
+platform/    WHAT — What external tools provide
 ```
 
-Dependencies flow downward only: business imports core, core imports platform. Never upward.
+Dependencies flow downward only. Business imports core. Core imports platform. Never upward. Never sideways.
 
 The service entry point (`service.py`), the heartbeat (`heart.py`), the web layer (`web/`), and the CLI (`cli/`) sit outside `application/`. They call business functions only and never touch core or platform directly.
 
----
+### Why this matters
 
-## Process
+When you add a feature, you always know where to put things:
 
-We always work top-down:
+- "The persona should be able to set reminders" → that's a **business** question (what should happen) backed by a **meaning** (how the pipeline handles it)
+- "We need to parse iCal format" → that's a **platform** capability (what a tool provides)
+- "Reminders should check if the time conflicts with existing events" → that's **core** logic (how we solve the problem)
 
-1. **Write the business spec first.** Define what the feature does as a clear spec, then translate it into a business function. The function should be self-documenting — a business person can read it and understand what happens. Add `bus.propose` at the start, `bus.broadcast` at the end, and calls to core functions in between.
-
-2. **Add core signatures only for what business asked for.** If the business spec calls `local_inference_engine.check(model)`, add `check(model)` to the core module. Never add core functions speculatively.
-
-3. **Implement core functions.** This is where we solve problems — what steps are needed, what platform capabilities to use, how to combine them. Core functions start with a log and use platform modules for all infrastructure.
-
-4. **Add platform functions only for what the tool provides.** If Ollama has `GET /api/tags`, the platform module has `get()`. If Ollama does not have a "get default model" concept, the platform module does not have `get_default_model()` — that logic lives in core.
+If you're ever unsure where something goes, ask: "Is this a business rule, an engineering solution, or a tool capability that is portable?" The answer tells you the layer.
 
 ---
 
-## Business Layer
+## How We Work
+
+Always top-down:
+
+**1. Write the business spec first.** Define what the feature does, then translate it into a business function. The function should be self-documenting. Add `bus.propose` at the start, `bus.broadcast` at the end, and calls to core functions in between.
+
+**2. Add core signatures only for what business asked for.** If the business spec calls `local_inference_engine.check(model)`, add `check(model)` to the core module. Never add functions speculatively.
+
+**3. Implement core functions.** This is where you solve the problem — what steps are needed, what platform capabilities to use, how to combine them. Every core function starts with a log and uses platform modules for all infrastructure.
+
+**4. Add platform functions only for what the tool provides.** If Ollama has `GET /api/tags`, the platform module has `get()`. If Ollama doesn't have a "get default model" concept, the platform module doesn't have `get_default_model()` — that logic lives in core.
+
+---
+
+## The Business Layer
 
 Every business function is `async`, returns `Outcome[T]`, starts with `bus.propose`, and ends with `bus.broadcast`. It catches domain exceptions from core and returns user-friendly messages. It never contains engineering logic.
 
 ### Signals
 
-Every business function sends at least two signals through the bus:
+The bus carries intent and results through the system:
 
-| Method | Signal Type | Purpose |
+| Method | Signal | Purpose |
 |---|---|---|
 | `bus.propose` | Plan | Announce intent before action |
 | `bus.broadcast` | Event | Announce result after action |
@@ -50,33 +72,45 @@ Every business function sends at least two signals through the bus:
 | `bus.ask` | Inquiry | Request input from subscribers |
 | `bus.order` | Command | Command an action, expect signals back |
 
+Every business function sends at least a propose and a broadcast. This makes the system observable — you can trace exactly what happened and why.
+
 ### Error Handling
 
-Error handling flows upward in three steps:
+Errors flow upward in three steps:
 
 1. **Platform** raises raw errors (`URLError`, `OSError`, etc.)
-2. **Core** catches platform errors and raises domain exceptions (`InstallationError`, `EngineConnectionError`, etc.)
-3. **Business** catches domain exceptions and returns user-friendly `Outcome` with a broadcast event
+2. **Core** catches platform errors and raises domain exceptions (`InstallationError`, `EngineConnectionError`)
+3. **Business** catches domain exceptions and returns user-friendly `Outcome` with a broadcast
 
-Do not add try/catch to business specs before implementing core. Go down first — implement core, see what platform errors it faces, define domain exceptions, add catches in core. Then come back up and add catches in business.
-
----
-
-## Core Layer
-
-Core functions exist because a business spec calls them. Every core function starts with a log, uses platform modules for all infrastructure, never sends signals, and never returns `Outcome` — it returns data or raises exceptions.
+Important: don't add try/catch to business specs before implementing core. Build downward first — see what breaks, define domain exceptions, then come back up and handle them.
 
 ---
 
-## Platform Layer
+## The Core Layer
 
-Platform modules expose what external tools actually offer — nothing invented, nothing wrapped beyond what the tool gives. They are portable across projects and contain no project-specific logic.
+Core functions exist because a business spec needs them. They start with a log, use platform modules for infrastructure, never send signals, and never return `Outcome`. They return data or raise exceptions.
+
+The core layer is where engineering lives. If you need to combine three platform calls, add retry logic, validate data, or make a decision — it goes here.
+
+---
+
+## The Platform Layer
+
+Platform modules expose what external tools actually offer. Nothing invented. Nothing wrapped beyond what the tool provides. They are portable across projects and contain no Eternego-specific logic.
+
+If you can imagine copy-pasting a platform module into a completely different project and having it work — you've written it correctly.
 
 ---
 
 ## The Cognitive System
 
-This is the persona's brain. Understanding it is essential for most contributions.
+This is the heart of Eternego. Understanding it is essential for most contributions.
+
+### The Core Idea
+
+Most AI systems work like this: user sends message → model generates response → done. Eternego works differently. It treats every interaction as something to be *understood*, *categorized*, *responded to*, *acted upon*, and *concluded*. Five distinct stages, each with a clear purpose.
+
+This means a persona can handle a reminder request differently from a coding question differently from casual chat — not because of prompt engineering, but because each type of interaction is literally a different code path.
 
 ### Data Model
 
@@ -88,14 +122,16 @@ Signal → Perception → Thought
                       Meaning
 ```
 
-- **Signal** — an atomic message (user, assistant, or system) with a timestamp
-- **Perception** — a group of related signals forming a conversation thread, identified by an *impression* (a short description of what this thread is about)
-- **Meaning** — a Python class that defines how to handle a type of interaction (e.g., Reminder, Shell, Chatting)
-- **Thought** — a perception paired with a meaning — the cognitive work unit that flows through the pipeline
+- **Signal** — an atomic message (user, assistant, or system) with a timestamp. The smallest unit.
+- **Perception** — a group of related signals forming a conversation thread. Identified by an *impression* — a short description of what this thread is about.
+- **Meaning** — a Python class that defines how to handle a type of interaction. This is where behavior lives.
+- **Thought** — a perception paired with a meaning. The cognitive work unit that flows through the pipeline.
+
+Think of it this way: signals are words, perceptions are conversations, meanings are skills, and thoughts are "I'm having this conversation and I know how to handle it."
 
 ### The Pipeline
 
-The mind runs a continuous loop through five stages:
+The mind runs a continuous loop:
 
 ```
 understand → recognize → answer → decide → conclude
@@ -103,51 +139,29 @@ understand → recognize → answer → decide → conclude
 
 Each stage has a clear entry condition. A thought can only be in one stage at a time:
 
-| Stage | Entry Condition | What Happens | Exits By |
-|-------|----------------|--------------|----------|
-| **understand** | Unattended user signal | Route signal to a perception thread | Attaching signal to perception |
-| **recognize** | Perception with no thought | Match perception to a meaning, creating a thought | Creating a thought |
-| **answer** | Thought unprocessed, last signal is user, meaning has reply/clarify | Generate a response to the person | Appending assistant signal |
-| **decide** | Thought unprocessed, meaning has path, answer is done | Extract structured data, execute action | Resolving thought (or retrying on error) |
-| **conclude** | Thought processed but not concluded | Confirm result to the person | Setting concluded_at |
+| Stage | What Happens | Entry Condition |
+|-------|-------------|----------------|
+| **understand** | Route incoming signal to a conversation thread | Unattended user signal |
+| **recognize** | Match the thread to a meaning, creating a thought | Perception with no thought |
+| **answer** | Generate a response to the person | Thought is new, meaning has `reply` |
+| **decide** | Extract structured data, execute actions | Meaning has `path`, answer is done |
+| **conclude** | Confirm the result to the person | Thought is processed but not wrapped up |
 
-After each stage, the clock checks if new signals arrived. If so, it restarts the pipeline from understand. This ensures the persona is always responsive.
+After each stage, the clock checks if new signals arrived. If so, it restarts from `understand`. This ensures the persona is always responsive — it never gets stuck processing while you're waiting.
 
-### Meaning Methods
+### Meanings: Where Behavior Lives
 
-Each method on a Meaning maps to a pipeline stage:
-
-**`name`** (class attribute) — identifies the meaning in the recognition list.
-
-**`description() → str`** — one sentence defining what interactions this covers. Used by the recognize stage to match a perception to this meaning.
-
-**`reply() → str | None`** — prompt for the answer stage. How to respond on first contact. This runs BEFORE any action is taken.
-
-Important: The reply output is appended to the conversation thread and becomes visible to the decide stage. Never ask the model to state specific extracted values (times, dates, names) — if it gets them wrong, the error propagates into extraction.
-
-**`clarify() → str | None`** — prompt for retry after an error. Only runs when the conversation already contains an error message from a failed action.
-
-**`path() → str | None`** — prompt for the decide stage. Tells the model what structured data to extract and what JSON schema to return. For tool-using meanings, reference tools by their exact name. Return None for conversational-only meanings.
-
-Important: Tell the model to extract from what the person said, not from assistant messages in the thread.
-
-**`summarize() → str | None`** — prompt for the conclude stage. The final message confirming what was done. Return None to skip.
-
-**`run(persona_response: dict)`** — executes the action. The default dispatches tool calls from the JSON that path() produced. Override only for custom logic (e.g., file I/O). Return None on success (pipeline moves to conclude), return a Signal on error (pipeline retries via clarify).
-
-### Adding a New Meaning
-
-Create a file in `application/core/brain/mind/meanings/`:
+A Meaning is a Python class with methods that map to pipeline stages. This is the most important abstraction in the system.
 
 ```python
-from application.core.brain.data import Meaning
-
-
 class WeatherForecast(Meaning):
     name = "Weather Forecast"
 
     def description(self):
         return "The person wants to know the weather for a location and time."
+
+    def reply(self):
+        return "Acknowledge briefly that you will check the weather."
 
     def clarify(self):
         return (
@@ -155,74 +169,107 @@ class WeatherForecast(Meaning):
             "went wrong, and ask the person to clarify the location or date."
         )
 
-    def reply(self):
-        return "Acknowledge briefly that you will check the weather."
-
-    def summarize(self):
-        return "Share the forecast naturally — temperature, conditions, and anything notable."
-
     def path(self):
         return (
-            "Extract the weather request from what the person said (ignore assistant messages).\n"
+            "Extract the weather request from what the person said.\n"
             'Return JSON: {"tool": "linux.execute_on_sub_process", "command": "curl ..."}\n'
         )
+
+    def summarize(self):
+        return "Share the forecast naturally — temperature, conditions, anything notable."
 ```
 
-Then register it in `meanings/__init__.py` by importing it and adding it to the `built_in()` list.
+Each method serves one pipeline stage:
 
-### Escalation — Learning New Meanings at Runtime
+- **`description()`** → used by `recognize` to match a conversation to this meaning
+- **`reply()`** → used by `answer` to generate the first response
+- **`clarify()`** → used by `answer` when retrying after an error
+- **`path()`** → used by `decide` to extract structured data and determine actions
+- **`summarize()`** → used by `conclude` to confirm results
+- **`run()`** → executes the action (default dispatches tool calls; override for custom logic)
 
-When no existing meaning matches a perception, the recognize stage selects Escalation. This triggers `ego.escalate()`, which asks a frontier model (or falls back to the local model) to generate a new Meaning class as Python code.
+**Critical pitfall:** The output of `reply()` becomes visible to `decide()`. Never ask the model to state extracted values (times, dates, names) in the reply — if it gets them wrong, the error propagates into extraction. Keep replies conversational; let `path()` handle precision.
 
-The generated code is saved to `~/.eternego/personas/<id>/home/meanings/` and loaded dynamically. The new meaning is used immediately for the current interaction and persists across restarts.
+### Adding a New Meaning
 
-The escalation prompt teaches the frontier model how the pipeline works, what each method does, and the pitfalls to avoid (like error propagation from reply to decide). This is intentional — a well-informed frontier model produces meanings that work correctly with a weaker local model.
+1. Create a file in `application/core/brain/mind/meanings/`
+2. Define the class with the methods above
+3. Register it in `meanings/__init__.py` by adding it to the `built_in()` list
+
+That's it. The pipeline picks it up automatically. Your new meaning will be available in the next recognition cycle.
+
+### Escalation: Learning at Runtime
+
+This is where it gets interesting.
+
+When no existing meaning matches a conversation, the recognize stage selects `Escalation`. This asks a frontier model (or falls back to the local model) to **generate a new Meaning class as Python code**.
+
+The generated code is saved to `~/.eternego/personas/<id>/home/meanings/` and loaded immediately. The persona uses it for the current interaction and keeps it forever.
+
+The escalation prompt teaches the frontier model everything about the pipeline — what each method does, the pitfalls to avoid, how to structure tool calls. A well-informed frontier model produces meanings that work correctly even when executed by a weaker local model.
+
+This means the persona's capabilities aren't fixed at deployment. They grow based on what you ask for. Day one it can chat. Day thirty it can manage your calendar, check your infrastructure, draft your emails — because you asked it to, and it taught itself how.
 
 ### The Sleep Cycle
 
-When a persona sleeps (triggered manually or by a daily routine):
+When a persona sleeps:
 
-1. The mind finishes processing all active thoughts
-2. **learn_from_experience** — conversations are analyzed to extract and update:
-   - `person.md` — facts about the user (timezone, relationships, preferences)
-   - `traits.md` — behavioral patterns the persona observes
+1. All active thoughts finish processing
+2. **learn_from_experience** — conversations are analyzed to update:
+   - `person.md` — facts (timezone, relationships, preferences)
+   - `traits.md` — behavioral patterns
    - `wishes.md` — goals and aspirations
    - `struggles.md` — recurring obstacles
    - `context.md` — operational context
    - `dna.md` — synthesized character description
-3. All thoughts are archived to `history/`
-4. **grow** — training pairs are generated from the DNA and the persona is fine-tuned on local hardware (if GPU is available)
+3. Thoughts are archived to `history/`
+4. **grow** — training pairs are generated from the DNA and the persona is fine-tuned locally
 5. Memory is cleared for the next waking cycle
+
+The sleep cycle is what turns a chatbot into a persona. Without it, the AI just has context. With it, the AI *becomes* the context.
 
 ### Persona Data on Disk
 
-Everything lives in `~/.eternego/personas/<id>/home/`:
-
 ```
-config.json       — persona configuration
-person.md         — facts about the user
-traits.md         — observed behavioral patterns
-wishes.md         — user's goals and aspirations
-struggles.md      — recurring obstacles
-context.md        — operational context
-dna.md            — synthesized character (used for training)
-mind/memory.json  — cognitive graph (signals, perceptions, thoughts)
-history/          — archived conversations
-destiny/          — scheduled reminders and events
-notes/            — user's saved notes
-meanings/         — learned meaning definitions (Python)
-training/         — generated training pairs
+~/.eternego/personas/<id>/home/
+├── config.json       — persona configuration
+├── person.md         — facts about the user
+├── traits.md         — observed behavioral patterns
+├── wishes.md         — user's goals and aspirations
+├── struggles.md      — recurring obstacles
+├── context.md        — operational context
+├── dna.md            — synthesized character (used for training)
+├── mind/memory.json  — cognitive graph (signals, perceptions, thoughts)
+├── history/          — archived conversations
+├── destiny/          — scheduled reminders and events
+├── notes/            — user's saved notes
+├── meanings/         — learned meaning definitions (Python)
+└── training/         — generated training pairs
 ```
 
-All files are human-readable and editable. Modifying them directly changes the persona's knowledge.
+All human-readable. All editable. This is intentional — the persona's knowledge should never be a black box.
 
 ---
 
-## Code Style
+## Code Conventions
 
 - **Naming**: gerund intents (`saying`, `doing`, `consulting`, `reasoning`)
-- **Memory access**: always through `memories.agent(persona)` — per-persona, no global memory
+- **Memory access**: always through `memories.agent(persona)` — per-persona, no global state
 - **Destiny entries**: `paths.save_destiny_entry()` to write, `paths.read_files_matching()` to read
-- **History writes**: `paths.add_history_entry(persona_id, event, content)` for system writes
-- **Signals**: plan at start, event at end, every business function
+- **History writes**: `paths.add_history_entry(persona_id, event, content)`
+- **Signals**: propose at start, broadcast at end, every business function
 - **Exceptions**: domain-specific, defined in `exceptions.py`, caught at business layer
+
+---
+
+## Where to Start
+
+**Want to add a new capability?** Write a Meaning. Start with the `WeatherForecast` example above, look at existing meanings in `application/core/brain/mind/meanings/`, and follow the pattern.
+
+**Want to improve how the persona learns?** Look at the sleep cycle in core — specifically `learn_from_experience` and `grow`. This is where observation extraction and training data generation happen.
+
+**Want to add a new communication channel?** The platform layer has channel modules. Add a new one following the Telegram pattern, then wire it up in core.
+
+**Want to improve the pipeline itself?** Each stage is a separate function in `application/core/brain/mind/`. They're independently testable and modifiable.
+
+**Found a bug?** Open an issue with the stage name (understand/recognize/answer/decide/conclude) if it's pipeline-related. This helps us triage fast.
