@@ -2,6 +2,8 @@
 # Register Eternego as a system service (systemd on Linux, launchd on macOS).
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
+ETERNEGO_BIN="$SCRIPT_DIR/.venv/bin/eternego"
+
 print "Registering service... estimation 1 minute"
 
 if [ "$OS_TYPE" = "Linux" ]; then

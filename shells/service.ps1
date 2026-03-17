@@ -3,9 +3,11 @@
 
 Print "Registering service... estimation 1 minute"
 
+$EternegoBin = "$ScriptDir\.venv\Scripts\eternego.exe"
+
 $Action = New-ScheduledTaskAction `
-    -Execute $PythonBin `
-    -Argument "-m cli.main daemon" `
+    -Execute $EternegoBin `
+    -Argument "daemon" `
     -WorkingDirectory $ScriptDir
 
 $Trigger = New-ScheduledTaskTrigger -AtLogOn

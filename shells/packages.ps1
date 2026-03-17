@@ -1,13 +1,19 @@
-# Install Eternego and all Python dependencies.
+# Install Eternego and all Python dependencies inside a virtual environment.
 . "$PSScriptRoot\lib.ps1"
 
+$VenvDir = "$ScriptDir\.venv"
 $PipIndex = "--index-url https://pypi.org/simple/"
 
+if (-not (Test-Path $VenvDir)) {
+    Print "Creating virtual environment..."
+    Run python -m venv $VenvDir
+}
+
+# Use venv's Python and pip from here on
+$PythonBin = "$VenvDir\Scripts\python.exe"
+
 Print "Upgrading pip..."
-Run python -m pip install --upgrade pip $PipIndex
+Run $PythonBin -m pip install --upgrade pip $PipIndex
 
 Print "Installing eternego... estimation 3-5 minutes"
-Run python -m pip install -e $ScriptDir $PipIndex
-
-# Locate Python executable for service registration
-$PythonBin = (Get-Command python -ErrorAction Stop).Source
+Run $PythonBin -m pip install -e $ScriptDir $PipIndex
