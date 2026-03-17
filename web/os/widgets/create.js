@@ -136,11 +136,6 @@ class CreateWidget extends Widget {
         const go = () => {
             if (!this._data.model) return;
             this._step.go('telegram');
-            fetch('/api/environment/prepare', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: this._data.model }),
-            }).catch(() => {});
         };
         nextBtn.addEventListener('click', go);
         s.querySelector('#wz-back').addEventListener('click', () => this._step.go('name'));
