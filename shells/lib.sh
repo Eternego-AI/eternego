@@ -59,7 +59,12 @@ show_prompt() {
 run() {
     print "  Running $*"
     echo "  $ $*" >> "$LOG_FILE"
-    "$@" >> "$LOG_FILE" 2>&1
+    if ! "$@" >> "$LOG_FILE" 2>&1; then
+        echo ""
+        echo "  Failed: $*"
+        echo "  See log for details: $LOG_FILE"
+        exit 1
+    fi
 }
 
 print_file() {
