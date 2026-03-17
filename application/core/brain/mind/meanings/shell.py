@@ -37,5 +37,7 @@ class Shell(Meaning):
             "Use the execute_on_sub_process tool matching the person's OS "
             "(linux.execute_on_sub_process, mac.execute_on_sub_process, or windows.execute_on_sub_process).\n"
             'Return JSON: {"tool": "<os>.execute_on_sub_process", "command": "the shell command"}\n'
-            "Use only one command per step. If the task needs multiple steps, handle one at a time."
+            "Use only one command per step. If the task needs multiple steps, handle one at a time.\n"
+            "Never use interactive commands (nano, vim, vi, less, more, top, htop). "
+            "Use non-interactive alternatives (e.g. tee, cat with heredoc, echo with redirect)."
         )
