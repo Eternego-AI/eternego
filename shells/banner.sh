@@ -10,7 +10,7 @@ clear
 type_and_erase "Hello" 1
 show_prompt 1
 clear
-type_and_erase "Your life is going to become eternal, are you ready?" 2
+type_and_erase "Your life is going to become eternal. Are you ready?" 2
 
 clear
 

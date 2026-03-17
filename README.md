@@ -28,7 +28,7 @@ Eternego is different:
 bash install.sh
 ```
 
-```
+```powershell
 # Windows (PowerShell)
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
@@ -47,26 +47,25 @@ Pulls the model so your persona can use it. Run once per model.
 
 ### 3. Create your persona
 
-Open **http://localhost:5001/dashboard** and click **+ Create**:
+Open **http://localhost:5000** and click **+ New**. The wizard walks you through:
 
-- **Name** — anything you like
-- **Base model** — the model you pulled (e.g. `llama3.2`)
-- **Channel** — `telegram`
-- **Credentials** — your Telegram bot token: `{"token": "123456:ABCdef..."}`
-  (Create a bot via [@BotFather](https://t.me/botfather))
+1. Name your persona
+2. Pick a base model
+3. Enter your Telegram bot token
+4. Optionally configure a frontier model for escalation
+5. Save your recovery phrase
+6. Pair your Telegram channel
 
-Send your persona a message on Telegram. It's alive.
-
-### 5. Other ways to talk
+### 4. Other ways to talk
 
 **Dashboard chat** — click the chat icon on any persona card.
 
-**OpenAI-compatible API** — use any OpenAI client pointed at `http://localhost:5001/v1` with the persona's UUID as the model:
+**OpenAI-compatible API** — use any OpenAI client pointed at `http://localhost:5000/v1` with the persona's UUID as the model:
 
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:5001/v1", api_key="unused")
+client = OpenAI(base_url="http://localhost:5000/v1", api_key="unused")
 response = client.chat.completions.create(
     model="<persona-uuid>",
     messages=[{"role": "user", "content": "Hello!"}],
