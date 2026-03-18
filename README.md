@@ -8,6 +8,8 @@ All that context. All that history. All that *you*. Wasted.
 
 Eternego doesn't forget.
 
+**Example of day 1 conversation:**
+![Greeting chat](assets/greeting.png)
 ---
 
 ## What this actually does
@@ -23,6 +25,9 @@ Persona: Done — added Thursday 10am to your calendar.
 
 Nobody programmed that. Your persona learned it from a conversation three weeks ago.
 
+**Actual learnings on day 1:**
+![person.md content](assets/person-md.png)
+![traits.md content](assets/traits-md.png)
 ---
 
 ## What happens over time
@@ -137,6 +142,8 @@ Works with Continue, Open WebUI, LM Studio, or anything that speaks the OpenAI p
 - **Search its own memory** — finds past conversations by topic
 - **Learn new capabilities** — encounters something new, asks a frontier model to teach it, uses that skill permanently
 
+**Actual example learning how to create a webpage**
+![it learned to create webpage](assets/new-meaning.png)
 ---
 
 ## CLI reference
