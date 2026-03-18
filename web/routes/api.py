@@ -170,6 +170,22 @@ async def delete_persona(persona_id: str):
     return outcome.data
 
 
+@router.post("/persona/{persona_id}/feed")
+async def feed_persona(
+    persona_id: str,
+    history: UploadFile = File(...),
+    source: str = Form(...),
+):
+    find = await persona.loaded(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    data = (await history.read()).decode("utf-8")
+    outcome = await persona.feed(find.data["persona"], data, source)
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
 @router.post("/persona/{persona_id}/hear")
 async def hear_persona(persona_id: str, request: HearRequest):
     find = await persona.loaded(persona_id)

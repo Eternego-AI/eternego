@@ -26,6 +26,11 @@ export default class PersonaApp extends App {
             offChat: (fn) => OS.offChat(fn),
         });
 
+        const feed = document.createElement('feed-widget');
+        feed.init({
+            onFeed: (file, source) => this._feed(file, source),
+        });
+
         const signals = document.createElement('signal-log-widget');
         signals.init({
             signals: this._props.signals,
@@ -34,9 +39,10 @@ export default class PersonaApp extends App {
 
         this._personaInfo = personaInfo;
         this._chat = chat;
+        this._feed_widget = feed;
         this._signalLog = signals;
         this._el = div;
-        this._widgets = [personaInfo, control, chat, signals];
+        this._widgets = [personaInfo, control, chat, feed, signals];
         this._personaId = null;
     }
 
@@ -90,6 +96,23 @@ export default class PersonaApp extends App {
             }
         } catch {
             console.error(`Action ${actionId} failed: network error`);
+        }
+    }
+
+    async _feed(file, source) {
+        if (!this._personaId) return { success: false, message: 'No persona selected' };
+        const form = new FormData();
+        form.append('history', file);
+        form.append('source', source);
+        try {
+            const res = await fetch(`/api/persona/${this._personaId}/feed`, { method: 'POST', body: form });
+            if (!res.ok) {
+                const err = await res.json();
+                return { success: false, message: err.detail || 'Feeding failed' };
+            }
+            return { success: true, message: 'Persona fed successfully' };
+        } catch {
+            return { success: false, message: 'Network error' };
         }
     }
 
