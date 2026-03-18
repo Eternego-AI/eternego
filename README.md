@@ -170,6 +170,11 @@ Active development. The cognitive pipeline works, personas learn and grow, and t
 
 Want to help? [CONTRIBUTING.md](CONTRIBUTING.md) has everything you need.
 
+## Community
+
+Want to help or follow along?
+
+→ Join the Discord: https://discord.gg/nfHnWwYUR4
 ---
 
 ## License
