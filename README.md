@@ -21,13 +21,13 @@ This is a digital companion that slowly becomes more *you* — and belongs only 
 You: "Remind me to call Jane on her birthday next month."  
 Eternego: "Got it — adding a reminder for March 15th. Who is Jane?"
 
-![Day 1 conversation](assets/primus-chat-day1.png)
+![Day 1 conversation](assets/greeting.png)
 
 **Week 2**  
 You: "Remind me to call Jane on her birthday."  
 Eternego: "Already on it — reminder set for March 15th at 10 AM your time. You usually prefer mornings before standup, right?"
 
-![Week 2 — remembered context](assets/primus-week2-remembered.png)
+![Week 2 — remembered context](assets/person-md.png)
 
 **Month 3**  
 You: "Set up the usual project structure"  
@@ -57,7 +57,7 @@ Because it actually **knows** you.
 No plugin store. No waiting for someone else to add a feature.  
 If a powerful model can figure it out once, your persona can learn it forever — in *your* personal style.
 
-![Learning a new skill — building a webpage](assets/primus-learning-webpage.png)
+![Learning a new skill — building a webpage](assets/new-meaning.png)
 
 ## Your persona = plain text files you can edit
 
