@@ -397,11 +397,11 @@ async def oversee(persona: Persona) -> Outcome[dict]:
     try:
         facts = paths.lines(paths.person_identity(persona.id))
         traits = paths.lines(paths.person_traits(persona.id))
+        wish_list = paths.lines(paths.wishes(persona.id))
+        struggle_list = paths.lines(paths.struggles(persona.id))
         persona_context = paths.lines(paths.context(persona.id))
-        skill_list = paths.md_files(paths.skills(persona.id)) 
         histories = paths.md_files(paths.history(persona.id))
         destinies = paths.md_files(paths.destiny(persona.id))
-        struggle_list = paths.lines(paths.struggles(persona.id))
 
         await bus.broadcast("Persona overseen", {"persona": persona})
 
@@ -411,11 +411,11 @@ async def oversee(persona: Persona) -> Outcome[dict]:
             data={
                 "person": system.make_rows_traceable(facts, "pi"),
                 "traits": system.make_rows_traceable(traits, "pt"),
+                "struggles": system.make_rows_traceable(struggle_list, "ps"),
+                "wishes": system.make_rows_traceable(wish_list, "wi"),
                 "context": system.make_rows_traceable(persona_context, "pc"),
-                "skills": system.make_rows_traceable([skill_path.name for skill_path in skill_list], "sk"),
                 "history": system.make_rows_traceable([history_path.name for history_path in histories], "hist"),
                 "destiny": system.make_rows_traceable([destiny_path.name for destiny_path in destinies], "dest"),
-                "struggles": system.make_rows_traceable(struggle_list, "ps"),
             },
         )
 
@@ -442,12 +442,12 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
                 paths.delete_entry(paths.person_traits(persona.id), hash_part)
             elif prefix == "pc":
                 paths.delete_entry(paths.context(persona.id), hash_part)
-            elif prefix == "sk":
-                paths.find_and_delete_file(paths.skills(persona.id), hash_part)
             elif prefix == "hist":
                 paths.find_and_delete_file(paths.history(persona.id), hash_part)
             elif prefix == "dest":
                 paths.find_and_delete_file(paths.destiny(persona.id), hash_part)
+            elif prefix == "wi":
+                paths.delete_entry(paths.wishes(persona.id), hash_part)
             elif prefix == "ps":
                 paths.delete_entry(paths.struggles(persona.id), hash_part)
 

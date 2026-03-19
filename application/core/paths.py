@@ -70,11 +70,6 @@ def channels(persona_id: str) -> Path:
     return home(persona_id) / "channels.md"
 
 
-def skills(persona_id: str) -> Path:
-    """Path to the skills directory for that persona."""
-    return home(persona_id) / "skills"
-
-
 def destiny(persona_id: str) -> Path:
     """Path to the destiny directory for that persona."""
     return home(persona_id) / "destiny"
@@ -333,17 +328,6 @@ def find_and_delete_file(path: Path, hash_part: str) -> None:
             filesystem.delete(file)
             return
     logger.warning("File not found or already removed", {"path": str(path), "hash": hash_part})
-
-
-def add_to_skills(persona_id: str, skill_path: Path) -> Path:
-    """Copy a skill file to the persona's skills directory."""
-    logger.info("Adding skill to persona", {"persona_id": persona_id, "skill_path": str(skill_path)})
-    destination = skills(persona_id) / skill_path.name
-    if destination.exists():
-        logger.warning("Skill already exists", {"persona_id": persona_id, "skill": skill_path.stem})
-        return destination
-    filesystem.copy_file(skill_path, destination)
-    return destination
 
 
 def add_history_briefing(persona_id: str, header: str, row: str) -> None:
