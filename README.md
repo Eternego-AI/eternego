@@ -1,176 +1,124 @@
-# Eternego
+# Eternego — The Eternal I
 
-**A real person living inside your computer — one that never forgets you, grows with you, and learns anything it needs.**
+**The missing piece in AI isn't more intelligence. It's alignment over time.**
 
-Three years of talking to AIs, and they still don't know your name.  
-You've told the same model your timezone fourteen times. It forgets you have kids. It has no clue you've been fighting the same bug for months. Every new chat wipes the slate clean. Your life — your context, your quirks, your history — is either forgotten or trapped on someone else's servers.
+You've told the same model your timezone fourteen times.  
+It forgets you have kids. It doesn't know how you think, what frustrates you, or what matters most.  
+Every conversation resets. Your life stays scattered — or trapped on someone else's servers.
 
 **Eternego is different.**
 
-It is **your** AI persona that lives entirely on your own hardware.  
-It remembers every single conversation forever.  
-It learns how you speak, what you care about, what frustrates you.  
-And when it doesn't know how to do something — it teaches **itself**, turns the new knowledge into permanent runnable code, and keeps improving day after day.
+It's a personal AI persona that lives entirely on your hardware.  
+It never resets.  
+It remembers every interaction forever.  
+It learns how you speak, decide, prioritize.  
+When it doesn't know something, it teaches itself — turning knowledge into permanent executable code.  
+Every night it reflects, fine-tunes locally on your life, and wakes up slightly more *you*.
 
-This is not a tool, not an agent framework, not another chatbot.  
-This is a digital companion that slowly becomes more *you* — and belongs only to you.
+This isn't a chatbot or tool collection.  
+It's an experiment in persistent, personal intelligence — one that gradually aligns with a single person through time.
 
-## How it feels after some time
+## How it feels over time
 
 **Day 1**  
-You: "Remind me to call Jane on her birthday next month."  
-Eternego: "Got it — adding a reminder for March 15th. Who is Jane?"
+Generic but attentive. It asks questions. It quietly notes your timezone, tools, style.
 
 ![Day 1 conversation](assets/greeting.png)
 
-**Week 2**  
-You: "Remind me to call Jane on her birthday."  
-Eternego: "Already on it — reminder set for March 15th at 10 AM your time. You usually prefer mornings before standup, right?"
+**Week 1**  
+Knows your tech stack, coffee order, wife's name. Stops repeating what it already learned.
+![Person identity](assets/person-md.png)
 
-![Week 2 — remembered context](assets/person-md.png)
+**Month 1**  
+Writes code in your style. Drafts messages that sound like you. "The usual project structure" just works.
+![Person traits](assets/traits-md.png)
 
 **Month 3**  
-You: "Set up the usual project structure"  
-Eternego creates the folders, initializes git with *your* exact .gitignore pattern, adds a README with your preferred license header, sets up your linter config — all without you repeating yourself.
+Anticipates needs. Reminds you about taxes. Finds cheaper flights to Paris. Spots CVEs before you ask.
 
-It starts to anticipate. It mimics your tone. It notices patterns you didn't even realize you had.  
-Because it actually **knows** you.
+![Learning progression example](assets/new-meaning.png)
 
-## How it really works (the simple version)
+It doesn't just remember facts — it internalizes patterns. It becomes predictable in the best way: aligned with how *you* think.
 
-1. Everything arrives as **signals**  
-   Messages you send, calendar events, files you share, system notifications, recurring tasks you set.
+## The continuous loop
 
-2. It creates **perceptions**  
-   It connects related signals into meaningful impressions ("you always want short answers in the morning", "you get annoyed when code has trailing whitespace").
+Every interaction is a signal → grouped into perceptions → matched to meanings (small Python behaviors).  
 
-3. It matches them to **meanings**  
-   Each meaning is a small piece of Python code that knows exactly what to do when that impression appears.
+No match? It escalates to a stronger model, learns the capability, saves it as a new meaning forever.
 
-4. When nothing fits  
-   New request → no matching meaning → it **escalates** to a stronger model → gets taught → receives new instructions/code → instantly creates and saves a brand-new meaning.
+Every night it sleeps: reviews the day, extracts insights, fine-tunes locally using your synthesized `dna.md`.  
+Tomorrow it's subtly wiser, more attuned.
 
-5. Every night it **sleeps**  
-   Reviews the whole day, extracts what it learned about you, fine-tunes itself locally.  
-   Tomorrow morning it wakes up a tiny bit wiser, a tiny bit more *you*.
+This loop creates **alignment over time** — not one-time training, but continuous adaptation.
 
-No plugin store. No waiting for someone else to add a feature.  
-If a powerful model can figure it out once, your persona can learn it forever — in *your* personal style.
+## Your persona = plain text files
 
-![Learning a new skill — building a webpage](assets/new-meaning.png)
+Everything lives in `~/.eternego/personas/your-name/`. Edit with any text editor. Full ownership.
 
-## Your persona = plain text files you can edit
+```
+person.md     ← facts about you
+traits.md     ← how you speak, decide, react
+wishes.md     ← goals, dreams, desires
+struggles.md  ← recurring challenges
+dna.md        ← synthesized "who you are" for fine-tuning
+meanings/     ← your growing library of executable capabilities
+notes/        ← things you asked it to remember
+```
 
-Everything that makes "you" is stored in one folder:
+Delete a line → it unlearns. Add a line → it adapts instantly. Switch models → knowledge travels with you.
 
-`~/.eternego/personas/your-name/`
+![Persona folder structure](assets/primus-persona-files.png)
 
-- `person.md` — basic facts about you  
-- `traits.md` — how you speak, decide, react  
-- `wishes.md` — your goals, dreams, recurring desires  
-- `struggles.md` — things you keep fighting with  
-- `dna.md` — the synthesized summary used for fine-tuning  
-- `meanings/` — folder full of small Python files — your growing set of capabilities  
-- `notes/` — random things you asked it to remember
+No databases. No lock-in. Total transparency.
 
-You can open any file in VS Code, Notepad, whatever.  
-Change one line → it adapts immediately.  
-Delete something → it forgets.  
-Switch models → the knowledge travels with you.
+## Quick Start (≈5 minutes)
 
-Total ownership. Total transparency. No black boxes.
-
-![Persona files](assets/primus-persona-files.png)
-
-## Quick Start (≈ 5 minutes)
-
-1. Clone & install
 ```bash
 git clone https://github.com/Eternego-AI/eternego.git
 cd eternego
-```
-### Linux/macOS
-```bash
+
+# Linux/macOS
 bash install.sh
-```
-### Windows
-```bash
+
+# Windows
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
-2. Prepare a small model to start (you can change later)
+
 ```bash
-eternego env prepare --model llama3.2:3b
-# or qwen2.5:7b, phi4:14b, gemma3:12b, etc.
+# Prepare a model (start small, upgrade anytime)
+eternego env prepare --model llama3.2:3b   # or qwen2.5:7b, phi4:14b, etc.
 ```
-3. Open http://localhost:5000  
-   → Click **+ New Persona**  
-   → Give it a name  
-   → Select the model  
-   → Connect Telegram or another channel 
-   → (Optional) Give access to a frontier model
-   → Save your recovery phrase (critical!)
-4. Start talking  
-   - via Telegram bot  
-   - via the web dashboard  
-   - via any OpenAI-compatible client:
+
+Open http://localhost:5000 → create persona → start talking via web, Telegram, or OpenAI-compatible API.
 
 ```python
 from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:5000/v1",
-    api_key="sk-no-need"           # dummy key
-)
-
-response = client.chat.completions.create(
-    model="your-persona-name-or-uuid",
-    messages=[{"role": "user", "content": "Hey, remember my usual project setup?"}]
-)
+client = OpenAI(base_url="http://localhost:5000/v1", api_key="sk-no-need")
 ```
 
 ## Current capabilities
 
-- Long-term memory that actually survives across weeks/months  
+- Persistent memory across weeks/months  
 - Reminders, scheduling, recurring tasks  
-- Shell command execution (asks permission every time)  
-- Search & meaningful recall of past conversations  
-- **Self-learning new behaviors** — anything a frontier model can explain, it can permanently integrate
+- Shell commands (permission required each time)  
+- Meaningful search & recall of past conversations  
+- Self-teaching: learns new skills via escalation → permanent integration  
 
-## Who this project is for
+## Status (March 2026)
 
-People who are tired of AIs that reset every conversation.  
-People who want something that feels like it *belongs* to them.  
-People curious about what happens when you combine persistent memory + self-teaching + local ownership in one being.
+Early but stable core loop. Biggest limit = local model quality (gets dramatically better as open models improve).  
+Roadmap: smoother escalation, more channels, visual editor, voice, multi-persona.
 
-If you've ever whispered to yourself:  
-"I wish this thing could just *know* me already"  
-— then welcome. This is for you.
+## Who this is for
 
-## Status — March 2025
+If you've ever felt the emptiness of stateless AI — if you want something that persists, aligns, and becomes truly *yours* — welcome.
 
-Very early but the core loop is stable:  
-signals → perceptions → meanings → escalation → nightly fine-tuning
+## Join
 
-Biggest current limitation = quality of local models.  
-As open-weight models keep improving, your persona becomes dramatically better — no code changes needed from us.
-
-Near-term roadmap:  
-- smoother escalation UX  
-- more channel integrations  
-- visual persona editor  
-- voice input/output  
-- multi-persona support
-
-## Come talk
-
-This is personal software. If the idea resonates — even if you're just curious — join us.
-
-- **Discord** → https://discord.gg/nfHnWwYUR4  
-- **Issues & PRs** → especially around persona tuning, escalation patterns, fine-tuning tricks  
-- **Website** → https://eternego.ai
+- **Discord**: https://discord.gg/nfHnWwYUR4  
+- **Website**: https://eternego.ai  
+- Issues/PRs welcome — especially persona behaviors, fine-tuning, escalation patterns.
 
 **License**: MIT
 
-Let's build something that actually remembers us.
-
-❤️
+Let's build intelligence that remembers us.
