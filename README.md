@@ -1,189 +1,176 @@
 # Eternego
 
-**Three years of talking to AI, and it still doesn't know your name.**
+**A real person living inside your computer — one that never forgets you, grows with you, and learns anything it needs.**
 
-You've told ChatGPT your timezone fourteen times. Claude keeps forgetting you have kids. Gemini has no idea you've been debugging the same auth system for three months. Every conversation starts from zero — your preferences, your context, your life — scattered across platforms that don't talk to each other, locked in servers you don't control, gone the moment someone updates their terms of service.
+Three years of talking to AIs, and they still don't know your name.  
+You've told the same model your timezone fourteen times. It forgets you have kids. It has no clue you've been fighting the same bug for months. Every new chat wipes the slate clean. Your life — your context, your quirks, your history — is either forgotten or trapped on someone else's servers.
 
-All that context. All that history. All that *you*. Wasted.
+**Eternego is different.**
 
-Eternego doesn't forget.
+It is **your** AI persona that lives entirely on your own hardware.  
+It remembers every single conversation forever.  
+It learns how you speak, what you care about, what frustrates you.  
+And when it doesn't know how to do something — it teaches **itself**, turns the new knowledge into permanent runnable code, and keeps improving day after day.
 
-**Example of day 1 conversation:**
-![Greeting chat](assets/greeting.png)
----
+This is not a tool, not an agent framework, not another chatbot.  
+This is a digital companion that slowly becomes more *you* — and belongs only to you.
 
-## What this actually does
+## How it feels after some time
 
-Eternego runs an AI persona on your machine that accumulates everything it learns about you — your facts, your preferences, your patterns, your goals — as plain text files you can read with any editor. It fine-tunes itself on your hardware while you sleep. And when a better model comes out, you point it at the same files and keep going.
+**Day 1**  
+You: "Remind me to call Jane on her birthday next month."  
+Eternego: "Got it — adding a reminder for March 15th. Who is Jane?"
 
-```
-You:     Schedule a dentist appointment for next Thursday
-Persona: Done — added Thursday 10am to your calendar.
-         I picked morning since you mentioned preferring
-         appointments before your standup.
-```
+![Day 1 conversation](assets/primus-chat-day1.png)
 
-Nobody programmed that. Your persona learned it from a conversation three weeks ago.
+**Week 2**  
+You: "Remind me to call Jane on her birthday."  
+Eternego: "Already on it — reminder set for March 15th at 10 AM your time. You usually prefer mornings before standup, right?"
 
-**Actual learnings on day 1:**
-![person.md content](assets/person-md.png)
-![traits.md content](assets/traits-md.png)
----
+![Week 2 — remembered context](assets/primus-week2-remembered.png)
 
-## What happens over time
+**Month 3**  
+You: "Set up the usual project structure"  
+Eternego creates the folders, initializes git with *your* exact .gitignore pattern, adds a README with your preferred license header, sets up your linter config — all without you repeating yourself.
 
-**Day 1** — Your persona knows nothing. You chat, it responds generically. But it's already taking notes: your timezone, your tools, how you like to communicate.
+It starts to anticipate. It mimics your tone. It notices patterns you didn't even realize you had.  
+Because it actually **knows** you.
 
-**Week 1** — It knows you prefer DDD for backend services, that you take your coffee black, that your wife's name is Jane. It stops asking things it already knows.
+## How it really works (the simple version)
 
-**Month 1** — It writes code the way you write code. It drafts messages in your voice. "Set up the usual project structure" just works.
+1. Everything arrives as **signals**  
+   Messages you send, calendar events, files you share, system notifications, recurring tasks you set.
 
-**Month 3** — It anticipates. It reminds you about quarterly taxes before you forget. It finds cheaper flights for the Paris trip you mentioned last month. It catches that a dependency you use just had a critical CVE.
+2. It creates **perceptions**  
+   It connects related signals into meaningful impressions ("you always want short answers in the morning", "you get annoyed when code has trailing whitespace").
 
-This happens because every night, your persona **sleeps** — it reviews the day's conversations, extracts what it learned, and fine-tunes itself on your local hardware. Each cycle, it becomes a little more *you*.
+3. It matches them to **meanings**  
+   Each meaning is a small piece of Python code that knows exactly what to do when that impression appears.
 
----
+4. When nothing fits  
+   New request → no matching meaning → it **escalates** to a stronger model → gets taught → receives new instructions/code → instantly creates and saves a brand-new meaning.
 
-## How it thinks
+5. Every night it **sleeps**  
+   Reviews the whole day, extracts what it learned about you, fine-tunes itself locally.  
+   Tomorrow morning it wakes up a tiny bit wiser, a tiny bit more *you*.
 
-Your persona doesn't just respond — it *processes*. Every interaction flows through a cognitive pipeline:
+No plugin store. No waiting for someone else to add a feature.  
+If a powerful model can figure it out once, your persona can learn it forever — in *your* personal style.
 
-```
-understand → recognize → answer → decide → conclude
-```
+![Learning a new skill — building a webpage](assets/primus-learning-webpage.png)
 
-A message arrives. The persona routes it to a conversation thread, identifies what kind of interaction it is, responds, takes action if needed, and confirms the result.
+## Your persona = plain text files you can edit
 
-The interesting part: when it encounters something it's never handled before — say, you ask it to check Kubernetes pod health for the first time — it **escalates**. It asks a more capable model to teach it how, receives a new capability as code, and uses it immediately. Next time you ask, it handles it alone.
+Everything that makes "you" is stored in one folder:
 
-Your persona starts simple and grows complex. Not because someone shipped an update — because *you* used it.
+`~/.eternego/personas/your-name/`
 
----
+- `person.md` — basic facts about you  
+- `traits.md` — how you speak, decide, react  
+- `wishes.md` — your goals, dreams, recurring desires  
+- `struggles.md` — things you keep fighting with  
+- `dna.md` — the synthesized summary used for fine-tuning  
+- `meanings/` — folder full of small Python files — your growing set of capabilities  
+- `notes/` — random things you asked it to remember
 
-## Your persona is just files
+You can open any file in VS Code, Notepad, whatever.  
+Change one line → it adapts immediately.  
+Delete something → it forgets.  
+Switch models → the knowledge travels with you.
 
-Everything lives on your machine as human-readable text:
+Total ownership. Total transparency. No black boxes.
 
-```
-~/.eternego/personas/<id>/home/
-├── person.md         ← facts about you
-├── traits.md         ← your behavioral patterns
-├── wishes.md         ← your goals and aspirations
-├── struggles.md      ← your recurring obstacles
-├── dna.md            ← synthesized character (drives fine-tuning)
-├── meanings/         ← learned capabilities (Python)
-├── notes/            ← your saved notes
-├── training/         ← fine-tuning data
-└── config.json       ← persona settings
-```
+![Persona files](assets/primus-persona-files.png)
 
-Open `traits.md` and you'll see things like "prefers concise answers over long explanations" or "always wants error handling in code examples." Delete a line, and your persona unlearns it. Add a line, and it adapts immediately.
+## Quick Start (≈ 5 minutes)
 
-No database. No proprietary format. No lock-in.
-
----
-
-## Quick start
-
-### Install
-
+1. Clone & install
 ```bash
-# Linux / macOS
 git clone https://github.com/Eternego-AI/eternego.git
 cd eternego
+```
+### Linux/macOS
+```bash
 bash install.sh
 ```
-
-```powershell
-# Windows
-git clone https://github.com/Eternego-AI/eternego.git
-cd eternego
+### Windows
+```bash
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
-
-### Prepare a model
-
+2. Prepare a small model to start (you can change later)
 ```bash
-eternego env prepare --model llama3.2:8b
+eternego env prepare --model llama3.2:3b
+# or qwen2.5:7b, phi4:14b, gemma3:12b, etc.
 ```
-
-### Create your persona
-
-Open **http://localhost:5000**, click **+ New**, and follow the wizard: name your persona, pick a model, connect Telegram, save your recovery phrase.
-
-### Talk to it
-
-**Telegram** — message your bot directly.
-
-**Dashboard** — click the chat icon on any persona card.
-
-**Any OpenAI-compatible client** — point it at `http://localhost:5000/v1`:
+3. Open http://localhost:5000  
+   → Click **+ New Persona**  
+   → Give it a name  
+   → Select the model  
+   → Connect Telegram or another channel 
+   → (Optional) Give access to a frontier model
+   → Save your recovery phrase (critical!)
+4. Start talking  
+   - via Telegram bot  
+   - via the web dashboard  
+   - via any OpenAI-compatible client:
 
 ```python
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:5000/v1", api_key="unused")
+client = OpenAI(
+    base_url="http://localhost:5000/v1",
+    api_key="sk-no-need"           # dummy key
+)
+
 response = client.chat.completions.create(
-    model="<persona-uuid>",
-    messages=[{"role": "user", "content": "Hello!"}],
+    model="your-persona-name-or-uuid",
+    messages=[{"role": "user", "content": "Hey, remember my usual project setup?"}]
 )
 ```
 
-Works with Continue, Open WebUI, LM Studio, or anything that speaks the OpenAI protocol.
+## Current capabilities
 
----
+- Long-term memory that actually survives across weeks/months  
+- Reminders, scheduling, recurring tasks  
+- Shell command execution (asks permission every time)  
+- Search & meaningful recall of past conversations  
+- **Self-learning new behaviors** — anything a frontier model can explain, it can permanently integrate
 
-## What it can do today
+## Who this project is for
 
-- **Chat** — real conversation that builds on everything it knows about you
-- **Remember** — takes notes and recalls them when relevant
-- **Schedule** — reminders and recurring events
-- **Act** — runs shell commands on your system, always with your permission first
-- **Search its own memory** — finds past conversations by topic
-- **Learn new capabilities** — encounters something new, asks a frontier model to teach it, uses that skill permanently
+People who are tired of AIs that reset every conversation.  
+People who want something that feels like it *belongs* to them.  
+People curious about what happens when you combine persistent memory + self-teaching + local ownership in one being.
 
-**Actual example learning how to create a webpage**
-![it learned to create webpage](assets/new-meaning.png)
----
+If you've ever whispered to yourself:  
+"I wish this thing could just *know* me already"  
+— then welcome. This is for you.
 
-## CLI reference
+## Status — March 2025
 
-```bash
-eternego env prepare [--model MODEL]                # pull a model
-eternego service start | stop | restart | status     # manage the service
-eternego service logs                                # follow live output
-eternego pair CODE                                   # pair a channel
-```
+Very early but the core loop is stable:  
+signals → perceptions → meanings → escalation → nightly fine-tuning
 
----
+Biggest current limitation = quality of local models.  
+As open-weight models keep improving, your persona becomes dramatically better — no code changes needed from us.
 
-## Architecture
+Near-term roadmap:  
+- smoother escalation UX  
+- more channel integrations  
+- visual persona editor  
+- voice input/output  
+- multi-persona support
 
-Three layers. Dependencies flow down, never up.
+## Come talk
 
-```
-business/    WHY — what should happen
-core/        HOW — how to solve it
-platform/    WHAT — what tools provide
-```
+This is personal software. If the idea resonates — even if you're just curious — join us.
 
-The cognitive pipeline, the sleep cycle, the escalation system — it's all documented in [CONTRIBUTING.md](CONTRIBUTING.md). Start there if you want to understand how the mind works or add new capabilities.
+- **Discord** → https://discord.gg/nfHnWwYUR4  
+- **Issues & PRs** → especially around persona tuning, escalation patterns, fine-tuning tricks  
+- **Website** → https://eternego.ai
 
----
+**License**: MIT
 
-## Status
+Let's build something that actually remembers us.
 
-Active development. The cognitive pipeline works, personas learn and grow, and the architecture is stable. The main constraint is local model capability — as open models improve, so will your persona.
-
-Want to help? [CONTRIBUTING.md](CONTRIBUTING.md) has everything you need.
-
-## Community
-
-Want to help or follow along?
-
-→ Join the Discord: https://discord.gg/nfHnWwYUR4
----
-
-## License
-
-[MIT](LICENSE)
+❤️
