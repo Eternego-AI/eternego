@@ -4,7 +4,7 @@ import uuid
 
 from datetime import datetime
 
-from application.core.brain.data import Signal, Perception, Thought, Meaning
+from application.core.brain.data import Signal, SignalEvent, Perception, Thought, Meaning
 from application.platform import datetimes, logger, persistent_memory
 from application.core import paths
 
@@ -40,10 +40,12 @@ class Memory:
 
         state = entries[0]
 
+        role_to_event = {"user": SignalEvent.heard, "assistant": SignalEvent.answered}
         for s in state.get("signals", []):
+            event = s.get("event") or role_to_event.get(s.get("role", ""), "")
             signal = Signal(
                 id=s["id"],
-                role=s["role"],
+                event=event,
                 content=s["content"],
                 channel_type=s.get("channel_type", ""),
                 channel_name=s.get("channel_name", ""),
@@ -77,8 +79,6 @@ class Memory:
                 meaning=meaning_map[meaning_name],
                 priority=t.get("priority", 0),
                 id=t["id"],
-                processed_at=datetime.fromisoformat(t["processed_at"]) if t.get("processed_at") else None,
-                concluded_at=datetime.fromisoformat(t["concluded_at"]) if t.get("concluded_at") else None,
             )
             self._thoughts.append(thought)
 
@@ -95,7 +95,7 @@ class Memory:
             "signals": [
                 {
                     "id": s.id,
-                    "role": s.role,
+                    "event": s.event,
                     "content": s.content,
                     "channel_type": s.channel_type,
                     "channel_name": s.channel_name,
@@ -117,8 +117,6 @@ class Memory:
                     "meaning": t.meaning.name,
                     "priority": t.priority,
                     "id": t.id,
-                    "processed_at": t.processed_at.isoformat() if t.processed_at else None,
-                    "concluded_at": t.concluded_at.isoformat() if t.concluded_at else None,
                 }
                 for t in self._thoughts
             ],
@@ -176,9 +174,9 @@ class Memory:
 
     @property
     def needs_understanding(self) -> list[Signal]:
-        """User-role Signals not yet attached to any Perception."""
+        """Heard signals not yet attached to any Perception."""
         return [s for s in self._signals.values()
-                if s.role == "user" and s.id not in self._signal_perceptions]
+                if s.event == SignalEvent.heard and s.id not in self._signal_perceptions]
 
     # ── Perception views ──────────────────────────────────────────────────────
 
@@ -205,6 +203,11 @@ class Memory:
 
     # ── Thought views ─────────────────────────────────────────────────────────
 
+    def _last_event(self, thought: Thought) -> str:
+        """Return the last signal's event in a thought's thread, or empty string."""
+        thread = thought.perception.thread
+        return thread[-1].event if thread else ""
+
     @property
     def intentions(self) -> list[Thought]:
         """All active Thoughts."""
@@ -212,41 +215,49 @@ class Memory:
 
     @property
     def needs_answer(self) -> list[Thought]:
-        """Thoughts where the latest thread Signal has role=user and the meaning has a verbal reply."""
+        """Thoughts that need the persona to speak — reply or clarify."""
         result = []
         for t in self._thoughts:
-            if t.processed_at is not None:
-                continue
-            if t.meaning.reply() is None and t.meaning.clarify() is None:
-                continue
-            thread = t.perception.thread
-            if thread and thread[-1].role == "user":
+            last = self._last_event(t)
+            if last in (SignalEvent.heard, SignalEvent.queried, SignalEvent.nudged) and t.meaning.reply() is not None:
+                result.append(t)
+            elif last == SignalEvent.executed and t.meaning.clarify() is not None:
                 result.append(t)
         return result
 
     @property
     def needs_decision(self) -> list[Thought]:
-        """Thoughts ready for deciding: has path, not processed, and answering is done.
-
-        For meanings with no reply, deciding owns the full lifecycle.
-        For meanings with a reply, deciding waits until answer has replied
-        (last signal is assistant) and the user hasn't added more signals.
-        """
+        """Thoughts ready for deciding — has path, answering is done or not needed."""
         result = []
         for t in self._thoughts:
-            if t.processed_at is not None or not t.meaning.path():
+            if not t.meaning.path():
                 continue
-            if t.meaning.reply() is None:
+            last = self._last_event(t)
+            if last in (SignalEvent.heard, SignalEvent.queried, SignalEvent.nudged) and t.meaning.reply() is None:
                 result.append(t)
-            elif t.perception.thread and t.perception.thread[-1].role == "assistant":
+            elif last in (SignalEvent.answered, SignalEvent.clarified):
+                result.append(t)
+            elif last == SignalEvent.executed and t.meaning.clarify() is None:
                 result.append(t)
         return result
 
     @property
     def needs_conclusion(self) -> list[Thought]:
-        """Thoughts with processed_at set but not yet concluded."""
+        """Thoughts ready for conclusion — recap present."""
         return [t for t in self._thoughts
-                if t.processed_at is not None and t.concluded_at is None]
+                if self._last_event(t) == SignalEvent.recap]
+
+    @property
+    def needs_archive(self) -> list[Thought]:
+        """Thoughts done — summarized, or answered with no path."""
+        result = []
+        for t in self._thoughts:
+            last = self._last_event(t)
+            if last == SignalEvent.summarized:
+                result.append(t)
+            elif last == SignalEvent.answered and not t.meaning.path():
+                result.append(t)
+        return result
 
     def most_important_thought(self, thoughts: list[Thought]) -> Thought | None:
         """The highest-priority Thought — highest priority, then oldest by id."""
@@ -254,26 +265,37 @@ class Memory:
             return None
         return min(thoughts, key=lambda t: (-t.priority, t.id))
 
+    # ── Scene ────────────────────────────────────────────────────────────────
+
+    def scene(self, thought: Thought) -> str:
+        """Build a scene description for a thought, collapsing before the latest recap."""
+        from application.core.brain import perceptions
+
+        thread = thought.perception.thread
+        start = 0
+        for i in range(len(thread) - 1, -1, -1):
+            if thread[i].event == SignalEvent.summarized:
+                start = i
+                break
+        return perceptions.narrate(thread[start:])
+
     # ── Mutation methods ──────────────────────────────────────────────────────
 
     def understand(self, signal: Signal, impression: str) -> None:
-        """Attach signal to the Perception with this impression; create if new."""
+        """Attach signal to a perception. Only free existing thoughts when the person speaks."""
         logger.info("memory.understand", {"persona": self._persona.id, "signal": signal.id, "impression": impression})
         if impression not in self._perceptions:
             self._perceptions[impression] = Perception(impression=impression)
         perception = self._perceptions[impression]
-        if signal not in perception.thread:
-            perception.thread.append(signal)
+        perception.thread.append(signal)
         self._signal_perceptions.setdefault(signal.id, [])
         if impression not in self._signal_perceptions[signal.id]:
             self._signal_perceptions[signal.id].append(impression)
 
-
-        # Free concluded thoughts so perception can be re-recognized
-        for t in list(self._thoughts):
-            if t.perception.impression == impression and t.concluded_at is not None:
-                self._thoughts.remove(t)
-                logger.debug("memory.understand: freed concluded thought", {"impression": impression})
+        if signal.event == SignalEvent.heard:
+            for t in list(self._thoughts):
+                if t.perception.impression == impression:
+                    self._thoughts.remove(t)
 
     def question(self, thought: Thought) -> None:
         """Add a pre-formed thought directly (bypasses understand + recognize)."""
@@ -289,10 +311,10 @@ class Memory:
 
         return thought
 
-    def answer(self, thought: Thought, text: str) -> None:
-        """Append an assistant Signal to the thread."""
-        logger.info("memory.answer", {"persona": self._persona.id, "thought": thought.id})
-        signal = Signal(id=str(uuid.uuid4()), role="assistant", content=text)
+    def answer(self, thought: Thought, text: str, event: SignalEvent = SignalEvent.answered) -> None:
+        """Append a persona signal to the thread with the given event."""
+        logger.info("memory.answer", {"persona": self._persona.id, "thought": thought.id, "event": event})
+        signal = Signal(id=str(uuid.uuid4()), event=event, content=text)
         self._signals[signal.id] = signal
         thought.perception.thread.append(signal)
         self._signal_perceptions.setdefault(signal.id, [])
@@ -300,14 +322,8 @@ class Memory:
             self._signal_perceptions[signal.id].append(thought.perception.impression)
 
 
-    def resolve(self, thought: Thought) -> None:
-        """Mark thought as processed (sets processed_at)."""
-        logger.info("memory.resolve", {"persona": self._persona.id, "thought": thought.id})
-        thought.processed_at = datetimes.now()
-
-
     def inform(self, thought: Thought, signal: Signal) -> None:
-        """Append a user Signal (tool result) directly into the thread."""
+        """Append a signal (tool result) directly into the thread."""
         logger.info("memory.inform", {"persona": self._persona.id, "thought": thought.id, "signal": signal.id})
         self._signals[signal.id] = signal
         thought.perception.thread.append(signal)
@@ -339,11 +355,11 @@ class Memory:
             logger.warning("memory.forget: thought not found in list", {"impression": impression})
 
     def archive(self, thought: Thought) -> str:
-        """Save a thought's thread to history and forget it."""
+        """Save a thought's conversation to history and forget it."""
         from application.core.brain import perceptions
 
-        thread_text = perceptions.thread(thought.perception)
-        filename = paths.add_history_entry(self._persona.id, thought.perception.impression, thread_text)
+        text = perceptions.conversation(thought.perception)
+        filename = paths.add_history_entry(self._persona.id, thought.perception.impression, text)
         self.forget(thought)
         return filename
 

@@ -3,19 +3,8 @@
 from application.core.brain.data import Signal
 
 
-def as_chat(signal: Signal) -> str:
-    """Format signal content with its timestamp — for use as Prompt.content where role is set separately."""
-    ts = signal.created_at.strftime("%Y-%m-%d %H:%M UTC")
-    return f"[{ts}] {signal.content}"
-
-
-def as_text(signal: Signal) -> str:
-    """Format a signal as a readable line, with timestamp and role."""
-    ts = signal.created_at.strftime("%Y-%m-%d %H:%M UTC")
-    return f"[{ts}] {signal.role}: {signal.content}"
-
-
 def labeled(signal: Signal) -> str:
-    """Format a signal with timestamp, role, and content — for routing tasks."""
+    """Format a signal with timestamp, event, and content — for routing tasks."""
     ts = signal.created_at.strftime("%Y-%m-%d %H:%M UTC")
-    return f"[{ts}] {signal.role}: {signal.content}"
+    channel = f" ({signal.channel_type})" if signal.channel_type else ""
+    return f"[{ts}] {signal.event}{channel}: {signal.content}"

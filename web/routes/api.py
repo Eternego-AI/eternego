@@ -102,7 +102,7 @@ async def get_persona(persona_id: str):
 
 @router.get("/persona/{persona_id}/mind")
 async def get_mind(persona_id: str):
-    outcome = await persona.mind_signals(persona_id)
+    outcome = await persona.scene(persona_id)
     if not outcome.success:
         raise HTTPException(status_code=404, detail=outcome.message)
     return outcome.data

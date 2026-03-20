@@ -3,7 +3,7 @@
 import re
 import uuid
 
-from application.core.brain.data import Meaning, Signal
+from application.core.brain.data import Meaning, Signal, SignalEvent
 from application.core import paths
 from application.platform import datetimes
 
@@ -13,9 +13,8 @@ class Noting(Meaning):
 
     def description(self) -> str:
         return (
-            "The person wants the persona to remember something — a preference, "
-            "a fact, a decision, an instruction, or any piece of information "
-            "worth keeping for future reference."
+            "The person states a fact, preference, decision, or instruction to keep "
+            "as a permanent note — no time trigger, no deadline, just something to store."
         )
 
     def clarify(self) -> str:
@@ -45,7 +44,7 @@ class Noting(Meaning):
 
         if not title or not content:
             return Signal(
-                id=str(uuid.uuid4()), role="user",
+                id=str(uuid.uuid4()), event=SignalEvent.executed,
                 content="Error: title or content is missing.",
             )
 
@@ -58,7 +57,7 @@ class Noting(Meaning):
             )
         except Exception as e:
             return Signal(
-                id=str(uuid.uuid4()), role="user",
+                id=str(uuid.uuid4()), event=SignalEvent.executed,
                 content=f"Error saving note: {e}",
             )
 

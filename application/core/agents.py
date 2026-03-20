@@ -116,17 +116,21 @@ class Agent:
 
         self.tick_task = asyncio.create_task(clock.tick(self._mem))
 
-    async def stop(self) -> None:
-        """Block new signals, wait for the mind to rest, stop the tick loop."""
-        logger.info("Stopping agent", {"persona": self.persona})
+    async def stop(self, force: bool = False) -> None:
+        """Block new signals, stop the tick loop. Force skips waiting for the mind to settle."""
+        logger.info("Stopping agent", {"persona": self.persona, "force": force})
         self.blocked = True
 
-        if self.memory:
+        if not force and self.memory:
             while not self.memory.settled:
                 await asyncio.sleep(0.05)
 
         if self.tick_task and not self.tick_task.done():
             self.tick_task.cancel()
+            try:
+                await self.tick_task
+            except (asyncio.CancelledError, Exception):
+                pass
         self.tick_task = None
 
     def unload(self) -> None:
@@ -198,13 +202,11 @@ class Agent:
         await self.learn("\n\n---\n\n".join(conversations))
 
         for thought in all_thoughts:
-            recap = None
-            if thought.concluded_at is not None:
-                recap_signals = [s for s in thought.perception.thread
-                                 if s.role == "assistant" and s.created_at <= thought.concluded_at]
-                recap = recap_signals[-1].content if recap_signals else thought.perception.impression
+            from application.core.brain.data import SignalEvent
+            summaries = [s for s in thought.perception.thread if s.event == SignalEvent.summarized]
+            recap = summaries[-1].content if summaries else None
 
             filename = mem.archive(thought)
 
-            if recap is not None:
+            if recap:
                 paths.add_history_briefing(self.persona.id, "| File | Recap |", f"| {filename} | {recap} |")

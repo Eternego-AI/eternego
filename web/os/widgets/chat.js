@@ -110,8 +110,10 @@ class ChatWidget extends Widget {
             const data = await res.json();
             this._tail.innerHTML = '';
             for (const s of data.signals || []) {
-                if ((s.role === 'user' || s.role === 'assistant') && !s.content.trimStart().startsWith('{')) {
-                    this._addMessage(s.role, s.content);
+                if (s.event === 'heard' || s.event === 'queried') {
+                    this._addMessage('user', s.content);
+                } else if ((s.event === 'answered' || s.event === 'clarified' || s.event === 'summarized') && !s.content.trimStart().startsWith('{')) {
+                    this._addMessage('assistant', s.content);
                 }
             }
         } catch {}

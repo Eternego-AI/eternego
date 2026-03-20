@@ -3,7 +3,7 @@
 import uuid
 from pathlib import Path
 
-from application.core.brain.data import Meaning, Signal
+from application.core.brain.data import Meaning, Signal, SignalEvent
 from application.core import paths
 from application.platform import filesystem, logger
 
@@ -54,7 +54,7 @@ class Recalling(Meaning):
         filenames = persona_response.get("files", [])
         if not filenames:
             return Signal(
-                id=str(uuid.uuid4()), role="user",
+                id=str(uuid.uuid4()), event=SignalEvent.executed,
                 content="No matching conversations found in history.",
             )
 
@@ -69,11 +69,11 @@ class Recalling(Meaning):
 
         if not contents:
             return Signal(
-                id=str(uuid.uuid4()), role="user",
+                id=str(uuid.uuid4()), event=SignalEvent.executed,
                 content="Could not find the requested history files.",
             )
 
         return Signal(
-            id=str(uuid.uuid4()), role="user",
+            id=str(uuid.uuid4()), event=SignalEvent.executed,
             content="\n\n---\n\n".join(contents),
         )

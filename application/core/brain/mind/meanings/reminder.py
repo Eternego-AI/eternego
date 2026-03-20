@@ -2,7 +2,7 @@
 
 import uuid
 
-from application.core.brain.data import Meaning, Signal
+from application.core.brain.data import Meaning, Signal, SignalEvent
 from application.core import paths
 from application.platform import datetimes, logger
 
@@ -11,7 +11,7 @@ class Reminder(Meaning):
     name = "Reminder"
 
     def description(self) -> str:
-        return "The person wants to be reminded of something at a specific date and time."
+        return "The person asks to be reminded or alerted at a future time — a timed nudge, alarm, or scheduled notification."
 
     def clarify(self) -> str:
         return (
@@ -49,13 +49,13 @@ class Reminder(Meaning):
 
         if not trigger or not timezone or not content:
             logger.info("reminder.run: incomplete data", {"trigger": trigger, "timezone": timezone})
-            return Signal(id=str(uuid.uuid4()), role="user", content="Error: trigger, timezone, or content is missing. Extract all three from the conversation and try again.")
+            return Signal(id=str(uuid.uuid4()), event=SignalEvent.executed, content="Error: trigger, timezone, or content is missing. Extract all three from the conversation and try again.")
 
         try:
             utc = datetimes.to_utc(trigger, timezone)
         except Exception as e:
             logger.error("reminder.run: invalid trigger or timezone", {"error": str(e)})
-            return Signal(id=str(uuid.uuid4()), role="user", content=f"Error: invalid trigger or timezone — {e}. Correct the format and try again.")
+            return Signal(id=str(uuid.uuid4()), event=SignalEvent.executed, content=f"Error: invalid trigger or timezone — {e}. Correct the format and try again.")
 
         body = content
         if recurrence:

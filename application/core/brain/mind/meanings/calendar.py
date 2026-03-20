@@ -3,7 +3,7 @@
 import re
 import uuid
 
-from application.core.brain.data import Meaning, Signal
+from application.core.brain.data import Meaning, Signal, SignalEvent
 from application.core import paths
 from application.platform import logger
 
@@ -46,14 +46,14 @@ class Calendar(Meaning):
 
         if not start or not end:
             return Signal(
-                id=str(uuid.uuid4()), role="user",
+                id=str(uuid.uuid4()), event=SignalEvent.executed,
                 content="Error: start or end date is missing.",
             )
 
         destiny_dir = paths.destiny(self.persona.id)
         if not destiny_dir.exists():
             return Signal(
-                id=str(uuid.uuid4()), role="user",
+                id=str(uuid.uuid4()), event=SignalEvent.executed,
                 content="Calendar is empty — no reminders or events scheduled.",
             )
 
@@ -72,11 +72,11 @@ class Calendar(Meaning):
 
         if not entries:
             return Signal(
-                id=str(uuid.uuid4()), role="user",
+                id=str(uuid.uuid4()), event=SignalEvent.executed,
                 content=f"No reminders or events found between {start} and {end}.",
             )
 
         return Signal(
-            id=str(uuid.uuid4()), role="user",
+            id=str(uuid.uuid4()), event=SignalEvent.executed,
             content=f"Calendar entries ({start} to {end}):\n" + "\n".join(entries),
         )

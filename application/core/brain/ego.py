@@ -1,6 +1,6 @@
 """Ego — the persona's reasoning and reply engine."""
 
-from application.core.data import Persona, Prompt
+from application.core.data import Persona
 from application.core.brain import character, current
 from application.core import local_model, frontier, tools, channels, paths
 from application.platform import logger
@@ -29,23 +29,27 @@ def identity(persona: Persona) -> str:
     return "\n\n".join(sections)
 
 
-async def reason(persona: Persona, system: str, prompts: list[Prompt]) -> dict:
+async def reason(persona: Persona, system: str, scene: str) -> dict:
     """Call the persona's model in JSON mode. Returns a parsed JSON dict."""
     logger.info("ego.reason", {"persona": persona.id})
     await channels.express_thinking(persona)
     full_system = identity(persona) + "\n\n" + system + "\n\nReturn your response as a JSON object."
-    messages = [{"role": "system", "content": full_system}]
-    messages += [{"role": p.role, "content": p.content} for p in prompts]
+    messages = [
+        {"role": "system", "content": full_system},
+        {"role": "user", "content": scene},
+    ]
     return await local_model.chat_json_stream(persona.model.name, messages)
 
 
-async def reply(persona: Persona, system: str, prompts: list[Prompt]):
+async def reply(persona: Persona, system: str, scene: str):
     """Stream the persona's reply, yielding one paragraph at a time."""
     logger.info("ego.reply", {"persona": persona.id})
     await channels.express_thinking(persona)
     full_system = identity(persona) + "\n\n" + system
-    messages = [{"role": "system", "content": full_system}]
-    messages += [{"role": p.role, "content": p.content} for p in prompts]
+    messages = [
+        {"role": "system", "content": full_system},
+        {"role": "user", "content": scene},
+    ]
     async for paragraph in local_model.chat_stream_paragraph(persona.model.name, messages):
         yield paragraph
 

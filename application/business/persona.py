@@ -82,23 +82,23 @@ async def loaded(persona_id: str) -> Outcome[dict]:
         return Outcome(success=False, message=str(e))
 
 
-async def mind_signals(persona_id: str) -> Outcome[dict]:
+async def scene(persona_id: str) -> Outcome[dict]:
     """Return all signals currently in the persona's mind, sorted by time."""
-    await bus.propose("Getting persona mind signals", {"persona_id": persona_id})
+    await bus.propose("Getting persona scene", {"persona_id": persona_id})
     persona = await loaded(persona_id)
     if not persona.success:
         return persona
     try:
         signals = agents.persona(persona.data["persona"]).read()
-        await bus.broadcast("Persona's mind signals loaded", {"persona": persona})
+        await bus.broadcast("Persona scene loaded", {"persona": persona})
         return Outcome(success=True, message="", data={
             "signals": [
-                {"role": s.role, "content": s.content, "created_at": s.created_at.isoformat()}
+                {"event": s.event, "content": s.content, "created_at": s.created_at.isoformat()}
                 for s in signals
             ]
         })
     except MindError as e:
-        await bus.broadcast("Reading persona's mind failed", {"persona_id": persona_id, "error": str(e)})
+        await bus.broadcast("Reading persona scene failed", {"persona_id": persona_id, "error": str(e)})
         return Outcome(success=False, message=str(e))
 
 
@@ -171,7 +171,6 @@ async def create(
         paths.create_directory(paths.workspace(persona.id))
         paths.create_directory(paths.notes(persona.id))
         paths.create_directory(paths.meanings(persona.id))
-        paths.create_directory(paths.experiences(persona.id))
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
         paths.save_as_string(paths.person_identity(persona.id), f"The person's timezone is {system.timezone()}.")
@@ -555,14 +554,14 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
 async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Outcome[dict]:
     """Receive a message, trigger the mind tick, return when say tool responds (web) or fire-and-forget (push channels)."""
     import asyncio
-    from application.core.brain.data import Signal
+    from application.core.brain.data import Signal, SignalEvent
     await bus.propose("Talking", {"persona": persona, "channel": message.channel})
     try:
         if message.channel:
             channels.set_latest(persona, message.channel)
         signal = Signal(
             id=f"{message.channel.type}-{message.channel.name}-{message.id}" if message.channel else message.id,
-            role="user",
+            event=SignalEvent.heard,
             content=message.content,
             channel_type=message.channel.type if message.channel else "",
             channel_name=message.channel.name if message.channel else "",
@@ -589,7 +588,7 @@ async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Out
 async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Outcome[dict]:
     """Answer a direct query — bypasses understanding and recognition, goes straight to deciding."""
     import asyncio
-    from application.core.brain.data import Signal, Perception, Thought
+    from application.core.brain.data import Signal, SignalEvent, Perception, Thought
     from application.core.brain.mind.meanings.query import Query
     from application.platform import datetimes
 
@@ -599,7 +598,7 @@ async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Ou
 
         signal = Signal(
             id=f"{message.channel.type}-{message.channel.name}-{message.id}",
-            role="user",
+            event=SignalEvent.queried,
             content=message.content,
             channel_type=message.channel.type,
             channel_name=message.channel.name,
@@ -626,24 +625,10 @@ async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Ou
         return Outcome(success=False, message="Something went wrong. Please try again.")
 
 
-async def nudge(persona: Persona, message: str) -> Outcome[dict]:
-    """Privately nudge the persona with an internal signal."""
-    from application.core.brain.data import Signal
-    import uuid
-    await bus.propose("Nudging persona", {"persona": persona})
-    try:
-        agents.persona(persona).trigger(Signal(id=str(uuid.uuid4()), role="user", content=message))
-        await bus.broadcast("Persona nudged", {"persona": persona})
-        return Outcome(success=True, message="Nudge sent.")
-    except MindError as e:
-        await bus.broadcast("Nudge failed", {"persona": persona, "error": str(e)})
-        return Outcome(success=False, message=str(e))
-
-
 async def live(persona: Persona, dt) -> Outcome[dict]:
     """Check for due destiny entries, archive them, and notify the persona."""
     import uuid
-    from application.core.brain.data import Signal, Perception
+    from application.core.brain.data import Signal, SignalEvent, Perception
     from application.platform import filesystem
 
     await bus.propose("Checking todos", {"persona": persona})
@@ -661,10 +646,11 @@ async def live(persona: Persona, dt) -> Outcome[dict]:
 
         signal = Signal(
             id=str(uuid.uuid4()),
-            role="user",
+            event=SignalEvent.nudged,
             content="Due now:\n" + "\n---\n".join(notifications),
         )
-        perception = Perception(impression="todo", thread=[signal])
+        from application.platform import datetimes
+        perception = Perception(impression=f"Due at {datetimes.iso_8601(datetimes.now())}", thread=[signal])
         agents.persona(persona).incept(perception)
 
         await bus.broadcast("Todos checked", {"persona": persona, "due": len(due)})
@@ -681,7 +667,7 @@ async def sleep(persona: Persona, deep: bool = False) -> Outcome[dict]:
     agent = agents.persona(persona)
     try:
         gateways.of(persona).clear()
-        await agent.stop()
+        await agent.stop(force=not deep)
 
         if deep:
             await agent.learn_from_experience()

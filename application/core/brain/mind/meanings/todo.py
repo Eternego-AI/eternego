@@ -2,7 +2,7 @@
 
 import uuid
 
-from application.core.brain.data import Meaning, Signal
+from application.core.brain.data import Meaning, Signal, SignalEvent
 from application.core import paths
 from application.platform import datetimes, logger
 
@@ -70,7 +70,7 @@ class Todo(Meaning):
 
         if errors:
             return Signal(
-                id=str(uuid.uuid4()), role="user",
+                id=str(uuid.uuid4()), event=SignalEvent.executed,
                 content=f"Error scheduling next recurrence: {'; '.join(errors)}",
             )
         return None

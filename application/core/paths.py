@@ -184,11 +184,6 @@ def meanings(persona_id: str) -> Path:
     return home(persona_id) / "meanings"
 
 
-def experiences(persona_id: str) -> Path:
-    """Directory where experience JSONL files are stored (one per meaning)."""
-    return home(persona_id) / "experiences"
-
-
 def save_persona_meaning(persona_id: str, meaning) -> None:
     """Save a persona-specific meaning as a JSON file (overwrites existing)."""
     import json

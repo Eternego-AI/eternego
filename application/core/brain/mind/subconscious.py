@@ -4,7 +4,6 @@ Each function receives (persona, conversations), builds a single prompt,
 uses ego.reply to stream the result, and saves directly to the relevant file.
 """
 
-from application.core.data import Prompt
 from application.core.brain import ego
 from application.core import paths
 from application.platform import logger
@@ -60,9 +59,8 @@ async def person_identity(persona, conversations: str) -> None:
         "• No bullets, no headers, no explanations, no extra text\n"
         "If no facts exist or none are extracted, return exactly: (none yet)"
     )
-    prompts = [Prompt(role="user", content="Process the input above.")]
     parts = []
-    async for paragraph in ego.reply(persona, system, prompts):
+    async for paragraph in ego.reply(persona, system, "Process the input above."):
         parts.append(paragraph)
     result = "\n".join(parts)
     if result:
@@ -116,9 +114,8 @@ async def person_traits(persona, conversations: str) -> None:
         "• No bullets, no headers, no extra text, no explanations\n"
         "If nothing new or no traits at all, return exactly: (none yet)"
     )
-    prompts = [Prompt(role="user", content="Process the input above.")]
     parts = []
-    async for paragraph in ego.reply(persona, system, prompts):
+    async for paragraph in ego.reply(persona, system, "Process the input above."):
         parts.append(paragraph)
     result = "\n".join(parts)
     if result:
@@ -170,9 +167,8 @@ async def wishes(persona, conversations: str) -> None:
         "• No bullets, no headers, no explanations, no extra commentary\n"
         "If nothing qualifies or no new items, return exactly: (none yet)"
     )
-    prompts = [Prompt(role="user", content="Process the input above.")]
     parts = []
-    async for paragraph in ego.reply(persona, system, prompts):
+    async for paragraph in ego.reply(persona, system, "Process the input above."):
         parts.append(paragraph)
     result = "\n".join(parts)
     if result:
@@ -225,9 +221,8 @@ async def struggles(persona, conversations: str) -> None:
         "• No bullets, no headers, no explanations, no extra commentary\n"
         "If nothing qualifies or no new items, return exactly: (none yet)"
     )
-    prompts = [Prompt(role="user", content="Process the input above.")]
     parts = []
-    async for paragraph in ego.reply(persona, system, prompts):
+    async for paragraph in ego.reply(persona, system, "Process the input above."):
         parts.append(paragraph)
     result = "\n".join(parts)
     if result:
@@ -278,9 +273,8 @@ async def persona_context(persona, conversations: str) -> None:
         "• Keep the total concise — aim for 4–12 high-quality lines max\n"
         "If nothing relevant is present or all prior context is now outdated, return exactly: (light context — mostly quiet season right now)"
     )
-    prompts = [Prompt(role="user", content="Process the input above.")]
     parts = []
-    async for paragraph in ego.reply(persona, system, prompts):
+    async for paragraph in ego.reply(persona, system, "Process the input above."):
         parts.append(paragraph)
     result = "\n".join(parts)
     if result:
@@ -315,9 +309,8 @@ async def synthesize_dna(persona) -> None:
         "Sections: Identity, Behavioral Patterns, Working Style, Current Focus.\n\n"
         "Return the profile as markdown text."
     )
-    prompts = [Prompt(role="user", content="Synthesize the profile.")]
     parts = []
-    async for paragraph in ego.reply(persona, system, prompts):
+    async for paragraph in ego.reply(persona, system, "Synthesize the profile."):
         parts.append(paragraph)
     result = "\n".join(parts)
     if result:

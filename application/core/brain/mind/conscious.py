@@ -4,7 +4,9 @@ Five functions run in sequence by the clock tick:
   understand → recognize → answer → decide → conclude
 """
 
-from application.core.data import Prompt
+import uuid
+
+from application.core.brain.data import Signal, SignalEvent
 from application.core.brain import perceptions, signals
 from application.core import channels
 from application.platform import logger
@@ -27,28 +29,31 @@ async def understand(reason, mind) -> None:
 
     system = (
         "# Task: Route incoming signals to conversation threads\n"
-        "Threads and signals are both numbered. For each signal number, return the thread "
-        "number(s) it continues, or a concise impression if it starts a new topic. "
-        "A signal can belong to multiple threads if it spans subjects.\n\n"
-        "Return routes ordered by importance — most urgent or significant thread first.\n\n"
+        "Threads and signals are both numbered. For each signal number, decide:\n"
+        "- Does it **directly continue** an existing thread? Only if it is a reply or follow-up "
+        "to that specific conversation topic. A new unrelated message does NOT continue a thread "
+        "just because the same person sent it.\n"
+        "- Otherwise, create a new impression that captures the topic.\n\n"
+        "Return routes ordered by importance — most urgent or significant first.\n\n"
         "Return JSON:\n"
         "{\n"
         '  "routes": [\n'
-        '    {"signal": 1, "threads": [1, 3], "new_impressions": ["new topic"]}\n'
+        '    {"signal": 1, "threads": [1], "new_impressions": ["new topic"]}\n'
         "  ]\n"
         "}\n"
-        "Use empty lists when not applicable. Prefer threads over new_impressions."
+        "Use empty lists when not applicable. When in doubt, prefer a new impression "
+        "over forcing a signal into an unrelated thread."
     )
 
-    prompts = [Prompt(role="user", content=(
+    scene = (
         "Known threads:\n"
         f"{"\n\n".join(f"{i}.\n{perceptions.thread(p)}" for i, p in thread_map.items()) if known else "None"}\n\n"
         "Signals to route:\n"
         f"{"\n".join(f"{i}. {signals.labeled(s)}" for i, s in signal_map.items())}\n\n"
         "Route each signal by its number."
-    ))]
+    )
 
-    result = await reason(mind.persona, system, prompts)
+    result = await reason(mind.persona, system, scene)
     routes = result.get("routes", [])
 
     routed = set()
@@ -72,13 +77,11 @@ async def understand(reason, mind) -> None:
                 mind.understand(signal, impression)
 
         if not route.get("threads") and not route.get("new_impressions"):
-            mind.understand(signal, signal.content[:60])
+            logger.warning("understand: route with no threads or impressions", {"signal_id": signal.id})
 
-    # Fallback: signals the LLM failed to route get their own perception
     for signal in unattended:
         if signal.id not in routed:
-            logger.warning("understand: unrouted signal, using fallback", {"signal_id": signal.id})
-            mind.understand(signal, signal.content[:60])
+            logger.warning("understand: unrouted signal, stays unattended", {"signal_id": signal.id})
 
 
 # ── Recognition ──────────────────────────────────────────────────────────────
@@ -101,15 +104,15 @@ async def recognize(reason, mind) -> None:
         '{"meaning_row": N}'
     )
 
-    prompts = [Prompt(role="user", content=(
+    scene = (
         "Known meanings:\n"
         f"{"\n".join(f"{i + 1}. {m.name}: {m.description()}" for i, m in enumerate(mind.meanings))}\n\n"
         "Thread to match:\n"
         f"{perceptions.thread(perception)}\n\n"
         "Return the row number of the best-matching meaning."
-    ))]
+    )
 
-    result = await reason(mind.persona, system, prompts)
+    result = await reason(mind.persona, system, scene)
     row = result.get("meaning_row")
 
     escalation = next(m for m in mind.meanings if m.name == "Escalation")
@@ -134,7 +137,7 @@ async def recognize(reason, mind) -> None:
     mind.recognize(perception, meaning)
 
 
-# ── Wondering ────────────────────────────────────────────────────────────────
+# ── Answering ────────────────────────────────────────────────────────────────
 
 async def answer(reply, mind) -> None:
     """Generate a streaming reply for the most important thought that needs an answer."""
@@ -144,12 +147,18 @@ async def answer(reply, mind) -> None:
         return
 
     m = thought.meaning
-    has_replied = any(s.role == "assistant" for s in thought.perception.thread)
-    prompt = m.clarify() if has_replied else m.reply()
+    last = thought.perception.thread[-1].event if thought.perception.thread else ""
+    if last == SignalEvent.executed:
+        prompt = m.clarify()
+        event = SignalEvent.clarified
+    else:
+        prompt = m.reply()
+        event = SignalEvent.answered
+
     if prompt is None:
         return
 
-    logger.debug("Answer", {"persona": mind.persona, "impression": thought.perception.impression})
+    logger.debug("Answer", {"persona": mind.persona, "impression": thought.perception.impression, "event": event})
 
     channel = channels.latest(mind.persona) or channels.default_channel(mind.persona)
 
@@ -158,10 +167,10 @@ async def answer(reply, mind) -> None:
         prompt,
     ]))
 
-    prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
+    scene = mind.scene(thought)
 
     text = ""
-    async for paragraph in reply(mind.persona, system, prompts):
+    async for paragraph in reply(mind.persona, system, scene):
         if mind.needs_understanding:
             break
         if channel:
@@ -169,10 +178,7 @@ async def answer(reply, mind) -> None:
         text += ("\n" if text else "") + paragraph
 
     if text:
-        mind.answer(thought, text)
-
-    if not thought.meaning.path():
-        mind.resolve(thought)
+        mind.answer(thought, text, event)
 
 
 # ── Deciding ─────────────────────────────────────────────────────────────────
@@ -195,26 +201,26 @@ async def decide(reason, mind) -> None:
         "If the task is already fulfilled based on the conversation, do not take "
         "further action. Return only: {\"recap\": \"what was accomplished\"}"
     )
-    prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
+    scene = mind.scene(thought)
 
-    result = await reason(mind.persona, system, prompts)
+    result = await reason(mind.persona, system, scene)
     recap = result.pop("recap", None) if isinstance(result, dict) else None
 
     if not result:
-        if recap:
-            mind.answer(thought, recap)
-        mind.resolve(thought)
+        mind.answer(thought, recap or "", SignalEvent.recap)
         return
 
     decision_text = json.dumps(result)
-    mind.answer(thought, decision_text)
+    mind.answer(thought, decision_text, SignalEvent.decided)
 
-    signal = await thought.meaning.run(result)
+    try:
+        signal = await thought.meaning.run(result)
+    except Exception as e:
+        logger.error("Decide: run failed", {"persona": mind.persona, "error": str(e)})
+        signal = Signal(id=str(uuid.uuid4()), event=SignalEvent.executed, content=f"Error: {e}")
 
     if signal is None:
-        if recap:
-            mind.answer(thought, recap)
-        mind.resolve(thought)
+        mind.answer(thought, recap or "", SignalEvent.recap)
     else:
         mind.inform(thought, signal)
 
@@ -222,12 +228,8 @@ async def decide(reason, mind) -> None:
 # ── Concluding ───────────────────────────────────────────────────────────────
 
 async def conclude(reply, mind) -> None:
-    """Summarize for the person and mark the thought as concluded.
-
-    No archiving — thread stays in memory until sleep.
-    """
+    """Summarize for the person and mark the thought as concluded."""
     logger.info("Concluding", {"persona": mind.persona})
-    from application.platform import datetimes
 
     thought = mind.most_important_thought(mind.needs_conclusion)
     if not thought:
@@ -243,14 +245,18 @@ async def conclude(reply, mind) -> None:
             thought.meaning.description(),
             summary_prompt,
         ]))
-        prompts = [Prompt(role=s.role, content=signals.as_chat(s)) for s in thought.perception.thread]
+        scene = mind.scene(thought)
 
         text = ""
-        async for paragraph in reply(mind.persona, system, prompts):
+        async for paragraph in reply(mind.persona, system, scene):
             await channels.send(channel, paragraph)
             text += ("\n" if text else "") + paragraph
 
-        if text:
-            mind.answer(thought, text)
-
-    thought.concluded_at = datetimes.now()
+        mind.answer(thought, text or "", SignalEvent.summarized)
+    else:
+        recap = ""
+        for s in reversed(thought.perception.thread):
+            if s.event == SignalEvent.recap:
+                recap = s.content
+                break
+        mind.answer(thought, recap, SignalEvent.summarized)

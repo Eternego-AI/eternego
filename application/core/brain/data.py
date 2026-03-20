@@ -5,15 +5,28 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
 
 from application.platform import datetimes
+
+
+class SignalEvent(StrEnum):
+    heard = "heard"
+    queried = "queried"
+    nudged = "nudged"
+    answered = "answered"
+    clarified = "clarified"
+    decided = "decided"
+    executed = "executed"
+    recap = "recap"
+    summarized = "summarized"
 
 
 @dataclass
 class Signal:
     """Atomic unit of communication."""
     id: str
-    role: str               # user | assistant | system
+    event: SignalEvent
     content: str
     channel_type: str = ""
     channel_name: str = ""
@@ -63,7 +76,7 @@ class Meaning(ABC):
             return None
         params = {k: v for k, v in persona_response.items() if k != "tool"}
         result = await tools.call(tool_name, **params)
-        return Signal(id=str(uuid.uuid4()), role="user", content=result)
+        return Signal(id=str(uuid.uuid4()), event=SignalEvent.executed, content=result)
 
 
 @dataclass
@@ -73,8 +86,6 @@ class Thought:
     meaning: Meaning
     priority: int = 0       # importance rank; higher = more important
     id: str = ""
-    processed_at: datetime | None = None
-    concluded_at: datetime | None = None
 
     def __post_init__(self):
         if not self.id:
