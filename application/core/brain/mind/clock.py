@@ -30,9 +30,7 @@ Pipeline: understand → recognize → answer → decide → conclude
                 if mind.changed():
                     restart = True
                     break
-            mind.persist()
             if not restart:
                 await asyncio.sleep(0.05)
         except Exception as e:
             logger.error("Mind tick got an exception", {"persona": mind.persona, "error": str(e)})
-            mind.persist()

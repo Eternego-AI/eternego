@@ -17,6 +17,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$SCRIPT_DIR
+Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=$ETERNEGO_BIN daemon
 Restart=on-failure
 RestartSec=5
@@ -46,10 +47,18 @@ elif [ "$OS_TYPE" = "Darwin" ]; then
     </array>
     <key>WorkingDirectory</key>
     <string>$SCRIPT_DIR</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONDONTWRITEBYTECODE</key>
+        <string>1</string>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>StandardOutPath</key>
     <string>$SVC_LOG</string>
     <key>StandardErrorPath</key>

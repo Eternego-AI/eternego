@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import signal
 
 import uvicorn
 
@@ -30,10 +31,8 @@ async def on_channel_paired(signal: Signal):
         return
     live = await persona.loaded(persona_id)
     if live.success:
-        await persona.stop(live.data["persona"])
-    outcome = await persona.find(persona_id)
-    if outcome.success:
-        await persona.start(outcome.data["persona"])
+        await persona.sleep(live.data["persona"])
+    await persona.wake(persona_id)
 
 
 async def restart_gateway(command: Command):
@@ -44,14 +43,14 @@ async def restart_gateway(command: Command):
     if not agent:
         return
 
-    outcome = await persona.stop(agent)
+    outcome = await persona.sleep(agent)
     if not outcome.success:
-        print(f"Failed to stop gateway for {agent.name}: {outcome.message}")
+        print(f"Failed to sleep {agent.name}: {outcome.message}")
         return
 
-    outcome = await persona.start(agent)
+    outcome = await persona.wake(agent.id)
     if not outcome.success:
-        print(f"Failed to start gateway for {agent.name}: {outcome.message}")
+        print(f"Failed to wake {agent.name}: {outcome.message}")
 
 
 async def main():
@@ -84,16 +83,22 @@ async def main():
     logger.default_media(log_media)
     subscribe(log_signal, restart_gateway, on_channel_paired, on_signal)
 
-    outcome = await persona.agents()
+    loop = asyncio.get_running_loop()
+    shutdown = asyncio.Event()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, shutdown.set)
+
+    outcome = await persona.get_list()
     if not outcome.success:
         print(f"No personas yet: {outcome.message}")
 
     personas = (outcome.data or {}).get("personas", [])
 
     for agent in personas:
-        outcome = await persona.start(agent)
+        outcome = await persona.wake(agent.id)
         if not outcome.success:
-            print(f"Failed to start gateway for {agent.name}: {outcome.message}")
+            print(f"Failed to wake {agent.name}: {outcome.message}")
 
     web_task = asyncio.create_task(start_web(args.host, args.port))
     web_task.add_done_callback(
@@ -101,8 +106,11 @@ async def main():
     )
 
     elapsed = 0
-    while True:
-        await asyncio.sleep(1)
+    while not shutdown.is_set():
+        try:
+            await asyncio.wait_for(shutdown.wait(), timeout=1)
+        except asyncio.TimeoutError:
+            pass
         elapsed += 1
         if elapsed >= 60:
             elapsed = 0
@@ -110,6 +118,14 @@ async def main():
             if outcome.success:
                 for agent in (outcome.data or {}).get("personas", []):
                     await heart.beat(agent)
+
+    print("Shutting down...")
+    outcome = await persona.running()
+    if outcome.success:
+        for agent in (outcome.data or {}).get("personas", []):
+            await persona.sleep(agent)
+
+    web_task.cancel()
 
 
 if __name__ == "__main__":

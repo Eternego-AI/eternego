@@ -1,6 +1,5 @@
 """Memory — the mind's persistent cognitive graph."""
 
-import asyncio
 import uuid
 
 from datetime import datetime
@@ -14,7 +13,7 @@ class Memory:
     """Per-persona cognitive graph with disk persistence.
 
     Holds signals, perceptions, thoughts, and their relationships.
-    Restores from disk on creation; caller is responsible for calling persist().
+    Starts empty; call remember() to restore from disk.
     """
 
     def __init__(self, persona, meanings: list[Meaning]):
@@ -25,13 +24,11 @@ class Memory:
         self._thoughts: list[Thought] = []
         self._signal_perceptions: dict[str, list[str]] = {}
         self._unattended_hash: int | None = None
-        self._tick_task: asyncio.Task | None = None
         self._storage_id = f"mind:{persona.id}"
-        self._restore()
 
     # ── Persistence ──────────────────────────────────────────────────────────
 
-    def _restore(self) -> None:
+    def remember(self) -> None:
         """Load graph state from disk."""
         logger.info("memory.restore", {"persona": self._persona.id})
         path = paths.mind_state(self._persona.id)
@@ -183,26 +180,12 @@ class Memory:
         return [s for s in self._signals.values()
                 if s.role == "user" and s.id not in self._signal_perceptions]
 
-    @property
-    def attended(self) -> list[Signal]:
-        """Signals already attached to at least one Perception."""
-        return [s for s in self._signals.values()
-                if s.id in self._signal_perceptions]
-
     # ── Perception views ──────────────────────────────────────────────────────
 
     @property
     def perceptions(self) -> list[Perception]:
         """All Perceptions in the graph."""
         return list(self._perceptions.values())
-
-    @property
-    def active(self) -> list[Perception]:
-        """Perceptions whose Thought is still in progress."""
-        open_impressions = {t.perception.impression for t in self._thoughts
-                            if t.processed_at is None}
-        return [p for p in self._perceptions.values()
-                if p.impression in open_impressions]
 
     @property
     def needs_recognition(self) -> list[Perception]:
@@ -271,13 +254,6 @@ class Memory:
             return None
         return min(thoughts, key=lambda t: (-t.priority, t.id))
 
-    # ── Context ───────────────────────────────────────────────────────────────
-
-    @property
-    def context(self) -> list[Signal]:
-        """All system-role Signals (persistent context from recaps)."""
-        return [s for s in self._signals.values() if s.role == "system"]
-
     # ── Mutation methods ──────────────────────────────────────────────────────
 
     def understand(self, signal: Signal, impression: str) -> None:
@@ -340,13 +316,6 @@ class Memory:
             self._signal_perceptions[signal.id].append(thought.perception.impression)
 
 
-    def remember(self, text: str) -> None:
-        """Create a system Signal and add it to context."""
-        logger.info("memory.remember", {"persona": self._persona.id})
-        signal = Signal(id=str(uuid.uuid4()), role="system", content=text)
-        self._signals[signal.id] = signal
-
-
     def forget(self, thought: Thought) -> None:
         """Remove thought and its exclusive Signals from the graph."""
         logger.info("memory.forget", {"persona": self._persona.id, "thought": thought.id})
@@ -369,6 +338,15 @@ class Memory:
         else:
             logger.warning("memory.forget: thought not found in list", {"impression": impression})
 
+    def archive(self, thought: Thought) -> str:
+        """Save a thought's thread to history and forget it."""
+        from application.core.brain import perceptions
+
+        thread_text = perceptions.thread(thought.perception)
+        filename = paths.add_history_entry(self._persona.id, thought.perception.impression, thread_text)
+        self.forget(thought)
+        return filename
+
 
     # ── State ─────────────────────────────────────────────────────────────────
 
@@ -380,39 +358,6 @@ class Memory:
                 and not self.needs_answer
                 and not self.needs_decision
                 and not self.needs_conclusion)
-
-    # ── Lifecycle ─────────────────────────────────────────────────────────────
-
-    def start_thinking(self) -> None:
-        """Start the cognitive tick loop."""
-        logger.info("memory.start_thinking", {"persona": self._persona.id})
-        if self._tick_task is None or self._tick_task.done():
-            from application.core.brain.mind import clock
-            self._tick_task = asyncio.create_task(clock.tick(self))
-
-    def stop_thinking(self) -> None:
-        """Cancel the running tick task and persist state."""
-        logger.info("memory.stop_thinking", {"persona": self._persona.id})
-        if self._tick_task and not self._tick_task.done():
-            self._tick_task.cancel()
-        self._tick_task = None
-        self.persist()
-
-    def snapshot(self) -> list[tuple[str, list]]:
-        """Return all active perceptions as (impression, thread) pairs for archiving."""
-        logger.info("memory.snapshot", {"persona": self._persona.id})
-        return [(p.impression, list(p.thread)) for p in self._perceptions.values()]
-
-    def clear(self) -> None:
-        """Wipe all in-memory state and persist the empty graph."""
-        logger.info("memory.clear", {"persona": self._persona.id})
-        self._signals.clear()
-        self._perceptions.clear()
-        self._thoughts.clear()
-        self._signal_perceptions.clear()
-        self._unattended_hash = None
-
-        self.persist()
 
     # ── Change detection ──────────────────────────────────────────────────────
 

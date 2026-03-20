@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api")
 
 @router.get("/personas")
 async def list_personas():
-    outcome = await persona.agents()
+    outcome = await persona.get_list()
     personas_list = (outcome.data or {}).get("personas", []) if outcome.success else []
     return {"personas": [{"id": p.id, "name": p.name} for p in personas_list]}
 

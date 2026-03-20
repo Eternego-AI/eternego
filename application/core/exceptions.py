@@ -65,5 +65,5 @@ class MindError(Exception):
     pass
 
 
-class RegistryError(Exception):
+class AgentError(Exception):
     pass

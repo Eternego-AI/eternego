@@ -1,7 +1,7 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
-from application.core import bus, registry, system, local_inference_engine, paths, channels
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, HardwareError, RegistryError
+from application.core import bus, agents, system, local_inference_engine, paths, channels
+from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, HardwareError, AgentError
 from application.business.outcome import Outcome
 
 
@@ -63,7 +63,7 @@ async def pair(code: str) -> Outcome[dict]:
     await bus.propose("Pairing channel", {"code": code})
 
     try:
-        persona, channel_type, channel_name = registry.take_code(code)
+        persona, channel_type, channel_name = agents.take_code(code)
 
         channel = next((ch for ch in (persona.channels or []) if ch.type == channel_type), None)
         if not channel:
@@ -79,7 +79,7 @@ async def pair(code: str) -> Outcome[dict]:
         await bus.broadcast("Channel paired", {"persona_id": persona.id, "channel": channel.name})
         return Outcome(success=True, message="Channel paired successfully", data={"persona_id": persona.id, "channel": channel.name})
 
-    except RegistryError as e:
+    except AgentError as e:
         await bus.broadcast("Pairing failed", {"code": code, "reason": str(e)})
         return Outcome(success=False, message=str(e))
 

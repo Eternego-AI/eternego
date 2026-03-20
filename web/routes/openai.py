@@ -12,7 +12,7 @@ router = APIRouter()
 
 @router.get("/v1/models")
 async def list_models():
-    outcome = await persona.agents()
+    outcome = await persona.get_list()
     if not outcome.success:
         raise HTTPException(status_code=500, detail=outcome.message)
 

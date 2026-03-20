@@ -11,5 +11,5 @@ from . import local_model
 from . import system
 from . import gateways
 from . import transcripts
-from . import registry
+from . import agents
 from . import tools

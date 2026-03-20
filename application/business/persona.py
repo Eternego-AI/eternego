@@ -1,9 +1,8 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 from pathlib import Path
 
-from application.core import bus, channels, gateways, frontier, system, registry, \
+from application.core import bus, channels, gateways, frontier, system, agents, \
     local_model, local_inference_engine, paths
-from application.core.brain import mind
 from application.core.data import Channel, Message, Model, Persona
 from application.core.exceptions import (
     UnsupportedOS, EngineConnectionError, SecretStorageError,
@@ -15,7 +14,7 @@ from application.business.outcome import Outcome
 from application.platform import logger
 
 
-async def agents() -> Outcome[dict]:
+async def get_list() -> Outcome[dict]:
     """Return all personas."""
     await bus.propose("Listing personas", {})
 
@@ -74,13 +73,13 @@ async def find(persona_id: str) -> Outcome[dict]:
 
 async def loaded(persona_id: str) -> Outcome[dict]:
     """Return the live persona from the in-process registry."""
-    from application.core import registry
     await bus.propose("Getting loaded persona", {"persona_id": persona_id})
-    persona = registry.get_persona(persona_id)
-    if persona is None:
+    try:
+        p = agents.find(persona_id)
+        return Outcome(success=True, message="", data={"persona": p})
+    except MindError as e:
         await bus.broadcast("Loaded persona not found", {"persona_id": persona_id})
-        return Outcome(success=False, message=f"Persona '{persona_id}' is not running.")
-    return Outcome(success=True, message="", data={"persona": persona})
+        return Outcome(success=False, message=str(e))
 
 
 async def mind_signals(persona_id: str) -> Outcome[dict]:
@@ -90,7 +89,7 @@ async def mind_signals(persona_id: str) -> Outcome[dict]:
     if not persona.success:
         return persona
     try:
-        signals = mind.read(persona.data["persona"])
+        signals = agents.persona(persona.data["persona"]).read()
         await bus.broadcast("Persona's mind signals loaded", {"persona": persona})
         return Outcome(success=True, message="", data={
             "signals": [
@@ -104,9 +103,8 @@ async def mind_signals(persona_id: str) -> Outcome[dict]:
 
 
 async def running() -> Outcome[dict]:
-    """Return all currently running personas from the in-process registry."""
-    from application.core import registry
-    return Outcome(success=True, message="", data={"personas": registry.all()})
+    """Return all currently running personas."""
+    return Outcome(success=True, message="", data={"personas": agents.personas()})
 
 
 async def delete(persona: Persona) -> Outcome[dict]:
@@ -192,7 +190,7 @@ async def create(
             )
             return Outcome(success=False, message=outcome.message)
 
-        outcome = await start(persona)
+        outcome = await wake(persona.id)
         if not outcome.success:
             await bus.broadcast("Persona creation failed", {"reason": outcome.message, "persona": persona})
             return outcome
@@ -309,7 +307,7 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
             )
             return Outcome(success=False, message=outcome.message)
 
-        outcome = await start(persona)
+        outcome = await wake(persona.id)
         if not outcome.success:
             await bus.broadcast("Persona migration failed", {"reason": outcome.message, "persona": persona})
             return outcome
@@ -372,7 +370,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
 
     try:
         conversations = await frontier.read(data, source)
-        await mind.learn(persona, conversations)
+        await agents.persona(persona).learn(conversations)
 
         await bus.broadcast("Persona fed", {"persona": persona, "source": source})
         return Outcome(
@@ -549,7 +547,7 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
         await bus.broadcast("Channel pairing failed", {"persona": persona, "reason": "not_belonging"})
         return Outcome(success=False, message="This channel does not belong to this persona.")
 
-    code = registry.pair(persona, channel)
+    code = agents.pair(persona, channel)
     await bus.broadcast("Channel pairing started", {"persona": persona, "channel": channel})
     return Outcome(success=True, message="Pairing code generated.", data={"pairing_code": code})
 
@@ -570,7 +568,7 @@ async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Out
             channel_name=message.channel.name if message.channel else "",
             message_id=message.id,
         )
-        mind.trigger(persona, signal)
+        agents.persona(persona).trigger(signal)
         # For channels with a bus (web), wait for answer to push the response
         if message.channel and message.channel.bus is not None:
             try:
@@ -614,7 +612,7 @@ async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Ou
         )
         thought = Thought(perception=perception, meaning=Query(persona))
 
-        mind.question(persona, thought)
+        agents.persona(persona).question(thought)
 
         try:
             response = await asyncio.wait_for(message.channel.bus.get(), timeout=timeout)
@@ -634,7 +632,7 @@ async def nudge(persona: Persona, message: str) -> Outcome[dict]:
     import uuid
     await bus.propose("Nudging persona", {"persona": persona})
     try:
-        mind.trigger(persona, Signal(id=str(uuid.uuid4()), role="user", content=message))
+        agents.persona(persona).trigger(Signal(id=str(uuid.uuid4()), role="user", content=message))
         await bus.broadcast("Persona nudged", {"persona": persona})
         return Outcome(success=True, message="Nudge sent.")
     except MindError as e:
@@ -667,7 +665,7 @@ async def live(persona: Persona, dt) -> Outcome[dict]:
             content="Due now:\n" + "\n---\n".join(notifications),
         )
         perception = Perception(impression="todo", thread=[signal])
-        mind.incept(persona, perception)
+        agents.persona(persona).incept(perception)
 
         await bus.broadcast("Todos checked", {"persona": persona, "due": len(due)})
         return Outcome(success=True, message=f"{len(due)} entries due.")
@@ -676,42 +674,38 @@ async def live(persona: Persona, dt) -> Outcome[dict]:
         return Outcome(success=False, message=str(e))
 
 
-async def sleep(persona: Persona) -> Outcome[dict]:
-    """Let the persona rest, consolidate its conversations into knowledge, and grow.
+async def sleep(persona: Persona, deep: bool = False) -> Outcome[dict]:
+    """Put a persona to sleep — stop thinking, optionally learn and grow, save and unload."""
+    await bus.propose("Sleeping", {"persona": persona, "deep": deep})
 
-    Flow: block → wait for resting → learn → grow → diary → unblock.
-    """
-    import asyncio
-
-    await bus.propose("Sleeping", {"persona": persona})
+    agent = agents.persona(persona)
     try:
-        mind.block(persona)
+        gateways.of(persona).clear()
+        await agent.stop()
 
-        while not mind.is_resting(persona):
-            await asyncio.sleep(0.1)
+        if deep:
+            await agent.learn_from_experience()
 
-        await mind.learn_from_experience(persona)
+            grow_outcome = await grow(persona)
+            if not grow_outcome.success:
+                logger.warning("Growing on sleep failed", {"persona": persona, "error": grow_outcome.message})
 
-        grow_outcome = await grow(persona)
-        if not grow_outcome.success:
-            logger.warning("Growing on sleep failed", {"persona": persona, "error": grow_outcome.message})
+            outcome = await write_diary(persona)
+            if not outcome.success:
+                logger.error("Writing diary on sleep failed", {"persona": persona, "error": outcome.message})
 
-        outcome = await write_diary(persona)
-        if not outcome.success:
-            logger.error("Writing diary on sleep failed", {"persona": persona, "error": outcome.message})
+        agent.unload()
 
-        mind.unblock(persona)
-
-        await bus.broadcast("Wake up", {"persona": persona})
+        await bus.broadcast("Persona asleep", {"persona": persona})
         return Outcome(success=True, message="Sleep complete.")
 
     except (DNAError, EngineConnectionError) as e:
-        mind.unblock(persona)
-        await bus.broadcast("Sleep failed", {"reason": "fine_tune", "persona": persona, "error": str(e)})
+        agent.unload()
+        await bus.broadcast("Sleep failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))
     except Exception as e:
-        mind.unblock(persona)
-        await bus.broadcast("Sleep failed", {"reason": "unknown", "persona": persona, "error": str(e)})
+        agent.unload()
+        await bus.broadcast("Sleep failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Sleep failed unexpectedly.")
 
 
@@ -764,34 +758,31 @@ async def grow(persona: Persona) -> Outcome[dict]:
         return Outcome(success=False, message=str(e))
 
 
-async def start(persona: Persona) -> Outcome[dict]:
-    """Open all channels for a persona and start listening."""
-    await bus.propose("Starting channels", {"persona": persona})
+async def wake(persona_id: str) -> Outcome[dict]:
+    """Wake a persona — find, register, connect channels, load mind, start thinking."""
+    await bus.propose("Waking persona", {"persona_id": persona_id})
 
-    registry.save(persona)
-    mind.start(persona)
+    outcome = await find(persona_id)
+    if not outcome.success:
+        await bus.broadcast("Wake failed", {"persona_id": persona_id, "reason": "not_found"})
+        return outcome
 
-    if not (persona.channels or []):
-        await bus.broadcast("Channels start failed", {"persona": persona, "reason": "no_channels"})
+    agent = outcome.data["persona"]
+
+    agents.register(agent)
+
+    if not (agent.channels or []):
+        await bus.broadcast("Wake failed", {"persona": agent, "reason": "no_channels"})
         return Outcome(success=False, message="No channels configured for this persona.")
 
-    for channel in (persona.channels or []):
-        outcome = await connect(persona, channel)
+    for channel in (agent.channels or []):
+        outcome = await connect(agent, channel)
         if not outcome.success:
-            await bus.broadcast("Channels start failed", {"persona": persona, "error": outcome.message})
+            await bus.broadcast("Wake failed", {"persona": agent, "error": outcome.message})
             return outcome
 
-    await bus.broadcast("Channels started", {"persona": persona})
-    return Outcome(success=True, message="Channels started", data={"persona_id": persona.id})
+    agents.persona(agent).load_mind()
+    agents.persona(agent).start()
 
-
-async def stop(persona: Persona) -> Outcome[dict]:
-    """Close all channels for a persona and stop its mind."""
-    await bus.propose("Stopping channels", {"persona": persona})
-
-    gateways.of(persona).clear()
-    mind.stop(persona)
-    registry.remove(persona.id)
-
-    await bus.broadcast("Channels stopped", {"persona": persona})
-    return Outcome(success=True, message="Channels stopped", data={"persona_id": persona.id})
+    await bus.broadcast("Persona awake", {"persona": agent})
+    return Outcome(success=True, message="Persona awake", data={"persona_id": agent.id})
