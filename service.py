@@ -31,7 +31,7 @@ async def on_channel_paired(signal: Signal):
         return
     live = await persona.loaded(persona_id)
     if live.success:
-        await persona.sleep(live.data["persona"])
+        await persona.nap(live.data["persona"])
     await persona.wake(persona_id)
 
 
@@ -43,9 +43,9 @@ async def restart_gateway(command: Command):
     if not agent:
         return
 
-    outcome = await persona.sleep(agent)
+    outcome = await persona.nap(agent)
     if not outcome.success:
-        print(f"Failed to sleep {agent.name}: {outcome.message}")
+        print(f"Failed to nap {agent.name}: {outcome.message}")
         return
 
     outcome = await persona.wake(agent.id)
@@ -123,7 +123,7 @@ async def main():
     outcome = await persona.running()
     if outcome.success:
         for agent in (outcome.data or {}).get("personas", []):
-            await persona.sleep(agent)
+            await persona.nap(agent)
 
     web_task.cancel()
 

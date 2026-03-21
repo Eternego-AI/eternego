@@ -124,7 +124,7 @@ async def sleep_persona(persona_id: str):
     find = await persona.loaded(persona_id)
     if not find.success:
         raise HTTPException(status_code=404, detail=find.message)
-    outcome = await persona.sleep(find.data["persona"], True)
+    outcome = await persona.sleep(find.data["persona"])
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data
@@ -135,7 +135,7 @@ async def stop_persona(persona_id: str):
     find = await persona.loaded(persona_id)
     if not find.success:
         raise HTTPException(status_code=404, detail=find.message)
-    outcome = await persona.sleep(find.data["persona"])
+    outcome = await persona.nap(find.data["persona"])
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data
@@ -146,7 +146,7 @@ async def restart_persona(persona_id: str):
     find = await persona.loaded(persona_id)
     if not find.success:
         raise HTTPException(status_code=404, detail=find.message)
-    await persona.sleep(find.data["persona"])
+    await persona.nap(find.data["persona"])
     find = await persona.find(persona_id)
     if not find.success:
         raise HTTPException(status_code=404, detail=find.message)
@@ -160,7 +160,7 @@ async def restart_persona(persona_id: str):
 async def delete_persona(persona_id: str):
     loaded = await persona.loaded(persona_id)
     if loaded.success:
-        await persona.sleep(loaded.data["persona"])
+        await persona.nap(loaded.data["persona"])
     find = await persona.find(persona_id)
     if not find.success:
         raise HTTPException(status_code=404, detail=find.message)

@@ -660,30 +660,46 @@ async def live(persona: Persona, dt) -> Outcome[dict]:
         return Outcome(success=False, message=str(e))
 
 
-async def sleep(persona: Persona, deep: bool = False) -> Outcome[dict]:
-    """Put a persona to sleep — stop thinking, optionally learn and grow, save and unload."""
-    await bus.propose("Sleeping", {"persona": persona, "deep": deep})
+async def nap(persona: Persona) -> Outcome[dict]:
+    """Quick stop — clear gateways, force-stop thinking, unload."""
+    await bus.propose("Napping", {"persona": persona})
 
     agent = agents.persona(persona)
     try:
         gateways.of(persona).clear()
-        await agent.stop(force=not deep)
-
-        if deep:
-            await agent.learn_from_experience()
-
-            grow_outcome = await grow(persona)
-            if not grow_outcome.success:
-                logger.warning("Growing on sleep failed", {"persona": persona, "error": grow_outcome.message})
-
-            outcome = await write_diary(persona)
-            if not outcome.success:
-                logger.error("Writing diary on sleep failed", {"persona": persona, "error": outcome.message})
-
+        await agent.stop(force=True)
         agent.unload()
 
-        if deep:
-            await wake(persona.id)
+        await bus.broadcast("Persona napping", {"persona": persona})
+        return Outcome(success=True, message="Nap complete.")
+
+    except Exception as e:
+        agent.unload()
+        await bus.broadcast("Nap failed", {"persona": persona, "error": str(e)})
+        return Outcome(success=False, message="Nap failed unexpectedly.")
+
+
+async def sleep(persona: Persona) -> Outcome[dict]:
+    """Put a persona to sleep — learn from experience, grow, write diary, then wake refreshed."""
+    await bus.propose("Sleeping", {"persona": persona})
+
+    agent = agents.persona(persona)
+    try:
+        gateways.of(persona).clear()
+        await agent.stop(force=False)
+
+        await agent.learn_from_experience()
+
+        grow_outcome = await grow(persona)
+        if not grow_outcome.success:
+            logger.warning("Growing on sleep failed", {"persona": persona, "error": grow_outcome.message})
+
+        outcome = await write_diary(persona)
+        if not outcome.success:
+            logger.error("Writing diary on sleep failed", {"persona": persona, "error": outcome.message})
+
+        agent.unload()
+        await wake(persona.id)
 
         await bus.broadcast("Persona asleep", {"persona": persona})
         return Outcome(success=True, message="Sleep complete.")
