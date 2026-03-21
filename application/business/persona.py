@@ -682,6 +682,9 @@ async def sleep(persona: Persona, deep: bool = False) -> Outcome[dict]:
 
         agent.unload()
 
+        if deep:
+            await wake(persona.id)
+
         await bus.broadcast("Persona asleep", {"persona": persona})
         return Outcome(success=True, message="Sleep complete.")
 
