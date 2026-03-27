@@ -1,14 +1,14 @@
 """Ego — the persona's reasoning and reply engine."""
 
 from application.core.data import Persona
-from application.core.brain import character, current
+from application.core.brain import character, situation
 from application.core import local_model, frontier, tools, channels, paths
 from application.platform import logger
 
 
 def identity(persona: Persona) -> str:
     """Build the character system prompt for this persona."""
-    sections = [character.shape(persona), current.situation(persona.id)]
+    sections = [character.shape(persona), situation.current(persona.id)]
 
     wishes = paths.read(paths.wishes(persona.id))
     if wishes.strip():
@@ -41,8 +41,8 @@ async def reason(persona: Persona, system: str, scene: str) -> dict:
     return await local_model.chat_json_stream(persona.model.name, messages)
 
 
-async def reply(persona: Persona, system: str, scene: str):
-    """Stream the persona's reply, yielding one paragraph at a time."""
+async def reply(persona: Persona, system: str, scene: str) -> str:
+    """Send the persona's reply as a complete message."""
     logger.info("ego.reply", {"persona": persona.id})
     await channels.express_thinking(persona)
     full_system = identity(persona) + "\n\n" + system
@@ -50,8 +50,7 @@ async def reply(persona: Persona, system: str, scene: str):
         {"role": "system", "content": full_system},
         {"role": "user", "content": scene},
     ]
-    async for paragraph in local_model.chat_stream_paragraph(persona.model.name, messages):
-        yield paragraph
+    return await local_model.chat(persona.model.name, messages)
 
 
 async def escalate(persona: Persona, thread_text: str,

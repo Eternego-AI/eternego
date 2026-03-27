@@ -59,10 +59,7 @@ async def person_identity(persona, conversations: str) -> None:
         "• No bullets, no headers, no explanations, no extra text\n"
         "If no facts exist or none are extracted, return exactly: (none yet)"
     )
-    parts = []
-    async for paragraph in ego.reply(persona, system, "Process the input above."):
-        parts.append(paragraph)
-    result = "\n".join(parts)
+    result = await ego.reply(persona, system, "Process the input above.")
     if result:
         logger.info("subconscious.person_identity", {"persona": persona.id})
         paths.save_as_string(paths.person_identity(persona.id), result)
@@ -114,10 +111,7 @@ async def person_traits(persona, conversations: str) -> None:
         "• No bullets, no headers, no extra text, no explanations\n"
         "If nothing new or no traits at all, return exactly: (none yet)"
     )
-    parts = []
-    async for paragraph in ego.reply(persona, system, "Process the input above."):
-        parts.append(paragraph)
-    result = "\n".join(parts)
+    result = await ego.reply(persona, system, "Process the input above.")
     if result:
         logger.info("subconscious.person_traits", {"persona": persona.id})
         paths.save_as_string(paths.person_traits(persona.id), result)
@@ -167,10 +161,7 @@ async def wishes(persona, conversations: str) -> None:
         "• No bullets, no headers, no explanations, no extra commentary\n"
         "If nothing qualifies or no new items, return exactly: (none yet)"
     )
-    parts = []
-    async for paragraph in ego.reply(persona, system, "Process the input above."):
-        parts.append(paragraph)
-    result = "\n".join(parts)
+    result = await ego.reply(persona, system, "Process the input above.")
     if result:
         logger.info("subconscious.wishes", {"persona": persona.id})
         paths.save_as_string(paths.wishes(persona.id), result)
@@ -221,10 +212,7 @@ async def struggles(persona, conversations: str) -> None:
         "• No bullets, no headers, no explanations, no extra commentary\n"
         "If nothing qualifies or no new items, return exactly: (none yet)"
     )
-    parts = []
-    async for paragraph in ego.reply(persona, system, "Process the input above."):
-        parts.append(paragraph)
-    result = "\n".join(parts)
+    result = await ego.reply(persona, system, "Process the input above.")
     if result:
         logger.info("subconscious.struggles", {"persona": persona.id})
         paths.save_as_string(paths.struggles(persona.id), result)
@@ -273,10 +261,7 @@ async def persona_context(persona, conversations: str) -> None:
         "• Keep the total concise — aim for 4–12 high-quality lines max\n"
         "If nothing relevant is present or all prior context is now outdated, return exactly: (light context — mostly quiet season right now)"
     )
-    parts = []
-    async for paragraph in ego.reply(persona, system, "Process the input above."):
-        parts.append(paragraph)
-    result = "\n".join(parts)
+    result = await ego.reply(persona, system, "Process the input above.")
     if result:
         logger.info("subconscious.persona_context", {"persona": persona.id})
         paths.save_as_string(paths.context(persona.id), result)
@@ -309,9 +294,6 @@ async def synthesize_dna(persona) -> None:
         "Sections: Identity, Behavioral Patterns, Working Style, Current Focus.\n\n"
         "Return the profile as markdown text."
     )
-    parts = []
-    async for paragraph in ego.reply(persona, system, "Synthesize the profile."):
-        parts.append(paragraph)
-    result = "\n".join(parts)
+    result = await ego.reply(persona, system, "Synthesize the profile.")
     if result:
         paths.write_dna(persona.id, result)

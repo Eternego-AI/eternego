@@ -2,7 +2,7 @@
 
 import json
 
-from application.platform import logger, ollama, strings, OS
+from application.platform import logger, ollama, strings
 from application.core.exceptions import EngineConnectionError
 
 
@@ -10,9 +10,6 @@ async def chat(model: str, messages: list[dict]) -> str:
     """Send messages, wait for full response."""
     logger.info("local_model.chat", {"model": model})
     try:
-        current_os = OS.get_supported()
-        if current_os:
-            messages = [{"role": "system", "content": f"When running tools, commands must be for {current_os}."}] + messages
         response = await ollama.post("/api/chat", {"model": model, "messages": messages, "stream": False})
         return response["message"]["content"]
     except ConnectionError as e:
@@ -25,27 +22,12 @@ async def chat_json(model: str, messages: list[dict]) -> dict:
     """Send messages, wait for full JSON response."""
     logger.info("local_model.chat_json", {"model": model})
     try:
-        current_os = OS.get_supported()
-        if current_os:
-            messages = [{"role": "system", "content": f"When running tools, commands must be for {current_os}."}] + messages
         response = await ollama.post("/api/chat", {"model": model, "messages": messages, "stream": False, "format": "json"})
         return strings.extract_json(response["message"]["content"])
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except (KeyError, json.JSONDecodeError) as e:
         raise EngineConnectionError("Model returned an invalid response") from e
-
-
-async def chat_stream(model: str, messages: list[dict]):
-    """Stream response, yielding one token at a time."""
-    logger.info("local_model.chat_stream", {"model": model})
-    try:
-        async for chunk in ollama.stream_post("/api/chat", {"model": model, "messages": messages}):
-            token = chunk.get("message", {}).get("content", "")
-            if token:
-                yield token
-    except ConnectionError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e
 
 
 async def chat_json_stream(model: str, messages: list[dict]) -> dict:
@@ -61,23 +43,6 @@ async def chat_json_stream(model: str, messages: list[dict]) -> dict:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except json.JSONDecodeError as e:
         raise EngineConnectionError("Model returned an invalid JSON response") from e
-
-
-async def chat_stream_paragraph(model: str, messages: list[dict]):
-    """Stream response, yielding one complete paragraph at a time.
-
-    Paragraphs are separated by blank lines (double newline).
-    """
-    logger.info("local_model.chat_stream_paragraph", {"model": model})
-    buffer = ""
-    async for token in chat_stream(model, messages):
-        buffer += token
-        while "\n\n" in buffer:
-            paragraph, buffer = buffer.split("\n\n", 1)
-            if paragraph.strip():
-                yield paragraph.strip()
-    if buffer.strip():
-        yield buffer.strip()
 
 
 async def generate(model: str, prompt: str, json_mode: bool = False) -> str:

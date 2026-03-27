@@ -169,15 +169,11 @@ async def answer(reply, mind) -> None:
 
     scene = mind.scene(thought)
 
-    text = ""
-    async for paragraph in reply(mind.persona, system, scene):
-        if mind.needs_understanding:
-            break
-        if channel:
-            await channels.send(channel, paragraph)
-        text += ("\n" if text else "") + paragraph
+    text = await reply(mind.persona, system, scene)
 
     if text:
+        if channel:
+            await channels.send(channel, text)
         mind.answer(thought, text, event)
 
 
@@ -247,10 +243,10 @@ async def conclude(reply, mind) -> None:
         ]))
         scene = mind.scene(thought)
 
-        text = ""
-        async for paragraph in reply(mind.persona, system, scene):
-            await channels.send(channel, paragraph)
-            text += ("\n" if text else "") + paragraph
+        text = await reply(mind.persona, system, scene)
+
+        if text and channel:
+            await channels.send(channel, text)
 
         mind.answer(thought, text or "", SignalEvent.summarized)
     else:

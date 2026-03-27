@@ -1,4 +1,4 @@
-"""Current — the present state injected as context.
+"""Situation — the present state injected as context.
 
 time()        — current date and time as readable text.
 environment() — the operating system and platform.
@@ -50,6 +50,6 @@ def notes(persona_id: str) -> str:
     return "# Notes\n" + "\n\n".join(entries)
 
 
-def situation(persona_id: str) -> str:
+def current(persona_id: str) -> str:
     parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id)]
     return "\n\n".join(p for p in parts if p)
