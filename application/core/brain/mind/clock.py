@@ -11,7 +11,7 @@ async def tick(mind) -> None:
 
 Pipeline: understand → recognize → answer → decide → conclude
 """
-    logger.info("Ticking in mind", {"persona": mind.persona})
+    logger.debug("Ticking in mind", {"persona": mind.persona})
     from application.core.brain import ego
 
     pipeline = [

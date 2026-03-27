@@ -16,7 +16,7 @@ from application.platform import logger
 
 async def understand(reason, mind) -> None:
     """Route unattended signals to existing or new perception threads."""
-    logger.info("Understanding", {"persona": mind.persona})
+    logger.debug("Understanding", {"persona": mind.persona})
     if not mind.needs_understanding:
         return
 
@@ -92,7 +92,7 @@ async def understand(reason, mind) -> None:
 
 async def recognize(reason, mind) -> None:
     """Match the most important unrecognized perception to a meaning."""
-    logger.info("Recognizing", {"persona": mind.persona})
+    logger.debug("Recognizing", {"persona": mind.persona})
     perception = mind.most_important_perception
     if not perception:
         return
@@ -144,7 +144,7 @@ async def recognize(reason, mind) -> None:
 
 async def answer(reply, mind) -> None:
     """Generate a streaming reply for the most important thought that needs an answer."""
-    logger.info("Answering", {"persona": mind.persona})
+    logger.debug("Answering", {"persona": mind.persona})
     thought = mind.most_important_thought(mind.needs_answer)
     if not thought:
         return
@@ -184,7 +184,7 @@ async def answer(reply, mind) -> None:
 
 async def decide(reason, mind) -> None:
     """Execute the action for the most important pending thought."""
-    logger.info("Deciding", {"persona": mind.persona})
+    logger.debug("Deciding", {"persona": mind.persona})
     import json
 
     thought = mind.most_important_thought(mind.needs_decision)
@@ -228,7 +228,7 @@ async def decide(reason, mind) -> None:
 
 async def conclude(reply, mind) -> None:
     """Summarize for the person and mark the thought as concluded."""
-    logger.info("Concluding", {"persona": mind.persona})
+    logger.debug("Concluding", {"persona": mind.persona})
 
     thought = mind.most_important_thought(mind.needs_conclusion)
     if not thought:

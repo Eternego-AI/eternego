@@ -50,6 +50,21 @@ def notes(persona_id: str) -> str:
     return "# Notes\n" + "\n\n".join(entries)
 
 
-def current(persona_id: str) -> str:
+def normal(persona_id: str) -> str:
     parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id)]
+    return "\n\n".join(p for p in parts if p)
+
+
+def sleep(persona_id: str) -> str:
+    parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id), (
+        'You are going to sleep now. Take a note from what are not completed today and what you want to focus on tomorrow.'
+    )]
+    return "\n\n".join(p for p in parts if p)
+
+
+def wake(persona_id: str) -> str:
+    parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id), (
+        'You just woke up. Read notes and schedule to get a sense of what is on your plate today. If there are any notes'
+        ' about what to focus on, prioritize those.'
+    )]
     return "\n\n".join(p for p in parts if p)

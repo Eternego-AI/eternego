@@ -10,6 +10,5 @@ from . import local_inference_engine
 from . import local_model
 from . import system
 from . import gateways
-from . import transcripts
 from . import agents
 from . import tools

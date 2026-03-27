@@ -555,8 +555,13 @@ async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Out
     """Receive a message, trigger the mind tick, return when say tool responds (web) or fire-and-forget (push channels)."""
     import asyncio
     from application.core.brain.data import Signal, SignalEvent
+    from application.core.brain import situation
     await bus.propose("Talking", {"persona": persona, "channel": message.channel})
     try:
+        if agents.persona(persona).current_situation is situation.sleep:
+            await bus.broadcast("Talked", {"persona": persona})
+            return Outcome(success=True, message="", data={"response": f"{persona.name} is sleeping."})
+
         if message.channel:
             channels.set_latest(persona, message.channel)
         signal = Signal(
@@ -590,10 +595,15 @@ async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Ou
     import asyncio
     from application.core.brain.data import Signal, SignalEvent, Perception, Thought
     from application.core.brain.mind.meanings.query import Query
+    from application.core.brain import situation
     from application.platform import datetimes
 
     await bus.propose("Querying", {"persona": persona, "channel": message.channel})
     try:
+        if agents.persona(persona).current_situation is situation.sleep:
+            await bus.broadcast("Queried", {"persona": persona})
+            return Outcome(success=True, message="", data={"response": f"{persona.name} is sleeping."})
+
         channels.set_latest(persona, message.channel)
 
         signal = Signal(
@@ -685,8 +695,10 @@ async def sleep(persona: Persona) -> Outcome[dict]:
 
     agent = agents.persona(persona)
     try:
-        gateways.of(persona).clear()
+        from application.core.brain import situation
+
         await agent.stop(force=False)
+        agent.current_situation = situation.sleep
 
         await agent.learn_from_experience()
 
@@ -786,7 +798,10 @@ async def wake(persona_id: str) -> Outcome[dict]:
             await bus.broadcast("Wake failed", {"persona": agent, "error": outcome.message})
             return outcome
 
+    from application.core.brain import situation
+
     agents.persona(agent).load_mind()
+    agents.persona(agent).current_situation = situation.wake
     agents.persona(agent).start()
 
     await bus.broadcast("Persona awake", {"persona": agent})

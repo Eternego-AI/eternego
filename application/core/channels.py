@@ -25,7 +25,7 @@ def latest(persona: Persona) -> "Channel | None":
 
 def keep_open(persona: Persona, channel: Channel, on_message: Callable) -> Callable[[], None]:
     """Open a persistent connection for a channel and return a stop callable."""
-    logger.info("Opening channel", {"type": channel.type, "persona": persona.id})
+    logger.info("Opening channel", {"type": channel.type, "persona": persona})
     if channel.type == "telegram":
         token = (channel.credentials or {})["token"]
         stop_event = threading.Event()
@@ -41,7 +41,7 @@ def keep_open(persona: Persona, channel: Channel, on_message: Callable) -> Calla
             asyncio.run_coroutine_threadsafe(handle(), loop)
 
         def on_error(exc: Exception):
-            logger.warning("Telegram polling error", {"persona": persona.id, "error": str(exc)})
+            logger.warning("Telegram polling error", {"persona": persona, "error": str(exc)})
 
         thread = threading.Thread(
             target=telegram.poll,

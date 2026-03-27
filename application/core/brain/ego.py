@@ -1,14 +1,21 @@
 """Ego — the persona's reasoning and reply engine."""
 
 from application.core.data import Persona
-from application.core.brain import character, situation
-from application.core import local_model, frontier, tools, channels, paths
+from application.core.brain import character
+from application.core import local_model, frontier, tools, channels, paths, agents
 from application.platform import logger
 
 
-def identity(persona: Persona) -> str:
-    """Build the character system prompt for this persona."""
-    sections = [character.shape(persona), situation.current(persona.id)]
+async def reason(persona: Persona, system: str, messages: list[dict]) -> dict:
+    """Call the persona's model in JSON mode. Returns a parsed JSON dict."""
+    logger.debug("ego.reason", {"persona": persona, "system": system, "messages": messages})
+    await channels.express_thinking(persona)
+
+    sections = [character.shape(persona)]
+
+    agent = agents.persona(persona)
+    if agent.current_situation:
+        sections.append(agent.current_situation(persona.id))
 
     wishes = paths.read(paths.wishes(persona.id))
     if wishes.strip():
@@ -26,39 +33,62 @@ def identity(persona: Persona) -> str:
             + struggles.strip()
         )
 
-    context = paths.read(paths.context(persona.id))
-    if context.strip():
+    traits = paths.read(paths.person_traits(persona.id))
+    if traits.strip():
         sections.append(
-            "# Current Life Context\n"
-            "This is where the person is right now — use it to stay grounded and timely.\n"
-            + context.strip()
+            "# The person's traits\n"
+            + traits.strip()
         )
 
-    return "\n\n".join(sections)
-
-
-async def reason(persona: Persona, system: str, messages: list[dict]) -> dict:
-    """Call the persona's model in JSON mode. Returns a parsed JSON dict."""
-    logger.info("ego.reason", {"persona": persona.id})
-    await channels.express_thinking(persona)
-    full_system = identity(persona) + "\n\n" + system + "\n\nReturn your response as a JSON object."
+    sections.append(system + "\n\nReturn your response as a JSON object.")
+    full_system = "\n\n".join(sections)
     all_messages = [{"role": "system", "content": full_system}] + messages
     return await local_model.chat_json_stream(persona.model.name, all_messages)
 
 
 async def reply(persona: Persona, system: str, messages: list[dict]) -> str:
     """Send the persona's reply as a complete message."""
-    logger.info("ego.reply", {"persona": persona.id})
+    logger.debug("ego.reply", {"persona": persona, "system": system, "messages": messages})
     await channels.express_thinking(persona)
-    full_system = identity(persona) + "\n\n" + system
+
+    sections = [character.shape(persona)]
+
+    agent = agents.persona(persona)
+    if agent.current_situation:
+        sections.append(agent.current_situation(persona.id))
+
+    wishes = paths.read(paths.wishes(persona.id))
+    if wishes.strip():
+        sections.append(
+            "# What the Person Wants\n"
+            "Consider these wishes and aspirations when thinking — look for opportunities to help.\n"
+            + wishes.strip()
+        )
+
+    struggles = paths.read(paths.struggles(persona.id))
+    if struggles.strip():
+        sections.append(
+            "# What the Person Struggles With\n"
+            "Consider these recurring obstacles — look for ways to ease them.\n"
+            + struggles.strip()
+        )
+
+    traits = paths.read(paths.person_traits(persona.id))
+    if traits.strip():
+        sections.append(
+            "# The person's traits\n"
+            + traits.strip()
+        )
+
+    sections.append(system)
+    full_system = "\n\n".join(sections)
     all_messages = [{"role": "system", "content": full_system}] + messages
     return await local_model.chat(persona.model.name, all_messages)
 
 
-async def escalate(persona: Persona, thread_text: str,
-                   existing_meanings: list) -> str | None:
+async def escalate(persona: Persona, thread_text: str, existing_meanings: list) -> str | None:
     """Generate meaning code via frontier or local model. Returns Python source or None."""
-    logger.info("ego.escalate", {"persona": persona.id})
+    logger.debug("ego.escalate", {"persona": persona, "thread": thread_text})
 
     available_tools = tools.discover()
     existing = [{"name": m.name, "description": m.description()}

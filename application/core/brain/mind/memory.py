@@ -30,7 +30,7 @@ class Memory:
 
     def remember(self) -> None:
         """Load graph state from disk."""
-        logger.info("memory.restore", {"persona": self._persona.id})
+        logger.debug("memory.restore", {"persona": self._persona.id})
         path = paths.mind_state(self._persona.id)
         path.parent.mkdir(parents=True, exist_ok=True)
         persistent_memory.load(self._storage_id, path)
@@ -90,7 +90,7 @@ class Memory:
 
     def persist(self) -> None:
         """Save graph state to disk."""
-        logger.info("memory.persist", {"persona": self._persona.id})
+        logger.debug("memory.persist", {"persona": self._persona.id})
         state = {
             "signals": [
                 {
@@ -143,20 +143,20 @@ class Memory:
 
     def add_meanings(self, *new_meanings) -> None:
         """Add meanings to the live list (for runtime escalation)."""
-        logger.info("memory.add_meanings", {"persona": self._persona.id})
+        logger.debug("memory.add_meanings", {"persona": self._persona.id})
         self._meanings.extend(new_meanings)
 
     # ── Incoming ──────────────────────────────────────────────────────────────
 
     def trigger(self, signal: Signal) -> None:
         """Accept an outside signal into the mind."""
-        logger.info("memory.trigger", {"persona": self._persona.id, "signal": signal.id})
+        logger.debug("memory.trigger", {"persona": self._persona.id, "signal": signal.id})
         self._signals[signal.id] = signal
 
 
     def incept(self, perception: Perception) -> None:
         """Inject a perception directly, bypassing understanding."""
-        logger.info("memory.incept", {"persona": self._persona.id, "impression": perception.impression})
+        logger.debug("memory.incept", {"persona": self._persona.id, "impression": perception.impression})
         for signal in perception.thread:
             self._signals[signal.id] = signal
             self._signal_perceptions.setdefault(signal.id, [])
@@ -281,7 +281,7 @@ class Memory:
 
     def understand(self, signal: Signal, impression: str) -> None:
         """Attach signal to a perception. Only free existing thoughts when the person speaks."""
-        logger.info("memory.understand", {"persona": self._persona.id, "signal": signal.id, "impression": impression})
+        logger.debug("memory.understand", {"persona": self._persona.id, "signal": signal.id, "impression": impression})
         if impression not in self._perceptions:
             self._perceptions[impression] = Perception(impression=impression)
         perception = self._perceptions[impression]
@@ -297,13 +297,13 @@ class Memory:
 
     def question(self, thought: Thought) -> None:
         """Add a pre-formed thought directly (bypasses understand + recognize)."""
-        logger.info("memory.question", {"persona": self._persona.id, "thought": thought.id})
+        logger.debug("memory.question", {"persona": self._persona.id, "thought": thought.id})
         self._thoughts.append(thought)
 
 
     def recognize(self, perception: Perception, meaning, priority: int = 0) -> Thought:
         """Create a Thought from a Perception and a Meaning instance."""
-        logger.info("memory.recognize", {"persona": self._persona.id, "impression": perception.impression})
+        logger.debug("memory.recognize", {"persona": self._persona.id, "impression": perception.impression})
         thought = Thought(perception=perception, meaning=meaning, priority=priority)
         self._thoughts.append(thought)
 
@@ -311,7 +311,7 @@ class Memory:
 
     def answer(self, thought: Thought, text: str, event: SignalEvent = SignalEvent.answered) -> None:
         """Append a persona signal to the thread with the given event."""
-        logger.info("memory.answer", {"persona": self._persona.id, "thought": thought.id, "event": event})
+        logger.debug("memory.answer", {"persona": self._persona.id, "thought": thought.id, "event": event})
         signal = Signal(id=str(uuid.uuid4()), event=event, content=text)
         self._signals[signal.id] = signal
         thought.perception.thread.append(signal)
@@ -322,7 +322,7 @@ class Memory:
 
     def inform(self, thought: Thought, signal: Signal) -> None:
         """Append a signal (tool result) directly into the thread."""
-        logger.info("memory.inform", {"persona": self._persona.id, "thought": thought.id, "signal": signal.id})
+        logger.debug("memory.inform", {"persona": self._persona.id, "thought": thought.id, "signal": signal.id})
         self._signals[signal.id] = signal
         thought.perception.thread.append(signal)
         self._signal_perceptions.setdefault(signal.id, [])
@@ -332,7 +332,7 @@ class Memory:
 
     def forget(self, thought: Thought) -> None:
         """Remove thought and its exclusive Signals from the graph."""
-        logger.info("memory.forget", {"persona": self._persona.id, "thought": thought.id})
+        logger.debug("memory.forget", {"persona": self._persona.id, "thought": thought.id})
         impression = thought.perception.impression
         other_impressions = {t.perception.impression for t in self._thoughts
                              if t is not thought}

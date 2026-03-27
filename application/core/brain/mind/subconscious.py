@@ -60,7 +60,7 @@ async def person_identity(persona, messages: list[dict]) -> None:
     )
     result = await ego.reply(persona, system, messages)
     if result:
-        logger.info("subconscious.person_identity", {"persona": persona.id})
+        logger.debug("subconscious.person_identity", {"persona": persona})
         paths.save_as_string(paths.person_identity(persona.id), result)
 
 
@@ -110,7 +110,7 @@ async def person_traits(persona, messages: list[dict]) -> None:
     )
     result = await ego.reply(persona, system, messages)
     if result:
-        logger.info("subconscious.person_traits", {"persona": persona.id})
+        logger.debug("subconscious.person_traits", {"persona": persona})
         paths.save_as_string(paths.person_traits(persona.id), result)
 
 
@@ -158,7 +158,7 @@ async def wishes(persona, messages: list[dict]) -> None:
     )
     result = await ego.reply(persona, system, messages)
     if result:
-        logger.info("subconscious.wishes", {"persona": persona.id})
+        logger.debug("subconscious.wishes", {"persona": persona})
         paths.save_as_string(paths.wishes(persona.id), result)
 
 
@@ -207,7 +207,7 @@ async def struggles(persona, messages: list[dict]) -> None:
     )
     result = await ego.reply(persona, system, messages)
     if result:
-        logger.info("subconscious.struggles", {"persona": persona.id})
+        logger.debug("subconscious.struggles", {"persona": persona})
         paths.save_as_string(paths.struggles(persona.id), result)
 
 
@@ -254,13 +254,13 @@ async def persona_context(persona, messages: list[dict]) -> None:
     )
     result = await ego.reply(persona, system, messages)
     if result:
-        logger.info("subconscious.persona_context", {"persona": persona.id})
+        logger.debug("subconscious.persona_context", {"persona": persona})
         paths.save_as_string(paths.context(persona.id), result)
 
 
 async def synthesize_dna(persona) -> None:
     """Synthesize persona DNA from accumulated knowledge files."""
-    logger.info("subconscious.synthesize_dna", {"persona": persona.id})
+    logger.debug("subconscious.synthesize_dna", {"persona": persona})
 
     previous_dna = paths.read(paths.dna(persona.id))
     traits = paths.read(paths.person_traits(persona.id))

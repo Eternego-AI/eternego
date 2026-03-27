@@ -93,6 +93,7 @@ class Agent:
         self.pairing_codes: dict = {}
         self.tick_task: asyncio.Task | None = None
         self.blocked: bool = False
+        self.current_situation = None
 
     @property
     def _mem(self) -> Memory:
@@ -148,6 +149,8 @@ class Agent:
         if self.blocked:
             logger.warning("Signal ignored, agent is blocked", {"persona": self.persona, "signal": signal})
             return
+        from application.core.brain import situation
+        self.current_situation = situation.normal
         self._mem.trigger(signal)
 
     def incept(self, perception: Perception) -> None:
