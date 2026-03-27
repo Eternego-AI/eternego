@@ -5,16 +5,22 @@ import urllib.error
 import urllib.request
 
 
-def role_based_text(data: str) -> str:
-    """Parse Anthropic export into role-based text lines."""
+def to_messages(data: str) -> list[dict]:
+    """Parse Anthropic export into role-based messages."""
     export = json.loads(data)
-    lines = []
+    messages = []
     for conversation in export:
         for message in conversation.get("chat_messages", []):
             role = message.get("sender", "unknown")
+            if role == "human":
+                role = "user"
+            elif role == "assistant":
+                pass
+            else:
+                continue
             text = message.get("text", "")
-            lines.append(f"{role}: {text}")
-    return "\n".join(lines)
+            messages.append({"role": role, "content": text})
+    return messages
 
 
 def chat(api_key: str, model: str, messages: list[dict]) -> str:

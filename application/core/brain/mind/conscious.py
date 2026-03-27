@@ -27,6 +27,16 @@ async def understand(reason, mind) -> None:
     unattended = list(mind.needs_understanding)
     signal_map = {i + 1: s for i, s in enumerate(unattended)}
 
+    threads_text = "\n\n".join(
+        f"{i}. {p.impression}\n{perceptions.conversation(p)}"
+        for i, p in thread_map.items()
+    ) if known else "None"
+
+    signals_text = "\n".join(
+        f"{i}. {signals.labeled(s)}"
+        for i, s in signal_map.items()
+    )
+
     system = (
         "# Task: Route incoming signals to conversation threads\n"
         "Threads and signals are both numbered. For each signal number, decide:\n"
@@ -42,18 +52,12 @@ async def understand(reason, mind) -> None:
         "  ]\n"
         "}\n"
         "Use empty lists when not applicable. When in doubt, prefer a new impression "
-        "over forcing a signal into an unrelated thread."
+        "over forcing a signal into an unrelated thread.\n\n"
+        f"Known threads:\n{threads_text}\n\n"
+        f"Signals to route:\n{signals_text}"
     )
 
-    scene = (
-        "Known threads:\n"
-        f"{"\n\n".join(f"{i}.\n{perceptions.thread(p)}" for i, p in thread_map.items()) if known else "None"}\n\n"
-        "Signals to route:\n"
-        f"{"\n".join(f"{i}. {signals.labeled(s)}" for i, s in signal_map.items())}\n\n"
-        "Route each signal by its number."
-    )
-
-    result = await reason(mind.persona, system, scene)
+    result = await reason(mind.persona, system, [{"role": "user", "content": "Route each signal by its number."}])
     routes = result.get("routes", [])
 
     routed = set()
@@ -95,24 +99,23 @@ async def recognize(reason, mind) -> None:
 
     logger.debug("Recognize", {"persona": mind.persona, "impression": perception.impression})
 
+    meanings_text = "\n".join(
+        f"{i + 1}. {m.name}: {m.description()}"
+        for i, m in enumerate(mind.meanings)
+    )
+
     system = (
         "# Task: Match a conversation thread to a meaning\n"
         "Given a numbered list of known meanings and a conversation thread, "
         "return the row number of the best-matching meaning.\n"
         "Use the Escalation row if no meaning fits.\n\n"
         "Return JSON:\n"
-        '{"meaning_row": N}'
-    )
-
-    scene = (
-        "Known meanings:\n"
-        f"{"\n".join(f"{i + 1}. {m.name}: {m.description()}" for i, m in enumerate(mind.meanings))}\n\n"
-        "Thread to match:\n"
-        f"{perceptions.thread(perception)}\n\n"
+        '{"meaning_row": N}\n\n'
+        f"Known meanings:\n{meanings_text}\n\n"
         "Return the row number of the best-matching meaning."
     )
 
-    result = await reason(mind.persona, system, scene)
+    result = await reason(mind.persona, system, perceptions.to_conversation(perception.thread))
     row = result.get("meaning_row")
 
     escalation = next(m for m in mind.meanings if m.name == "Escalation")
@@ -167,9 +170,9 @@ async def answer(reply, mind) -> None:
         prompt,
     ]))
 
-    scene = mind.scene(thought)
+    messages = mind.prompts(thought)
 
-    text = await reply(mind.persona, system, scene)
+    text = await reply(mind.persona, system, messages)
 
     if text:
         if channel:
@@ -197,9 +200,9 @@ async def decide(reason, mind) -> None:
         "If the task is already fulfilled based on the conversation, do not take "
         "further action. Return only: {\"recap\": \"what was accomplished\"}"
     )
-    scene = mind.scene(thought)
+    messages = mind.prompts(thought)
 
-    result = await reason(mind.persona, system, scene)
+    result = await reason(mind.persona, system, messages)
     recap = result.pop("recap", None) if isinstance(result, dict) else None
 
     if not result:
@@ -241,9 +244,9 @@ async def conclude(reply, mind) -> None:
             thought.meaning.description(),
             summary_prompt,
         ]))
-        scene = mind.scene(thought)
+        messages = mind.prompts(thought)
 
-        text = await reply(mind.persona, system, scene)
+        text = await reply(mind.persona, system, messages)
 
         if text and channel:
             await channels.send(channel, text)

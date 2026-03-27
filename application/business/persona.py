@@ -368,8 +368,8 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
     await bus.propose("Feeding persona", {"persona": persona, "source": source})
 
     try:
-        conversations = await frontier.read(data, source)
-        await agents.persona(persona).learn(conversations)
+        messages = await frontier.read(data, source)
+        await agents.persona(persona).learn(messages)
 
         await bus.broadcast("Persona fed", {"persona": persona, "source": source})
         return Outcome(

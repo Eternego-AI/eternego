@@ -4,19 +4,21 @@ import json
 import urllib.request
 
 
-def role_based_text(data: str) -> str:
-    """Parse OpenAI export into role-based text lines."""
+def to_messages(data: str) -> list[dict]:
+    """Parse OpenAI export into role-based messages."""
     export = json.loads(data)
-    lines = []
+    messages = []
     for conversation in export:
         mapping = conversation.get("mapping", {})
         for node in mapping.values():
             message = node.get("message")
             if message and message.get("content", {}).get("parts"):
                 role = message["author"]["role"]
+                if role not in ("user", "assistant"):
+                    continue
                 text = " ".join(message["content"]["parts"])
-                lines.append(f"{role}: {text}")
-    return "\n".join(lines)
+                messages.append({"role": role, "content": text})
+    return messages
 
 
 def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False) -> str:

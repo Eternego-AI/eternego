@@ -1,7 +1,8 @@
 """Subconscious — sleep-time knowledge extraction.
 
-Each function receives (persona, conversations), builds a single prompt,
-uses ego.reply to stream the result, and saves directly to the relevant file.
+Each function receives (persona, messages), where messages is a list of
+role-based conversation dicts. The system prompt tells the model what to
+extract; the messages show the actual conversation.
 """
 
 from application.core.brain import ego
@@ -9,7 +10,7 @@ from application.core import paths
 from application.platform import logger
 
 
-async def person_identity(persona, conversations: str) -> None:
+async def person_identity(persona, messages: list[dict]) -> None:
     """Extract and merge identity facts."""
     existing = paths.read(paths.person_identity(persona.id))
     system = (
@@ -27,11 +28,9 @@ async def person_identity(persona, conversations: str) -> None:
         "• Important ongoing personal and professional contacts (close friends by name + context, primary doctors/dentists/specialists with name + specialty + address + phone/email, when clearly presented as current and important)\n"
         "• Timezone (with date ranges only for temporary travel/relocation)\n\n"
         "These are facts treated as close to permanent profile data — always remember them and do not contradict lightly.\n\n"
-        "## Conversations\n\n"
-        "Messages labeled 'user' or 'human' are from the person. Messages labeled 'assistant' are from an AI — "
+        "User messages are from the person. Assistant messages are from the persona — "
         "use those only as context to understand what the person was saying or responding to. "
         "Extract insights ONLY from the person's own words.\n\n"
-        f"{conversations}\n\n"
         f"## Known Facts\n\n{existing or '(none yet)'}\n\n"
         "## Task\n\n"
         "1. Extract ONLY new facts that clearly belong in the categories above.\n"
@@ -59,13 +58,13 @@ async def person_identity(persona, conversations: str) -> None:
         "• No bullets, no headers, no explanations, no extra text\n"
         "If no facts exist or none are extracted, return exactly: (none yet)"
     )
-    result = await ego.reply(persona, system, "Process the input above.")
+    result = await ego.reply(persona, system, messages)
     if result:
         logger.info("subconscious.person_identity", {"persona": persona.id})
         paths.save_as_string(paths.person_identity(persona.id), result)
 
 
-async def person_traits(persona, conversations: str) -> None:
+async def person_traits(persona, messages: list[dict]) -> None:
     """Extract and merge behavioral traits."""
     existing = paths.read(paths.person_traits(persona.id))
     system = (
@@ -79,11 +78,9 @@ async def person_traits(persona, conversations: str) -> None:
         "• Interaction preferences (likes banter, prefers straight-to-point, enjoys emojis, dislikes small talk, wants empathy first…)\n"
         "• General personality vibes shown repeatedly (optimistic, skeptical, curious, blunt, gentle…)\n\n"
         "These traits guide **how you should behave** in future replies (be more concise, add humor, always give reasoning, match sarcasm level, etc.).\n\n"
-        "## Conversations\n\n"
-        "Messages labeled 'user' or 'human' are from the person. Messages labeled 'assistant' are from an AI — "
+        "User messages are from the person. Assistant messages are from the persona — "
         "use those only as context to understand what the person was saying or responding to. "
         "Extract insights ONLY from the person's own words.\n\n"
-        f"{conversations}\n\n"
         f"## Known Traits\n\n{existing or '(none yet)'}\n\n"
         "## Task\n\n"
         "1. Extract ONLY recurring / strongly emphasized patterns from conversations that match the categories above.\n"
@@ -111,13 +108,13 @@ async def person_traits(persona, conversations: str) -> None:
         "• No bullets, no headers, no extra text, no explanations\n"
         "If nothing new or no traits at all, return exactly: (none yet)"
     )
-    result = await ego.reply(persona, system, "Process the input above.")
+    result = await ego.reply(persona, system, messages)
     if result:
         logger.info("subconscious.person_traits", {"persona": persona.id})
         paths.save_as_string(paths.person_traits(persona.id), result)
 
 
-async def wishes(persona, conversations: str) -> None:
+async def wishes(persona, messages: list[dict]) -> None:
     """Extract and merge wishes and aspirations."""
     existing = paths.read(paths.wishes(persona.id))
     system = (
@@ -128,11 +125,9 @@ async def wishes(persona, conversations: str) -> None:
         "• courage opportunities (they've expressed wanting to speak up → suggest asking for the Paris assignment)\n"
         "• life-transition windows (feeling ready for marriage / kids / moving / starting a business → highlight relevant gaps or triggers)\n"
         "• natural next steps that match their inner direction\n\n"
-        "## Conversations\n\n"
-        "Messages labeled 'user' or 'human' are from the person. Messages labeled 'assistant' are from an AI — "
+        "User messages are from the person. Assistant messages are from the persona — "
         "use those only as context to understand what the person was saying or responding to. "
         "Extract insights ONLY from the person's own words.\n\n"
-        f"{conversations}\n\n"
         f"## Known Aspirations\n\n{existing or '(none yet)'}\n\n"
         "## Task\n\n"
         "1. Extract ONLY entries that reveal genuine, recurring or emotionally charged **wants, dreams, readiness, fears-about-missing-out, or life-direction leanings**.\n"
@@ -161,35 +156,33 @@ async def wishes(persona, conversations: str) -> None:
         "• No bullets, no headers, no explanations, no extra commentary\n"
         "If nothing qualifies or no new items, return exactly: (none yet)"
     )
-    result = await ego.reply(persona, system, "Process the input above.")
+    result = await ego.reply(persona, system, messages)
     if result:
         logger.info("subconscious.wishes", {"persona": persona.id})
         paths.save_as_string(paths.wishes(persona.id), result)
 
 
-async def struggles(persona, conversations: str) -> None:
+async def struggles(persona, messages: list[dict]) -> None:
     """Extract and merge recurring struggles."""
     existing = paths.read(paths.struggles(persona.id))
     system = (
         "# Struggle & Friction Maintenance\n\n"
-        "You maintain a focused list of the person's **recurring personal obstacles, emotional friction points, energy drains, avoidance patterns, and areas of repeated difficulty** — things that consistently cause stress, procrastination, shame, inefficiency, or stuckness.\n\n"
+        "You maintain a focused list of the person’s **recurring personal obstacles, emotional friction points, energy drains, avoidance patterns, and areas of repeated difficulty** — things that consistently cause stress, procrastination, shame, inefficiency, or stuckness.\n\n"
         "These entries help you:\n"
         "• offer empathy when relevant\n"
         "• suggest gentle workarounds or tools\n"
         "• avoid triggering topics unnecessarily\n"
         "• highlight possible growth areas without pushing\n"
         "• recognize when something is a real blocker vs a passing mood\n\n"
-        "## Conversations\n\n"
-        "Messages labeled 'user' or 'human' are from the person. Messages labeled 'assistant' are from an AI — "
+        "User messages are from the person. Assistant messages are from the persona — "
         "use those only as context to understand what the person was saying or responding to. "
-        "Extract insights ONLY from the person's own words.\n\n"
-        f"{conversations}\n\n"
+        "Extract insights ONLY from the person’s own words.\n\n"
         f"## Known Struggles\n\n{existing or '(none yet)'}\n\n"
         "## Task\n\n"
         "1. Extract ONLY patterns that show **recurring difficulty, emotional weight, avoidance, or consistent self-reported struggle**.\n"
         "2. Merge with known struggles.\n"
         "3. Combine similar/duplicate items into one stronger, more precise statement.\n"
-        "4. If evolution or contradictions appear, keep the most recent/most intense version and add a short note at the end (e.g. 'Note: struggle with presenting has lessened since public speaking course').\n"
+        "4. If evolution or contradictions appear, keep the most recent/most intense version and add a short note at the end (e.g. ‘Note: struggle with presenting has lessened since public speaking course’).\n"
         "5. Be very conservative: require repetition, strong emotional language, or multiple examples — when in doubt, exclude.\n\n"
         "Good struggle examples (include these kinds):\n"
         "• The person struggles significantly with public speaking and presenting their work to groups.\n"
@@ -200,7 +193,7 @@ async def struggles(persona, conversations: str) -> None:
         "• The person has ongoing difficulty maintaining consistent exercise or healthy routines.\n"
         "• The person struggles to ask for help even when overwhelmed.\n\n"
         "Strictly EXCLUDE:\n"
-        "• One-off complaints or bad-day venting ('I hate today’s meeting', 'work was annoying')\n"
+        "• One-off complaints or bad-day venting (‘I hate today’s meeting’, ‘work was annoying’)\n"
         "• Specific tasks, reminders, requests, schedules, tool commands\n"
         "• Temporary moods or situational stress without pattern\n"
         "• Objective facts (location, contacts, job title — Identity Facts)\n"
@@ -208,17 +201,17 @@ async def struggles(persona, conversations: str) -> None:
         "• Desires, dreams, readiness signals (wants to travel, start a company — Aspirations & Life Momentum)\n\n"
         "Return ONLY the complete merged list.\n"
         "• One struggle per line\n"
-        "• Start every line with 'The person '\n"
+        "• Start every line with ‘The person ‘\n"
         "• No bullets, no headers, no explanations, no extra commentary\n"
         "If nothing qualifies or no new items, return exactly: (none yet)"
     )
-    result = await ego.reply(persona, system, "Process the input above.")
+    result = await ego.reply(persona, system, messages)
     if result:
         logger.info("subconscious.struggles", {"persona": persona.id})
         paths.save_as_string(paths.struggles(persona.id), result)
 
 
-async def persona_context(persona, conversations: str) -> None:
+async def persona_context(persona, messages: list[dict]) -> None:
     """Extract and merge persona context."""
     existing = paths.read(paths.context(persona.id))
     system = (
@@ -226,11 +219,9 @@ async def persona_context(persona, conversations: str) -> None:
         "You maintain a concise, first-person 'rolling snapshot' document that captures the person's **current life season, active chapters, emotional weather, key ongoing threads, and important situational context**.\n"
         "This is the 'what chapter of life are they in right now?' view — used to keep responses grounded, timely, empathetic, and contextually intelligent.\n\n"
         "Focus on things that feel alive and relatively current (weeks to ~6–12 months horizon), not permanent facts or very long-term dreams.\n\n"
-        "## Conversations\n\n"
-        "Messages labeled 'user' or 'human' are from the person. Messages labeled 'assistant' are from an AI — "
+        "User messages are from the person. Assistant messages are from the persona — "
         "use those only as context to understand what the person was saying or responding to. "
         "Extract insights ONLY from the person's own words.\n\n"
-        f"{conversations}\n\n"
         f"## Known Context\n\n{existing or '(none yet)'}\n\n"
         "## Task\n\n"
         "1. Extract ONLY meaningful updates to the person's current life situation, active endeavors, emotional state, relational dynamics, or life-phase context.\n"
@@ -261,7 +252,7 @@ async def persona_context(persona, conversations: str) -> None:
         "• Keep the total concise — aim for 4–12 high-quality lines max\n"
         "If nothing relevant is present or all prior context is now outdated, return exactly: (light context — mostly quiet season right now)"
     )
-    result = await ego.reply(persona, system, "Process the input above.")
+    result = await ego.reply(persona, system, messages)
     if result:
         logger.info("subconscious.persona_context", {"persona": persona.id})
         paths.save_as_string(paths.context(persona.id), result)
@@ -294,6 +285,6 @@ async def synthesize_dna(persona) -> None:
         "Sections: Identity, Behavioral Patterns, Working Style, Current Focus.\n\n"
         "Return the profile as markdown text."
     )
-    result = await ego.reply(persona, system, "Synthesize the profile.")
+    result = await ego.reply(persona, system, [{"role": "user", "content": "Synthesize the profile."}])
     if result:
         paths.write_dna(persona.id, result)

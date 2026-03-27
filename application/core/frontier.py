@@ -101,14 +101,14 @@ async def generate_training_set(model: Model, dna: str) -> list[dict]:
     return parsed.get("training_pairs", [])
 
 
-async def read(data: str, source: str) -> str:
-    """Parse external AI history into role-based text."""
+async def read(data: str, source: str) -> list[dict]:
+    """Parse external AI history into role-based messages."""
     logger.info("Reading external LLM history", {"source": source})
     try:
         if source == "claude":
-            return anthropic.role_based_text(data)
+            return anthropic.to_messages(data)
 
-        return openai.role_based_text(data)
+        return openai.to_messages(data)
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise FrontierError("Could not parse external data") from e
 

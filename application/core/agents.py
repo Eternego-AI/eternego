@@ -168,20 +168,20 @@ class Agent:
 
     # ── Learning ─────────────────────────────────────────────────────────────
 
-    async def learn(self, conversations: str) -> None:
-        """Run subconscious knowledge extraction on the given conversations."""
+    async def learn(self, messages: list[dict]) -> None:
+        """Run subconscious knowledge extraction on the given conversation messages."""
         logger.info("Learn", {"persona": self.persona})
         from application.core.brain.mind import subconscious as sub
 
-        if not conversations:
+        if not messages:
             logger.warning("No conversations to learn from", {"persona": self.persona})
             return
 
-        await sub.person_identity(self.persona, conversations)
-        await sub.person_traits(self.persona, conversations)
-        await sub.wishes(self.persona, conversations)
-        await sub.struggles(self.persona, conversations)
-        await sub.persona_context(self.persona, conversations)
+        await sub.person_identity(self.persona, messages)
+        await sub.person_traits(self.persona, messages)
+        await sub.wishes(self.persona, messages)
+        await sub.struggles(self.persona, messages)
+        await sub.persona_context(self.persona, messages)
         await sub.synthesize_dna(self.persona)
 
     async def learn_from_experience(self) -> None:
@@ -195,11 +195,11 @@ class Agent:
         if not all_thoughts:
             return
 
-        conversations = []
+        messages = []
         for thought in all_thoughts:
-            conversations.append(perceptions.thread(thought.perception))
+            messages.extend(perceptions.to_conversation(thought.perception.thread))
 
-        await self.learn("\n\n---\n\n".join(conversations))
+        await self.learn(messages)
 
         for thought in all_thoughts:
             from application.core.brain.data import SignalEvent

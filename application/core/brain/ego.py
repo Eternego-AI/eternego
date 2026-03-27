@@ -26,31 +26,33 @@ def identity(persona: Persona) -> str:
             + struggles.strip()
         )
 
+    context = paths.read(paths.context(persona.id))
+    if context.strip():
+        sections.append(
+            "# Current Life Context\n"
+            "This is where the person is right now — use it to stay grounded and timely.\n"
+            + context.strip()
+        )
+
     return "\n\n".join(sections)
 
 
-async def reason(persona: Persona, system: str, scene: str) -> dict:
+async def reason(persona: Persona, system: str, messages: list[dict]) -> dict:
     """Call the persona's model in JSON mode. Returns a parsed JSON dict."""
     logger.info("ego.reason", {"persona": persona.id})
     await channels.express_thinking(persona)
     full_system = identity(persona) + "\n\n" + system + "\n\nReturn your response as a JSON object."
-    messages = [
-        {"role": "system", "content": full_system},
-        {"role": "user", "content": scene},
-    ]
-    return await local_model.chat_json_stream(persona.model.name, messages)
+    all_messages = [{"role": "system", "content": full_system}] + messages
+    return await local_model.chat_json_stream(persona.model.name, all_messages)
 
 
-async def reply(persona: Persona, system: str, scene: str) -> str:
+async def reply(persona: Persona, system: str, messages: list[dict]) -> str:
     """Send the persona's reply as a complete message."""
     logger.info("ego.reply", {"persona": persona.id})
     await channels.express_thinking(persona)
     full_system = identity(persona) + "\n\n" + system
-    messages = [
-        {"role": "system", "content": full_system},
-        {"role": "user", "content": scene},
-    ]
-    return await local_model.chat(persona.model.name, messages)
+    all_messages = [{"role": "system", "content": full_system}] + messages
+    return await local_model.chat(persona.model.name, all_messages)
 
 
 async def escalate(persona: Persona, thread_text: str,

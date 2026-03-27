@@ -265,10 +265,8 @@ class Memory:
             return None
         return min(thoughts, key=lambda t: (-t.priority, t.id))
 
-    # ── Scene ────────────────────────────────────────────────────────────────
-
-    def scene(self, thought: Thought) -> str:
-        """Build a scene description for a thought, collapsing before the latest recap."""
+    def prompts(self, thought: Thought) -> list[dict]:
+        """Build role-based prompt messages for a thought, collapsing before the latest summary."""
         from application.core.brain import perceptions
 
         thread = thought.perception.thread
@@ -277,7 +275,7 @@ class Memory:
             if thread[i].event == SignalEvent.summarized:
                 start = i
                 break
-        return perceptions.narrate(thread[start:])
+        return perceptions.to_messages(thread[start:])
 
     # ── Mutation methods ──────────────────────────────────────────────────────
 

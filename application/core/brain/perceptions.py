@@ -52,3 +52,42 @@ def thread(perception: Perception) -> str:
         ts = s.created_at.strftime("%Y-%m-%d %H:%M UTC")
         lines.append(f"[{ts}] {s.event}: {s.content}")
     return "\n".join(lines)
+
+
+def to_conversation(signals: list[Signal]) -> list[dict]:
+    """Only what was said — no tool mechanics. Coalesces consecutive same-role messages."""
+    messages = []
+    for s in signals:
+        if s.event in (SignalEvent.heard, SignalEvent.queried, SignalEvent.nudged):
+            role = "user"
+        elif s.event in (SignalEvent.answered, SignalEvent.clarified, SignalEvent.summarized):
+            role = "assistant"
+        else:
+            continue
+
+        if messages and messages[-1]["role"] == role:
+            messages[-1]["content"] += "\n" + s.content
+        else:
+            messages.append({"role": role, "content": s.content})
+    return messages
+
+
+def to_messages(signals: list[Signal]) -> list[dict]:
+    """Full thread including tool results — for pipeline steps that need execution context.
+
+    Coalesces consecutive same-role messages.
+    """
+    messages = []
+    for s in signals:
+        if s.event in (SignalEvent.heard, SignalEvent.queried, SignalEvent.nudged, SignalEvent.executed):
+            role = "user"
+        elif s.event in (SignalEvent.answered, SignalEvent.clarified, SignalEvent.summarized):
+            role = "assistant"
+        else:
+            continue
+
+        if messages and messages[-1]["role"] == role:
+            messages[-1]["content"] += "\n" + s.content
+        else:
+            messages.append({"role": role, "content": s.content})
+    return messages
