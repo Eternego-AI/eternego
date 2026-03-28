@@ -1,17 +1,15 @@
 """Reminder — the person wants to be reminded of something at a specific time."""
 
-import uuid
-
-from application.core.brain.data import Meaning, Signal, SignalEvent
+from application.core.brain.data import Meaning
 from application.core import paths
-from application.platform import datetimes, logger
+from application.platform import datetimes
 
 
 class Reminder(Meaning):
     name = "Reminder"
 
     def description(self) -> str:
-        return "The person asks to be reminded or alerted at a future time — a timed nudge, alarm, or scheduled notification."
+        return "The person asks to CREATE or SET a new reminder for a future time. This is about saving a new reminder, not about delivering one that is already due."
 
     def clarify(self) -> str:
         return (
@@ -48,23 +46,19 @@ class Reminder(Meaning):
         recurrence = persona_response.get("recurrence", "")
 
         if not trigger or not timezone or not content:
-            logger.info("reminder.run: incomplete data", {"trigger": trigger, "timezone": timezone})
-            return Signal(id=str(uuid.uuid4()), event=SignalEvent.executed, content="Error: trigger, timezone, or content is missing. Extract all three from the conversation and try again.")
+            raise ValueError("trigger, timezone, or content is missing")
 
-        try:
-            utc = datetimes.to_utc(trigger, timezone)
-        except Exception as e:
-            logger.error("reminder.run: invalid trigger or timezone", {"error": str(e)})
-            return Signal(id=str(uuid.uuid4()), event=SignalEvent.executed, content=f"Error: invalid trigger or timezone — {e}. Correct the format and try again.")
-
+        utc = datetimes.to_utc(trigger, timezone)
         body = content
         if recurrence:
             body += f"\nrecurrence: {recurrence}\ntimezone: {timezone}"
 
-        paths.save_destiny_entry(
-            self.persona.id,
-            "reminder",
-            utc.strftime("%Y-%m-%d %H:%M"),
-            body,
-        )
-        return None
+        async def action():
+            paths.save_destiny_entry(
+                self.persona.id,
+                "reminder",
+                utc.strftime("%Y-%m-%d %H:%M"),
+                body,
+            )
+
+        return action

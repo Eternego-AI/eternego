@@ -1,17 +1,15 @@
 """Schedule — the person wants to schedule an appointment, meeting, or event."""
 
-import uuid
-
-from application.core.brain.data import Meaning, Signal, SignalEvent
+from application.core.brain.data import Meaning
 from application.core import paths
-from application.platform import datetimes, logger
+from application.platform import datetimes
 
 
 class Scheduler(Meaning):
     name = "Scheduler"
 
     def description(self) -> str:
-        return "The person wants to schedule an appointment, meeting, or event at a specific time."
+        return "The person asks to CREATE or SCHEDULE a new appointment, meeting, or event at a future time. This is about saving a new event, not about delivering one that is already due."
 
     def clarify(self) -> str:
         return (
@@ -48,23 +46,19 @@ class Scheduler(Meaning):
         recurrence = persona_response.get("recurrence", "")
 
         if not trigger or not timezone or not content:
-            logger.info("schedule.run: incomplete data", {"trigger": trigger, "timezone": timezone})
-            return Signal(id=str(uuid.uuid4()), event=SignalEvent.executed, content="Error: trigger, timezone, or content is missing. Extract all three from the conversation and try again.")
+            raise ValueError("trigger, timezone, or content is missing")
 
-        try:
-            utc = datetimes.to_utc(trigger, timezone)
-        except Exception as e:
-            logger.error("schedule.run: invalid trigger or timezone", {"error": str(e)})
-            return Signal(id=str(uuid.uuid4()), event=SignalEvent.executed, content=f"Error: invalid trigger or timezone — {e}. Correct the format and try again.")
-
+        utc = datetimes.to_utc(trigger, timezone)
         body = content
         if recurrence:
             body += f"\nrecurrence: {recurrence}\ntimezone: {timezone}"
 
-        paths.save_destiny_entry(
-            self.persona.id,
-            "schedule",
-            utc.strftime("%Y-%m-%d %H:%M"),
-            body,
-        )
-        return None
+        async def action():
+            paths.save_destiny_entry(
+                self.persona.id,
+                "schedule",
+                utc.strftime("%Y-%m-%d %H:%M"),
+                body,
+            )
+
+        return action

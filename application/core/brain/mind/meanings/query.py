@@ -26,9 +26,11 @@ class Query(Meaning):
         )
 
     async def run(self, persona_response: dict):
-        """Send the response to all active channels and resolve."""
         text = persona_response.get("response", "")
         if not text:
             return None
-        await channels.send_all(self.persona, text)
-        return None
+
+        async def action():
+            await channels.send_all(self.persona, text)
+
+        return action

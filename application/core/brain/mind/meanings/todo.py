@@ -1,8 +1,6 @@
 """Todo — notify the person about due entries and handle recurrence."""
 
-import uuid
-
-from application.core.brain.data import Meaning, Signal, SignalEvent
+from application.core.brain.data import Meaning
 from application.core import paths
 from application.platform import datetimes, logger
 
@@ -11,7 +9,7 @@ class Todo(Meaning):
     name = "Todo"
 
     def description(self) -> str:
-        return "Due reminders or events that need to be communicated to the person."
+        return "A previously saved reminder or event has reached its due time and must be DELIVERED to the person now. This is a system notification, not a person asking to create something new."
 
     def clarify(self) -> str:
         return (
@@ -46,31 +44,30 @@ class Todo(Meaning):
         if not entries:
             return None
 
-        errors = []
-        for entry in entries:
-            trigger = entry.get("trigger", "")
-            tz = entry.get("timezone", "")
-            content = entry.get("content", "")
-            event = entry.get("event", "schedule")
+        async def action():
+            errors = []
+            for entry in entries:
+                trigger = entry.get("trigger", "")
+                tz = entry.get("timezone", "")
+                content = entry.get("content", "")
+                event = entry.get("event", "schedule")
 
-            if not trigger or not tz or not content:
-                continue
+                if not trigger or not tz or not content:
+                    continue
 
-            try:
-                utc = datetimes.to_utc(trigger, tz)
-                paths.save_destiny_entry(
-                    self.persona.id,
-                    event,
-                    utc.strftime("%Y-%m-%d %H:%M"),
-                    content,
-                )
-                logger.info("todo: scheduled next recurrence", {"trigger": trigger, "event": event})
-            except Exception as e:
-                errors.append(f"{event} at {trigger}: {e}")
+                try:
+                    utc = datetimes.to_utc(trigger, tz)
+                    paths.save_destiny_entry(
+                        self.persona.id,
+                        event,
+                        utc.strftime("%Y-%m-%d %H:%M"),
+                        content,
+                    )
+                    logger.info("todo: scheduled next recurrence", {"trigger": trigger, "event": event})
+                except Exception as e:
+                    errors.append(f"{event} at {trigger}: {e}")
 
-        if errors:
-            return Signal(
-                id=str(uuid.uuid4()), event=SignalEvent.executed,
-                content=f"Error scheduling next recurrence: {'; '.join(errors)}",
-            )
-        return None
+            if errors:
+                return f"Error scheduling next recurrence: {'; '.join(errors)}"
+
+        return action

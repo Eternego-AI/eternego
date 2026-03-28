@@ -1,11 +1,10 @@
 """Recalling — the persona recalls a past conversation from history."""
 
-import uuid
 from pathlib import Path
 
-from application.core.brain.data import Meaning, Signal, SignalEvent
+from application.core.brain.data import Meaning
 from application.core import paths
-from application.platform import filesystem, logger
+from application.platform import filesystem
 
 
 class Recalling(Meaning):
@@ -52,28 +51,23 @@ class Recalling(Meaning):
 
     async def run(self, persona_response: dict):
         filenames = persona_response.get("files", [])
-        if not filenames:
-            return Signal(
-                id=str(uuid.uuid4()), event=SignalEvent.executed,
-                content="No matching conversations found in history.",
-            )
-
         history_dir = paths.history(self.persona.id)
-        contents = []
-        for name in filenames:
-            target = history_dir / Path(name).name
-            if target.exists():
-                text = filesystem.read(target).strip()
-                if text:
-                    contents.append(f"## {name}\n\n{text}")
 
-        if not contents:
-            return Signal(
-                id=str(uuid.uuid4()), event=SignalEvent.executed,
-                content="Could not find the requested history files.",
-            )
+        async def action():
+            if not filenames:
+                return "No matching conversations found in history."
 
-        return Signal(
-            id=str(uuid.uuid4()), event=SignalEvent.executed,
-            content="\n\n---\n\n".join(contents),
-        )
+            contents = []
+            for name in filenames:
+                target = history_dir / Path(name).name
+                if target.exists():
+                    text = filesystem.read(target).strip()
+                    if text:
+                        contents.append(f"## {name}\n\n{text}")
+
+            if not contents:
+                return "Could not find the requested history files."
+
+            return "\n\n---\n\n".join(contents)
+
+        return action

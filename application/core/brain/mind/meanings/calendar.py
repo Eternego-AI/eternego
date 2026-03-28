@@ -1,11 +1,9 @@
 """Calendar — the person wants to check what is on their calendar."""
 
 import re
-import uuid
 
-from application.core.brain.data import Meaning, Signal, SignalEvent
+from application.core.brain.data import Meaning
 from application.core import paths
-from application.platform import logger
 
 
 class Calendar(Meaning):
@@ -45,38 +43,29 @@ class Calendar(Meaning):
         end = persona_response.get("end", "")
 
         if not start or not end:
-            return Signal(
-                id=str(uuid.uuid4()), event=SignalEvent.executed,
-                content="Error: start or end date is missing.",
-            )
+            raise ValueError("start or end date is missing")
 
-        destiny_dir = paths.destiny(self.persona.id)
-        if not destiny_dir.exists():
-            return Signal(
-                id=str(uuid.uuid4()), event=SignalEvent.executed,
-                content="Calendar is empty — no reminders or events scheduled.",
-            )
+        async def action():
+            destiny_dir = paths.destiny(self.persona.id)
+            if not destiny_dir.exists():
+                return "Calendar is empty — no reminders or events scheduled."
 
-        entries = []
-        for f in sorted(destiny_dir.glob("*.md")):
-            match = re.search(r"(\d{4}-\d{2}-\d{2})-\d{2}-\d{2}", f.name)
-            if not match:
-                continue
-            file_date = match.group(1)
-            if start <= file_date <= end:
-                content = f.read_text().strip()
-                kind = "reminder" if f.name.startswith("reminder") else "event"
-                time_match = re.search(r"\d{4}-(\d{2}-\d{2})-(\d{2})-(\d{2})", f.name)
-                time_str = f"{time_match.group(2)}:{time_match.group(3)}" if time_match else ""
-                entries.append(f"{file_date} {time_str} [{kind}] {content}")
+            entries = []
+            for f in sorted(destiny_dir.glob("*.md")):
+                match = re.search(r"(\d{4}-\d{2}-\d{2})-\d{2}-\d{2}", f.name)
+                if not match:
+                    continue
+                file_date = match.group(1)
+                if start <= file_date <= end:
+                    content = f.read_text().strip()
+                    kind = "reminder" if f.name.startswith("reminder") else "event"
+                    time_match = re.search(r"\d{4}-(\d{2}-\d{2})-(\d{2})-(\d{2})", f.name)
+                    time_str = f"{time_match.group(2)}:{time_match.group(3)}" if time_match else ""
+                    entries.append(f"{file_date} {time_str} [{kind}] {content}")
 
-        if not entries:
-            return Signal(
-                id=str(uuid.uuid4()), event=SignalEvent.executed,
-                content=f"No reminders or events found between {start} and {end}.",
-            )
+            if not entries:
+                return f"No reminders or events found between {start} and {end}."
 
-        return Signal(
-            id=str(uuid.uuid4()), event=SignalEvent.executed,
-            content=f"Calendar entries ({start} to {end}):\n" + "\n".join(entries),
-        )
+            return f"Calendar entries ({start} to {end}):\n" + "\n".join(entries)
+
+        return action

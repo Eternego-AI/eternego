@@ -226,15 +226,35 @@ async def decide(mind) -> None:
     mind.answer(thought, decision_text, SignalEvent.decided)
 
     try:
-        signal = await thought.meaning.run(result)
+        action = await thought.meaning.run(result)
     except Exception as e:
         logger.error("Decide: run failed", {"persona": mind.persona, "error": str(e)})
-        signal = Signal(id=str(uuid.uuid4()), event=SignalEvent.executed, content=f"Error: {e}")
+        mind.inform(thought, Signal(
+            id=str(uuid.uuid4()), event=SignalEvent.executed,
+            content=f"[{thought.meaning.name}: {decision_text}] Error: {e}",
+        ))
+        return
 
-    if signal is None:
+    if action is None:
         mind.answer(thought, recap or "", SignalEvent.recap)
+        return
+
+    try:
+        output = await action()
+    except Exception as e:
+        logger.error("Decide: action failed", {"persona": mind.persona, "error": str(e)})
+        output = f"Error: {e}"
+
+    if output is not None:
+        content = f"[{thought.meaning.name}: {decision_text}]"
+        if output:
+            content += f" {output}"
+        mind.inform(thought, Signal(
+            id=str(uuid.uuid4()), event=SignalEvent.executed,
+            content=content,
+        ))
     else:
-        mind.inform(thought, signal)
+        mind.answer(thought, recap or "", SignalEvent.recap)
 
 
 # ── Concluding ───────────────────────────────────────────────────────────────

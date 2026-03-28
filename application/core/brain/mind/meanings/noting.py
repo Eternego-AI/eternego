@@ -1,9 +1,8 @@
 """Noting — the persona takes a note to remember something."""
 
 import re
-import uuid
 
-from application.core.brain.data import Meaning, Signal, SignalEvent
+from application.core.brain.data import Meaning
 from application.core import paths
 from application.platform import datetimes
 
@@ -43,22 +42,14 @@ class Noting(Meaning):
         content = persona_response.get("content", "").strip()
 
         if not title or not content:
-            return Signal(
-                id=str(uuid.uuid4()), event=SignalEvent.executed,
-                content="Error: title or content is missing.",
-            )
+            raise ValueError("title or content is missing")
 
         slug = re.sub(r"\W+", "-", title.lower()).strip("-")[:50]
 
-        try:
+        async def action():
             paths.write_as_string(
                 paths.notes(self.persona.id) / f"{slug}-{datetimes.stamp(datetimes.now())}.md",
-              f"# {title}\n\n{content}\n"
-            )
-        except Exception as e:
-            return Signal(
-                id=str(uuid.uuid4()), event=SignalEvent.executed,
-                content=f"Error saving note: {e}",
+                f"# {title}\n\n{content}\n"
             )
 
-        return None
+        return action
