@@ -1,12 +1,12 @@
-"""Todo — notify the person about due entries and handle recurrence."""
+"""DueNotification — notify the person about due entries and handle recurrence."""
 
 from application.core.brain.data import Meaning
 from application.core import paths
 from application.platform import datetimes, logger
 
 
-class Todo(Meaning):
-    name = "Todo"
+class DueNotification(Meaning):
+    name = "Due Notification"
 
     def description(self) -> str:
         return "A previously saved reminder or event has reached its due time and must be DELIVERED to the person now. This is a system notification, not a person asking to create something new."

@@ -12,7 +12,7 @@ from application.core.brain.mind.meanings.noting import Noting
 from application.core.brain.mind.meanings.recalling import Recalling
 from application.core.brain.mind.meanings.shell import Shell
 from application.core.brain.mind.meanings.coding import Coding
-from application.core.brain.mind.meanings.todo import Todo
+from application.core.brain.mind.meanings.due_notification import DueNotification
 from application.core.brain.mind.meanings.escalation import Escalation
 from application.core import paths
 from application.platform import logger
@@ -30,7 +30,7 @@ def built_in(persona) -> list:
         Recalling(persona),
         Shell(persona),
         Coding(persona),
-        Todo(persona),
+        DueNotification(persona),
         Escalation(persona),
     ]
 
