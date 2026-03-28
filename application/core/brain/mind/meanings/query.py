@@ -26,11 +26,9 @@ class Query(Meaning):
         )
 
     async def run(self, persona_response: dict):
-        """Send the response to the origin channel's bus and resolve."""
+        """Send the response to all active channels and resolve."""
         text = persona_response.get("response", "")
         if not text:
             return None
-        channel = channels.latest(self.persona)
-        if channel and channel.bus:
-            await channel.bus.put(text)
+        await channels.send_all(self.persona, text)
         return None

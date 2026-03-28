@@ -7,7 +7,9 @@ import signal
 import uvicorn
 
 from application.business import persona
+from application.core import agents
 from application.platform import logger
+from application.platform.asyncio_worker import Worker
 from config import web as web_config
 from config.application import log_file, signal_log_file
 import heart
@@ -31,8 +33,11 @@ async def on_channel_paired(signal: Signal):
         return
     live = await persona.loaded(persona_id)
     if live.success:
+        worker = agents.persona(live.data["persona"]).worker
         await persona.nap(live.data["persona"])
-    await persona.wake(persona_id)
+    else:
+        worker = Worker()
+    await persona.wake(persona_id, worker)
 
 
 async def restart_gateway(command: Command):
@@ -43,12 +48,13 @@ async def restart_gateway(command: Command):
     if not agent:
         return
 
+    worker = agents.persona(agent).worker
     outcome = await persona.nap(agent)
     if not outcome.success:
         print(f"Failed to nap {agent.name}: {outcome.message}")
         return
 
-    outcome = await persona.wake(agent.id)
+    outcome = await persona.wake(agent.id, worker)
     if not outcome.success:
         print(f"Failed to wake {agent.name}: {outcome.message}")
 
@@ -96,7 +102,7 @@ async def main():
     personas = (outcome.data or {}).get("personas", [])
 
     for agent in personas:
-        outcome = await persona.wake(agent.id)
+        outcome = await persona.wake(agent.id, Worker())
         if not outcome.success:
             print(f"Failed to wake {agent.name}: {outcome.message}")
 

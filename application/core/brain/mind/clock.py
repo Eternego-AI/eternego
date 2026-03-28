@@ -1,36 +1,34 @@
 """Clock — the persona's sense of time. Using each tick, life manifests."""
 
-import asyncio
-
 from application.platform import logger
 from application.core.brain.mind import conscious
 
 
-async def tick(mind) -> None:
-    """Loop over conscious thinking states indefinitely, restarting when mind receives new signals.
+async def tick(mind, worker) -> None:
+    """Run the conscious pipeline until the mind has nothing left to process.
 
-Pipeline: understand → recognize → answer → decide → conclude
-"""
+    Each step is dispatched through the worker. If a new signal arrives
+    mid-step, the worker cancels the job and changed() restarts the
+    pipeline from understand.
+
+    Pipeline: understand → recognize → answer → decide → conclude
+    """
     logger.debug("Ticking in mind", {"persona": mind.persona})
-    from application.core.brain import ego
 
     pipeline = [
-        (conscious.understand, ego.reason),
-        (conscious.recognize,  ego.reason),
-        (conscious.answer,     ego.reply),
-        (conscious.decide,     ego.reason),
-        (conscious.conclude,   ego.reply),
+        conscious.understand,
+        conscious.recognize,
+        conscious.answer,
+        conscious.decide,
+        conscious.conclude,
     ]
 
-    while True:
-        try:
-            restart = False
-            for step, fn in pipeline:
-                await step(fn, mind)
-                if mind.changed():
-                    restart = True
-                    break
-            if not restart:
-                await asyncio.sleep(0.05)
-        except Exception as e:
-            logger.error("Mind tick got an exception", {"persona": mind.persona, "error": str(e)})
+    while not mind.settled:
+        if worker.stopped:
+            return
+        for step in pipeline:
+            await worker.dispatch(step, mind)
+            if worker.stopped:
+                return
+            if mind.changed():
+                break

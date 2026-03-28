@@ -10,17 +10,11 @@ from application.core.data import Channel, Message, Persona
 from application.core.exceptions import ChannelError
 
 
-_latest: dict[str, "Channel"] = {}
-
-
-def set_latest(persona: Persona, channel: "Channel") -> None:
-    """Record the most recently active channel for this persona."""
-    _latest[persona.id] = channel
-
-
-def latest(persona: Persona) -> "Channel | None":
-    """Return the most recently active channel for this persona."""
-    return _latest.get(persona.id)
+async def send_all(persona: Persona, text: str) -> None:
+    """Send text to all active channels for this persona."""
+    from application.core import gateways
+    for channel in gateways.of(persona).all_channels():
+        await send(channel, text)
 
 
 def keep_open(persona: Persona, channel: Channel, on_message: Callable) -> Callable[[], None]:
@@ -60,24 +54,16 @@ def keep_open(persona: Persona, channel: Channel, on_message: Callable) -> Calla
 
 
 
-def default_channel(persona: Persona) -> Channel | None:
-    """Return the first active channel for a persona, or None if none are open."""
-    from application.core import gateways
-    active = gateways.of(persona).all_channels()
-    return active[0] if active else None
-
-
 async def express_thinking(persona: Persona) -> None:
-    """Signal to the active channel that the persona is working on something."""
-    channel = latest(persona) or default_channel(persona)
-    if channel is None:
-        return
-    if channel.type == "telegram":
-        token = (channel.credentials or {})["token"]
-        try:
-            await asyncio.to_thread(telegram.typing_action, token=token, chat_id=channel.name)
-        except Exception:
-            pass
+    """Signal to all active channels that the persona is working on something."""
+    from application.core import gateways
+    for channel in gateways.of(persona).all_channels():
+        if channel.type == "telegram":
+            token = (channel.credentials or {})["token"]
+            try:
+                await asyncio.to_thread(telegram.typing_action, token=token, chat_id=channel.name)
+            except Exception:
+                pass
 
 
 async def send(channel: Channel, text: str) -> None:

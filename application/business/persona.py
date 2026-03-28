@@ -189,7 +189,8 @@ async def create(
             )
             return Outcome(success=False, message=outcome.message)
 
-        outcome = await wake(persona.id)
+        from application.platform.asyncio_worker import Worker
+        outcome = await wake(persona.id, Worker())
         if not outcome.success:
             await bus.broadcast("Persona creation failed", {"reason": outcome.message, "persona": persona})
             return outcome
@@ -306,7 +307,8 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
             )
             return Outcome(success=False, message=outcome.message)
 
-        outcome = await wake(persona.id)
+        from application.platform.asyncio_worker import Worker
+        outcome = await wake(persona.id, Worker())
         if not outcome.success:
             await bus.broadcast("Persona migration failed", {"reason": outcome.message, "persona": persona})
             return outcome
@@ -562,8 +564,6 @@ async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Out
             await bus.broadcast("Talked", {"persona": persona})
             return Outcome(success=True, message="", data={"response": f"{persona.name} is sleeping."})
 
-        if message.channel:
-            channels.set_latest(persona, message.channel)
         signal = Signal(
             id=f"{message.channel.type}-{message.channel.name}-{message.id}" if message.channel else message.id,
             event=SignalEvent.heard,
@@ -603,8 +603,6 @@ async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Ou
         if agents.persona(persona).current_situation is situation.sleep:
             await bus.broadcast("Queried", {"persona": persona})
             return Outcome(success=True, message="", data={"response": f"{persona.name} is sleeping."})
-
-        channels.set_latest(persona, message.channel)
 
         signal = Signal(
             id=f"{message.channel.type}-{message.channel.name}-{message.id}",
@@ -677,7 +675,7 @@ async def nap(persona: Persona) -> Outcome[dict]:
     agent = agents.persona(persona)
     try:
         gateways.of(persona).clear()
-        await agent.stop(force=True)
+        await agent.stop()
         agent.unload()
 
         await bus.broadcast("Persona napping", {"persona": persona})
@@ -694,11 +692,12 @@ async def sleep(persona: Persona) -> Outcome[dict]:
     await bus.propose("Sleeping", {"persona": persona})
 
     agent = agents.persona(persona)
+    worker = agent.worker
     try:
         from application.core.brain import situation
 
-        await agent.stop(force=False)
         agent.current_situation = situation.sleep
+        await agent.settle()
 
         await agent.learn_from_experience()
 
@@ -710,18 +709,23 @@ async def sleep(persona: Persona) -> Outcome[dict]:
         if not outcome.success:
             logger.error("Writing diary on sleep failed", {"persona": persona, "error": outcome.message})
 
+        gateways.of(persona).clear()
         agent.unload()
-        await wake(persona.id)
+        await wake(persona.id, worker)
 
         await bus.broadcast("Persona asleep", {"persona": persona})
         return Outcome(success=True, message="Sleep complete.")
 
     except (DNAError, EngineConnectionError) as e:
+        gateways.of(persona).clear()
         agent.unload()
+        await wake(persona.id, worker)
         await bus.broadcast("Sleep failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))
     except Exception as e:
+        gateways.of(persona).clear()
         agent.unload()
+        await wake(persona.id, worker)
         await bus.broadcast("Sleep failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Sleep failed unexpectedly.")
 
@@ -775,8 +779,8 @@ async def grow(persona: Persona) -> Outcome[dict]:
         return Outcome(success=False, message=str(e))
 
 
-async def wake(persona_id: str) -> Outcome[dict]:
-    """Wake a persona — find, register, connect channels, load mind, start thinking."""
+async def wake(persona_id: str, worker) -> Outcome[dict]:
+    """Wake a persona — find, open gateways, construct ego, register."""
     await bus.propose("Waking persona", {"persona_id": persona_id})
 
     outcome = await find(persona_id)
@@ -785,8 +789,6 @@ async def wake(persona_id: str) -> Outcome[dict]:
         return outcome
 
     agent = outcome.data["persona"]
-
-    agents.register(agent)
 
     if not (agent.channels or []):
         await bus.broadcast("Wake failed", {"persona": agent, "reason": "no_channels"})
@@ -798,11 +800,12 @@ async def wake(persona_id: str) -> Outcome[dict]:
             await bus.broadcast("Wake failed", {"persona": agent, "error": outcome.message})
             return outcome
 
+    from application.core.brain.mind import meanings
     from application.core.brain import situation
 
-    agents.persona(agent).load_mind()
-    agents.persona(agent).current_situation = situation.wake
-    agents.persona(agent).start()
+    all_meanings = meanings.built_in(agent) + meanings.specific_to(agent)
+    ego = agents.Ego(agent, all_meanings, worker, situation.wake)
+    agents.register(agent, ego)
 
     await bus.broadcast("Persona awake", {"persona": agent})
     return Outcome(success=True, message="Persona awake", data={"persona_id": agent.id})

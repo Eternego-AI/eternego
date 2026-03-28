@@ -8,7 +8,7 @@ from application.core.exceptions import EngineConnectionError
 
 async def chat(model: str, messages: list[dict]) -> str:
     """Send messages, wait for full response."""
-    logger.info("local_model.chat", {"model": model})
+    logger.debug("local_model.chat", {"model": model, "messages": messages})
     try:
         response = await ollama.post("/api/chat", {"model": model, "messages": messages, "stream": False})
         return response["message"]["content"]
@@ -20,7 +20,7 @@ async def chat(model: str, messages: list[dict]) -> str:
 
 async def chat_json(model: str, messages: list[dict]) -> dict:
     """Send messages, wait for full JSON response."""
-    logger.info("local_model.chat_json", {"model": model})
+    logger.debug("local_model.chat_json", {"model": model, "messages": messages})
     try:
         response = await ollama.post("/api/chat", {"model": model, "messages": messages, "stream": False, "format": "json"})
         return strings.extract_json(response["message"]["content"])
@@ -32,7 +32,7 @@ async def chat_json(model: str, messages: list[dict]) -> dict:
 
 async def chat_json_stream(model: str, messages: list[dict]) -> dict:
     """Stream response, collect and return parsed JSON."""
-    logger.info("local_model.chat_json_stream", {"model": model})
+    logger.debug("local_model.chat_json_stream", {"model": model, "messages": messages})
     try:
         body = {"model": model, "messages": messages, "format": "json"}
         parts = []
@@ -47,7 +47,7 @@ async def chat_json_stream(model: str, messages: list[dict]) -> dict:
 
 async def generate(model: str, prompt: str, json_mode: bool = False) -> str:
     """Send a prompt to the local model and return the response text."""
-    logger.info("Sending generate request to model", {"model": model, "prompt": prompt})
+    logger.debug("Sending generate request to model", {"model": model, "prompt": prompt, "json_mode": json_mode})
     try:
         body = {"model": model, "prompt": prompt, "stream": False}
         if json_mode:
@@ -62,7 +62,7 @@ async def generate(model: str, prompt: str, json_mode: bool = False) -> str:
 
 async def generate_json(model: str, prompt: str) -> dict:
     """Send a prompt to the local model and return the parsed JSON response."""
-    logger.info("Sending JSON generate request to model", {"model": model, "prompt": prompt})
+    logger.debug("Sending JSON generate request to model", {"model": model, "prompt": prompt})
     response = await generate(model, prompt, json_mode=True)
     try:
         return strings.extract_json(response)

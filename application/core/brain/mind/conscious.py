@@ -8,13 +8,13 @@ import uuid
 
 from application.core.brain.data import Signal, SignalEvent
 from application.core.brain import perceptions, signals
-from application.core import channels
+from application.core import channels, agents
 from application.platform import logger
 
 
 # ── Understanding ────────────────────────────────────────────────────────────
 
-async def understand(reason, mind) -> None:
+async def understand(mind) -> None:
     """Route unattended signals to existing or new perception threads."""
     logger.debug("Understanding", {"persona": mind.persona})
     if not mind.needs_understanding:
@@ -57,7 +57,8 @@ async def understand(reason, mind) -> None:
         f"Signals to route:\n{signals_text}"
     )
 
-    result = await reason(mind.persona, system, [{"role": "user", "content": "Route each signal by its number."}])
+    ego = agents.persona(mind.persona)
+    result = await ego.reason(system, [{"role": "user", "content": "Route each signal by its number."}])
     routes = result.get("routes", [])
 
     routed = set()
@@ -90,7 +91,7 @@ async def understand(reason, mind) -> None:
 
 # ── Recognition ──────────────────────────────────────────────────────────────
 
-async def recognize(reason, mind) -> None:
+async def recognize(mind) -> None:
     """Match the most important unrecognized perception to a meaning."""
     logger.debug("Recognizing", {"persona": mind.persona})
     perception = mind.most_important_perception
@@ -115,7 +116,8 @@ async def recognize(reason, mind) -> None:
         "Return the row number of the best-matching meaning."
     )
 
-    result = await reason(mind.persona, system, perceptions.to_conversation(perception.thread))
+    ego = agents.persona(mind.persona)
+    result = await ego.reason(system, perceptions.to_conversation(perception.thread))
     row = result.get("meaning_row")
 
     escalation = next(m for m in mind.meanings if m.name == "Escalation")
@@ -126,9 +128,8 @@ async def recognize(reason, mind) -> None:
 
     # Escalation → try generating a new meaning via frontier/local model
     if meaning.name == "Escalation":
-        from application.core.brain import ego
         from application.core.brain.mind import meanings as meanings_module
-        code = await ego.escalate(mind.persona, perceptions.thread(perception), mind.meanings)
+        code = await ego.escalate(perceptions.thread(perception), mind.meanings)
         if code:
             try:
                 new_meaning = meanings_module.learn(mind.persona, code)
@@ -142,7 +143,7 @@ async def recognize(reason, mind) -> None:
 
 # ── Answering ────────────────────────────────────────────────────────────────
 
-async def answer(reply, mind) -> None:
+async def answer(mind) -> None:
     """Generate a streaming reply for the most important thought that needs an answer."""
     logger.debug("Answering", {"persona": mind.persona})
     thought = mind.most_important_thought(mind.needs_answer)
@@ -163,8 +164,6 @@ async def answer(reply, mind) -> None:
 
     logger.debug("Answer", {"persona": mind.persona, "impression": thought.perception.impression, "event": event})
 
-    channel = channels.latest(mind.persona) or channels.default_channel(mind.persona)
-
     system = "# This Interaction\n" + "\n".join(filter(None, [
         m.description(),
         prompt,
@@ -172,17 +171,17 @@ async def answer(reply, mind) -> None:
 
     messages = mind.prompts(thought)
 
-    text = await reply(mind.persona, system, messages)
+    ego = agents.persona(mind.persona)
+    text = await ego.reply(system, messages)
 
     if text:
-        if channel:
-            await channels.send(channel, text)
+        await channels.send_all(mind.persona, text)
         mind.answer(thought, text, event)
 
 
 # ── Deciding ─────────────────────────────────────────────────────────────────
 
-async def decide(reason, mind) -> None:
+async def decide(mind) -> None:
     """Execute the action for the most important pending thought."""
     logger.debug("Deciding", {"persona": mind.persona})
     import json
@@ -202,7 +201,8 @@ async def decide(reason, mind) -> None:
     )
     messages = mind.prompts(thought)
 
-    result = await reason(mind.persona, system, messages)
+    ego = agents.persona(mind.persona)
+    result = await ego.reason(system, messages)
     recap = result.pop("recap", None) if isinstance(result, dict) else None
 
     if not result:
@@ -226,7 +226,7 @@ async def decide(reason, mind) -> None:
 
 # ── Concluding ───────────────────────────────────────────────────────────────
 
-async def conclude(reply, mind) -> None:
+async def conclude(mind) -> None:
     """Summarize for the person and mark the thought as concluded."""
     logger.debug("Concluding", {"persona": mind.persona})
 
@@ -238,18 +238,17 @@ async def conclude(reply, mind) -> None:
 
     summary_prompt = thought.meaning.summarize()
     if summary_prompt:
-        channel = channels.latest(mind.persona) or channels.default_channel(mind.persona)
-
         system = "# This Interaction\n" + "\n".join(filter(None, [
             thought.meaning.description(),
             summary_prompt,
         ]))
         messages = mind.prompts(thought)
 
-        text = await reply(mind.persona, system, messages)
+        ego = agents.persona(mind.persona)
+        text = await ego.reply(system, messages)
 
-        if text and channel:
-            await channels.send(channel, text)
+        if text:
+            await channels.send_all(mind.persona, text)
 
         mind.answer(thought, text or "", SignalEvent.summarized)
     else:

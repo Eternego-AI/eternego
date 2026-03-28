@@ -5,8 +5,7 @@ role-based conversation dicts. The system prompt tells the model what to
 extract; the messages show the actual conversation.
 """
 
-from application.core.brain import ego
-from application.core import paths
+from application.core import agents, paths
 from application.platform import logger
 
 
@@ -58,7 +57,7 @@ async def person_identity(persona, messages: list[dict]) -> None:
         "• No bullets, no headers, no explanations, no extra text\n"
         "If no facts exist or none are extracted, return exactly: (none yet)"
     )
-    result = await ego.reply(persona, system, messages)
+    result = await agents.persona(persona).reply(system, messages)
     if result:
         logger.debug("subconscious.person_identity", {"persona": persona})
         paths.save_as_string(paths.person_identity(persona.id), result)
@@ -108,7 +107,7 @@ async def person_traits(persona, messages: list[dict]) -> None:
         "• No bullets, no headers, no extra text, no explanations\n"
         "If nothing new or no traits at all, return exactly: (none yet)"
     )
-    result = await ego.reply(persona, system, messages)
+    result = await agents.persona(persona).reply(system, messages)
     if result:
         logger.debug("subconscious.person_traits", {"persona": persona})
         paths.save_as_string(paths.person_traits(persona.id), result)
@@ -156,7 +155,7 @@ async def wishes(persona, messages: list[dict]) -> None:
         "• No bullets, no headers, no explanations, no extra commentary\n"
         "If nothing qualifies or no new items, return exactly: (none yet)"
     )
-    result = await ego.reply(persona, system, messages)
+    result = await agents.persona(persona).reply(system, messages)
     if result:
         logger.debug("subconscious.wishes", {"persona": persona})
         paths.save_as_string(paths.wishes(persona.id), result)
@@ -205,7 +204,7 @@ async def struggles(persona, messages: list[dict]) -> None:
         "• No bullets, no headers, no explanations, no extra commentary\n"
         "If nothing qualifies or no new items, return exactly: (none yet)"
     )
-    result = await ego.reply(persona, system, messages)
+    result = await agents.persona(persona).reply(system, messages)
     if result:
         logger.debug("subconscious.struggles", {"persona": persona})
         paths.save_as_string(paths.struggles(persona.id), result)
@@ -252,7 +251,7 @@ async def persona_context(persona, messages: list[dict]) -> None:
         "• Keep the total concise — aim for 4–12 high-quality lines max\n"
         "If nothing relevant is present or all prior context is now outdated, return exactly: (light context — mostly quiet season right now)"
     )
-    result = await ego.reply(persona, system, messages)
+    result = await agents.persona(persona).reply(system, messages)
     if result:
         logger.debug("subconscious.persona_context", {"persona": persona})
         paths.save_as_string(paths.context(persona.id), result)
@@ -285,6 +284,6 @@ async def synthesize_dna(persona) -> None:
         "Sections: Identity, Behavioral Patterns, Working Style, Current Focus.\n\n"
         "Return the profile as markdown text."
     )
-    result = await ego.reply(persona, system, [{"role": "user", "content": "Synthesize the profile."}])
+    result = await agents.persona(persona).reply(system, [{"role": "user", "content": "Synthesize the profile."}])
     if result:
         paths.write_dna(persona.id, result)
