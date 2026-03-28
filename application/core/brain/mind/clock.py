@@ -9,16 +9,16 @@ async def tick(mind, worker) -> None:
 
     Each step is dispatched through the worker. If a new signal arrives
     mid-step, the worker cancels the job and changed() restarts the
-    pipeline from understand.
+    pipeline from realize.
 
-    Pipeline: understand → recognize → answer → decide → conclude
+    Pipeline: realize → understand → recognize → decide → conclude
     """
     logger.debug("Ticking in mind", {"persona": mind.persona})
 
     pipeline = [
+        conscious.realize,
         conscious.understand,
         conscious.recognize,
-        conscious.answer,
         conscious.decide,
         conscious.conclude,
     ]

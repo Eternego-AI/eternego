@@ -7,7 +7,7 @@ from datetime import timedelta
 from application.core.brain.data import Signal, Perception, Thought
 from application.core.brain.mind.memory import Memory
 from application.core.brain import character
-from application.core import local_model, frontier, tools, channels, paths
+from application.core import local_model, frontier, tools, paths
 from application.core.data import Persona, Channel
 from application.core.exceptions import MindError, AgentError
 from application.platform import datetimes, logger
@@ -188,13 +188,10 @@ class Ego:
             if recap:
                 paths.add_history_briefing(self.persona.id, "| File | Recap |", f"| {filename} | {recap} |")
 
-    # ── Reasoning ─────────────────────────────────────────────────────────
+    # ── Identity ───────────────────────────────────────────────────────────
 
-    async def reason(self, system: str, messages: list[dict]) -> dict:
-        """Call the persona's model in JSON mode. Returns a parsed JSON dict."""
-        logger.debug("ego.reason", {"persona": self.persona, "system": system, "messages": messages})
-        await channels.express_thinking(self.persona)
-
+    def identity(self) -> str:
+        """Return assembled identity text: character, knowledge, and situation."""
         sections = [character.shape(self.persona)]
 
         if self.current_situation:
@@ -204,7 +201,6 @@ class Ego:
         if wishes.strip():
             sections.append(
                 "# What the Person Wants\n"
-                "Consider these wishes and aspirations when thinking — look for opportunities to help.\n"
                 + wishes.strip()
             )
 
@@ -212,59 +208,19 @@ class Ego:
         if struggles.strip():
             sections.append(
                 "# What the Person Struggles With\n"
-                "Consider these recurring obstacles — look for ways to ease them.\n"
                 + struggles.strip()
             )
 
         traits = paths.read(paths.person_traits(self.persona.id))
         if traits.strip():
             sections.append(
-                "# The person's traits\n"
+                "# The Person's Traits\n"
                 + traits.strip()
             )
 
-        sections.append(system + "\n\nReturn your response as a JSON object.")
-        full_system = "\n\n".join(sections)
-        all_messages = [{"role": "system", "content": full_system}] + messages
-        return await local_model.chat_json_stream(self.persona.model.name, all_messages)
+        return "\n\n".join(sections)
 
-    async def reply(self, system: str, messages: list[dict]) -> str:
-        """Send the persona's reply as a complete message."""
-        logger.debug("ego.reply", {"persona": self.persona, "system": system, "messages": messages})
-        await channels.express_thinking(self.persona)
-
-        sections = [character.shape(self.persona)]
-
-        if self.current_situation:
-            sections.append(self.current_situation(self.persona.id))
-
-        wishes = paths.read(paths.wishes(self.persona.id))
-        if wishes.strip():
-            sections.append(
-                "# What the Person Wants\n"
-                "Consider these wishes and aspirations when thinking — look for opportunities to help.\n"
-                + wishes.strip()
-            )
-
-        struggles = paths.read(paths.struggles(self.persona.id))
-        if struggles.strip():
-            sections.append(
-                "# What the Person Struggles With\n"
-                "Consider these recurring obstacles — look for ways to ease them.\n"
-                + struggles.strip()
-            )
-
-        traits = paths.read(paths.person_traits(self.persona.id))
-        if traits.strip():
-            sections.append(
-                "# The person's traits\n"
-                + traits.strip()
-            )
-
-        sections.append(system)
-        full_system = "\n\n".join(sections)
-        all_messages = [{"role": "system", "content": full_system}] + messages
-        return await local_model.chat(self.persona.model.name, all_messages)
+    # ── Escalation ────────────────────────────────────────────────────────
 
     async def escalate(self, thread_text: str, existing_meanings: list) -> str | None:
         """Generate meaning code via frontier or local model. Returns Python source or None."""
@@ -286,7 +242,7 @@ class Ego:
         prompt = (
             "# Meaning Generation\n\n"
             "A persona has a cognitive pipeline that processes interactions in five stages:\n"
-            "  understand → recognize → answer → decide → conclude\n\n"
+            "  realize → understand → recognize → decide → conclude\n\n"
             "A **Meaning** is a Python class that defines how the persona handles a specific "
             "type of interaction. When no existing Meaning matches, a new one must be created.\n\n"
             "## How Meanings Work in the Pipeline\n\n"
@@ -300,10 +256,10 @@ class Ego:
             "Bad: 'Helper', 'Task', 'Utility'\n\n"
             "### `description() → str`\n"
             "One sentence defining exactly what interactions this meaning covers. Used by the "
-            "recognition stage to match a conversation to this meaning. Must be distinct from "
+            "understand stage to match a conversation to this meaning. Must be distinct from "
             "every existing meaning — if it overlaps, the local model will pick the wrong one.\n\n"
             "### `reply() → str | None`\n"
-            "Prompt for the **answer** stage — how to respond to the person on first contact. "
+            "Prompt for the **recognize** stage — how to respond to the person on first contact. "
             "This runs BEFORE any action is taken.\n"
             "CRITICAL: The reply output is appended to the conversation thread and becomes "
             "visible to the decide stage. Never ask the model to state specific extracted values "
@@ -329,7 +285,7 @@ class Ego:
             "### `run()` — do NOT implement\n"
             "The default `run()` dispatches tool calls from the JSON that `path()` produced. "
             "Do not override it unless the meaning needs custom logic (like file I/O). "
-            "If `run()` returns a Signal, the pipeline retries (loops back to answer with clarify). "
+            "If `run()` returns a Signal, the pipeline retries (loops back to recognize with clarify). "
             "If it returns None, the action succeeded and the pipeline moves to conclude.\n\n"
             f"## Conversation That Triggered Escalation\n\n{thread_text}\n\n"
             f"## Available Tools\n\n{tools_text}\n\n"

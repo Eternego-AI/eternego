@@ -173,7 +173,7 @@ class Memory:
         return list(self._signals.values())
 
     @property
-    def needs_understanding(self) -> list[Signal]:
+    def needs_realizing(self) -> list[Signal]:
         """Heard signals not yet attached to any Perception."""
         return [s for s in self._signals.values()
                 if s.event == SignalEvent.heard and s.id not in self._signal_perceptions]
@@ -186,19 +186,19 @@ class Memory:
         return list(self._perceptions.values())
 
     @property
-    def needs_recognition(self) -> list[Perception]:
+    def needs_understanding(self) -> list[Perception]:
         """Perceptions not yet assigned a Meaning (no Thought exists)."""
-        recognized = {t.perception.impression for t in self._thoughts}
+        understood = {t.perception.impression for t in self._thoughts}
         return [p for p in self._perceptions.values()
-                if p.impression not in recognized]
+                if p.impression not in understood]
 
     @property
     def most_important_perception(self) -> Perception | None:
-        """The oldest unrecognized Perception — first to be recognized."""
-        unrecognized = self.needs_recognition
-        if not unrecognized:
+        """The oldest perception not yet understood — first to be matched."""
+        ununderstood = self.needs_understanding
+        if not ununderstood:
             return None
-        return min(unrecognized,
+        return min(ununderstood,
                    key=lambda p: p.thread[0].created_at if p.thread else datetimes.now())
 
     # ── Thought views ─────────────────────────────────────────────────────────
@@ -214,8 +214,8 @@ class Memory:
         return list(self._thoughts)
 
     @property
-    def needs_answer(self) -> list[Thought]:
-        """Thoughts that need the persona to speak — reply or clarify."""
+    def needs_recognition(self) -> list[Thought]:
+        """Thoughts that need the persona to recognize — reply or clarify."""
         result = []
         for t in self._thoughts:
             last = self._last_event(t)
@@ -227,7 +227,7 @@ class Memory:
 
     @property
     def needs_decision(self) -> list[Thought]:
-        """Thoughts ready for deciding — has path, answering is done or not needed."""
+        """Thoughts ready for deciding — has path, recognition is done or not needed."""
         result = []
         for t in self._thoughts:
             if not t.meaning.path():
@@ -279,9 +279,9 @@ class Memory:
 
     # ── Mutation methods ──────────────────────────────────────────────────────
 
-    def understand(self, signal: Signal, impression: str) -> None:
+    def realize(self, signal: Signal, impression: str) -> None:
         """Attach signal to a perception. Only free existing thoughts when the person speaks."""
-        logger.debug("memory.understand", {"persona": self._persona.id, "signal": signal.id, "impression": impression})
+        logger.debug("memory.realize", {"persona": self._persona.id, "signal": signal.id, "impression": impression})
         if impression not in self._perceptions:
             self._perceptions[impression] = Perception(impression=impression)
         perception = self._perceptions[impression]
@@ -296,14 +296,14 @@ class Memory:
                     self._thoughts.remove(t)
 
     def question(self, thought: Thought) -> None:
-        """Add a pre-formed thought directly (bypasses understand + recognize)."""
+        """Add a pre-formed thought directly (bypasses realize + understand)."""
         logger.debug("memory.question", {"persona": self._persona.id, "thought": thought.id})
         self._thoughts.append(thought)
 
 
-    def recognize(self, perception: Perception, meaning, priority: int = 0) -> Thought:
+    def understand(self, perception: Perception, meaning, priority: int = 0) -> Thought:
         """Create a Thought from a Perception and a Meaning instance."""
-        logger.debug("memory.recognize", {"persona": self._persona.id, "impression": perception.impression})
+        logger.debug("memory.understand", {"persona": self._persona.id, "impression": perception.impression})
         thought = Thought(perception=perception, meaning=meaning, priority=priority)
         self._thoughts.append(thought)
 
@@ -367,9 +367,9 @@ class Memory:
     @property
     def settled(self) -> bool:
         """True when the mind has nothing left to process."""
-        return (not self.needs_understanding
+        return (not self.needs_realizing
+                and not self.needs_understanding
                 and not self.needs_recognition
-                and not self.needs_answer
                 and not self.needs_decision
                 and not self.needs_conclusion)
 
@@ -377,7 +377,7 @@ class Memory:
 
     def changed(self) -> bool:
         """True when unattended signals have changed since last check."""
-        unattended = self.needs_understanding
+        unattended = self.needs_realizing
         if not unattended:
             self._unattended_hash = None
             return False

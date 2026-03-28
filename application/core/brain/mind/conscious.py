@@ -1,30 +1,32 @@
 """Conscious — the waking thinking pipeline.
 
 Five functions run in sequence by the clock tick:
-  understand → recognize → answer → decide → conclude
+  realize → understand → recognize → decide → conclude
 """
 
 import uuid
 
 from application.core.brain.data import Signal, SignalEvent
 from application.core.brain import perceptions, signals
-from application.core import channels, agents
+from application.core import channels, agents, local_model
 from application.platform import logger
 
 
-# ── Understanding ────────────────────────────────────────────────────────────
+# ── Realizing ─────────────────────────────────────────────────────────────────
 
-async def understand(mind) -> None:
+async def realize(mind) -> None:
     """Route unattended signals to existing or new perception threads."""
-    logger.debug("Understanding", {"persona": mind.persona})
-    if not mind.needs_understanding:
+    if not mind.needs_realizing:
+        logger.debug("Nothing to realize", {"persona": mind.persona})
         return
 
-    logger.debug("Understand", {"persona": mind.persona, "unattended": mind.needs_understanding})
+    logger.debug("Realize", {"persona": mind.persona, "unattended": mind.needs_realizing})
+
+    await channels.express_thinking(mind.persona)
 
     known = mind.perceptions
     thread_map = {i + 1: p for i, p in enumerate(known)}
-    unattended = list(mind.needs_understanding)
+    unattended = list(mind.needs_realizing)
     signal_map = {i + 1: s for i, s in enumerate(unattended)}
 
     threads_text = "\n\n".join(
@@ -37,8 +39,10 @@ async def understand(mind) -> None:
         for i, s in signal_map.items()
     )
 
+    ego = agents.persona(mind.persona)
     system = (
-        "# Task: Route incoming signals to conversation threads\n"
+        ego.identity()
+        + "\n\n# Task: Route incoming signals to conversation threads\n"
         "Threads and signals are both numbered. For each signal number, decide:\n"
         "- Does it **directly continue** an existing thread? Only if it is a reply or follow-up "
         "to that specific conversation topic. A new unrelated message does NOT continue a thread "
@@ -57,8 +61,8 @@ async def understand(mind) -> None:
         f"Signals to route:\n{signals_text}"
     )
 
-    ego = agents.persona(mind.persona)
-    result = await ego.reason(system, [{"role": "user", "content": "Route each signal by its number."}])
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": "Route each signal by its number."}]
+    result = await local_model.chat_json_stream(mind.persona.model.name, messages)
     routes = result.get("routes", [])
 
     routed = set()
@@ -75,38 +79,42 @@ async def understand(mind) -> None:
         for thread_num in route.get("threads", []):
             perception = thread_map.get(thread_num)
             if perception:
-                mind.understand(signal, perception.impression)
+                mind.realize(signal, perception.impression)
 
         for impression in route.get("new_impressions", []):
             if impression:
-                mind.understand(signal, impression)
+                mind.realize(signal, impression)
 
         if not route.get("threads") and not route.get("new_impressions"):
-            logger.warning("understand: route with no threads or impressions", {"signal_id": signal.id})
+            logger.warning("realize: route with no threads or impressions", {"signal_id": signal.id})
 
     for signal in unattended:
         if signal.id not in routed:
-            logger.warning("understand: unrouted signal, stays unattended", {"signal_id": signal.id})
+            logger.warning("realize: unrouted signal, stays unattended", {"signal_id": signal.id})
 
 
-# ── Recognition ──────────────────────────────────────────────────────────────
+# ── Understanding ────────────────────────────────────────────────────────────
 
-async def recognize(mind) -> None:
+async def understand(mind) -> None:
     """Match the most important unrecognized perception to a meaning."""
-    logger.debug("Recognizing", {"persona": mind.persona})
     perception = mind.most_important_perception
     if not perception:
+        logger.debug("Nothing to understand", {"persona": mind.persona})
         return
 
-    logger.debug("Recognize", {"persona": mind.persona, "impression": perception.impression})
+    logger.debug("Understand", {"persona": mind.persona, "impression": perception.impression})
+
+    await channels.express_thinking(mind.persona)
 
     meanings_text = "\n".join(
         f"{i + 1}. {m.name}: {m.description()}"
         for i, m in enumerate(mind.meanings)
     )
 
+    ego = agents.persona(mind.persona)
     system = (
-        "# Task: Match a conversation thread to a meaning\n"
+        ego.identity()
+        + "\n\n# Task: Match a conversation thread to a meaning\n"
         "Given a numbered list of known meanings and a conversation thread, "
         "return the row number of the best-matching meaning.\n"
         "Use the Escalation row if no meaning fits.\n\n"
@@ -116,8 +124,8 @@ async def recognize(mind) -> None:
         "Return the row number of the best-matching meaning."
     )
 
-    ego = agents.persona(mind.persona)
-    result = await ego.reason(system, perceptions.to_conversation(perception.thread))
+    messages = [{"role": "system", "content": system}] + perceptions.to_conversation(perception.thread)
+    result = await local_model.chat_json_stream(mind.persona.model.name, messages)
     row = result.get("meaning_row")
 
     escalation = next(m for m in mind.meanings if m.name == "Escalation")
@@ -136,19 +144,21 @@ async def recognize(mind) -> None:
                 mind.add_meanings(new_meaning)
                 meaning = new_meaning
             except Exception as e:
-                logger.error("recognize: failed to learn meaning", {"persona": mind.persona, "error": str(e)})
+                logger.error("understand: failed to learn meaning", {"persona": mind.persona, "error": str(e)})
 
-    mind.recognize(perception, meaning)
+    mind.understand(perception, meaning)
 
 
-# ── Answering ────────────────────────────────────────────────────────────────
+# ── Recognition ──────────────────────────────────────────────────────────────
 
-async def answer(mind) -> None:
-    """Generate a streaming reply for the most important thought that needs an answer."""
-    logger.debug("Answering", {"persona": mind.persona})
-    thought = mind.most_important_thought(mind.needs_answer)
+async def recognize(mind) -> None:
+    """Generate a reply for the most important thought that needs recognition."""
+    thought = mind.most_important_thought(mind.needs_recognition)
     if not thought:
+        logger.debug("Nothing to recognize", {"persona": mind.persona})
         return
+
+    await channels.express_thinking(mind.persona)
 
     m = thought.meaning
     last = thought.perception.thread[-1].event if thought.perception.thread else ""
@@ -162,17 +172,18 @@ async def answer(mind) -> None:
     if prompt is None:
         return
 
-    logger.debug("Answer", {"persona": mind.persona, "impression": thought.perception.impression, "event": event})
+    logger.debug("Recognize", {"persona": mind.persona, "impression": thought.perception.impression, "event": event})
 
-    system = "# This Interaction\n" + "\n".join(filter(None, [
+    ego = agents.persona(mind.persona)
+    await channels.express_thinking(mind.persona)
+
+    system = ego.identity() + "\n\n# This Interaction\n" + "\n".join(filter(None, [
         m.description(),
         prompt,
     ]))
 
-    messages = mind.prompts(thought)
-
-    ego = agents.persona(mind.persona)
-    text = await ego.reply(system, messages)
+    messages = [{"role": "system", "content": system}] + mind.prompts(thought)
+    text = await local_model.chat(mind.persona.model.name, messages)
 
     if text:
         await channels.send_all(mind.persona, text)
@@ -183,26 +194,28 @@ async def answer(mind) -> None:
 
 async def decide(mind) -> None:
     """Execute the action for the most important pending thought."""
-    logger.debug("Deciding", {"persona": mind.persona})
     import json
 
     thought = mind.most_important_thought(mind.needs_decision)
     if not thought:
+        logger.debug("Nothing to decide", {"persona": mind.persona})
         return
+
+    await channels.express_thinking(mind.persona)
 
     logger.debug("Decide", {"persona": mind.persona, "impression": thought.perception.impression})
 
+    ego = agents.persona(mind.persona)
     system = (
-        thought.meaning.path()
+        ego.identity()
+        + "\n\n" + thought.meaning.path()
         + "\n\nAlways include a \"recap\" field — a brief one-sentence summary of what "
         "you are doing or have done.\n"
         "If the task is already fulfilled based on the conversation, do not take "
         "further action. Return only: {\"recap\": \"what was accomplished\"}"
     )
-    messages = mind.prompts(thought)
-
-    ego = agents.persona(mind.persona)
-    result = await ego.reason(system, messages)
+    messages = [{"role": "system", "content": system}] + mind.prompts(thought)
+    result = await local_model.chat_json_stream(mind.persona.model.name, messages)
     recap = result.pop("recap", None) if isinstance(result, dict) else None
 
     if not result:
@@ -228,24 +241,26 @@ async def decide(mind) -> None:
 
 async def conclude(mind) -> None:
     """Summarize for the person and mark the thought as concluded."""
-    logger.debug("Concluding", {"persona": mind.persona})
-
     thought = mind.most_important_thought(mind.needs_conclusion)
     if not thought:
+        logger.debug("Nothing to conclude", {"persona": mind.persona})
         return
 
-    logger.debug("conclude", {"persona": mind.persona, "impression": thought.perception.impression})
+    await channels.express_thinking(mind.persona)
+
+    logger.debug("Conclude", {"persona": mind.persona, "impression": thought.perception.impression})
 
     summary_prompt = thought.meaning.summarize()
     if summary_prompt:
-        system = "# This Interaction\n" + "\n".join(filter(None, [
+        ego = agents.persona(mind.persona)
+        await channels.express_thinking(mind.persona)
+
+        system = ego.identity() + "\n\n# This Interaction\n" + "\n".join(filter(None, [
             thought.meaning.description(),
             summary_prompt,
         ]))
-        messages = mind.prompts(thought)
-
-        ego = agents.persona(mind.persona)
-        text = await ego.reply(system, messages)
+        messages = [{"role": "system", "content": system}] + mind.prompts(thought)
+        text = await local_model.chat(mind.persona.model.name, messages)
 
         if text:
             await channels.send_all(mind.persona, text)
