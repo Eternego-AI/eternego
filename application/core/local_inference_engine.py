@@ -3,49 +3,8 @@
 import asyncio
 import json
 
-from application.platform import logger, ollama, lora, hugging_face
+from application.platform import logger, ollama, lora
 from application.core.exceptions import EngineConnectionError
-
-
-def is_supported(base_model: str) -> bool:
-    """Return True if base_model has a known HuggingFace ID and can be fine-tuned."""
-    from application.platform import hugging_face
-    return hugging_face.id_for(base_model) is not None
-
-
-def models() -> list[dict]:
-    """Return supported base models enriched with hardware compatibility metadata.
-
-    Each entry includes:
-      name            — Ollama model name (e.g. "qwen2.5:7b")
-      params_b        — parameter count in billions, or None if unknown
-      ram_required_gb — estimated RAM needed for CPU/MPS bf16 fine-tuning
-      fits            — True if current hardware can run fine-tuning
-    """
-    import re
-    from application.platform import hugging_face, OS
-
-    ram = OS.ram_gb()
-    vram = OS.gpu_vram_gb()
-
-    result = []
-    for name in hugging_face.ids():
-        m = re.search(r":(\d+(?:\.\d+)?)b", name.lower())
-        params_b = float(m.group(1)) if m else None
-
-        if params_b is not None:
-            # CPU/MPS bf16: 2 bytes/param + ~1.5 GB overhead
-            ram_required = round(params_b * 2.0 + 1.5, 1)
-            # CUDA 4-bit QLoRA: 0.5 bytes/param + ~1.5 GB overhead
-            vram_required = round(params_b * 0.5 + 1.5, 1)
-            fits = (vram >= vram_required) if vram is not None else (ram >= ram_required)
-        else:
-            ram_required = None
-            fits = True  # unknown size — no warning
-
-        result.append({"name": name, "params_b": params_b, "ram_required_gb": ram_required, "fits": fits})
-
-    return result
 
 
 async def get_default_model() -> str | None:
@@ -93,10 +52,10 @@ async def delete(model: str) -> bool:
         return False
 
 
-async def fine_tune(base_model: str, training_set: str, model_name: str, persona_id: str) -> None:
+async def fine_tune(hf_model_id: str, training_set: str, base_model: str, model_name: str, persona_id: str) -> None:
     """Fine-tune a model using LoRA and register the result as a new Ollama model.
 
-    Trains on the HuggingFace base model (HF cache handles re-use across nights).
+    Trains on the HuggingFace model (HF cache handles re-use across nights).
     Saves only the LoRA adapter (~100–300 MB) — no merge, no memory spike.
     Converts the adapter to GGUF and registers it with Ollama as:
       FROM <base_model>
@@ -111,13 +70,6 @@ async def fine_tune(base_model: str, training_set: str, model_name: str, persona
 
     from application.core import paths
     from pathlib import Path
-
-    hf_model_id = hugging_face.id_for(base_model)
-    if hf_model_id is None:
-        raise EngineConnectionError(
-            f"No HuggingFace model ID known for '{base_model}' — "
-            "add it to platform/hugging_face.py to enable fine-tuning"
-        )
 
     adapter_dir = paths.lora_adapter(persona_id)
     fine_tune_dir = paths.eternego_home() / "fine_tune" / persona_id

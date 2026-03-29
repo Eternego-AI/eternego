@@ -1,12 +1,11 @@
 import Widget from './widget.js';
-import { check, x } from '../icons.js';
 
 class CreateWidget extends Widget {
     static widgetId = 'create';
     static columns = 2;
     static rows = 3;
 
-    // init({ models, onCreated })
+    // init({ onCreated })
     build() {
 
         this._data = { name: '', model: '', botToken: '', frontierModel: '', frontierKey: '' };
@@ -88,56 +87,24 @@ class CreateWidget extends Widget {
 
     _renderModel() {
         const s = this._panels.model;
-        const models = this._props.models();
-
-        if (models.length === 0) {
-            s.innerHTML = `
-                <label class="wizard-label">No models available</label>
-                <div class="wizard-nav">
-                    <button class="wizard-btn" id="wz-back">Back</button><span></span>
-                </div>
-            `;
-            s.querySelector('#wz-back').addEventListener('click', () => this._step.go('name'));
-            return;
-        }
-
-        const options = models.map(m => {
-            const fit = m.fits ? check(14) : x(14);
-            const ram = m.ram_required_gb ? `${m.ram_required_gb}GB RAM` : '';
-            const params = m.params_b ? `${m.params_b}B` : '';
-            const meta = [params, ram].filter(Boolean).join(' · ');
-            const selected = this._data.model === m.name ? 'selected' : '';
-            return `<div class="wizard-option ${selected}" data-model="${this._esc(m.name)}">
-                <span class="wizard-option-fit">${fit}</span>
-                <span class="wizard-option-name">${this._esc(m.name)}</span>
-                <span class="wizard-option-meta">${meta}</span>
-            </div>`;
-        }).join('');
-
         s.innerHTML = `
-            <label class="wizard-label">Choose a base model</label>
-            <div class="wizard-options">${options}</div>
+            <label class="wizard-label">Base model</label>
+            <p class="wizard-hint">Enter the Ollama model name your persona will use (e.g. <code>qwen2.5:7b</code>).</p>
+            <input class="wizard-input" type="text" placeholder="qwen2.5:7b" value="${this._esc(this._data.model)}">
             <div class="wizard-nav">
                 <button class="wizard-btn" id="wz-back">Back</button>
-                <button class="wizard-btn primary" id="wz-next" ${!this._data.model ? 'disabled' : ''}>Next</button>
+                <button class="wizard-btn primary" id="wz-next">Next</button>
             </div>
         `;
-
-        const nextBtn = s.querySelector('#wz-next');
-        s.querySelectorAll('.wizard-option').forEach(el => {
-            el.addEventListener('click', () => {
-                this._data.model = el.dataset.model;
-                s.querySelectorAll('.wizard-option').forEach(o => o.classList.remove('selected'));
-                el.classList.add('selected');
-                nextBtn.removeAttribute('disabled');
-            });
-        });
-
+        const input = s.querySelector('input');
         const go = () => {
-            if (!this._data.model) return;
+            const val = input.value.trim();
+            if (!val) return;
+            this._data.model = val;
             this._step.go('telegram');
         };
-        nextBtn.addEventListener('click', go);
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+        s.querySelector('#wz-next').addEventListener('click', go);
         s.querySelector('#wz-back').addEventListener('click', () => this._step.go('name'));
     }
 

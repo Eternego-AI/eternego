@@ -14,7 +14,6 @@ export default class NewPersonaApp extends App {
 
         const create = document.createElement('create-widget');
         create.init({
-            models: () => OS.models,
             onCreated: (personaId) => {
                 OS.fetchPersonas().then(() => OS.open('persona', { personaId }));
             },
@@ -22,7 +21,6 @@ export default class NewPersonaApp extends App {
 
         const migrate = document.createElement('migrate-widget');
         migrate.init({
-            models: () => OS.models,
             onMigrated: (personaId) => {
                 OS.fetchPersonas().then(() => OS.open('persona', { personaId }));
             },

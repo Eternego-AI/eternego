@@ -18,12 +18,6 @@ async def list_personas():
 
 
 
-@router.get("/models")
-async def get_models():
-    outcome = await environment.info()
-    return outcome.data
-
-
 @router.post("/environment/prepare")
 async def prepare_environment(request: EnvironmentPrepareRequest):
     outcome = await environment.prepare(request.model or None)

@@ -149,9 +149,6 @@ async def create(
         "Creating persona", {"name": name, "model": model, "channel": channel_type, "frontier_model": frontier_model, "frontier_provider": frontier_provider}
     )
 
-    if not local_inference_engine.is_supported(model):
-        return Outcome(success=False, message=f"'{model}' is not a supported base model. Please choose from the supported models.")
-
     persona = None
 
     try:
@@ -276,9 +273,6 @@ async def create(
 async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
     """It enables you to migrate your persona so nothing is ever lost."""
     await bus.propose("Migrating persona", {"diary_path": diary_path, "model": model})
-
-    if not local_inference_engine.is_supported(model):
-        return Outcome(success=False, message=f"'{model}' is not a supported base model. Please choose from the supported models.")
 
     persona = None
 
@@ -758,18 +752,18 @@ async def grow(persona: Persona) -> Outcome[dict]:
         training_set = json.dumps({"training_pairs": all_pairs}, indent=2)
         paths.add_training_set(persona.id, training_set)
 
+        from application.platform import hugging_face
+        hf_model_id = hugging_face.id_for(persona.base_model)
+        if hf_model_id is None:
+            await bus.broadcast("Grown", {"persona": persona})
+            return Outcome(success=False, message=f"'{persona.base_model}' is not supported for fine-tuning.", data={"dna": True, "finetune": False})
+
         vram = OS.gpu_vram_gb()
         if vram is None:
             await bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=True, message="Fine-tuning skipped — no GPU detected.", data={"dna": True, "finetune": False})
 
-        hardware = local_inference_engine.models()
-        model_info = next((m for m in hardware if m["name"] == persona.base_model), None)
-        if model_info is not None and not model_info["fits"]:
-            await bus.broadcast("Grown", {"persona": persona})
-            return Outcome(success=True, message="Fine-tuning skipped — insufficient VRAM.", data={"dna": True, "finetune": False})
-
-        await local_inference_engine.fine_tune(persona.base_model, training_set, persona.model.name, persona.id)
+        await local_inference_engine.fine_tune(hf_model_id, training_set, persona.base_model, persona.model.name, persona.id)
 
         if not await local_inference_engine.check(persona.model.name):
             raise DNAError("Fine-tuned model failed verification — previous model is still active")

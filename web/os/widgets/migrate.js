@@ -1,12 +1,11 @@
 import Widget from './widget.js';
-import { check, x } from '../icons.js';
 
 class MigrateWidget extends Widget {
     static widgetId = 'migrate';
     static columns = 2;
     static rows = 3;
 
-    // init({ models, onMigrated })
+    // init({ onMigrated })
     build() {
 
         this._data = { file: null, phrase: '', model: '' };
@@ -106,51 +105,24 @@ class MigrateWidget extends Widget {
 
     _renderModel() {
         const s = this._panels.model;
-        const models = this._props.models();
-
-        if (models.length === 0) {
-            s.innerHTML = `
-                <label class="wizard-label">No models available</label>
-                <div class="wizard-nav">
-                    <button class="wizard-btn" id="wz-back">Back</button><span></span>
-                </div>
-            `;
-            s.querySelector('#wz-back').addEventListener('click', () => this._step.go('diary'));
-            return;
-        }
-
-        const options = models.map(m => {
-            const fit = m.fits ? check(14) : x(14);
-            const ram = m.ram_required_gb ? `${m.ram_required_gb}GB RAM` : '';
-            const params = m.params_b ? `${m.params_b}B` : '';
-            const meta = [params, ram].filter(Boolean).join(' · ');
-            const selected = this._data.model === m.name ? 'selected' : '';
-            return `<div class="wizard-option ${selected}" data-model="${this._esc(m.name)}">
-                <span class="wizard-option-fit">${fit}</span>
-                <span class="wizard-option-name">${this._esc(m.name)}</span>
-                <span class="wizard-option-meta">${meta}</span>
-            </div>`;
-        }).join('');
-
         s.innerHTML = `
-            <label class="wizard-label">Choose a base model for migration</label>
-            <div class="wizard-options">${options}</div>
+            <label class="wizard-label">Base model for migration</label>
+            <p class="wizard-hint">Enter the Ollama model name (e.g. <code>qwen2.5:7b</code>).</p>
+            <input class="wizard-input" type="text" placeholder="qwen2.5:7b" value="${this._esc(this._data.model)}">
             <div class="wizard-nav">
                 <button class="wizard-btn" id="wz-back">Back</button>
-                <button class="wizard-btn primary" id="wz-migrate" ${!this._data.model ? 'disabled' : ''}>Migrate</button>
+                <button class="wizard-btn primary" id="wz-migrate">Migrate</button>
             </div>
         `;
-
-        const migrateBtn = s.querySelector('#wz-migrate');
-        s.querySelectorAll('.wizard-option').forEach(el => {
-            el.addEventListener('click', () => {
-                this._data.model = el.dataset.model;
-                s.querySelectorAll('.wizard-option').forEach(o => o.classList.remove('selected'));
-                el.classList.add('selected');
-                migrateBtn.removeAttribute('disabled');
-            });
-        });
-        migrateBtn.addEventListener('click', () => { if (this._data.model) this._submit(); });
+        const input = s.querySelector('input');
+        const go = () => {
+            const val = input.value.trim();
+            if (!val) return;
+            this._data.model = val;
+            this._submit();
+        };
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+        s.querySelector('#wz-migrate').addEventListener('click', go);
         s.querySelector('#wz-back').addEventListener('click', () => this._step.go('diary'));
     }
 

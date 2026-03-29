@@ -19,7 +19,6 @@ const OS = {
     // ── State ────────────────────────────────────────────────
     booted: false,
     personas: [],
-    models: [],
     currentApp: null,
     currentPersonaId: null,
 
@@ -78,15 +77,6 @@ const OS = {
     },
 
     // ── API ──────────────────────────────────────────────────
-    async fetchEnvironment() {
-        try {
-            const res = await fetch('/api/models');
-            const data = await res.json();
-            this.models = data.models || [];
-        } catch { this.models = []; }
-        return this.models;
-    },
-
     async fetchPersonas() {
         try {
             const res = await fetch('/api/personas');
@@ -101,7 +91,7 @@ const OS = {
 
     async boot() {
         const minWait = new Promise(r => setTimeout(r, 1500));
-        await Promise.all([this.fetchEnvironment(), this.fetchPersonas()]);
+        await Promise.all([this.fetchPersonas()]);
         await minWait;
         this.booted = true;
     },

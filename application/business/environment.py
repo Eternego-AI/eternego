@@ -1,7 +1,7 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
 from application.core import bus, agents, system, local_inference_engine, paths, channels
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, HardwareError, AgentError
+from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, AgentError
 from application.business.outcome import Outcome
 
 
@@ -82,18 +82,6 @@ async def pair(code: str) -> Outcome[dict]:
     except AgentError as e:
         await bus.broadcast("Pairing failed", {"code": code, "reason": str(e)})
         return Outcome(success=False, message=str(e))
-
-
-async def info() -> Outcome[dict]:
-    """Return supported base models with hardware compatibility flags."""
-    await bus.propose("Listing supported models", {})
-    try:
-        supported = local_inference_engine.models()
-        await bus.broadcast("Supported models listed", {"count": len(supported)})
-        return Outcome(success=True, message="Environment information retrieved", data={"models": supported, "hardware": system.hardware()})
-    except HardwareError as e:
-        await bus.broadcast("Hardware info failed", {"error": str(e)})
-        return Outcome(success=False, message="Could not read hardware information from your system.")
 
 
 async def check_model(model: str) -> Outcome[dict]:
