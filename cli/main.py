@@ -14,6 +14,8 @@ def cmd_daemon(args):
     """Run the background daemon (called by the OS service manager)."""
     service_args = ["eternego-daemon"]
     service_args += ["-v"] * getattr(args, "verbose", 0)
+    if getattr(args, "debug", False):
+        service_args += ["--debug"]
     if getattr(args, "predict_interval", 60) != 60:
         service_args += ["--predict-interval", str(args.predict_interval)]
     if getattr(args, "port", 5001) != 5001:
@@ -148,6 +150,7 @@ def main():
     # daemon
     daemon_p = sub.add_parser("daemon", help="Run the background daemon (used by the OS service manager)")
     daemon_p.add_argument("-v", "--verbose", action="count", default=0)
+    daemon_p.add_argument("--debug", action="store_true", help="Enable debug logging and signal file output")
     daemon_p.add_argument("--predict-interval", type=int, default=60, metavar="SECONDS",
                           help="Seconds between predict cycles (default: 60, 0 to disable)")
     daemon_p.add_argument("--port", type=int, default=5001, help="Web server port (default: 5001)")

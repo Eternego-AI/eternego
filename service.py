@@ -62,27 +62,31 @@ async def restart_gateway(command: Command):
 async def main():
     parser = argparse.ArgumentParser(description="Eternego service")
     parser.add_argument("-v", "--verbose", action="count", default=0)
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging and signal file output")
     parser.add_argument("--port", type=int, default=web_config.PORT, help=f"Web server port (default: {web_config.PORT})")
     parser.add_argument("--host", default=web_config.HOST, help=f"Web server host (default: {web_config.HOST})")
     args = parser.parse_args()
     verbosity = args.verbose
+    debug_mode = args.debug
 
     levels = list(logger.Level)
     info_index = levels.index(logger.Level.INFO)
 
     log_file().parent.mkdir(parents=True, exist_ok=True)  # Windows needs this upfront
-    file_log = logger.file_media(log_file)
+
     def log_media(message):
-        file_log(message)
+        if not debug_mode and message.level == logger.Level.DEBUG:
+            return
+        logger.file_media(log_file)(message)
         if verbosity >= 3 or (verbosity >= 2 and levels.index(message.level) <= info_index):
             print(f"[{message.level.value}] {message.title}", message.context)
-
-    file_signal = logger.file_media(signal_log_file)
-    def signal_media(message):
-        file_signal(message)
+        
 
     def log_signal(signal: Signal):
-        logger.info(signal.title, {"_type": signal.__class__.__name__, **signal.details}, signal_media)
+        def signal_log_media(message):
+            if debug_mode:
+                logger.file_media(signal_log_file)(message)
+        logger.info(signal.title, {"_type": signal.__class__.__name__, **signal.details}, signal_log_media)
         if verbosity >= 2 or (verbosity >= 1 and isinstance(signal, (Plan, Event))):
             print(f"[{signal.__class__.__name__}] {signal.title}", signal.details)
 
