@@ -6,17 +6,13 @@ schedule()    — today's destiny entries (reminders and events).
 notes()       — all active notes.
 """
 
-from application.core import paths, system
+from application.core import paths
 from application.platform import datetimes, OS
 
 
 def time() -> str:
     now = datetimes.now()
-    return (
-        f"Current time: {now.strftime('%A, %B %d, %Y %H:%M UTC')}.\n"
-        "Always express times in the person's timezone from person identity. "
-        f"If not available, use {system.timezone()}."
-    )
+    return f"Current time: {now.strftime('%A, %B %d, %Y %H:%M')}."
 
 
 def environment(persona_id: str) -> str:

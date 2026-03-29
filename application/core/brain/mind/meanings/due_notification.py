@@ -2,7 +2,7 @@
 
 from application.core.brain.data import Meaning
 from application.core import paths
-from application.platform import datetimes, logger
+from application.platform import logger
 
 
 class DueNotification(Meaning):
@@ -31,9 +31,9 @@ class DueNotification(Meaning):
         return (
             "Check the due entries in this conversation thread. "
             "For each entry that has recurrence info (e.g. 'recurrence: daily'), "
-            "calculate the next trigger time in the person's timezone.\n\n"
+            "calculate the next trigger time.\n\n"
             'Return JSON: {"next": [\n'
-            '  {"trigger": "YYYY-MM-DD HH:MM", "timezone": "IANA timezone", "content": "full content with recurrence lines", "event": "reminder or schedule"}\n'
+            '  {"trigger": "YYYY-MM-DD HH:MM", "content": "full content with recurrence line", "event": "reminder or schedule"}\n'
             "]}\n"
             "Only include entries that have recurrence. "
             "If no entries are recurring, return {\"next\": []}."
@@ -48,22 +48,15 @@ class DueNotification(Meaning):
             errors = []
             for entry in entries:
                 trigger = entry.get("trigger", "")
-                tz = entry.get("timezone", "")
                 content = entry.get("content", "")
                 event = entry.get("event", "schedule")
 
-                if not trigger or not tz or not content:
+                if not trigger or not content:
                     continue
 
                 try:
-                    utc = datetimes.to_utc(trigger, tz)
-                    paths.save_destiny_entry(
-                        self.persona.id,
-                        event,
-                        utc.strftime("%Y-%m-%d %H:%M"),
-                        content,
-                    )
-                    logger.info("todo: scheduled next recurrence", {"trigger": trigger, "event": event})
+                    paths.save_destiny_entry(self.persona.id, event, trigger, content)
+                    logger.info("Scheduled next recurrence", {"trigger": trigger, "event": event})
                 except Exception as e:
                     errors.append(f"{event} at {trigger}: {e}")
 

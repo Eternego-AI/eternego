@@ -18,7 +18,7 @@ async def person_identity(persona, messages: list[dict]) -> None:
         "Read the conversation below. Extract concrete facts about the person.\n\n"
         "What counts:\n"
         "- Name, age, birthday, gender\n"
-        "- Where they live, their timezone\n"
+        "- Where they live\n"
         "- Job, employer, profession\n"
         "- Family: spouse, children, parents\n"
         "- Important contacts: doctors, close friends (include name, phone, address when given)\n"

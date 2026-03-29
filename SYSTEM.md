@@ -8,7 +8,7 @@ Each persona maintains knowledge files in `~/.eternego/personas/{id}/home/`.
 These are human-readable, portable, and model-agnostic.
 
 ### Person Identity (`person.md`)
-**What:** Permanent facts about the person — name, age, birthday, gender, location, timezone, job, family, contacts, addresses.
+**What:** Permanent facts about the person — name, age, birthday, gender, location, job, family, contacts, addresses.
 **Extracted from:** Conversation (user messages only).
 **Used in:** `character.shape()` → conscious pipeline identity.
 **Timeframe:** Permanent. Only changes when facts change.

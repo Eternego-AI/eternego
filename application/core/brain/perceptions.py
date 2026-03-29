@@ -10,7 +10,7 @@ def conversation(perception: Perception) -> str:
     for s in perception.thread:
         if s.event not in visible:
             continue
-        ts = s.created_at.strftime("%Y-%m-%d %H:%M UTC")
+        ts = s.created_at.strftime("%Y-%m-%d %H:%M")
         who = "person" if s.event in (SignalEvent.heard, SignalEvent.queried) else "persona"
         lines.append(f"[{ts}] {who}: {s.content}")
     return "\n".join(lines)
@@ -20,7 +20,7 @@ def thread(perception: Perception) -> str:
     """Return a full string representation of a perception and its thread."""
     lines = [f"# {perception.impression}"]
     for s in perception.thread:
-        ts = s.created_at.strftime("%Y-%m-%d %H:%M UTC")
+        ts = s.created_at.strftime("%Y-%m-%d %H:%M")
         lines.append(f"[{ts}] {s.event}: {s.content}")
     return "\n".join(lines)
 

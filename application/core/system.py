@@ -119,10 +119,7 @@ async def get_phrases(persona: Persona) -> str:
     raise UnsupportedOS("Eternego requires Linux, macOS, or Windows")
 
 
-def timezone() -> str:
-    """Return the IANA timezone name of the local system."""
-    logger.info("Reading system timezone")
-    return datetimes.system_timezone()
+
 
 
 def hardware() -> dict:

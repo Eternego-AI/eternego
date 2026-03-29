@@ -182,12 +182,12 @@ async def create(
         paths.create_directory(paths.meanings(persona.id))
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
-        paths.save_as_string(paths.person_identity(persona.id), f"The person's timezone is {system.timezone()}.")
+        paths.save_as_string(paths.person_identity(persona.id), "")
 
         phrase = system.generate_recovery_phrases()
         await system.save_phrases(persona, phrase)
 
-        paths.add_routine(persona.id, "sleep", "00:00", "daily", system.timezone())
+        paths.add_routine(persona.id, "sleep", "00:00", "daily")
 
         paths.init_git(paths.diary(persona.id))
         outcome = await write_diary(persona)

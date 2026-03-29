@@ -125,14 +125,12 @@ def routines(persona_id: str) -> Path:
     return home(persona_id) / "routines.json"
 
 
-def add_routine(persona_id: str, spec: str, time: str, recurrence: str, timezone: str | None = None) -> None:
+def add_routine(persona_id: str, spec: str, time: str, recurrence: str) -> None:
     """Add a routine entry to the persona's routines file."""
-    logger.info("Adding routine", {"persona_id": persona_id, "spec": spec, "time": time, "recurrence": recurrence, "timezone": timezone})
+    logger.info("Adding routine", {"persona_id": persona_id, "spec": spec, "time": time, "recurrence": recurrence})
     path = routines(persona_id)
     data = filesystem.read_json(path) if path.exists() else {"routines": []}
     entry = {"spec": spec, "time": time, "recurrence": recurrence}
-    if timezone:
-        entry["timezone"] = timezone
     data["routines"].append(entry)
     filesystem.write_json(path, data)
 
@@ -415,9 +413,9 @@ def save_destiny_entry(persona_id: str, event: str, trigger: str, content: str) 
 
 
 def due_destiny_entries(persona_id: str, before: "datetime") -> list[tuple[Path, str]]:
-    """Return (filepath, content) for destiny entries with trigger time <= before (UTC)."""
+    """Return (filepath, content) for destiny entries with trigger time <= before (local)."""
     import re
-    from datetime import datetime as dt_class, timezone
+    from datetime import datetime as dt_class
     logger.info("Reading due destiny entries", {"persona_id": persona_id})
     dest = destiny(persona_id)
     if not dest.exists():
@@ -432,9 +430,8 @@ def due_destiny_entries(persona_id: str, before: "datetime") -> list[tuple[Path,
             trigger = dt_class(
                 int(match.group(1)), int(match.group(2)), int(match.group(3)),
                 int(match.group(4)), int(match.group(5)),
-                tzinfo=timezone.utc,
             )
-            if trigger <= before:
+            if trigger <= before.replace(tzinfo=None):
                 content = read(f)
                 if content:
                     results.append((f, content))
