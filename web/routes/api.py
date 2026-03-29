@@ -102,7 +102,15 @@ async def get_persona(persona_id: str):
 
 @router.get("/persona/{persona_id}/mind")
 async def get_mind(persona_id: str):
-    outcome = await persona.scene(persona_id)
+    outcome = await persona.mind(persona_id)
+    if not outcome.success:
+        raise HTTPException(status_code=404, detail=outcome.message)
+    return outcome.data
+
+
+@router.get("/persona/{persona_id}/conversation")
+async def get_conversation(persona_id: str):
+    outcome = await persona.conversation(persona_id)
     if not outcome.success:
         raise HTTPException(status_code=404, detail=outcome.message)
     return outcome.data
@@ -194,12 +202,9 @@ async def hear_persona(persona_id: str, request: HearRequest):
     live = find.data["persona"]
 
     from application.core.data import Channel, Message
-    from web.socket import WebSocketBus
-    channel = Channel(type="web", name=persona_id, bus=WebSocketBus(persona_id))
+    channel = Channel(type="web", name=persona_id)
     message = Message(channel=channel, content=request.message)
-
-    from config import web as web_config
-    outcome = await persona.talk(live, message, timeout=web_config.CHAT_TIMEOUT)
+    outcome = await persona.hear(live, message)
     if not outcome.success:
         raise HTTPException(status_code=500, detail=outcome.message)
     return {"status": "received"}

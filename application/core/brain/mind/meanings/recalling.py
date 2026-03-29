@@ -32,42 +32,38 @@ class Recalling(Meaning):
         return None
 
     def path(self) -> str | None:
-        history_dir = paths.history(self.persona.id)
-        if not history_dir.exists():
+        briefing_path = paths.history_briefing(self.persona.id)
+        if not briefing_path.exists():
             return None
 
-        files = [f for f in sorted(history_dir.glob("*.md")) if f.name != "briefing.md"]
-        if not files:
+        listing = filesystem.read(briefing_path).strip()
+        if not listing:
             return None
 
-        listing = "\n".join(f"- {f.name}" for f in files)
         return (
             "The person wants to recall a past conversation.\n\n"
-            f"## History\n\n{listing}\n\n"
-            "Select the files that best match what the person is asking about.\n"
-            'Return JSON: {"files": ["filename1.md", "filename2.md"]}\n'
-            "Pick only the most relevant files."
+            f"## Past Conversations\n\n{listing}\n\n"
+            "Select the file that best matches what the person is asking about.\n"
+            'Return JSON: {"file": "filename.md"}\n'
+            "Pick only the most relevant file."
         )
 
     async def run(self, persona_response: dict):
-        filenames = persona_response.get("files", [])
+        filename = persona_response.get("file", "")
         history_dir = paths.history(self.persona.id)
 
         async def action():
-            if not filenames:
+            if not filename:
                 return "No matching conversations found in history."
 
-            contents = []
-            for name in filenames:
-                target = history_dir / Path(name).name
-                if target.exists():
-                    text = filesystem.read(target).strip()
-                    if text:
-                        contents.append(f"## {name}\n\n{text}")
+            target = history_dir / Path(filename).name
+            if not target.exists():
+                return "Could not find the requested history file."
 
-            if not contents:
-                return "Could not find the requested history files."
+            text = filesystem.read(target).strip()
+            if not text:
+                return "The history file is empty."
 
-            return "\n\n---\n\n".join(contents)
+            return f"## {filename}\n\n{text}"
 
         return action

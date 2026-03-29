@@ -186,8 +186,11 @@ async def recognize(mind) -> None:
     text = await local_model.chat(mind.persona.model.name, messages)
 
     if text:
-        await channels.send_all(mind.persona, text)
+        await ego.say(text)
         mind.answer(thought, text, event)
+
+    if not m.path():
+        mind.forget(thought)
 
 
 # ── Deciding ─────────────────────────────────────────────────────────────────
@@ -209,10 +212,8 @@ async def decide(mind) -> None:
     system = (
         ego.identity()
         + "\n\n" + thought.meaning.path()
-        + "\n\nAlways include a \"recap\" field — a brief one-sentence summary of what "
-        "you are doing or have done.\n"
-        "If the task is already fulfilled based on the conversation, do not take "
-        "further action. Return only: {\"recap\": \"what was accomplished\"}"
+        + "\n\nAdd a \"recap\" field to your JSON — one sentence on what you did or are doing.\n"
+        "If already fulfilled, return just: {\"recap\": \"what was accomplished\"}."
     )
     messages = [{"role": "system", "content": system}] + mind.prompts(thought)
     result = await local_model.chat_json_stream(mind.persona.model.name, messages)
@@ -283,7 +284,7 @@ async def conclude(mind) -> None:
         text = await local_model.chat(mind.persona.model.name, messages)
 
         if text:
-            await channels.send_all(mind.persona, text)
+            await ego.say(text)
 
         mind.answer(thought, text or "", SignalEvent.summarized)
     else:

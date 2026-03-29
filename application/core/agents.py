@@ -4,7 +4,7 @@ import secrets
 
 from datetime import timedelta
 
-from application.core.brain.data import Signal, Perception, Thought
+from application.core.brain.data import Signal, Perception
 from application.core.brain.mind.memory import Memory
 from application.core.brain import character
 from application.core import local_model, frontier, tools, paths
@@ -131,12 +131,17 @@ class Ego:
         self.memory.incept(perception)
         self.worker.nudge()
 
-    def question(self, thought: Thought) -> None:
-        """Inject a pre-formed thought, bypassing understanding and recognition."""
-        logger.info("Question", {"persona": self.persona, "thought": thought})
-        self.memory.incept(thought.perception)
-        self.memory.question(thought)
-        self.worker.nudge()
+    async def say(self, text: str) -> None:
+        """Append to conversation.jsonl and send to all active channels."""
+        logger.debug("Say", {"persona": self.persona, "text": text})
+        from application.core import channels
+        paths.append_jsonl(paths.conversation(self.persona.id), {
+            "role": "persona",
+            "content": text,
+            "channel": "web",
+            "time": datetimes.iso_8601(datetimes.now()),
+        })
+        await channels.send_all(self.persona, text)
 
     def read(self) -> list[Signal]:
         """Return all signals in the mind sorted by creation time."""
@@ -147,7 +152,7 @@ class Ego:
 
     async def learn(self, messages: list[dict]) -> None:
         """Run subconscious knowledge extraction on the given conversation messages."""
-        logger.info("Learn", {"persona": self.persona})
+        logger.debug("Learn", {"persona": self.persona, "messages": messages})
         from application.core.brain.mind import subconscious as sub
 
         if not messages:
@@ -158,35 +163,51 @@ class Ego:
         await sub.person_traits(self.persona, messages)
         await sub.wishes(self.persona, messages)
         await sub.struggles(self.persona, messages)
-        await sub.persona_context(self.persona, messages)
+        await sub.persona_trait(self.persona, messages)
         await sub.synthesize_dna(self.persona)
 
     async def learn_from_experience(self) -> None:
-        """Learn from all thoughts, then archive each individually."""
-        logger.info("Learn from experience", {"persona": self.persona})
-        from application.core.brain import perceptions
+        """Learn from conversation, archive it, build briefing, clean completed thoughts."""
+        logger.debug("Learn from experience", {"persona": self.persona})
+        from application.core.brain.data import SignalEvent
 
-        mem = self.memory
-
-        all_thoughts = list(mem.intentions)
-        if not all_thoughts:
+        # 1. Read conversation and learn from it
+        conversation = paths.read_jsonl(paths.conversation(self.persona.id))
+        if not conversation:
             return
 
         messages = []
-        for thought in all_thoughts:
-            messages.extend(perceptions.to_conversation(thought.perception.thread))
+        for entry in conversation:
+            role = "user" if entry["role"] == "person" else "assistant"
+            messages.append({"role": role, "content": entry["content"]})
 
         await self.learn(messages)
 
-        for thought in all_thoughts:
-            from application.core.brain.data import SignalEvent
-            summaries = [s for s in thought.perception.thread if s.event == SignalEvent.summarized]
-            recap = summaries[-1].content if summaries else None
+        # 2. Archive conversation as a single history file
+        lines = []
+        for entry in conversation:
+            lines.append(f"[{entry.get('time', '')}] {entry['role']}: {entry['content']}")
+        filename = paths.add_history_entry(self.persona.id, "conversation", "\n".join(lines))
 
-            filename = mem.archive(thought)
+        # 3. Build briefing from recap signals in completed thoughts
+        recaps = []
+        for thought in self.memory.intentions:
+            for s in reversed(thought.perception.thread):
+                if s.event == SignalEvent.recap:
+                    recaps.append(s.content)
+                    break
+        recap_text = " | ".join(recaps) if recaps else "No recap available."
+        date = datetimes.iso_8601(datetimes.now())
+        paths.append_line(paths.history_briefing(self.persona.id),
+                          f"- {date}: {filename} — {recap_text}")
 
-            if recap:
-                paths.add_history_briefing(self.persona.id, "| File | Recap |", f"| {filename} | {recap} |")
+        # 4. Clean all remaining thoughts
+        for thought in list(self.memory.intentions):
+            self.memory.forget(thought)
+
+        # 5. Clear conversation file
+        from application.platform import filesystem
+        filesystem.write(paths.conversation(self.persona.id), "")
 
     # ── Identity ───────────────────────────────────────────────────────────
 

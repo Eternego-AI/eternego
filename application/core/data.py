@@ -1,6 +1,5 @@
 """Data models for the application."""
 
-import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
@@ -21,7 +20,7 @@ class Channel(Data):
     name: str = ""          # chat_id for telegram, uuid for web; empty for network-level channels
     credentials: dict | None = sensitive()
     verified_at: str | None = None
-    bus: asyncio.Queue | None = hidden()
+    bus: object | None = hidden()
 
 
 @dataclass(kw_only=True)

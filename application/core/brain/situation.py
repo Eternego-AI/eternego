@@ -57,7 +57,8 @@ def normal(persona_id: str) -> str:
 
 def sleep(persona_id: str) -> str:
     parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id), (
-        'You are going to sleep now. Take a note from what are not completed today and what you want to focus on tomorrow.'
+        'This is your last response before you shut down for the night. '
+        'Say goodnight and mention anything you want to pick up tomorrow.'
     )]
     return "\n\n".join(p for p in parts if p)
 

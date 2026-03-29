@@ -25,6 +25,11 @@ def workspace(persona_id: str) -> Path:
     return Path.home() / ".eternego" / "personas" / persona_id / "workspace"
 
 
+def conversation(persona_id: str) -> Path:
+    """Path to the conversation.jsonl file for that persona."""
+    return home(persona_id) / "conversation.jsonl"
+
+
 def persona_identity(persona_id: str) -> Path:
     """Path to the config.json file for that persona."""
     return home(persona_id) / "config.json"
@@ -40,9 +45,9 @@ def person_traits(persona_id: str) -> Path:
     return home(persona_id) / "traits.md"
 
 
-def context(persona_id: str) -> Path:
-    """Path to the persona-context.md file for that persona."""
-    return home(persona_id) / "context.md"
+def persona_trait(persona_id: str) -> Path:
+    """Path to the persona-trait.md file for that persona."""
+    return home(persona_id) / "persona-trait.md"
 
 
 def struggles(persona_id: str) -> Path:
@@ -177,6 +182,27 @@ def append_as_string(path: Path, content: str) -> None:
     """Append string content to a file."""
     logger.info("Appending to file", {"path": str(path)})
     filesystem.append(path, content)
+
+
+def append_line(path: Path, line: str) -> None:
+    """Append a single line to a file."""
+    logger.info("Appending line to file", {"path": str(path)})
+    filesystem.append(path, line + "\n")
+
+
+def append_jsonl(path: Path, obj: dict) -> None:
+    """Append a JSON object as a single line to a JSONL file."""
+    import json
+    filesystem.append(path, json.dumps(obj) + "\n")
+
+
+def read_jsonl(path: Path) -> list[dict]:
+    """Read a JSONL file and return a list of parsed objects."""
+    import json
+    if not path.exists():
+        return []
+    text = read(path)
+    return [json.loads(line) for line in text.strip().splitlines() if line.strip()]
 
 
 def meanings(persona_id: str) -> Path:
@@ -325,17 +351,6 @@ def find_and_delete_file(path: Path, hash_part: str) -> None:
     logger.warning("File not found or already removed", {"path": str(path), "hash": hash_part})
 
 
-def add_history_briefing(persona_id: str, header: str, row: str) -> None:
-    """Append an entry to the persona's history briefing index."""
-    logger.info("Adding entry to history briefing", {"persona_id": persona_id, "row": row})
-    briefing_path = history_briefing(persona_id)
-    if not briefing_path.exists():
-        cols = header.count("|") - 1
-        separator = "|" + "|".join(["--------|" for _ in range(cols)])
-        save_as_string(briefing_path, header + "\n" + separator + "\n")
-    append_as_string(briefing_path, row + "\n")
-
-
 def md_files(directory: Path) -> list[Path]:
     """Return a list of markdown files in the given directory."""
     logger.info("Listing markdown files in directory", {"directory": str(directory)})
@@ -353,17 +368,6 @@ def zip_home(persona_id: str) -> bytes:
         logger.error("Persona home directory not found", {"persona_id": persona_id})
         raise FileNotFoundError(f"Persona home directory not found for persona_id: {persona_id}")
     return filesystem.zip(path)
-
-
-def read_history_brief(persona_id: str, default: str) -> str:
-    """Read the history briefing index for the persona."""
-    logger.info("Reading history briefing index", {"persona_id": persona_id})
-    path = history_briefing(persona_id)
-    if not path.exists():
-        logger.warning("History briefing file not found", {"persona_id": persona_id})
-        return default
-    content = filesystem.read(path)
-    return content.strip() if content.strip() else default
 
 
 def write_dna(persona_id: str, dna_content: str) -> None:

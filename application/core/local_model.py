@@ -11,10 +11,13 @@ async def chat(model: str, messages: list[dict]) -> str:
     logger.debug("local_model.chat", {"model": model, "messages": messages})
     try:
         response = await ollama.post("/api/chat", {"model": model, "messages": messages, "stream": False})
-        return response["message"]["content"]
+        content = response["message"]["content"]
+        logger.debug("local_model.chat response", {"model": model, "content": content or "(empty)"})
+        return content
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except KeyError as e:
+        logger.warning("local_model.chat invalid response", {"model": model, "response": str(response)})
         raise EngineConnectionError("Model returned an invalid response") from e
 
 
@@ -23,6 +26,7 @@ async def chat_json(model: str, messages: list[dict]) -> dict:
     logger.debug("local_model.chat_json", {"model": model, "messages": messages})
     try:
         response = await ollama.post("/api/chat", {"model": model, "messages": messages, "stream": False, "format": "json"})
+        logger.debug("local_model.chat_json response", {"model": model, "response": response})
         return strings.extract_json(response["message"]["content"])
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
@@ -38,6 +42,7 @@ async def chat_json_stream(model: str, messages: list[dict]) -> dict:
         parts = []
         async for chunk in ollama.stream_post("/api/chat", body):
             parts.append(chunk.get("message", {}).get("content", ""))
+        logger.debug("local_model.chat_json_stream full response", {"model": model, "response": "".join(parts)})
         return strings.extract_json("".join(parts))
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
@@ -53,6 +58,7 @@ async def generate(model: str, prompt: str, json_mode: bool = False) -> str:
         if json_mode:
             body["format"] = "json"
         response = await ollama.post("/api/generate", body)
+        logger.debug("Received generate response from model", {"model": model, "response": response})
         return response["response"].strip()
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
@@ -65,7 +71,9 @@ async def generate_json(model: str, prompt: str) -> dict:
     logger.debug("Sending JSON generate request to model", {"model": model, "prompt": prompt})
     response = await generate(model, prompt, json_mode=True)
     try:
-        return strings.extract_json(response)
+        response = strings.extract_json(response)
+        logger.debug("Parsed JSON from model response", {"model": model, "response": response})
+        return response
     except json.JSONDecodeError as e:
         raise EngineConnectionError("Model returned an invalid JSON response") from e
 

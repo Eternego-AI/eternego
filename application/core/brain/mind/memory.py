@@ -247,18 +247,6 @@ class Memory:
         return [t for t in self._thoughts
                 if self._last_event(t) == SignalEvent.recap]
 
-    @property
-    def needs_archive(self) -> list[Thought]:
-        """Thoughts done — summarized, or answered with no path."""
-        result = []
-        for t in self._thoughts:
-            last = self._last_event(t)
-            if last == SignalEvent.summarized:
-                result.append(t)
-            elif last == SignalEvent.answered and not t.meaning.path():
-                result.append(t)
-        return result
-
     def most_important_thought(self, thoughts: list[Thought]) -> Thought | None:
         """The highest-priority Thought — highest priority, then oldest by id."""
         if not thoughts:
@@ -294,12 +282,6 @@ class Memory:
             for t in list(self._thoughts):
                 if t.perception.impression == impression:
                     self._thoughts.remove(t)
-
-    def question(self, thought: Thought) -> None:
-        """Add a pre-formed thought directly (bypasses realize + understand)."""
-        logger.debug("memory.question", {"persona": self._persona.id, "thought": thought.id})
-        self._thoughts.append(thought)
-
 
     def understand(self, perception: Perception, meaning, priority: int = 0) -> Thought:
         """Create a Thought from a Perception and a Meaning instance."""

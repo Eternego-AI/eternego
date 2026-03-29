@@ -105,16 +105,13 @@ class ChatWidget extends Widget {
     async _loadHistory() {
         if (!this._personaId) return;
         try {
-            const res = await fetch(`/api/persona/${this._personaId}/mind`);
+            const res = await fetch(`/api/persona/${this._personaId}/conversation`);
             if (!res.ok) return;
             const data = await res.json();
             this._tail.innerHTML = '';
-            for (const s of data.signals || []) {
-                if (s.event === 'heard' || s.event === 'queried') {
-                    this._addMessage('user', s.content);
-                } else if ((s.event === 'answered' || s.event === 'clarified' || s.event === 'summarized') && !s.content.trimStart().startsWith('{')) {
-                    this._addMessage('assistant', s.content);
-                }
+            for (const msg of data.messages || []) {
+                const role = msg.role === 'person' ? 'user' : 'assistant';
+                this._addMessage(role, msg.content);
             }
         } catch {}
     }

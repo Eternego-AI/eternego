@@ -43,10 +43,14 @@ const OS = {
 
     // ── WebSocket ────────────────────────────────────────────
     _ws: null,
+    _wsPersonaId: null,
 
-    connect() {
+    connectPersona(personaId) {
+        if (this._wsPersonaId === personaId && this._ws) return;
+        this.disconnectPersona();
+        this._wsPersonaId = personaId;
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${protocol}//${location.host}/ws`);
+        const ws = new WebSocket(`${protocol}//${location.host}/ws/${personaId}`);
 
         ws.onmessage = (e) => {
             try {
@@ -56,8 +60,21 @@ const OS = {
             } catch {}
         };
 
-        ws.onclose = () => setTimeout(() => this.connect(), 3000);
+        ws.onclose = () => {
+            if (this._wsPersonaId === personaId) {
+                setTimeout(() => this.connectPersona(personaId), 3000);
+            }
+        };
         this._ws = ws;
+    },
+
+    disconnectPersona() {
+        this._wsPersonaId = null;
+        if (this._ws) {
+            this._ws.onclose = null;
+            this._ws.close();
+            this._ws = null;
+        }
     },
 
     // ── API ──────────────────────────────────────────────────
@@ -83,7 +100,6 @@ const OS = {
     _mode: null,
 
     async boot() {
-        this.connect();
         const minWait = new Promise(r => setTimeout(r, 1500));
         await Promise.all([this.fetchEnvironment(), this.fetchPersonas()]);
         await minWait;

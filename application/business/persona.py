@@ -82,15 +82,15 @@ async def loaded(persona_id: str) -> Outcome[dict]:
         return Outcome(success=False, message=str(e))
 
 
-async def scene(persona_id: str) -> Outcome[dict]:
+async def mind(persona_id: str) -> Outcome[dict]:
     """Return all signals currently in the persona's mind, sorted by time."""
-    await bus.propose("Getting persona scene", {"persona_id": persona_id})
+    await bus.propose("Getting persona mind", {"persona_id": persona_id})
     persona = await loaded(persona_id)
     if not persona.success:
         return persona
     try:
         signals = agents.persona(persona.data["persona"]).read()
-        await bus.broadcast("Persona scene loaded", {"persona": persona})
+        await bus.broadcast("Persona mind loaded", {"persona": persona})
         return Outcome(success=True, message="", data={
             "signals": [
                 {"event": s.event, "content": s.content, "created_at": s.created_at.isoformat()}
@@ -98,7 +98,19 @@ async def scene(persona_id: str) -> Outcome[dict]:
             ]
         })
     except MindError as e:
-        await bus.broadcast("Reading persona scene failed", {"persona_id": persona_id, "error": str(e)})
+        await bus.broadcast("Reading persona mind failed", {"persona_id": persona_id, "error": str(e)})
+        return Outcome(success=False, message=str(e))
+
+
+async def conversation(persona_id: str) -> Outcome[dict]:
+    """Return the conversation history for a persona."""
+    await bus.propose("Reading conversation", {"persona_id": persona_id})
+    try:
+        messages = paths.read_jsonl(paths.conversation(persona_id))
+        await bus.broadcast("Conversation read", {"persona_id": persona_id})
+        return Outcome(success=True, message="", data={"messages": messages})
+    except Exception as e:
+        await bus.broadcast("Conversation read failed", {"persona_id": persona_id, "error": str(e)})
         return Outcome(success=False, message=str(e))
 
 
@@ -398,7 +410,7 @@ async def oversee(persona: Persona) -> Outcome[dict]:
         traits = paths.lines(paths.person_traits(persona.id))
         wish_list = paths.lines(paths.wishes(persona.id))
         struggle_list = paths.lines(paths.struggles(persona.id))
-        persona_context = paths.lines(paths.context(persona.id))
+        persona_context = paths.lines(paths.persona_trait(persona.id))
         histories = paths.md_files(paths.history(persona.id))
         destinies = paths.md_files(paths.destiny(persona.id))
 
@@ -440,7 +452,7 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
             elif prefix == "pt":
                 paths.delete_entry(paths.person_traits(persona.id), hash_part)
             elif prefix == "pc":
-                paths.delete_entry(paths.context(persona.id), hash_part)
+                paths.delete_entry(paths.persona_trait(persona.id), hash_part)
             elif prefix == "hist":
                 paths.find_and_delete_file(paths.history(persona.id), hash_part)
             elif prefix == "dest":
@@ -509,30 +521,42 @@ async def connect(persona: Persona, channel: Channel) -> Outcome:
             await bus.broadcast("Channel connected", {"persona": persona, "channel": channel})
             return Outcome(success=True, message="")
 
-        async def on_message(message: Message) -> Outcome:
-            if channel.verified_at is not None:
-                outcome = await talk(persona, message)
-                # say tool handles delivery to the channel directly
+        if channel.type == "web":
+            gateways.of(persona).add(channel, lambda: None)
+        else:
+            async def on_message(message: Message) -> Outcome:
+                if channel.verified_at is not None:
+                    return await hear(persona, message)
+
+                outcome = await pair(persona, message.channel)
+                if not outcome.success:
+                    await channels.send(message.channel, outcome.message)
+                else:
+                    code = outcome.data["pairing_code"]
+                    await channels.send(
+                        message.channel,
+                        f"Your pairing code is: {code}\n\nRun: eternego pair {code}\n\nThis code expires in 10 minutes.",
+                    )
                 return outcome
 
-            outcome = await pair(persona, message.channel)
-            if not outcome.success:
-                await channels.send(message.channel, outcome.message)
-            else:
-                code = outcome.data["pairing_code"]
-                await channels.send(
-                    message.channel,
-                    f"Your pairing code is: {code}\n\nRun: eternego pair {code}\n\nThis code expires in 10 minutes.",
-                )
-            return outcome
+            connection = channels.keep_open(persona, channel, on_message)
+            gateways.of(persona).add(channel, connection)
 
-        connection = channels.keep_open(persona, channel, on_message)
-        gateways.of(persona).add(channel, connection)
         await bus.broadcast("Channel connected", {"persona": persona, "channel": channel})
         return Outcome(success=True, message="")
     except ChannelError as e:
         await bus.broadcast("Channel connection failed", {"persona": persona, "channel": channel, "error": str(e)})
         return Outcome(success=False, message=str(e))
+
+
+async def disconnect(persona: Persona, channel: Channel) -> Outcome:
+    """Close a channel connection for a persona."""
+    await bus.propose("Disconnecting channel", {"persona": persona, "channel": channel})
+    stop = gateways.of(persona).remove(channel)
+    if stop:
+        stop()
+    await bus.broadcast("Channel disconnected", {"persona": persona, "channel": channel})
+    return Outcome(success=True, message="")
 
 
 
@@ -553,16 +577,24 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
     return Outcome(success=True, message="Pairing code generated.", data={"pairing_code": code})
 
 
-async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Outcome[dict]:
-    """Receive a message, trigger the mind tick, return when say tool responds (web) or fire-and-forget (push channels)."""
-    import asyncio
+async def hear(persona: Persona, message: Message) -> Outcome[dict]:
+    """Receive a message, write to conversation, trigger the mind tick."""
     from application.core.brain.data import Signal, SignalEvent
     from application.core.brain import situation
-    await bus.propose("Talking", {"persona": persona, "channel": message.channel})
+    from application.core import paths
+    from application.platform import datetimes
+    await bus.propose("Hearing", {"persona": persona, "channel": message.channel})
     try:
         if agents.persona(persona).current_situation is situation.sleep:
-            await bus.broadcast("Talked", {"persona": persona})
+            await bus.broadcast("Heard", {"persona": persona})
             return Outcome(success=True, message="", data={"response": f"{persona.name} is sleeping."})
+
+        paths.append_jsonl(paths.conversation(persona.id), {
+            "role": "person",
+            "content": message.content,
+            "channel": message.channel.type if message.channel else "",
+            "time": datetimes.iso_8601(datetimes.now()),
+        })
 
         signal = Signal(
             id=f"{message.channel.type}-{message.channel.name}-{message.id}" if message.channel else message.id,
@@ -573,58 +605,31 @@ async def talk(persona: Persona, message: Message, timeout: float = 30.0) -> Out
             message_id=message.id,
         )
         agents.persona(persona).trigger(signal)
-        # For channels with a bus (web), wait for answer to push the response
-        if message.channel and message.channel.bus is not None:
-            try:
-                response = await asyncio.wait_for(message.channel.bus.get(), timeout=timeout)
-            except asyncio.TimeoutError:
-                response = ""
-            await bus.broadcast("Talked", {"persona": persona})
-            return Outcome(success=True, message="", data={"response": response})
-        # For push channels (Telegram), answer handles delivery directly
-        await bus.broadcast("Talked", {"persona": persona})
-        return Outcome(success=True, message="", data={"response": ""})
+        await bus.broadcast("Heard", {"persona": persona})
+        return Outcome(success=True, message="")
     except MindError as e:
-        await bus.broadcast("Talk failed", {"persona": persona, "error": str(e)})
+        await bus.broadcast("Hearing failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Something went wrong. Please try again.")
 
 
 
-async def query(persona: Persona, message: Message, timeout: float = 30.0) -> Outcome[dict]:
-    """Answer a direct query — bypasses understanding and recognition, goes straight to deciding."""
-    import asyncio
-    from application.core.brain.data import Signal, SignalEvent, Perception, Thought
-    from application.core.brain.mind.meanings.query import Query
+async def query(persona: Persona, messages) -> Outcome[dict]:
+    """Answer a direct query using the local model — no pipeline, no memory."""
     from application.core.brain import situation
-    from application.platform import datetimes
+    from application.core import local_model
 
-    await bus.propose("Querying", {"persona": persona, "channel": message.channel})
+    await bus.propose("Querying", {"persona": persona})
     try:
         if agents.persona(persona).current_situation is situation.sleep:
             await bus.broadcast("Queried", {"persona": persona})
             return Outcome(success=True, message="", data={"response": f"{persona.name} is sleeping."})
 
-        signal = Signal(
-            id=f"{message.channel.type}-{message.channel.name}-{message.id}",
-            event=SignalEvent.queried,
-            content=message.content,
-            channel_type=message.channel.type,
-            channel_name=message.channel.name,
-            message_id=message.id,
-        )
-        now = datetimes.iso_8601(datetimes.now())
-        perception = Perception(
-            impression=f"Direct query at {now}",
-            thread=[signal],
-        )
-        thought = Thought(perception=perception, meaning=Query(persona))
+        ego = agents.persona(persona)
 
-        agents.persona(persona).question(thought)
-
-        try:
-            response = await asyncio.wait_for(message.channel.bus.get(), timeout=timeout)
-        except asyncio.TimeoutError:
-            response = ""
+        response = await local_model.chat(persona.model.name, [
+            {"role": "system", "content": ego.identity()},
+            messages,
+        ])
 
         await bus.broadcast("Queried", {"persona": persona})
         return Outcome(success=True, message="", data={"response": response})

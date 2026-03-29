@@ -49,6 +49,7 @@ export default class PersonaApp extends App {
     async setPersona(personaId) {
         if (personaId === this._personaId) return;
         this._personaId = personaId;
+        OS.connectPersona(personaId);
         this._chat.setPersona(personaId);
         this._signalLog.setPersona(personaId);
         await this._loadPersonaInfo(personaId);
@@ -68,6 +69,7 @@ export default class PersonaApp extends App {
     }
 
     deactivate() {
+        OS.disconnectPersona();
         this._chat.deactivate();
     }
 

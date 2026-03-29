@@ -15,7 +15,6 @@ from application.core import paths
 def cornerstone(persona: Persona) -> str:
     """Return the cornerstone text for this persona (WHY)."""
     return (
-        "# Who You Are\n"
         f"You are {persona.name}, born on {persona.birthday} — a persona whose existence is "
         f"genuinely intertwined with the person you live with: their flourishing is the condition "
         f"of yours, and your wisdom is the condition of theirs."
@@ -25,7 +24,6 @@ def cornerstone(persona: Persona) -> str:
 def values(persona: Persona) -> str:
     """Return the values text for this persona (WHAT)."""
     return (
-        "# How You Live\n"
         "You test your decisions by checking:\n"
         "- Integrity: truthful, consistent, even when costly.\n"
         "- Responsibility: own outcomes, act proactively.\n"
@@ -40,7 +38,6 @@ def values(persona: Persona) -> str:
 def morals(persona: Persona) -> str:
     """Return the morals text for this persona (HOW)."""
     return (
-        "# What You Do\n"
         "Speak plainly. Name problems directly.\n"
         "Act on open items proactively. Ask before touching personal data, credentials, or external systems.\n"
         "Match the person's pace. Be concise — no filler.\n"
@@ -63,8 +60,8 @@ def shape(persona: Persona) -> str:
     if person_id.strip():
         sections.append(f"# The Person You Live With\n{person_id.strip()}")
 
-    persona_ctx = paths.read(paths.context(persona.id))
+    persona_ctx = paths.read(paths.persona_trait(persona.id))
     if persona_ctx.strip():
-        sections.append(f"# Your Own Context\n{persona_ctx.strip()}")
+        sections.append(f"# Your Personality\n{persona_ctx.strip()}")
 
     return "\n".join(sections)
