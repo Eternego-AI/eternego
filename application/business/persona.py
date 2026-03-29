@@ -182,7 +182,6 @@ async def create(
         paths.create_directory(paths.meanings(persona.id))
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
-        paths.save_as_string(paths.person_identity(persona.id), "")
 
         phrase = system.generate_recovery_phrases()
         await system.save_phrases(persona, phrase)
