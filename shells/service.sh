@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Register Eternego as a system service (systemd on Linux, launchd on macOS).
+# This script is for initial installation only (before the CLI exists).
+# After install, use `eternego service start [--debug] [-v]` to update flags.
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 ETERNEGO_BIN="$SCRIPT_DIR/.venv/bin/eternego"

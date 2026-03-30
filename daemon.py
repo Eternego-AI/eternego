@@ -1,28 +1,28 @@
-"""Eternego service — entry point for running all persona gateways."""
+"""Eternego daemon — long-running process that serves personas."""
 
-import argparse
 import asyncio
 import signal
 
 import uvicorn
 
-from application.business import persona
+from application.business import persona, routine
 from application.core import agents
-from application.platform import logger
+from application.platform import datetimes, logger
 from application.platform.asyncio_worker import Worker
-from config import web as web_config
-from config.application import log_file, signal_log_file
-import heart
-from application.platform.observer import Command, Event, Plan, Signal, subscribe
+from application.platform.observer import Command, Signal, subscribe
 from web.app import app as web_app
 from web.socket import on_signal
 
 
+_web_server: uvicorn.Server | None = None
+
+
 async def start_web(host: str, port: int) -> None:
     """Run the FastAPI web server inside the existing event loop."""
+    global _web_server
     config = uvicorn.Config(web_app, host=host, port=port, log_level="error")
-    server = uvicorn.Server(config)
-    await server.serve()
+    _web_server = uvicorn.Server(config)
+    await _web_server.serve()
 
 
 async def on_channel_paired(signal: Signal):
@@ -59,62 +59,36 @@ async def restart_gateway(command: Command):
         print(f"Failed to wake {agent.name}: {outcome.message}")
 
 
-async def main():
-    parser = argparse.ArgumentParser(description="Eternego service")
-    parser.add_argument("-v", "--verbose", action="count", default=0)
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging and signal file output")
-    parser.add_argument("--port", type=int, default=web_config.PORT, help=f"Web server port (default: {web_config.PORT})")
-    parser.add_argument("--host", default=web_config.HOST, help=f"Web server host (default: {web_config.HOST})")
-    args = parser.parse_args()
-    verbosity = args.verbose
-    debug_mode = args.debug
+async def run(config):
+    """Run the daemon — load personas, start web server, heartbeat loop."""
 
-    levels = list(logger.Level)
-    info_index = levels.index(logger.Level.INFO)
+    # Daemon-specific signal subscriptions
+    subscribe(restart_gateway, on_channel_paired, on_signal)
 
-    log_file().parent.mkdir(parents=True, exist_ok=True)  # Windows needs this upfront
-
-    def log_media(message):
-        if not debug_mode and message.level == logger.Level.DEBUG:
-            return
-        logger.file_media(log_file)(message)
-        if verbosity >= 3 or (verbosity >= 2 and levels.index(message.level) <= info_index):
-            print(f"[{message.level.value}] {message.title}", message.context)
-        
-
-    def log_signal(signal: Signal):
-        def signal_log_media(message):
-            if debug_mode:
-                logger.file_media(signal_log_file)(message)
-        logger.info(signal.title, {"_type": signal.__class__.__name__, **signal.details}, signal_log_media)
-        if verbosity >= 2 or (verbosity >= 1 and isinstance(signal, (Plan, Event))):
-            print(f"[{signal.__class__.__name__}] {signal.title}", signal.details)
-
-    logger.default_media(log_media)
-    subscribe(log_signal, restart_gateway, on_channel_paired, on_signal)
-
+    # Graceful shutdown on SIGTERM/SIGINT
     loop = asyncio.get_running_loop()
     shutdown = asyncio.Event()
-
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, shutdown.set)
 
+    # Load and wake all personas
     outcome = await persona.get_list()
     if not outcome.success:
         print(f"No personas yet: {outcome.message}")
 
     personas = (outcome.data or {}).get("personas", [])
-
     for agent in personas:
         outcome = await persona.wake(agent.id, Worker())
         if not outcome.success:
             print(f"Failed to wake {agent.name}: {outcome.message}")
 
-    web_task = asyncio.create_task(start_web(args.host, args.port))
+    # Start web server
+    web_task = asyncio.create_task(start_web(config.host, config.port))
     web_task.add_done_callback(
         lambda t: print(f"Web server stopped: {t.exception()}") if not t.cancelled() and t.exception() else None
     )
 
+    # Heartbeat loop
     elapsed = 0
     while not shutdown.is_set():
         try:
@@ -127,16 +101,21 @@ async def main():
             outcome = await persona.running()
             if outcome.success:
                 for agent in (outcome.data or {}).get("personas", []):
-                    await heart.beat(agent)
+                    now = datetimes.now()
+                    logger.info("Heartbeat", {"persona": agent.id, "time": now.strftime("%Y-%m-%d %H:%M")})
+                    await persona.live(agent, now)
+                    await routine.trigger(agent)
 
+    # Graceful shutdown
     print("Shutting down...")
     outcome = await persona.running()
     if outcome.success:
         for agent in (outcome.data or {}).get("personas", []):
             await persona.nap(agent)
 
-    web_task.cancel()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    if _web_server:
+        _web_server.should_exit = True
+    try:
+        await asyncio.wait_for(web_task, timeout=5)
+    except asyncio.TimeoutError:
+        web_task.cancel()
