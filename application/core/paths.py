@@ -368,12 +368,6 @@ def zip_home(persona_id: str) -> bytes:
     return filesystem.zip(path)
 
 
-def write_dna(persona_id: str, dna_content: str) -> None:
-    """Write the given DNA content to the persona's dna.md file."""
-    logger.info("Writing DNA content", {"persona_id": persona_id})
-    filesystem.write(dna(persona_id), dna_content)
-
-
 def add_training_set(persona_id: str, training_set_content: str) -> None:
     """Write the given training set content to a new file in the persona's training directory."""
     logger.info("Adding training set", {"persona_id": persona_id})

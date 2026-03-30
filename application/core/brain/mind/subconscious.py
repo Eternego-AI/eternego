@@ -1,17 +1,18 @@
 """Subconscious — sleep-time knowledge extraction.
 
-Each function receives (persona, messages), where messages is a list of
-role-based conversation dicts. The system prompt tells the model what to
-extract; the messages show the actual conversation.
+Each function receives (persona, conversation_text), where conversation_text
+is a narrative rendering of the conversation. The system prompt tells the
+model what to extract; the conversation is passed as a single user message
+so the model treats it as data to analyse, not a chat to continue.
 """
 
 from application.core import local_model, paths
 from application.platform import logger
 
 
-async def person_identity(persona, messages: list[dict]) -> None:
+async def person_identity(persona, conversation: str) -> None:
     """Extract and merge identity facts."""
-    logger.debug("subconscious.person_identity", {"persona": persona, "messages": messages})
+    logger.debug("subconscious.person_identity", {"persona": persona, "conversation": conversation})
     existing = paths.read(paths.person_identity(persona.id))
     system = (
         "# Extract Person's Identity Facts\n\n"
@@ -31,13 +32,13 @@ async def person_identity(persona, messages: list[dict]) -> None:
         "Format: one fact per line, each starting with 'The person '. "
         "No bullets, no headers, no commentary."
     )
-    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}] + messages)
+    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}, {"role": "user", "content": conversation}])
     paths.save_as_string(paths.person_identity(persona.id), result.strip())
 
 
-async def person_traits(persona, messages: list[dict]) -> None:
+async def person_traits(persona, conversation: str) -> None:
     """Extract and merge behavioral traits."""
-    logger.debug("subconscious.person_traits", {"persona": persona, "messages": messages})
+    logger.debug("subconscious.person_traits", {"persona": persona, "conversation": conversation})
     existing = paths.read(paths.person_traits(persona.id))
     system = (
         "# Extract Person's Behavioral Traits\n\n"
@@ -56,13 +57,13 @@ async def person_traits(persona, messages: list[dict]) -> None:
         "Format: one trait per line, each starting with 'The person '. "
         "No bullets, no headers, no commentary."
     )
-    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}] + messages)
+    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}, {"role": "user", "content": conversation}])
     paths.save_as_string(paths.person_traits(persona.id), result.strip())
 
 
-async def wishes(persona, messages: list[dict]) -> None:
+async def wishes(persona, conversation: str) -> None:
     """Extract and merge wishes and aspirations."""
-    logger.debug("subconscious.wishes", {"persona": persona, "messages": messages})
+    logger.debug("subconscious.wishes", {"persona": persona, "conversation": conversation})
     existing = paths.read(paths.wishes(persona.id))
     system = (
         "# Extract Person's Wishes and Dreams\n\n"
@@ -82,13 +83,13 @@ async def wishes(persona, messages: list[dict]) -> None:
         "Format: one wish per line, each starting with 'The person '. "
         "No bullets, no headers, no commentary."
     )
-    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}] + messages)
+    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}, {"role": "user", "content": conversation}])
     paths.save_as_string(paths.wishes(persona.id), result.strip())
 
 
-async def struggles(persona, messages: list[dict]) -> None:
+async def struggles(persona, conversation: str) -> None:
     """Extract and merge struggles."""
-    logger.debug("subconscious.struggles", {"persona": persona, "messages": messages})
+    logger.debug("subconscious.struggles", {"persona": persona, "conversation": conversation})
     existing = paths.read(paths.struggles(persona.id))
     system = (
         "# Extract Person's Struggles\n\n"
@@ -106,13 +107,13 @@ async def struggles(persona, messages: list[dict]) -> None:
         "Format: one struggle per line, each starting with 'The person '. "
         "No bullets, no headers, no commentary."
     )
-    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}] + messages)
+    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}, {"role": "user", "content": conversation}])
     paths.save_as_string(paths.struggles(persona.id), result.strip())
 
 
-async def persona_trait(persona, messages: list[dict]) -> None:
+async def persona_trait(persona, conversation: str) -> None:
     """Extract and merge persona behavioral instructions."""
-    logger.debug("subconscious.persona_trait", {"persona": persona})
+    logger.debug("subconscious.persona_trait", {"persona": persona, "conversation": conversation})
     existing = paths.read(paths.persona_trait(persona.id))
     person_traits_text = paths.read(paths.person_traits(persona.id))
     system = (
@@ -137,7 +138,7 @@ async def persona_trait(persona, messages: list[dict]) -> None:
         "Format: one instruction per line, written as an imperative ('Be concise', 'Use humor', "
         "'Match their direct style'). No bullets, no headers, no commentary."
     )
-    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}] + messages)
+    result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}, {"role": "user", "content": conversation}])
     paths.save_as_string(paths.persona_trait(persona.id), result.strip())
 
 
@@ -161,4 +162,4 @@ async def synthesize_dna(persona) -> None:
         "Return markdown text."
     )
     result = await local_model.chat(persona.model.name, [{"role": "system", "content": system}, {"role": "user", "content": "Synthesize the training profile."}])
-    paths.write_dna(persona.id, result.strip())
+    paths.save_as_string(paths.dna(persona.id), result.strip())
