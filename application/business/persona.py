@@ -376,7 +376,11 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
 
     try:
         messages = await frontier.read(data, source)
-        await agents.persona(persona).learn(messages)
+        conversation_text = "\n".join(
+            f"{'Person' if m['role'] == 'user' else 'Persona'}: {m['content']}"
+            for m in messages
+        )
+        await agents.persona(persona).learn(conversation_text)
 
         await bus.broadcast("Persona fed", {"persona": persona, "source": source})
         return Outcome(
@@ -766,8 +770,6 @@ async def grow(persona: Persona) -> Outcome[dict]:
 
         if not await local_inference_engine.check(persona.model.name):
             raise DNAError("Fine-tuned model failed verification — previous model is still active")
-
-        paths.clear(paths.person_traits(persona.id))
 
         await bus.broadcast("Grown", {"persona": persona})
         return Outcome(success=True, message="Grow complete.")

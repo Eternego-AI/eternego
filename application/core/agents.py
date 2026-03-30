@@ -150,20 +150,20 @@ class Ego:
 
     # ── Learning ─────────────────────────────────────────────────────────────
 
-    async def learn(self, messages: list[dict]) -> None:
-        """Run subconscious knowledge extraction on the given conversation messages."""
-        logger.debug("Learn", {"persona": self.persona, "messages": messages})
+    async def learn(self, conversation: str) -> None:
+        """Run subconscious knowledge extraction on the given conversation text."""
+        logger.debug("Learn", {"persona": self.persona})
         from application.core.brain.mind import subconscious as sub
 
-        if not messages:
+        if not conversation.strip():
             logger.warning("No conversations to learn from", {"persona": self.persona})
             return
 
-        await sub.person_identity(self.persona, messages)
-        await sub.person_traits(self.persona, messages)
-        await sub.wishes(self.persona, messages)
-        await sub.struggles(self.persona, messages)
-        await sub.persona_trait(self.persona, messages)
+        await sub.person_identity(self.persona, conversation)
+        await sub.person_traits(self.persona, conversation)
+        await sub.wishes(self.persona, conversation)
+        await sub.struggles(self.persona, conversation)
+        await sub.persona_trait(self.persona, conversation)
         await sub.synthesize_dna(self.persona)
 
     async def learn_from_experience(self) -> None:
@@ -176,12 +176,12 @@ class Ego:
         if not conversation:
             return
 
-        messages = []
-        for entry in conversation:
-            role = "user" if entry["role"] == "person" else "assistant"
-            messages.append({"role": role, "content": entry["content"]})
+        conversation_text = "\n".join(
+            f"{'Person' if entry['role'] == 'person' else 'Persona'}: {entry['content']}"
+            for entry in conversation
+        )
 
-        await self.learn(messages)
+        await self.learn(conversation_text)
 
         # 2. Archive conversation as a single history file
         lines = []
