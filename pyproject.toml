@@ -31,10 +31,10 @@ dependencies = [
 ]
 
 [project.scripts]
-eternego = "cli.main:main"
+eternego = "index:main"
 
 [tool.setuptools]
-py-modules = ["service", "heart"]
+py-modules = ["index", "daemon"]
 
 [tool.setuptools.packages.find]
 where = ["."]

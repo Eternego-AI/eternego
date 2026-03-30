@@ -21,7 +21,7 @@ core/        HOW — engineering, calls platform
 platform/    WHAT — thin wrappers around external tools
 ```
 
-Business imports core. Core imports platform. Never upward. The service entry point (`service.py`), the heartbeat (`heart.py`), the web layer (`web/`), and the CLI (`cli/`) sit outside `application/` and only call business.
+Business imports core. Core imports platform. Never upward. The entry point (`index.py`), the daemon (`daemon.py`), the web layer (`web/`), and the CLI (`cli/`) sit outside `application/` and only call business.
 
 ### Business layer conventions
 
