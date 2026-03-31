@@ -20,6 +20,7 @@ on_exit() {
 trap on_exit EXIT
 
 . "$SCRIPT_DIR/shells/banner.sh"
+. "$SCRIPT_DIR/shells/copy.sh"
 . "$SCRIPT_DIR/shells/python.sh"
 . "$SCRIPT_DIR/shells/packages.sh"
 . "$SCRIPT_DIR/shells/gguf.sh"

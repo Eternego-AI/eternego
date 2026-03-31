@@ -89,6 +89,9 @@ def main():
     pair_p = sub.add_parser("pair", help="Pair a channel using a code sent by the persona")
     pair_p.add_argument("code", help="6-character pairing code")
 
+    # uninstall
+    sub.add_parser("uninstall", help="Remove the Eternego service and source code (preserves persona data)")
+
     # env
     env_p = sub.add_parser("env", help="Check and prepare the environment")
     env_sub = env_p.add_subparsers(dest="action", metavar="ACTION")
@@ -111,6 +114,10 @@ def main():
     elif args.command == "pair":
         from cli.pair import run
         run(args)
+
+    elif args.command == "uninstall":
+        from cli.uninstall import run
+        run()
 
     elif args.command == "env":
         config = bootstrap(args)

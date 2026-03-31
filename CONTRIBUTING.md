@@ -34,7 +34,19 @@ The entry point (`index.py`), the daemon (`daemon.py`), the web layer (`web/`), 
 
 Everything goes through `index.py` — the single entry point registered as the `eternego` command. It parses global flags (`--debug`, `-v`, `--port`, `--host`), bootstraps the application (logging, signals, config), and dispatches to the right handler.
 
-The daemon (`daemon.py`) is the long-running process that wakes personas, starts the web server, and runs the heartbeat loop. It receives its config from the bootstrap — no arg parsing of its own. The OS service manager (systemd/launchd) runs `eternego daemon`. For development, run `eternego --debug daemon` directly.
+The daemon (`daemon.py`) is the long-running process that wakes personas, starts the web server, and runs the heartbeat loop. It receives its config from the bootstrap — no arg parsing of its own. The OS service manager (systemd/launchd) runs `eternego daemon` from the installed copy at `~/.eternego/source/`.
+
+### Development vs. installed service
+
+The installer copies the project to `~/.eternego/source/` and runs the service from there. This means `eternego service start` runs the **installed** copy, not your working tree.
+
+For development, run the daemon directly from the repo:
+
+```bash
+python index.py --debug daemon
+```
+
+This uses your live source code and shows debug output in the terminal. When you're happy with a change, re-run the installer to update the installed copy.
 
 CLI service commands (`cli/service.py`) manage the OS service. `eternego service start --debug` generates the unit file with the right flags and starts it. Other commands (`env`, `pair`) go through the same bootstrap and call business functions directly.
 
