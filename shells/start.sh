@@ -7,5 +7,6 @@ print "Starting service"
 if [ "$OS_TYPE" = "Linux" ]; then
     run systemctl --user start eternego
 elif [ "$OS_TYPE" = "Darwin" ]; then
-    run launchctl start com.eternego
+    # bootstrap in service.sh already starts the service via RunAtLoad
+    print "Service started"
 fi

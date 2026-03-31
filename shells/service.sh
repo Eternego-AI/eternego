@@ -68,5 +68,7 @@ elif [ "$OS_TYPE" = "Darwin" ]; then
 </dict>
 </plist>
 EOF
-    run launchctl load -w "$PLIST_DIR/com.eternego.plist"
+    # Unload if previously registered (ignore errors on fresh install)
+    launchctl bootout "gui/$(id -u)/com.eternego" 2>/dev/null || true
+    run launchctl bootstrap "gui/$(id -u)" "$PLIST_DIR/com.eternego.plist"
 fi

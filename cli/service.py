@@ -10,7 +10,11 @@ from config.application import log_file
 
 _OS = platform.system()
 _PROJECT_ROOT = Path(__file__).parent.parent
-_ETERNEGO_BIN = str(_PROJECT_ROOT / ".venv" / "bin" / "eternego")
+
+if _OS == "Windows":
+    _ETERNEGO_BIN = str(_PROJECT_ROOT / ".venv" / "Scripts" / "eternego.exe")
+else:
+    _ETERNEGO_BIN = str(_PROJECT_ROOT / ".venv" / "bin" / "eternego")
 
 
 def _build_exec_args(args) -> list[str]:
@@ -93,21 +97,56 @@ def _write_launchd_plist(args) -> None:
     (plist_dir / "com.eternego.plist").write_text(plist)
 
 
+def _launchd_target() -> str:
+    return f"gui/{os.getuid()}"
+
+
+def _launchd_service() -> str:
+    return f"gui/{os.getuid()}/com.eternego"
+
+
+def _launchd_plist() -> str:
+    return str(Path.home() / "Library" / "LaunchAgents" / "com.eternego.plist")
+
+
+def _write_windows_task(args) -> None:
+    """Register the Eternego Windows scheduled task."""
+    exec_args = _build_exec_args(args)
+    exe = exec_args[0]
+    arguments = " ".join(exec_args[1:]) if len(exec_args) > 1 else ""
+    ps_cmd = (
+        f"$Action = New-ScheduledTaskAction -Execute '{exe}'"
+        f" -Argument '{arguments}' -WorkingDirectory '{_PROJECT_ROOT}';"
+        f" $Trigger = New-ScheduledTaskTrigger -AtLogOn;"
+        f" $Settings = New-ScheduledTaskSettingsSet"
+        f" -ExecutionTimeLimit ([TimeSpan]::Zero)"
+        f" -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1);"
+        f" Register-ScheduledTask -TaskName 'Eternego'"
+        f" -Action $Action -Trigger $Trigger"
+        f" -Settings $Settings -Force"
+    )
+    subprocess.run(["powershell", "-Command", ps_cmd])
+
+
 def cmd_start(args):
     if _OS == "Linux":
         _write_systemd_unit(args)
         subprocess.run(["systemctl", "--user", "start", "eternego"])
     elif _OS == "Darwin":
         _write_launchd_plist(args)
-        subprocess.run(["launchctl", "load", "-w",
-                        str(Path.home() / "Library" / "LaunchAgents" / "com.eternego.plist")])
+        subprocess.run(["launchctl", "bootout", _launchd_service()],
+                        stderr=subprocess.DEVNULL)
+        subprocess.run(["launchctl", "bootstrap", _launchd_target(), _launchd_plist()])
+    elif _OS == "Windows":
+        _write_windows_task(args)
+        subprocess.run(["powershell", "-Command", "Start-ScheduledTask -TaskName Eternego"])
 
 
 def cmd_stop(_):
     if _OS == "Linux":
         subprocess.run(["systemctl", "--user", "stop", "eternego"])
     elif _OS == "Darwin":
-        subprocess.run(["launchctl", "stop", "com.eternego"])
+        subprocess.run(["launchctl", "bootout", _launchd_service()])
     elif _OS == "Windows":
         subprocess.run(["powershell", "-Command", "Stop-ScheduledTask -TaskName Eternego"])
 
@@ -118,8 +157,13 @@ def cmd_restart(args):
         subprocess.run(["systemctl", "--user", "restart", "eternego"])
     elif _OS == "Darwin":
         _write_launchd_plist(args)
-        uid = os.getuid()
-        subprocess.run(["launchctl", "kickstart", "-k", f"gui/{uid}/com.eternego"])
+        subprocess.run(["launchctl", "bootout", _launchd_service()],
+                        stderr=subprocess.DEVNULL)
+        subprocess.run(["launchctl", "bootstrap", _launchd_target(), _launchd_plist()])
+    elif _OS == "Windows":
+        _write_windows_task(args)
+        subprocess.run(["powershell", "-Command",
+                         "Stop-ScheduledTask -TaskName Eternego; Start-ScheduledTask -TaskName Eternego"])
 
 
 def cmd_status(_):
@@ -127,7 +171,7 @@ def cmd_status(_):
         if _OS == "Linux":
             subprocess.run(["systemctl", "--user", "status", "eternego"])
         elif _OS == "Darwin":
-            subprocess.run(["launchctl", "list", "com.eternego"])
+            subprocess.run(["launchctl", "print", _launchd_service()])
         elif _OS == "Windows":
             subprocess.run([
                 "powershell", "-Command",

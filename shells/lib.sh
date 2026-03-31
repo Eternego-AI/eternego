@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+if [ -n "$_LIB_LOADED" ]; then return 0; fi
+_LIB_LOADED=1
 
 TYPEWRITER=1
 
