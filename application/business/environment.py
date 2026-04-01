@@ -5,6 +5,20 @@ from application.core.exceptions import UnsupportedOS, InstallationError, Engine
 from application.business.outcome import Outcome
 
 
+async def ready() -> Outcome[dict]:
+    """Ensure the inference engine is running and ready to serve requests."""
+    await bus.propose("Ensuring engine readiness", {})
+
+    try:
+        await local_inference_engine.ensure_running()
+        await bus.broadcast("Engine is ready", {})
+        return Outcome(success=True, message="Engine is ready")
+
+    except EngineConnectionError as e:
+        await bus.broadcast("Engine readiness check failed", {"error": str(e)})
+        return Outcome(success=False, message="Could not start the local inference engine. Please reinstall following the installation guide at https://eternego.ai")
+
+
 async def prepare(model: str | None = None) -> Outcome[dict]:
     """It makes it easy to set up and prepare an environment for your persona to grow."""
     await bus.propose("Preparing environment", {"model": model})

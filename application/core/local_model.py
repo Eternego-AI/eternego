@@ -10,7 +10,8 @@ async def chat(model: str, messages: list[dict]) -> str:
     """Send messages, wait for full response."""
     logger.debug("local_model.chat", {"model": model, "messages": messages})
     try:
-        response = await ollama.post("/api/chat", {"model": model, "messages": messages, "stream": False})
+        async with ollama.connect() as client:
+            response = await ollama.post(client, "/api/chat", {"model": model, "messages": messages, "stream": False})
         content = response["message"]["content"]
         logger.debug("local_model.chat response", {"model": model, "content": content or "(empty)"})
         return content
@@ -25,7 +26,8 @@ async def chat_json(model: str, messages: list[dict]) -> dict:
     """Send messages, wait for full JSON response."""
     logger.debug("local_model.chat_json", {"model": model, "messages": messages})
     try:
-        response = await ollama.post("/api/chat", {"model": model, "messages": messages, "stream": False, "format": "json"})
+        async with ollama.connect() as client:
+            response = await ollama.post(client, "/api/chat", {"model": model, "messages": messages, "stream": False, "format": "json"})
         logger.debug("local_model.chat_json response", {"model": model, "response": response})
         return strings.extract_json(response["message"]["content"])
     except ConnectionError as e:
@@ -38,10 +40,11 @@ async def chat_json_stream(model: str, messages: list[dict]) -> dict:
     """Stream response, collect and return parsed JSON."""
     logger.debug("local_model.chat_json_stream", {"model": model, "messages": messages})
     try:
-        body = {"model": model, "messages": messages, "format": "json"}
-        parts = []
-        async for chunk in ollama.stream_post("/api/chat", body):
-            parts.append(chunk.get("message", {}).get("content", ""))
+        async with ollama.connect() as client:
+            body = {"model": model, "messages": messages, "format": "json"}
+            parts = []
+            async for chunk in ollama.stream(client, "/api/chat", body):
+                parts.append(chunk.get("message", {}).get("content", ""))
         logger.debug("local_model.chat_json_stream full response", {"model": model, "response": "".join(parts)})
         return strings.extract_json("".join(parts))
     except ConnectionError as e:
@@ -57,7 +60,8 @@ async def generate(model: str, prompt: str, json_mode: bool = False) -> str:
         body = {"model": model, "prompt": prompt, "stream": False}
         if json_mode:
             body["format"] = "json"
-        response = await ollama.post("/api/generate", body)
+        async with ollama.connect() as client:
+            response = await ollama.post(client, "/api/generate", body)
         logger.debug("Received generate response from model", {"model": model, "response": response})
         return response["response"].strip()
     except ConnectionError as e:

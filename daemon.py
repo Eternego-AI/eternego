@@ -6,7 +6,7 @@ import sys
 
 import uvicorn
 
-from application.business import persona, routine
+from application.business import environment, persona, routine
 from application.core import agents
 from application.platform import datetimes, logger
 from application.platform.asyncio_worker import Worker
@@ -75,6 +75,11 @@ async def run(config):
     else:
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, shutdown.set)
+
+    # Ensure inference engine is running
+    outcome = await environment.ready()
+    if not outcome.success:
+        print(f"Warning: {outcome.message}")
 
     # Load and wake all personas
     outcome = await persona.get_list()
