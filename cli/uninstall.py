@@ -99,12 +99,18 @@ def _delete_source():
     if not _INSTALL_DIR.exists():
         return
     os.chdir(str(Path.home()))
-    try:
-        shutil.rmtree(_INSTALL_DIR)
-    except OSError:
-        print()
-        print(f"Could not fully remove {_INSTALL_DIR}")
-        if _OS == "Windows":
-            print(f"Delete it manually: Remove-Item -Recurse -Force '{_INSTALL_DIR}'")
-        else:
+    if _OS == "Windows":
+        # On Windows the running eternego.exe locks files in .venv, so schedule
+        # a delayed cleanup via cmd /c that waits for the process to exit.
+        cmd = f'ping 127.0.0.1 -n 3 >nul & rmdir /s /q "{_INSTALL_DIR}"'
+        subprocess.Popen(
+            f'cmd /c "{cmd}"',
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW,
+        )
+    else:
+        try:
+            shutil.rmtree(_INSTALL_DIR)
+        except OSError:
+            print()
+            print(f"Could not fully remove {_INSTALL_DIR}")
             print(f"Delete it manually: rm -rf '{_INSTALL_DIR}'")

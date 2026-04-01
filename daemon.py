@@ -2,6 +2,7 @@
 
 import asyncio
 import signal
+import sys
 
 import uvicorn
 
@@ -68,8 +69,12 @@ async def run(config):
     # Graceful shutdown on SIGTERM/SIGINT
     loop = asyncio.get_running_loop()
     shutdown = asyncio.Event()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, shutdown.set)
+    if sys.platform == "win32":
+        signal.signal(signal.SIGTERM, lambda *_: shutdown.set())
+        signal.signal(signal.SIGINT, lambda *_: shutdown.set())
+    else:
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, shutdown.set)
 
     # Load and wake all personas
     outcome = await persona.get_list()

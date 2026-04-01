@@ -51,12 +51,24 @@ function Show-Prompt($seconds = 3) {
 }
 
 function Run() {
-    $savedPref = $ErrorActionPreference
-    $ErrorActionPreference = "SilentlyContinue"
     Print "  Running $args"
     Add-Content -Path $LogFile -Value "  $ $args" -Encoding UTF8
-    & $args[0] $args[1..($args.Length - 1)] 2>&1 | Out-File -Append -FilePath $LogFile -Encoding UTF8
-    $ErrorActionPreference = $savedPref
+    $proc = Start-Process -FilePath $args[0] `
+        -ArgumentList $args[1..($args.Length - 1)] `
+        -NoNewWindow -Wait -PassThru `
+        -RedirectStandardOutput "$LogFile.stdout" `
+        -RedirectStandardError "$LogFile.stderr"
+    if (Test-Path "$LogFile.stdout") {
+        Get-Content "$LogFile.stdout" | Add-Content -Path $LogFile -Encoding UTF8
+        Remove-Item "$LogFile.stdout" -ErrorAction SilentlyContinue
+    }
+    if (Test-Path "$LogFile.stderr") {
+        Get-Content "$LogFile.stderr" | Add-Content -Path $LogFile -Encoding UTF8
+        Remove-Item "$LogFile.stderr" -ErrorAction SilentlyContinue
+    }
+    if ($proc.ExitCode -ne 0) {
+        throw "Command failed with exit code $($proc.ExitCode) - check log: $LogFile"
+    }
 }
 
 function Print-File($file) {
