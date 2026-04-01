@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
+if [ -n "$_LIB_LOADED" ]; then return 0; fi
+_LIB_LOADED=1
 
 TYPEWRITER=1
 
 GREEN="\033[32m"
 RESET="\033[0m"
 
-trap 'tput cnorm' EXIT
+trap 'tput cnorm 2>/dev/null || true' EXIT
 
 print() {
     local text="$1"
