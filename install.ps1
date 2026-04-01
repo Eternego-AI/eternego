@@ -10,6 +10,8 @@ $LogFile   = "$env:TEMP\eternego-install.log"
 try {
     . "$ScriptDir\shells\banner.ps1"
     . "$ScriptDir\shells\copy.ps1"
+    # From here on, operate on the installed copy
+    $ScriptDir = $EternegoInstallDir
     . "$ScriptDir\shells\python.ps1"
     . "$ScriptDir\shells\packages.ps1"
     . "$ScriptDir\shells\gguf.ps1"

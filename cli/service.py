@@ -9,6 +9,17 @@ from pathlib import Path
 from config.application import log_file
 
 _OS = platform.system()
+
+
+def _run(cmd, *, quiet=False, **kwargs):
+    """Run a subprocess command and print stderr on failure."""
+    result = subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+    if result.returncode != 0 and not quiet:
+        label = cmd[0] if isinstance(cmd, list) else cmd
+        print(f"Error running {label} (exit {result.returncode})")
+        if result.stderr and result.stderr.strip():
+            print(f"  {result.stderr.strip()}")
+    return result
 _PROJECT_ROOT = Path(__file__).parent.parent
 
 if _OS == "Windows":
@@ -52,8 +63,8 @@ WantedBy=default.target
     service_dir = Path.home() / ".config" / "systemd" / "user"
     service_dir.mkdir(parents=True, exist_ok=True)
     (service_dir / "eternego.service").write_text(unit)
-    subprocess.run(["systemctl", "--user", "daemon-reload"])
-    subprocess.run(["systemctl", "--user", "enable", "eternego"])
+    _run(["systemctl", "--user", "daemon-reload"])
+    _run(["systemctl", "--user", "enable", "eternego"])
 
 
 def _write_launchd_plist(args) -> None:
@@ -125,45 +136,43 @@ def _write_windows_task(args) -> None:
         f" -Action $Action -Trigger $Trigger"
         f" -Settings $Settings -Force"
     )
-    subprocess.run(["powershell", "-Command", ps_cmd])
+    _run(["powershell", "-Command", ps_cmd])
 
 
 def cmd_start(args):
     if _OS == "Linux":
         _write_systemd_unit(args)
-        subprocess.run(["systemctl", "--user", "start", "eternego"])
+        _run(["systemctl", "--user", "start", "eternego"])
     elif _OS == "Darwin":
         _write_launchd_plist(args)
-        subprocess.run(["launchctl", "bootout", _launchd_service()],
-                        stderr=subprocess.DEVNULL)
-        subprocess.run(["launchctl", "bootstrap", _launchd_target(), _launchd_plist()])
+        _run(["launchctl", "bootout", _launchd_service()], quiet=True)
+        _run(["launchctl", "bootstrap", _launchd_target(), _launchd_plist()])
     elif _OS == "Windows":
         _write_windows_task(args)
-        subprocess.run(["powershell", "-Command", "Start-ScheduledTask -TaskName Eternego"])
+        _run(["powershell", "-Command", "Start-ScheduledTask -TaskName Eternego"])
 
 
 def cmd_stop(_):
     if _OS == "Linux":
-        subprocess.run(["systemctl", "--user", "stop", "eternego"])
+        _run(["systemctl", "--user", "stop", "eternego"])
     elif _OS == "Darwin":
-        subprocess.run(["launchctl", "bootout", _launchd_service()])
+        _run(["launchctl", "bootout", _launchd_service()])
     elif _OS == "Windows":
-        subprocess.run(["powershell", "-Command", "Stop-ScheduledTask -TaskName Eternego"])
+        _run(["powershell", "-Command", "Stop-ScheduledTask -TaskName Eternego"])
 
 
 def cmd_restart(args):
     if _OS == "Linux":
         _write_systemd_unit(args)
-        subprocess.run(["systemctl", "--user", "restart", "eternego"])
+        _run(["systemctl", "--user", "restart", "eternego"])
     elif _OS == "Darwin":
         _write_launchd_plist(args)
-        subprocess.run(["launchctl", "bootout", _launchd_service()],
-                        stderr=subprocess.DEVNULL)
-        subprocess.run(["launchctl", "bootstrap", _launchd_target(), _launchd_plist()])
+        _run(["launchctl", "bootout", _launchd_service()], quiet=True)
+        _run(["launchctl", "bootstrap", _launchd_target(), _launchd_plist()])
     elif _OS == "Windows":
         _write_windows_task(args)
-        subprocess.run(["powershell", "-Command",
-                         "Stop-ScheduledTask -TaskName Eternego; Start-ScheduledTask -TaskName Eternego"])
+        _run(["powershell", "-Command",
+              "Stop-ScheduledTask -TaskName Eternego; Start-ScheduledTask -TaskName Eternego"])
 
 
 def cmd_status(_):

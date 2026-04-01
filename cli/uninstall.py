@@ -98,6 +98,8 @@ def _show_persona_message():
 def _delete_source():
     if not _INSTALL_DIR.exists():
         return
+    # Move out of the install dir before deleting — required on Windows (and
+    # avoids "directory busy" errors on some Linux filesystems too).
     os.chdir(str(Path.home()))
     if _OS == "Windows":
         # On Windows the running eternego.exe locks files in .venv, so schedule

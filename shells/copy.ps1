@@ -11,5 +11,5 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 $exclude = @('.git', '.venv', '__pycache__', '.env')
 Get-ChildItem -Path $ScriptDir -Exclude $exclude | Copy-Item -Destination $InstallDir -Recurse -Force
 
-# All subsequent scripts operate on the installed copy
-$ScriptDir = $InstallDir
+# Expose the installed location; install.ps1 switches $ScriptDir explicitly.
+$EternegoInstallDir = $InstallDir
