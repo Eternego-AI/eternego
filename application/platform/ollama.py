@@ -7,6 +7,11 @@ import httpx
 from config.inference import OLLAMA_BASE_URL
 
 
+class OllamaError(Exception):
+    """The Ollama server returned an error response."""
+    pass
+
+
 class Client:
     """Ollama API client wrapping the HTTP transport."""
 
@@ -55,7 +60,7 @@ async def post(client: Client, path: str, data: dict) -> dict:
         body = response.text.strip()
         return response.json() if body else {}
     except httpx.HTTPStatusError as e:
-        raise ConnectionError(f"Ollama API error {e.response.status_code}: {e.response.text}") from e
+        raise OllamaError(f"Ollama API error {e.response.status_code}: {e.response.text}") from e
     except httpx.RequestError as e:
         raise ConnectionError(f"Could not reach Ollama: {e}") from e
 
@@ -67,6 +72,8 @@ async def delete(client: Client, path: str, data: dict) -> dict:
         response.raise_for_status()
         body = response.text.strip()
         return response.json() if body else {}
+    except httpx.HTTPStatusError as e:
+        raise OllamaError(f"Ollama API error {e.response.status_code}: {e.response.text}") from e
     except httpx.RequestError as e:
         raise ConnectionError(f"Could not reach Ollama: {e}") from e
 

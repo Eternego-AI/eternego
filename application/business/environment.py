@@ -1,7 +1,7 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
 from application.core import bus, agents, system, local_inference_engine, paths, channels
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, AgentError
+from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, ModelError, AgentError
 from application.business.outcome import Outcome
 
 
@@ -29,6 +29,8 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
 
         if not await system.is_installed("ollama"):
             await system.install("ollama")
+
+        await local_inference_engine.ensure_running()
 
         if not model:
             model = await local_inference_engine.get_default_model()
@@ -59,6 +61,14 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
     except InstallationError as e:
         await bus.broadcast("Environment preparation failed", {
             "reason": "installation",
+            "error": str(e),
+        })
+        return Outcome(success=False, message=str(e))
+
+    except ModelError as e:
+        await bus.broadcast("Environment preparation failed", {
+            "reason": "model",
+            "model": model,
             "error": str(e),
         })
         return Outcome(success=False, message=str(e))
@@ -109,6 +119,14 @@ async def check_model(model: str) -> Outcome[dict]:
 
         await bus.broadcast("Model check failed", {"model": model})
         return Outcome(success=False, message="Model is not available")
+
+    except ModelError as e:
+        await bus.broadcast("Model check failed", {
+            "reason": "model",
+            "model": model,
+            "error": str(e),
+        })
+        return Outcome(success=False, message=str(e))
 
     except EngineConnectionError as e:
         await bus.broadcast("Model check failed", {

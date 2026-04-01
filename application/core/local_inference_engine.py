@@ -4,7 +4,7 @@ import asyncio
 import json
 
 from application.platform import logger, ollama, lora, OS, linux, mac, windows
-from application.core.exceptions import EngineConnectionError
+from application.core.exceptions import EngineConnectionError, ModelError
 
 
 async def ensure_running() -> None:
@@ -38,6 +38,8 @@ async def get_default_model() -> str | None:
     try:
         async with ollama.connect() as client:
             data = await ollama.get(client, "/api/tags")
+    except ollama.OllamaError as e:
+        raise ModelError(f"Failed to list models: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     models = data.get("models", [])
@@ -52,6 +54,8 @@ async def pull(model: str) -> None:
     try:
         async with ollama.connect() as client:
             await ollama.post(client, "/api/pull", {"name": model, "stream": False})
+    except ollama.OllamaError as e:
+        raise ModelError(f"Failed to pull model '{model}': {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
@@ -66,6 +70,8 @@ async def register(model_name: str, base_model: str) -> None:
     try:
         async with ollama.connect() as client:
             await ollama.post(client, "/api/create", {"model": model_name, "from": base_model, "stream": False})
+    except ollama.OllamaError as e:
+        raise ModelError(f"Failed to register model '{model_name}': {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
 
@@ -118,6 +124,8 @@ async def fine_tune(hf_model_id: str, training_set: str, base_model: str, model_
             })
     except ImportError as e:
         raise EngineConnectionError(f"Fine-tuning dependencies not installed: {e}") from e
+    except ollama.OllamaError as e:
+        raise ModelError(f"Failed to register fine-tuned model '{model_name}': {e}") from e
     except (RuntimeError, OSError, TypeError, ValueError) as e:
         raise EngineConnectionError(f"Fine-tuning failed: {e}") from e
     except ConnectionError as e:
@@ -137,5 +145,7 @@ async def check(model: str) -> bool:
                 return False
             response = await ollama.post(client, "/api/generate", {"model": model, "prompt": "hi", "stream": False})
             return response.get("response") is not None
+    except ollama.OllamaError as e:
+        raise ModelError(f"Model '{model}' check failed: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e

@@ -3,7 +3,7 @@
 import json
 
 from application.platform import logger, ollama, strings
-from application.core.exceptions import EngineConnectionError
+from application.core.exceptions import EngineConnectionError, ModelError
 
 
 async def chat(model: str, messages: list[dict]) -> str:
@@ -15,6 +15,8 @@ async def chat(model: str, messages: list[dict]) -> str:
         content = response["message"]["content"]
         logger.debug("local_model.chat response", {"model": model, "content": content or "(empty)"})
         return content
+    except ollama.OllamaError as e:
+        raise ModelError(f"Model returned an error: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except KeyError as e:
@@ -30,6 +32,8 @@ async def chat_json(model: str, messages: list[dict]) -> dict:
             response = await ollama.post(client, "/api/chat", {"model": model, "messages": messages, "stream": False, "format": "json"})
         logger.debug("local_model.chat_json response", {"model": model, "response": response})
         return strings.extract_json(response["message"]["content"])
+    except ollama.OllamaError as e:
+        raise ModelError(f"Model returned an error: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except (KeyError, json.JSONDecodeError) as e:
@@ -47,6 +51,8 @@ async def chat_json_stream(model: str, messages: list[dict]) -> dict:
                 parts.append(chunk.get("message", {}).get("content", ""))
         logger.debug("local_model.chat_json_stream full response", {"model": model, "response": "".join(parts)})
         return strings.extract_json("".join(parts))
+    except ollama.OllamaError as e:
+        raise ModelError(f"Model returned an error: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except json.JSONDecodeError as e:
@@ -64,6 +70,8 @@ async def generate(model: str, prompt: str, json_mode: bool = False) -> str:
             response = await ollama.post(client, "/api/generate", body)
         logger.debug("Received generate response from model", {"model": model, "response": response})
         return response["response"].strip()
+    except ollama.OllamaError as e:
+        raise ModelError(f"Model returned an error: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     except KeyError as e:
