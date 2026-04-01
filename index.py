@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from application.platform import logger
 from application.platform.observer import Event, Plan, Signal, subscribe
 from config.application import log_file, signal_log_file
+from config.web import HOST as DEFAULT_HOST, PORT as DEFAULT_PORT
 
 
 @dataclass
@@ -60,8 +61,8 @@ def main():
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging and signal file output")
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase verbosity (repeatable)")
-    parser.add_argument("--port", type=int, default=5001, help="Web server port (default: 5001)")
-    parser.add_argument("--host", default="127.0.0.1", help="Web server host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Web server port (default: {DEFAULT_PORT})")
+    parser.add_argument("--host", default=DEFAULT_HOST, help=f"Web server host (default: {DEFAULT_HOST})")
 
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
