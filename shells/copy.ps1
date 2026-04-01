@@ -8,8 +8,7 @@ Print "Installing to $InstallDir"
 if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
-$exclude = @('.git', '.venv', '__pycache__', '.env')
-Get-ChildItem -Path $ScriptDir -Exclude $exclude | Copy-Item -Destination $InstallDir -Recurse -Force
+robocopy $ScriptDir $InstallDir /E /XD .git .venv __pycache__ /XF .env *.pyc /NFL /NDL /NJH /NJS /NC /NS /NP | Out-Null
 
 # Expose the installed location; install.ps1 switches $ScriptDir explicitly.
 $EternegoInstallDir = $InstallDir

@@ -20,6 +20,8 @@ def _run(cmd, *, quiet=False, **kwargs):
         if result.stderr and result.stderr.strip():
             print(f"  {result.stderr.strip()}")
     return result
+
+
 _PROJECT_ROOT = Path(__file__).parent.parent
 
 if _OS == "Windows":

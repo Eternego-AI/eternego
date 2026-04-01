@@ -14,8 +14,8 @@ _PERSONA_DIR = Path.home() / ".eternego"
 def run():
     print()
     print("This will:")
-    print(f"  - Stop and remove the Eternego service")
-    print(f"  - Remove the eternego CLI")
+    print("  - Stop and remove the Eternego service")
+    print("  - Remove the eternego CLI")
     print(f"  - Delete the installed code at {_INSTALL_DIR}")
     print()
     print("Your persona data at ~/.eternego will NOT be touched.")
