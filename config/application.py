@@ -22,7 +22,8 @@ LORA_CONVERT_SCRIPT: str = os.environ.get(
 )
 
 # Log directory — daily log files live here.
-LOGS_DIR: Path = Path(os.environ.get("LOGS_DIR", str(_PROJECT_ROOT / "logs")))
+# Installed version uses ~/.eternego/logs (set via .env); dev defaults to ./logs.
+LOGS_DIR: Path = Path(os.environ.get("LOGS_DIR") or str(_PROJECT_ROOT / "logs"))
 
 
 def log_file() -> Path:
