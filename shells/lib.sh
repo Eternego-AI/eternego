@@ -7,7 +7,7 @@ TYPEWRITER=1
 GREEN="\033[32m"
 RESET="\033[0m"
 
-trap 'tput cnorm' EXIT
+trap 'tput cnorm 2>/dev/null || true' EXIT
 
 print() {
     local text="$1"

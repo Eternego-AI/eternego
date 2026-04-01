@@ -3,7 +3,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 clear
-tput civis
+tput civis 2>/dev/null || true
 
 show_prompt 1
 clear
@@ -16,4 +16,4 @@ clear
 
 print_file "$SCRIPT_DIR/assets/eternego-ascii.txt"
 
-tput cnorm
+tput cnorm 2>/dev/null || true
