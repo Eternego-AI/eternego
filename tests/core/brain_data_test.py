@@ -1,7 +1,7 @@
 from application.core.brain.data import Signal, SignalEvent, Perception, Thought, Meaning
 
 
-def test_it_creates_signals_with_defaults():
+async def test_it_creates_signals_with_defaults():
     s = Signal(id="s1", event=SignalEvent.heard, content="hello")
     assert s.id == "s1"
     assert s.event == SignalEvent.heard
@@ -10,20 +10,20 @@ def test_it_creates_signals_with_defaults():
     assert s.created_at is not None
 
 
-def test_it_creates_perception_with_empty_thread():
+async def test_it_creates_perception_with_empty_thread():
     p = Perception(impression="greeting")
     assert p.impression == "greeting"
     assert p.thread == []
 
 
-def test_it_creates_perception_with_signals():
+async def test_it_creates_perception_with_signals():
     s1 = Signal(id="s1", event=SignalEvent.heard, content="hi")
     s2 = Signal(id="s2", event=SignalEvent.answered, content="hello")
     p = Perception(impression="greeting", thread=[s1, s2])
     assert len(p.thread) == 2
 
 
-def test_it_generates_thought_id_from_perception():
+async def test_it_generates_thought_id_from_perception():
     p = Perception(impression="test topic", thread=[])
 
     class TestMeaning(Meaning):
@@ -39,7 +39,7 @@ def test_it_generates_thought_id_from_perception():
     assert t.id != ""
 
 
-def test_it_generates_consistent_thought_ids():
+async def test_it_generates_consistent_thought_ids():
     p = Perception(impression="same topic", thread=[])
 
     class TestMeaning(Meaning):
@@ -55,6 +55,6 @@ def test_it_generates_consistent_thought_ids():
     assert t1.id == t2.id
 
 
-def test_it_signal_events_are_strings():
+async def test_it_signal_events_are_strings():
     assert str(SignalEvent.heard) == "heard"
     assert str(SignalEvent.answered) == "answered"

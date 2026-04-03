@@ -25,7 +25,7 @@ def _make_module():
     return mod
 
 
-def test_sorted_by_returns_callables_with_attribute():
+async def test_sorted_by_returns_callables_with_attribute():
     mod = _make_module()
     result = sorted_by(mod, "stage")
     names = [name for name, _ in result]
@@ -34,23 +34,23 @@ def test_sorted_by_returns_callables_with_attribute():
     assert "helper" not in names
 
 
-def test_sorted_by_respects_order():
+async def test_sorted_by_respects_order():
     mod = _make_module()
     result = sorted_by(mod, "stage")
     names = [name for name, _ in result]
     assert names.index("second") < names.index("first")
 
 
-def test_has_ability_returns_true_for_matching():
+async def test_has_ability_returns_true_for_matching():
     mod = _make_module()
     assert has_ability(mod, "first", "stage")
 
 
-def test_has_ability_returns_false_for_missing_attribute():
+async def test_has_ability_returns_false_for_missing_attribute():
     mod = _make_module()
     assert not has_ability(mod, "helper", "stage")
 
 
-def test_has_ability_returns_false_for_missing_function():
+async def test_has_ability_returns_false_for_missing_function():
     mod = _make_module()
     assert not has_ability(mod, "nonexistent", "stage")

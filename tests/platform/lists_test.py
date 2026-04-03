@@ -1,32 +1,32 @@
 from application.platform.lists import filter_by, as_list
 
 
-def test_it_filters_by_predicate():
+async def test_it_filters_by_predicate():
     result = filter_by([1, 2, 3, 4, 5], lambda x: x > 3)
     assert result == [4, 5]
 
 
-def test_it_returns_empty_list_when_nothing_matches():
+async def test_it_returns_empty_list_when_nothing_matches():
     result = filter_by([1, 2, 3], lambda x: x > 10)
     assert result == []
 
 
-def test_it_handles_empty_list():
+async def test_it_handles_empty_list():
     result = filter_by([], lambda x: True)
     assert result == []
 
 
-def test_it_wraps_string_as_list():
+async def test_it_wraps_string_as_list():
     assert as_list("hello") == ["hello"]
 
 
-def test_it_returns_list_as_is():
+async def test_it_returns_list_as_is():
     assert as_list([1, 2]) == [1, 2]
 
 
-def test_it_returns_empty_list_for_none():
+async def test_it_returns_empty_list_for_none():
     assert as_list(None) == []
 
 
-def test_it_returns_empty_list_for_empty_string():
+async def test_it_returns_empty_list_for_empty_string():
     assert as_list("") == []

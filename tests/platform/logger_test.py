@@ -5,7 +5,7 @@ from pathlib import Path
 from application.platform.logger import Level, Message, log, file_media
 
 
-def test_message_has_id_and_level():
+async def test_message_has_id_and_level():
     msg = Message("test event", {"key": "val"}, Level.INFO)
     assert msg.id
     assert msg.time > 0
@@ -13,7 +13,7 @@ def test_message_has_id_and_level():
     assert msg.level == Level.INFO
 
 
-def test_file_media_writes_json_log():
+async def test_file_media_writes_json_log():
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "test.log"
         media = file_media(path)
@@ -29,7 +29,7 @@ def test_file_media_writes_json_log():
         assert "time" in entry
 
 
-def test_file_media_appends_multiple_entries():
+async def test_file_media_appends_multiple_entries():
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "test.log"
         media = file_media(path)
@@ -40,7 +40,7 @@ def test_file_media_appends_multiple_entries():
         assert len(lines) == 2
 
 
-def test_log_dispatches_to_provided_media():
+async def test_log_dispatches_to_provided_media():
     received = []
 
     def fake_media(msg):
@@ -51,7 +51,7 @@ def test_log_dispatches_to_provided_media():
     assert received == ["dispatch test"]
 
 
-def test_file_media_with_callable_path():
+async def test_file_media_with_callable_path():
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "dynamic.log"
         media = file_media(lambda: path)

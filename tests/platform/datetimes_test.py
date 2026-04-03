@@ -3,17 +3,17 @@ from datetime import datetime, timezone
 from application.platform.datetimes import stamp, date_stamp, from_stamp, iso_8601
 
 
-def test_it_formats_compact_timestamp():
+async def test_it_formats_compact_timestamp():
     dt = datetime(2026, 3, 15, 14, 30, 45)
     assert stamp(dt) == "20260315143045"
 
 
-def test_it_formats_date_stamp():
+async def test_it_formats_date_stamp():
     dt = datetime(2026, 3, 15, 14, 30, 45)
     assert date_stamp(dt) == "2026-03-15"
 
 
-def test_it_parses_compact_timestamp():
+async def test_it_parses_compact_timestamp():
     result = from_stamp("20260315143045")
     assert result.year == 2026
     assert result.month == 3
@@ -23,7 +23,7 @@ def test_it_parses_compact_timestamp():
     assert result.second == 45
 
 
-def test_it_roundtrips_stamp():
+async def test_it_roundtrips_stamp():
     dt = datetime(2026, 1, 1, 0, 0, 0)
     text = stamp(dt)
     back = from_stamp(text)
@@ -33,7 +33,7 @@ def test_it_roundtrips_stamp():
     assert back.hour == dt.hour
 
 
-def test_it_formats_iso_8601():
+async def test_it_formats_iso_8601():
     dt = datetime(2026, 3, 15, 14, 30, 45, tzinfo=timezone.utc)
     result = iso_8601(dt)
     assert "2026-03-15" in result

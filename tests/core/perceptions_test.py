@@ -13,7 +13,7 @@ def make_signal(event, content, ts=None):
     )
 
 
-def test_it_formats_conversation_with_person_and_persona():
+async def test_it_formats_conversation_with_person_and_persona():
     p = Perception(impression="test", thread=[
         make_signal(SignalEvent.heard, "hello"),
         make_signal(SignalEvent.answered, "hi there"),
@@ -23,7 +23,7 @@ def test_it_formats_conversation_with_person_and_persona():
     assert "persona: hi there" in result
 
 
-def test_it_excludes_internal_signals_from_conversation():
+async def test_it_excludes_internal_signals_from_conversation():
     p = Perception(impression="test", thread=[
         make_signal(SignalEvent.heard, "hello"),
         make_signal(SignalEvent.decided, "internal decision"),
@@ -35,7 +35,7 @@ def test_it_excludes_internal_signals_from_conversation():
     assert "persona: response" in result
 
 
-def test_it_converts_signals_to_conversation_messages():
+async def test_it_converts_signals_to_conversation_messages():
     signals = [
         make_signal(SignalEvent.heard, "hello"),
         make_signal(SignalEvent.answered, "hi"),
@@ -48,7 +48,7 @@ def test_it_converts_signals_to_conversation_messages():
     assert result[2] == {"role": "user", "content": "how are you"}
 
 
-def test_it_coalesces_consecutive_same_role_messages():
+async def test_it_coalesces_consecutive_same_role_messages():
     signals = [
         make_signal(SignalEvent.heard, "first"),
         make_signal(SignalEvent.queried, "second"),
@@ -60,7 +60,7 @@ def test_it_coalesces_consecutive_same_role_messages():
     assert result[0]["role"] == "user"
 
 
-def test_it_includes_executed_signals_in_to_messages():
+async def test_it_includes_executed_signals_in_to_messages():
     signals = [
         make_signal(SignalEvent.heard, "run ls"),
         make_signal(SignalEvent.executed, "file1.txt\nfile2.txt"),
@@ -70,7 +70,7 @@ def test_it_includes_executed_signals_in_to_messages():
     assert any("file1.txt" in m["content"] for m in result)
 
 
-def test_it_excludes_executed_signals_from_to_conversation():
+async def test_it_excludes_executed_signals_from_to_conversation():
     signals = [
         make_signal(SignalEvent.heard, "run ls"),
         make_signal(SignalEvent.executed, "file1.txt"),

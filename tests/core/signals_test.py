@@ -4,7 +4,7 @@ from application.core.brain.data import Signal, SignalEvent
 from application.core.brain.signals import labeled
 
 
-def test_labeled_formats_signal_with_timestamp_and_content():
+async def test_labeled_formats_signal_with_timestamp_and_content():
     s = Signal(
         id="s1",
         event=SignalEvent.heard,
@@ -15,7 +15,7 @@ def test_labeled_formats_signal_with_timestamp_and_content():
     assert result == "[2026-03-15 14:30] heard: hello world"
 
 
-def test_labeled_includes_channel_type_when_present():
+async def test_labeled_includes_channel_type_when_present():
     s = Signal(
         id="s1",
         event=SignalEvent.answered,
@@ -27,7 +27,7 @@ def test_labeled_includes_channel_type_when_present():
     assert result == "[2026-03-15 14:30] answered (telegram): response"
 
 
-def test_labeled_omits_channel_when_empty():
+async def test_labeled_omits_channel_when_empty():
     s = Signal(
         id="s1",
         event=SignalEvent.decided,

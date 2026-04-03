@@ -53,13 +53,16 @@ jobs:
           security unlock-keychain -p test test.keychain
           security set-keychain-settings test.keychain
 
-      - name: Verify Python
-        run: |
-          python --version
-          python -c "import sys; print(sys.executable)"
+      - name: Run tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: bash test.sh
+        timeout-minutes: 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run tests
-        run: python -u test.py
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: pwsh test.ps1
         timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
