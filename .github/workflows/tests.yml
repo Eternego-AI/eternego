@@ -26,9 +26,18 @@ jobs:
       - name: Install dependencies
         run: pip install -e .
 
-      - name: Install secret-tool (Linux)
+      - name: Install secret-tool and keyring (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libsecret-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsecret-tools gnome-keyring dbus-x11
+
+      - name: Start keyring daemon (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          eval $(dbus-launch --sh-syntax)
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> $GITHUB_ENV
+          echo -n "test" | gnome-keyring-daemon --unlock --components=secrets
 
       - name: Run tests
         run: python test.py
