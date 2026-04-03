@@ -32,16 +32,27 @@ def os_name():
 def download():
     print("Downloading test-runner...")
     TMP_DIR.mkdir(parents=True, exist_ok=True)
-    release = json.loads(
-        urllib.request.urlopen(f"https://api.github.com/repos/{REPO}/releases/latest").read()
-    )
+
+    url = f"https://api.github.com/repos/{REPO}/releases/latest"
+    req = urllib.request.Request(url)
+
+    # Use GitHub token if available (avoids rate limits in CI)
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        req.add_header("Authorization", f"token {token}")
+
+    release = json.loads(urllib.request.urlopen(req).read())
     asset_name = f"test-runner-{os_name()}.zip"
     asset = next((a for a in release["assets"] if a["name"] == asset_name), None)
     if not asset:
         print(f"Error: Could not find {asset_name} in latest release.")
         sys.exit(1)
 
-    data = urllib.request.urlopen(asset["browser_download_url"]).read()
+    asset_req = urllib.request.Request(asset["browser_download_url"])
+    if token:
+        asset_req.add_header("Authorization", f"token {token}")
+
+    data = urllib.request.urlopen(asset_req).read()
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         zf.extractall(TMP_DIR)
     print("Done.")
