@@ -29,6 +29,13 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Configure git
+        run: |
+          git config --global user.email "test@ci.eternego.ai"
+          git config --global user.name "CI"
+          git config --global init.defaultBranch master
+          git config --global advice.defaultBranchName false
+
       - name: Install dependencies
         run: pip install -e .
 
