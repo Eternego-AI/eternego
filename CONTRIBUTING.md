@@ -282,6 +282,112 @@ All human-readable. All editable. This is intentional — the persona's knowledg
 
 ---
 
+## Testing
+
+### Running Tests
+
+```bash
+python test.py
+```
+
+This downloads the [test-runner](https://github.com/Eternego-AI/test-runner) on first run (cached in system temp), then runs all tests.
+
+To run a specific directory:
+
+```bash
+python test.py tests/platform
+python test.py tests/core
+python test.py tests/business
+```
+
+### Writing Tests
+
+Tests are plain Python — no framework imports, no decorators. Just functions and `assert`.
+
+```python
+# tests/core/example_test.py
+
+def test_it_does_the_thing():
+    result = do_thing()
+    assert result == expected
+```
+
+**Rules:**
+
+- File names end with `_test.py`
+- Function names start with `test_`
+- Tests run in definition order (top to bottom)
+- `async def test_*` functions are supported
+- No mocking libraries — use dependency injection and platform `assert_*` functions
+
+### Test Structure
+
+Tests mirror the application structure:
+
+```
+tests/
+├── platform/    ← tests for platform modules
+├── core/        ← tests for core modules
+└── business/    ← tests for business specs
+```
+
+### Testing Platform Functions
+
+Each platform module with network calls has built-in `assert_*` functions that spin up a local HTTP server, redirect the module to it, and let you control the response:
+
+```python
+from application.platform import ollama
+
+def test_post_sends_correct_payload():
+    ollama.assert_post(
+        run=lambda: ollama.post("/api/pull", {"name": "llama3"}),
+        validate=lambda r: assert r["body"]["name"] == "llama3",
+        response={"status": "success"},
+    )
+```
+
+Available: `ollama.assert_post/get/delete/call`, `anthropic.assert_chat/chat_json/call`, `openai.assert_chat/chat_json/call`, `telegram.assert_send/get_me/typing_action/call`.
+
+### Testing Core and Business Functions
+
+Core functions that use the local model are tested by redirecting ollama to a local server:
+
+```python
+from application.platform import ollama
+
+def test_get_default_model():
+    result = {}
+    ollama.assert_get(
+        run=lambda: capture(result, local_inference_engine.get_default_model()),
+        response={"models": [{"name": "llama3"}]},
+    )
+    assert result["value"] == "llama3"
+```
+
+Business spec tests verify the Outcome — not internals:
+
+```python
+def test_create_succeeds():
+    result = with_fake_ollama(lambda: asyncio.run(spec.create(
+        name="TestBot", model="llama3", channel_type="web", channel_credentials={},
+    )))
+    assert result.success is True
+    assert result.data["name"] == "TestBot"
+```
+
+### What NOT to Test
+
+- **Bridges** — thin wrappers around stdlib (e.g. `pathlib`, `shutil`)
+- **Obvious code** — simple if/elif, direct passthrough
+- **Prompts** — prompt content is validated by reading the code and checking debug logs, not by assertion
+- **Fine-tuning** — requires GPU and model downloads
+
+### When to Write Tests
+
+Write tests to catch errors, not to prove obvious code works. If there's real logic that could break — transformation, parsing, state management, error handling — test it. If it's a one-liner bridge, skip it.
+
+---
+
 ## Where to Start
 
 **Want to add a new capability?** Write a Meaning. Start with the `WeatherForecast` example above, look at existing meanings in `application/core/brain/mind/meanings/`, and follow the pattern.
