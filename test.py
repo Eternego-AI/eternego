@@ -69,7 +69,10 @@ if __name__ == "__main__":
     project_dir = str(Path(__file__).parent)
     python = sys.executable
 
-    sys.exit(subprocess.run(
+    print(f"Running: {python} -u -m test_runner {test_dir}")
+    print(f"PYTHONPATH: {TMP_DIR}{os.pathsep}{project_dir}")
+    result = subprocess.run(
         [python, "-u", "-m", "test_runner", test_dir],
         env={**os.environ, "PYTHONPATH": f"{TMP_DIR}{os.pathsep}{project_dir}", "PYTHONUNBUFFERED": "1"},
-    ).returncode)
+    )
+    sys.exit(result.returncode)
