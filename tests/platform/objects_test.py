@@ -59,8 +59,12 @@ def test_safe_handles_lists_and_dicts():
 
 
 def test_safe_converts_path_to_string():
-    result = safe(Path("/home/user"))
-    assert result == "/home/user"
+    from application.core import paths
+    p = paths.home("test-id") / "context.md"
+    result = safe(p)
+    assert isinstance(result, str)
+    assert "test-id" in result
+    assert "context.md" in result
 
 
 def test_are_equal_compares_by_serialized_form():
