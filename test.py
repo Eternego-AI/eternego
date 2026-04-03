@@ -70,6 +70,6 @@ if __name__ == "__main__":
     python = sys.executable
 
     sys.exit(subprocess.run(
-        [python, "-m", "test_runner", test_dir],
-        env={**os.environ, "PYTHONPATH": f"{TMP_DIR}{os.pathsep}{project_dir}"},
+        [python, "-u", "-m", "test_runner", test_dir],
+        env={**os.environ, "PYTHONPATH": f"{TMP_DIR}{os.pathsep}{project_dir}", "PYTHONUNBUFFERED": "1"},
     ).returncode)
