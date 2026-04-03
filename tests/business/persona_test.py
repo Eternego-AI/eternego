@@ -38,9 +38,6 @@ def _setup():
     os.environ["HOME"] = tmp
     agents._personas.clear()
     gateways._active.clear()
-    import subprocess
-    subprocess.run(["git", "config", "--global", "user.email", "test@test.com"], env={**os.environ, "HOME": tmp})
-    subprocess.run(["git", "config", "--global", "user.name", "Test"], env={**os.environ, "HOME": tmp})
     return tmp
 
 

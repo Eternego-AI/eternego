@@ -8,6 +8,10 @@ def init(path: Path) -> None:
     """Initialize a git repository if not already initialized."""
     if not (path / ".git").exists():
         subprocess.run(["git", "init", str(path)], check=True)
+        subprocess.run(["git", "config", "user.email", "persona@eternego.ai"], cwd=str(path), check=True)
+        subprocess.run(["git", "config", "user.name", "Eternego"], cwd=str(path), check=True)
+        subprocess.run(["git", "config", "init.defaultBranch", "master"], cwd=str(path), check=True)
+        subprocess.run(["git", "config", "advice.defaultBranchName", "false"], cwd=str(path), check=True)
 
 
 def add(path: Path, file: str) -> None:

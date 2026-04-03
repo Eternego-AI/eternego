@@ -29,13 +29,6 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Configure git
-        run: |
-          git config --global user.email "test@ci.eternego.ai"
-          git config --global user.name "CI"
-          git config --global init.defaultBranch master
-          git config --global advice.defaultBranchName false
-
       - name: Install dependencies
         run: pip install -e .
 
@@ -60,8 +53,13 @@ jobs:
           security unlock-keychain -p test test.keychain
           security set-keychain-settings test.keychain
 
+      - name: Verify Python
+        run: |
+          python --version
+          python -c "import sys; print(sys.executable)"
+
       - name: Run tests
-        run: python test.py
+        run: python -u test.py
         timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
