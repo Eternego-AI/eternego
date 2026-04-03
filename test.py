@@ -41,7 +41,7 @@ def download():
     if token:
         req.add_header("Authorization", f"token {token}")
 
-    release = json.loads(urllib.request.urlopen(req).read())
+    release = json.loads(urllib.request.urlopen(req, timeout=30).read())
     asset_name = f"test-runner-{os_name()}.zip"
     asset = next((a for a in release["assets"] if a["name"] == asset_name), None)
     if not asset:
@@ -52,7 +52,7 @@ def download():
     if token:
         asset_req.add_header("Authorization", f"token {token}")
 
-    data = urllib.request.urlopen(asset_req).read()
+    data = urllib.request.urlopen(asset_req, timeout=60).read()
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         zf.extractall(TMP_DIR)
     print("Done.")
@@ -60,6 +60,8 @@ def download():
 
 if __name__ == "__main__":
     test_dir = sys.argv[1] if len(sys.argv) > 1 else "tests"
+    print(f"Test runner cache: {TMP_DIR}")
+    print(f"Cached: {(TMP_DIR / 'test_runner').exists()}")
 
     if not (TMP_DIR / "test_runner").exists():
         download()
