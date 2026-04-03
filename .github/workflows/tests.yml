@@ -45,7 +45,16 @@ jobs:
           echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> $GITHUB_ENV
           echo -n "test" | gnome-keyring-daemon --unlock --components=secrets
 
+      - name: Set up keychain (macOS)
+        if: matrix.name == 'macos'
+        run: |
+          security create-keychain -p test test.keychain
+          security default-keychain -s test.keychain
+          security unlock-keychain -p test test.keychain
+          security set-keychain-settings test.keychain
+
       - name: Run tests
         run: python test.py
+        timeout-minutes: 10
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
