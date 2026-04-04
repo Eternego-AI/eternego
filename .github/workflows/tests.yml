@@ -30,7 +30,9 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install -e .
+        run: |
+          pip install -e .
+          pip install git+https://github.com/Eternego-AI/test-runner.git
 
       - name: Install secret-tool and keyring (Linux)
         if: matrix.name == 'linux'
@@ -53,16 +55,6 @@ jobs:
           security unlock-keychain -p test test.keychain
           security set-keychain-settings test.keychain
 
-      - name: Run tests (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: bash test.sh
+      - name: Run tests
+        run: test-runner
         timeout-minutes: 10
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Run tests (Windows)
-        if: runner.os == 'Windows'
-        run: pwsh test.ps1
-        timeout-minutes: 10
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

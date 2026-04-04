@@ -287,17 +287,16 @@ All human-readable. All editable. This is intentional — the persona's knowledg
 ### Running Tests
 
 ```bash
-bash test.sh
+pip install git+https://github.com/Eternego-AI/test-runner.git
+test-runner
 ```
-
-This downloads the [test-runner](https://github.com/Eternego-AI/test-runner) on first run (cached in system temp), then runs all tests.
 
 To run a specific directory:
 
 ```bash
-bash test.sh tests/platform
-bash test.sh tests/core
-bash test.sh tests/business
+test-runner tests/platform
+test-runner tests/core
+test-runner tests/business
 ```
 
 ### Writing Tests
