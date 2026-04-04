@@ -50,10 +50,10 @@ jobs:
       - name: Set up keychain (macOS)
         if: matrix.name == 'macos'
         run: |
-          security create-keychain -p test test.keychain
-          security default-keychain -s test.keychain
-          security unlock-keychain -p test test.keychain
-          security set-keychain-settings test.keychain
+          security create-keychain -p test login.keychain-db
+          security default-keychain -s login.keychain-db
+          security unlock-keychain -p test login.keychain-db
+          security set-keychain-settings -t 0 login.keychain-db
 
       - name: Run tests
         run: test-runner

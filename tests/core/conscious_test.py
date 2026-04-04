@@ -15,7 +15,7 @@ async def test_realize_does_nothing_when_no_signals():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -47,7 +47,7 @@ async def test_realize_routes_signal_to_new_impression():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -92,7 +92,7 @@ async def test_realize_routes_signal_to_existing_thread():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -140,7 +140,7 @@ async def test_realize_routes_signal_to_both_existing_and_new():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -190,7 +190,7 @@ async def test_realize_skips_invalid_signal_number():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -234,7 +234,7 @@ async def test_understand_does_nothing_when_no_perceptions():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -269,7 +269,7 @@ async def test_understand_picks_meaning_by_row():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -326,7 +326,7 @@ async def test_understand_falls_to_escalation_on_invalid_row():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -383,7 +383,7 @@ async def test_understand_escalation_with_no_code_uses_escalation_meaning():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -440,7 +440,7 @@ async def test_recognize_does_nothing_when_no_thoughts():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -473,7 +473,7 @@ async def test_recognize_replies_on_heard_signal():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -521,7 +521,7 @@ async def test_recognize_uses_clarify_after_executed_signal():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -566,7 +566,7 @@ async def test_recognize_forgets_thought_when_no_path():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class NoPathMeaning(Meaning):
@@ -611,7 +611,7 @@ async def test_decide_does_nothing_when_no_thoughts():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -642,7 +642,7 @@ async def test_decide_creates_recap_when_only_recap_returned():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -690,7 +690,7 @@ async def test_decide_runs_action_and_informs_with_output():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class ActionMeaning(Meaning):
@@ -743,7 +743,7 @@ async def test_decide_informs_error_when_run_raises():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class BrokenMeaning(Meaning):
@@ -792,7 +792,7 @@ async def test_decide_recaps_when_action_returns_none():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class NullActionMeaning(Meaning):
@@ -842,7 +842,7 @@ async def test_conclude_does_nothing_when_no_thoughts():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -875,7 +875,7 @@ async def test_conclude_summarizes_with_model():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -923,7 +923,7 @@ async def test_conclude_uses_recap_when_no_summarize():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
         class NoSummaryMeaning(Meaning):

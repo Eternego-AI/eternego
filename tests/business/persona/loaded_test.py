@@ -11,7 +11,7 @@ async def test_loaded_returns_running_persona():
         from application.core.brain.data import Meaning
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
@@ -55,7 +55,7 @@ async def test_loaded_fails_when_not_running():
         from application.core import agents, gateways
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         result = asyncio.run(spec.loaded("not-running"))

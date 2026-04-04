@@ -1,5 +1,6 @@
 """Paths — application directory layout."""
 
+import os
 from pathlib import Path
 
 from application.platform import filesystem, logger, objects, git, crypto, datetimes
@@ -7,22 +8,25 @@ from application.platform import filesystem, logger, objects, git, crypto, datet
 
 def eternego_home() -> Path:
     """Root directory for all Eternego data."""
+    custom = os.environ.get("ETERNEGO_HOME")
+    if custom:
+        return Path(custom)
     return Path.home() / ".eternego"
 
 
 def personas_home() -> Path:
     """Root directory for all persona storage."""
-    return Path.home() / ".eternego" / "personas"
+    return eternego_home() / "personas"
 
 
 def home(persona_id: str) -> Path:
     """Root directory for a specific persona."""
-    return Path.home() / ".eternego" / "personas" / persona_id / "home"
+    return eternego_home() / "personas" / persona_id / "home"
 
 
 def workspace(persona_id: str) -> Path:
     """Path to the workspace directory for that persona."""
-    return Path.home() / ".eternego" / "personas" / persona_id / "workspace"
+    return eternego_home() / "personas" / persona_id / "workspace"
 
 
 def conversation(persona_id: str) -> Path:

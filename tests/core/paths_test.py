@@ -8,7 +8,7 @@ async def test_md_list_extracts_lines_under_section():
         from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = paths.home("test-paths")
         p.mkdir(parents=True, exist_ok=True)
         f = p / "test.md"
@@ -27,7 +27,7 @@ async def test_md_list_returns_empty_for_missing_section():
         from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = paths.home("test-paths")
         p.mkdir(parents=True, exist_ok=True)
         f = p / "test.md"
@@ -46,7 +46,7 @@ async def test_md_list_returns_empty_for_missing_file():
         from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         result = paths.md_list(paths.home("test-paths") / "nonexistent.md", "Tasks")
         assert result == []
 
@@ -62,7 +62,7 @@ async def test_delete_entry_removes_matching_line():
         from application.platform.crypto import generate_unique_id
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = paths.home("test-paths")
         p.mkdir(parents=True, exist_ok=True)
         f = p / "entries.md"
@@ -85,7 +85,7 @@ async def test_delete_entry_does_nothing_for_missing_hash():
         from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = paths.home("test-paths")
         p.mkdir(parents=True, exist_ok=True)
         f = p / "entries.md"
@@ -107,7 +107,7 @@ async def test_due_destiny_entries_returns_entries_before_time():
         from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         dest = paths.destiny("test-paths")
         dest.mkdir(parents=True, exist_ok=True)
         (dest / "reminder-2026-03-15-10-00-20260315090000.md").write_text("doctor appointment")
@@ -131,7 +131,7 @@ async def test_due_destiny_entries_empty_when_none_due():
         from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         dest = paths.destiny("test-paths")
         dest.mkdir(parents=True, exist_ok=True)
         (dest / "reminder-2026-03-20-10-00-20260315090000.md").write_text("future task")
@@ -151,7 +151,7 @@ async def test_save_and_read_destiny_entry():
         from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         paths.save_destiny_entry("test-paths", "reminder", "2026-03-15 10:00", "Call the dentist")
         dest = paths.destiny("test-paths")
         files = list(dest.glob("*.md"))
@@ -171,7 +171,7 @@ async def test_read_files_matching():
         from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         dest = paths.destiny("test-paths")
         dest.mkdir(parents=True, exist_ok=True)
         (dest / "note-2026-03-15.md").write_text("today's note")
@@ -193,7 +193,7 @@ async def test_add_history_entry_creates_file():
         from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         filename = paths.add_history_entry("test-paths", "conversation", "hello\nworld")
         history_dir = paths.history("test-paths")
         assert (history_dir / filename).exists()

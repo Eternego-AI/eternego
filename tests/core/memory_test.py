@@ -13,7 +13,7 @@ async def test_trigger_adds_signal():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -44,7 +44,7 @@ async def test_needs_realizing_returns_unattached_heard_signals():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -78,7 +78,7 @@ async def test_realize_creates_perception():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -111,7 +111,7 @@ async def test_realize_appends_to_existing_perception():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -146,7 +146,7 @@ async def test_realize_clears_signal_from_needs_realizing():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -178,7 +178,7 @@ async def test_realize_removes_existing_thought_on_heard_signal():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -217,7 +217,7 @@ async def test_understand_creates_thought():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -251,7 +251,7 @@ async def test_needs_understanding_returns_perceptions_without_thoughts():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -290,7 +290,7 @@ async def test_needs_recognition_when_last_signal_is_heard():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -322,7 +322,7 @@ async def test_needs_recognition_empty_when_no_reply():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class NoReplyMeaning(Meaning):
@@ -354,7 +354,7 @@ async def test_needs_decision_when_answered_and_has_path():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -387,7 +387,7 @@ async def test_needs_decision_when_no_reply_and_has_path():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class NoReplyMeaning(Meaning):
@@ -419,7 +419,7 @@ async def test_needs_conclusion_when_recap_present():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -454,7 +454,7 @@ async def test_answer_appends_signal_to_thread():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -489,7 +489,7 @@ async def test_inform_appends_tool_result_to_thread():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -526,7 +526,7 @@ async def test_forget_removes_thought_and_exclusive_signals():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -569,7 +569,7 @@ async def test_most_important_thought_selects_highest_priority():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -606,7 +606,7 @@ async def test_most_important_thought_returns_none_for_empty():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -635,7 +635,7 @@ async def test_settled_when_nothing_to_process():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -663,7 +663,7 @@ async def test_not_settled_when_signals_need_realizing():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -694,7 +694,7 @@ async def test_changed_detects_new_signals():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -725,7 +725,7 @@ async def test_changed_resets_after_signals_realized():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -759,7 +759,7 @@ async def test_persist_and_remember_roundtrip():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -807,7 +807,7 @@ async def test_prompts_builds_messages_from_thread():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):
@@ -844,7 +844,7 @@ async def test_prompts_collapses_before_last_summary():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"))
 
         class TestMeaning(Meaning):

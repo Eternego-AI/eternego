@@ -11,7 +11,7 @@ async def test_control_removes_person_identity_entry():
         from application.core.brain.data import Meaning
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
@@ -69,7 +69,7 @@ async def test_control_fails_on_invalid_id_format():
         from application.core.brain.data import Meaning
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")

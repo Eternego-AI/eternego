@@ -14,7 +14,7 @@ async def test_create_succeeds():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         class Handler(BaseHTTPRequestHandler):
@@ -75,7 +75,7 @@ async def test_create_with_frontier_succeeds():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         class Handler(BaseHTTPRequestHandler):
@@ -109,7 +109,7 @@ async def test_create_with_frontier_succeeds():
         thread.start()
         port = server.server_address[1]
         ollama.OLLAMA_BASE_URL = f"http://127.0.0.1:{port}"
-        
+
         result = asyncio.run(spec.create(
             name="FrontierBot",
             model="llama3",

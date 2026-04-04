@@ -9,7 +9,7 @@ async def test_get_list_returns_empty_when_no_personas():
         from application.core import agents, gateways
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         outcome = asyncio.run(spec.get_list())
@@ -30,7 +30,7 @@ async def test_get_list_returns_personas():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p =Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")

@@ -13,7 +13,7 @@ async def test_ego_initializes_with_persona_and_memory():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -55,7 +55,7 @@ async def test_consciousness_returns_five_callables():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -97,7 +97,7 @@ async def test_trigger_adds_signal_to_memory_and_nudges():
         from application.core.data import Model, Persona
         
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -138,7 +138,7 @@ async def test_trigger_ignores_signal_when_worker_stopped():
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -181,7 +181,7 @@ async def test_incept_injects_perception_and_nudges():
         from application.core.data import Model, Persona
         from application.core.brain.data import Perception
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -224,7 +224,7 @@ async def test_read_returns_signals_sorted_by_time():
         from application.core.brain.data import Signal, SignalEvent, Meaning
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -269,7 +269,7 @@ async def test_register_stores_ego_and_find_retrieves_persona():
         from application.core.brain.data import Signal, SignalEvent, Meaning
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -307,7 +307,7 @@ async def test_find_raises_when_not_registered():
         from application.core.brain.data import Signal, SignalEvent, Meaning
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         try:
             agents.find("nonexistent")
             assert False, "should have raised"
@@ -327,7 +327,7 @@ async def test_persona_returns_ego():
         from application.core.brain.data import Signal, SignalEvent, Meaning
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -366,7 +366,7 @@ async def test_unload_persists_memory_and_unregisters():
         from application.core.brain.data import Signal, SignalEvent, Meaning
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -416,7 +416,7 @@ async def test_pair_generates_code_and_take_code_claims_it():
         from application.core.data import Model, Persona
         from application.core.data import Channel
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
@@ -461,7 +461,7 @@ async def test_take_code_raises_on_invalid_code():
         from application.core.brain.data import Signal, SignalEvent, Meaning
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         try:
             agents.take_code("INVALID")
             assert False, "should have raised"
@@ -483,7 +483,7 @@ async def test_identity_includes_character():
         from application.core.brain.data import Signal, SignalEvent, Meaning
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):

@@ -11,7 +11,7 @@ async def test_verify_sets_channel_name_and_verified_at():
         from application.core.data import Channel, Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
@@ -41,7 +41,7 @@ async def test_send_telegram_sends_to_correct_chat():
         from application.platform import telegram
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
 
@@ -72,7 +72,7 @@ async def test_send_web_puts_to_bus():
         from application.core.data import Channel
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         received = []
 
@@ -100,7 +100,7 @@ async def test_send_all_sends_to_all_active_channels():
         from application.core.data import Channel, Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
         received = []
@@ -134,7 +134,7 @@ async def test_express_thinking_sends_typing_to_telegram_channels():
         from application.platform import telegram
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
         ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
@@ -161,7 +161,7 @@ async def test_express_thinking_skips_non_telegram_channels():
         from application.core.data import Channel, Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
 
@@ -187,7 +187,7 @@ async def test_keep_open_returns_polling_strategy_for_telegram():
         from application.core.data import Channel, Model, Persona
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
         ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
@@ -210,7 +210,7 @@ async def test_keep_open_connection_returns_messages_from_poll():
         from application.platform import telegram
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
         ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
@@ -246,7 +246,7 @@ async def test_keep_open_connection_filters_group_without_mention():
         from application.platform import telegram
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
         ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
@@ -278,7 +278,7 @@ async def test_keep_open_raises_on_unsupported_channel():
         from application.core.exceptions import ChannelError
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
         p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
 

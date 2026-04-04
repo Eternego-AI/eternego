@@ -8,9 +8,10 @@ async def test_shape_composes_full_character_prompt():
         from pathlib import Path
         from application.core.brain.character import shape
         from application.core.data import Model, Persona
+        from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         persona = Persona(
             id="test-char",
             name="Primus",
@@ -18,7 +19,7 @@ async def test_shape_composes_full_character_prompt():
             birthday="2026-01-15",
         )
 
-        home = Path(tmp) / ".eternego" / "personas" / persona.id / "home"
+        home = paths.home(persona.id)
         home.mkdir(parents=True)
         (home / "person.md").write_text("The person lives in Amsterdam.\nThe person is a software engineer.")
         (home / "persona-trait.md").write_text("Be concise.\nUse humor when appropriate.")
@@ -46,16 +47,17 @@ async def test_shape_omits_empty_identity_sections():
         from pathlib import Path
         from application.core.brain.character import shape
         from application.core.data import Model, Persona
+        from application.core import paths
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         persona = Persona(
             id="test-empty",
             name="Primus",
             model=Model(name="llama3"),
         )
 
-        home = Path(tmp) / ".eternego" / "personas" / persona.id / "home"
+        home = paths.home(persona.id)
         home.mkdir(parents=True)
         (home / "person.md").write_text("")
         (home / "persona-trait.md").write_text("")

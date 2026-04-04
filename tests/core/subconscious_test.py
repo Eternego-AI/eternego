@@ -13,7 +13,7 @@ async def test_person_identity_writes_model_response_to_file():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
@@ -39,7 +39,7 @@ async def test_person_identity_includes_existing_facts_in_prompt():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.person_identity(p.id), "The person is a developer.")
@@ -67,7 +67,7 @@ async def test_person_identity_sends_conversation_as_user_message():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
@@ -102,7 +102,7 @@ async def test_person_traits_writes_to_correct_file():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
@@ -128,7 +128,7 @@ async def test_person_traits_includes_existing_in_prompt():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.person_traits(p.id), "The person uses humor.")
@@ -158,7 +158,7 @@ async def test_wishes_writes_to_correct_file():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
@@ -186,7 +186,7 @@ async def test_struggles_writes_to_correct_file():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
@@ -214,7 +214,7 @@ async def test_persona_trait_writes_to_correct_file():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
@@ -240,7 +240,7 @@ async def test_persona_trait_includes_person_traits_in_prompt():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.person_traits(p.id), "The person is direct and technical.")
@@ -270,7 +270,7 @@ async def test_synthesize_dna_writes_to_dna_file():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.persona_trait(p.id), "Be concise.\nUse humor.")
@@ -298,7 +298,7 @@ async def test_synthesize_dna_includes_previous_dna_and_traits_in_prompt():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-sub", name="Primus", model=Model(name="llama3"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.dna(p.id), "Previous profile content")

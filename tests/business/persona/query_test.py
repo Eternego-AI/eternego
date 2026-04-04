@@ -13,7 +13,7 @@ async def test_query_returns_response():
         from application.platform import ollama
         
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")

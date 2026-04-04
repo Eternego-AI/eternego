@@ -12,7 +12,7 @@ async def test_live_processes_due_destiny_entries():
         from application.core.brain.data import Meaning
     
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
@@ -68,7 +68,7 @@ async def test_live_returns_nothing_due_when_empty():
         from application.core.brain.data import Meaning
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")

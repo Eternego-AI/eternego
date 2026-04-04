@@ -12,7 +12,7 @@ async def test_trigger_fires_matching_spec():
         from application.platform import datetimes, filesystem
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-routine", name="Primus", model=Model(name="llama3"))
@@ -68,7 +68,7 @@ async def test_trigger_fires_nothing_when_no_match():
         from application.platform import datetimes, filesystem
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-routine", name="Primus", model=Model(name="llama3"))
@@ -120,7 +120,7 @@ async def test_trigger_succeeds_when_no_routines_file():
         from application.platform import datetimes, filesystem
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-routine", name="Primus", model=Model(name="llama3"))
@@ -166,7 +166,7 @@ async def test_trigger_skips_unknown_spec():
         from application.platform import datetimes, filesystem
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         p = Persona(id="test-routine", name="Primus", model=Model(name="llama3"))

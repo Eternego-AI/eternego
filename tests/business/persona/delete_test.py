@@ -14,7 +14,7 @@ async def test_delete_succeeds():
         from application.platform import ollama
 
         tmp = tempfile.mkdtemp()
-        os.environ["HOME"] = tmp
+        os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
         class Handler(BaseHTTPRequestHandler):
