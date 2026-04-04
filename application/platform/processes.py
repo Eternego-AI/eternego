@@ -27,14 +27,14 @@ def on_separate_process(fn: Callable) -> tuple[int, str]:
     if fn.__qualname__ != fn.__name__:
         source = textwrap.dedent(inspect.getsource(fn))
         code = (
-            f"import sys; sys.path.insert(0, '{os.getcwd()}')\n"
+            f"import sys; sys.path.insert(0, {os.getcwd()!r})\n"
             f"{source}\n"
             f"{name}()\n"
         )
     else:
         # Top-level function — import from module
         code = (
-            f"import sys; sys.path.insert(0, '{os.getcwd()}')\n"
+            f"import sys; sys.path.insert(0, {os.getcwd()!r})\n"
             f"from {module.__name__} import {name}\n"
             f"{name}()\n"
         )
