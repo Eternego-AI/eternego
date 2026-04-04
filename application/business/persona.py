@@ -281,11 +281,6 @@ async def migrate(diary_path: str, phrase: str, model: str) -> Outcome[dict]:
         archive = paths.decrypt(temp_path, await system.persona_key(phrase, persona_id))
         staging = paths.unzip(persona_id, archive)
 
-        outcome = await environment.prepare(model)
-        if not outcome.success:
-            await bus.broadcast("Persona migration failed", {"reason": "environment"})
-            return Outcome(success=False, message=outcome.message)
-
         paths.copy_recursively(staging, paths.home(persona_id))
         paths.delete_recursively(staging)
 
@@ -519,7 +514,7 @@ async def connect(persona: Persona, channel: Channel) -> Outcome:
             return Outcome(success=True, message="")
 
         if channel.type == "web":
-            gateways.of(persona).add(channel, lambda: None)
+            gateways.of(persona).add(channel, {"type": "web"})
         else:
             async def on_message(message: Message) -> Outcome:
                 if channel.verified_at is not None:
@@ -536,8 +531,9 @@ async def connect(persona: Persona, channel: Channel) -> Outcome:
                     )
                 return outcome
 
-            connection = channels.keep_open(persona, channel, on_message)
-            gateways.of(persona).add(channel, connection)
+            strategy = channels.keep_open(persona, channel)
+            strategy["on_message"] = on_message
+            gateways.of(persona).add(channel, strategy)
 
         await bus.broadcast("Channel connected", {"persona": persona, "channel": channel})
         return Outcome(success=True, message="")

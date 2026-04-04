@@ -2,7 +2,7 @@
 
 import subprocess
 
-from application.platform import logger, crypto, OS, linux, mac, windows, datetimes, bip39
+from application.platform import logger, crypto, OS, linux, mac, windows, bip39
 from application.core.data import Persona
 from application.core.exceptions import UnsupportedOS, InstallationError, SecretStorageError, ExecutionError, HardwareError
 

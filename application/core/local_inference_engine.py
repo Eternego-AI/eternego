@@ -10,24 +10,23 @@ from application.core.exceptions import EngineConnectionError, ModelError
 async def ensure_running() -> None:
     """Ensure the local inference engine is running, start it if needed."""
     logger.info("Ensuring local inference engine is running")
-    async with ollama.connect() as client:
-        if await ollama.is_serving(client):
+    if await ollama.is_serving():
+        return
+
+    logger.info("Local inference engine not responding, starting server")
+    platform = OS.get_supported()
+    if platform == "linux":
+        await linux.execute_on_sub_process("systemctl start ollama")
+    elif platform == "mac":
+        await mac.execute_on_sub_process("ollama serve >/dev/null 2>&1 &")
+    elif platform == "windows":
+        await windows.execute_on_sub_process("Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden")
+
+    for _ in range(10):
+        await asyncio.sleep(1)
+        if await ollama.is_serving():
+            logger.info("Local inference engine is now running")
             return
-
-        logger.info("Local inference engine not responding, starting server")
-        platform = OS.get_supported()
-        if platform == "linux":
-            await linux.execute_on_sub_process("systemctl start ollama")
-        elif platform == "mac":
-            await mac.execute_on_sub_process("ollama serve >/dev/null 2>&1 &")
-        elif platform == "windows":
-            await windows.execute_on_sub_process("Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden")
-
-        for _ in range(10):
-            await asyncio.sleep(1)
-            if await ollama.is_serving(client):
-                logger.info("Local inference engine is now running")
-                return
 
     raise EngineConnectionError("Could not start the local inference engine")
 
@@ -36,8 +35,7 @@ async def get_default_model() -> str | None:
     """Get the default model name from the running engine."""
     logger.info("Getting default model from local inference engine")
     try:
-        async with ollama.connect() as client:
-            data = await ollama.get(client, "/api/tags")
+        data = await ollama.get("/api/tags")
     except ollama.OllamaError as e:
         raise ModelError(f"Failed to list models: {e}") from e
     except ConnectionError as e:
@@ -52,8 +50,7 @@ async def pull(model: str) -> None:
     """Pull a model into the local inference engine."""
     logger.info("Pulling model", {"model": model})
     try:
-        async with ollama.connect() as client:
-            await ollama.post(client, "/api/pull", {"name": model, "stream": False})
+        await ollama.post("/api/pull", {"name": model, "stream": False})
     except ollama.OllamaError as e:
         raise ModelError(f"Failed to pull model '{model}': {e}") from e
     except ConnectionError as e:
@@ -61,15 +58,10 @@ async def pull(model: str) -> None:
 
 
 async def register(model_name: str, base_model: str) -> None:
-    """Register a named model in Ollama pointing at base_model, with no adapter.
-
-    Creates a Modelfile reference — no blob copy, no extra disk space.
-    After the first sleep, fine_tune() overwrites it with FROM base + ADAPTER.
-    """
+    """Register a named model in Ollama pointing at base_model, with no adapter."""
     logger.info("Registering model", {"model_name": model_name, "base_model": base_model})
     try:
-        async with ollama.connect() as client:
-            await ollama.post(client, "/api/create", {"model": model_name, "from": base_model, "stream": False})
+        await ollama.post("/api/create", {"model": model_name, "from": base_model, "stream": False})
     except ollama.OllamaError as e:
         raise ModelError(f"Failed to register model '{model_name}': {e}") from e
     except ConnectionError as e:
@@ -80,23 +72,30 @@ async def delete(model: str) -> bool:
     """Delete a model from the local inference engine. Returns True on success, False on failure."""
     logger.info("Deleting model", {"model": model})
     try:
-        async with ollama.connect() as client:
-            await ollama.delete(client, "/api/delete", {"name": model})
+        await ollama.delete("/api/delete", {"name": model})
         return True
     except Exception:
         return False
 
 
-async def fine_tune(hf_model_id: str, training_set: str, base_model: str, model_name: str, persona_id: str) -> None:
-    """Fine-tune a model using LoRA and register the result as a new Ollama model.
+async def check(model: str) -> bool:
+    """Check if a model is pulled, available, and responding."""
+    logger.info("Checking model availability", {"model": model})
+    try:
+        data = await ollama.get("/api/tags")
+        models = [m["name"] for m in data.get("models", [])]
+        if model not in models:
+            return False
+        response = await ollama.post("/api/generate", {"model": model, "prompt": "hi", "stream": False})
+        return response.get("response") is not None
+    except ollama.OllamaError as e:
+        raise ModelError(f"Model '{model}' check failed: {e}") from e
+    except ConnectionError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
 
-    Trains on the HuggingFace model (HF cache handles re-use across nights).
-    Saves only the LoRA adapter (~100-300 MB) — no merge, no memory spike.
-    Converts the adapter to GGUF and registers it with Ollama as:
-      FROM <base_model>
-      ADAPTER <adapter.gguf>
-    The model_name is the existing persona model name — updated in place each night.
-    """
+
+async def fine_tune(hf_model_id: str, training_set: str, base_model: str, model_name: str, persona_id: str) -> None:
+    """Fine-tune a model using LoRA and register the result as a new Ollama model."""
     try:
         parsed = json.loads(training_set)
         training_pairs = parsed.get("training_pairs", [])
@@ -114,14 +113,12 @@ async def fine_tune(hf_model_id: str, training_set: str, base_model: str, model_
     logger.info("Fine-tuning model", {"model": base_model, "pairs": len(training_pairs)})
     try:
         await asyncio.to_thread(lora.train, hf_model_id, training_pairs, output_gguf, str(adapter_dir))
-
-        async with ollama.connect() as client:
-            await ollama.post(client, "/api/create", {
-                "model": model_name,
-                "from": base_model,
-                "adapters": {"path": output_gguf},
-                "stream": False,
-            })
+        await ollama.post("/api/create", {
+            "model": model_name,
+            "from": base_model,
+            "adapters": {"path": output_gguf},
+            "stream": False,
+        })
     except ImportError as e:
         raise EngineConnectionError(f"Fine-tuning dependencies not installed: {e}") from e
     except ollama.OllamaError as e:
@@ -132,20 +129,3 @@ async def fine_tune(hf_model_id: str, training_set: str, base_model: str, model_
         raise EngineConnectionError("Could not connect to the local inference engine") from e
     finally:
         Path(output_gguf).unlink(missing_ok=True)
-
-
-async def check(model: str) -> bool:
-    """Check if a model is pulled, available, and responding."""
-    logger.info("Checking model availability", {"model": model})
-    try:
-        async with ollama.connect() as client:
-            data = await ollama.get(client, "/api/tags")
-            models = [m["name"] for m in data.get("models", [])]
-            if model not in models:
-                return False
-            response = await ollama.post(client, "/api/generate", {"model": model, "prompt": "hi", "stream": False})
-            return response.get("response") is not None
-    except ollama.OllamaError as e:
-        raise ModelError(f"Model '{model}' check failed: {e}") from e
-    except ConnectionError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e

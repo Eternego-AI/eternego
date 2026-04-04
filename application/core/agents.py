@@ -20,7 +20,7 @@ def register(p: Persona, ego: "Ego") -> None:
     logger.info("Registering agent", {"persona": p})
     _personas[p.id] = ego
     from application.core.brain.mind import clock
-    ego.worker.run(clock.tick, ego.memory, ego.worker)
+    ego.worker.run(clock.tick, ego.consciousness(), ego.memory, ego.worker)
 
 
 def personas() -> list[Persona]:
@@ -90,10 +90,24 @@ class Ego:
     def __init__(self, p: Persona, all_meanings: list, worker, situation=None):
         self.persona = p
         self.worker = worker
+        self.meanings = all_meanings
         self.memory = Memory(p, all_meanings)
         self.memory.remember()
         self.pairing_codes: dict = {}
         self.current_situation = situation
+
+    def consciousness(self) -> list:
+        """Build the conscious thinking sequence as a list of callables."""
+        from application.core.brain.mind import conscious
+        from functools import partial
+
+        return [
+            partial(conscious.realize, self.memory, self.persona, self.identity),
+            partial(conscious.understand, self.memory, self.persona, self.meanings, self.identity, self.escalate),
+            partial(conscious.recognize, self.memory, self.persona, self.identity, self.say),
+            partial(conscious.decide, self.memory, self.persona, self.identity),
+            partial(conscious.conclude, self.memory, self.persona, self.identity, self.say),
+        ]
 
     async def settle(self) -> None:
         """Nudge the tick and wait for it to finish processing."""
@@ -246,100 +260,23 @@ class Ego:
     async def escalate(self, thread_text: str, existing_meanings: list) -> str | None:
         """Generate meaning code via frontier or local model. Returns Python source or None."""
         logger.debug("ego.escalate", {"persona": self.persona, "thread": thread_text})
-
-        available_tools = tools.discover()
-        existing = [{"name": m.name, "description": m.description()}
-                    for m in existing_meanings if m.name != "Escalation"]
-
-        tools_text = "\n".join(
-            f"- `{t.name}({', '.join(f'{k}: {v}' for k, v in t.params.items())}) -> {t.returns}`: {t.instruction}"
-            for t in available_tools
-        ) or "(no tools available)"
-
-        meanings_text = "\n".join(
-            f"- {m['name']}: {m['description']}" for m in existing
-        ) or "(none yet)"
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind import meanings as meanings_module
 
         prompt = (
-            "# Meaning Generation\n\n"
-            "A persona has a cognitive pipeline that processes interactions in five stages:\n"
-            "  realize → understand → recognize → decide → conclude\n\n"
-            "A **Meaning** is a Python class that defines how the persona handles a specific "
-            "type of interaction. When no existing Meaning matches, a new one must be created.\n\n"
-            "## How Meanings Work in the Pipeline\n\n"
-            "Each Meaning method maps to a pipeline stage. A small local model executes "
-            "these — prompts must be explicit, unambiguous, and structured.\n\n"
-            "### `name` (class attribute)\n"
-            "A specific, descriptive identifier. This appears in the recognition list alongside "
-            "existing meanings, so it must be **narrower and more specific** than built-in names. "
-            "The local model picks meanings by name + description, so specificity avoids collisions.\n"
-            "Good: 'Weather Forecast Lookup', 'Email Draft Composition'\n"
-            "Bad: 'Helper', 'Task', 'Utility'\n\n"
-            "### `description() → str`\n"
-            "One sentence defining exactly what interactions this meaning covers. Used by the "
-            "understand stage to match a conversation to this meaning. Must be distinct from "
-            "every existing meaning — if it overlaps, the local model will pick the wrong one.\n\n"
-            "### `reply() → str | None`\n"
-            "Prompt for the **recognize** stage — how to respond to the person on first contact. "
-            "This runs BEFORE any action is taken.\n"
-            "CRITICAL: The reply output is appended to the conversation thread and becomes "
-            "visible to the decide stage. Never ask the model to state specific extracted values "
-            "(times, dates, names, quantities) in the reply — if it gets them wrong, the error "
-            "propagates into the extraction. Keep it to a brief acknowledgment.\n"
-            "Return None if no verbal response is needed before acting.\n\n"
-            "### `clarify() → str | None`\n"
-            "Prompt for retry after an error. Only runs when an action has failed and the "
-            "conversation already contains an error message. Tell the model to look at the error, "
-            "explain what went wrong, and ask the person to confirm or correct.\n"
-            "Return None if retries should be silent.\n\n"
-            "### `path() → str | None`\n"
-            "Prompt for the **decide** stage — tells the local model what structured data to extract "
-            "or what action to take. The model sees the full conversation thread and must return JSON.\n"
-            "CRITICAL: Tell the model to extract information from what the **person** said, "
-            "not from assistant messages in the thread.\n"
-            "For tool-using meanings, reference tools by their exact name and define the exact "
-            "JSON schema the model must return.\n"
-            "Return None for conversational-only meanings (no action needed).\n\n"
-            "### `summarize() → str | None`\n"
-            "Prompt for the **conclude** stage — the final message to the person after the action "
-            "completes. Should confirm what was done. Return None to skip.\n\n"
-            "### `run(persona_response: dict)` — do NOT implement unless needed\n"
-            "The default `run()` dispatches tool calls from the JSON that `path()` produced. "
-            "Do not override it unless the meaning needs custom logic (like file I/O).\n"
-            "`run()` returns an async callable or None. The callable is executed by the pipeline, "
-            "which handles all errors. The callable returns a string (execution output fed back "
-            "to the conversation) or None (success, nothing to report).\n"
-            "Raise exceptions for validation failures — do not catch them.\n"
-            "Example override:\n"
-            "    async def run(self, persona_response: dict):\n"
-            "        value = persona_response.get('key', '')\n"
-            "        if not value:\n"
-            "            raise ValueError('key is missing')\n"
-            "        async def action():\n"
-            "            return do_something(value)\n"
-            "        return action\n\n"
-            f"## Conversation That Triggered Escalation\n\n{thread_text}\n\n"
-            f"## Available Tools\n\n{tools_text}\n\n"
-            f"## Existing Meanings (do not duplicate or overlap)\n\n{meanings_text}\n\n"
-            "## Output\n\n"
-            "Return ONLY valid Python source code. No markdown fences, no explanation.\n"
-            "Only import: `from application.core.brain.data import Meaning`\n\n"
-            "from application.core.brain.data import Meaning\n\n\n"
-            "class SpecificDescriptiveName(Meaning):\n"
-            '    name = "Specific Descriptive Name"\n\n'
-            "    def description(self):\n"
-            '        return "Narrow, specific description of what this covers."\n\n'
-            "    def clarify(self):\n"
-            '        return "Look at the error. Explain what went wrong and ask the person to correct."\n\n'
-            "    def reply(self):\n"
-            '        return "Acknowledge briefly. Do not restate extracted details."\n\n'
-            "    def summarize(self):\n"
-            '        return "Confirm what was done."\n\n'
-            "    def path(self):\n"
-            "        return (\n"
-            '            "Extract X from what the person said (ignore assistant messages).\\n"\n'
-            "            'Return JSON: {\"tool\": \"name\", \"param\": \"value\"}\\n'\n"
-            "        )\n"
+            "You are generating a capability for an AI persona.\n\n"
+            f"## Consciousness\n\n{conscious.document()}\n\n"
+            f"## Meanings\n\n{meanings_module.document()}\n\n"
+            f"## Current Meanings\n\n{meanings_module.prompt(existing_meanings)}\n\n"
+            "If any existing meaning can handle the situation below, return JSON:\n"
+            '{"existing": "Meaning Name"}\n\n'
+            f"## Situation\n\n{thread_text}\n\n"
+            f"## Available Tools\n\n{tools.document()}\n\n"
+            "If no existing meaning fits, return JSON with valid Python source code:\n"
+            '{"new_meaning": "python code here"}\n\n'
+            "Only import: `from application.core.brain.data import Meaning`\n"
+            "Do not duplicate existing meanings.\n"
+            "Do not override run() unless custom logic is needed beyond tool dispatch."
         )
 
         code = None

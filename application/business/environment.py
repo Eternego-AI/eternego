@@ -1,8 +1,14 @@
 """Environment — preparing and verifying the environment for a persona to grow."""
 
-from application.core import bus, agents, system, local_inference_engine, paths, channels
-from application.core.exceptions import UnsupportedOS, InstallationError, EngineConnectionError, ModelError, AgentError
 from application.business.outcome import Outcome
+from application.core import agents, bus, channels, local_inference_engine, system
+from application.core.exceptions import (
+    AgentError,
+    EngineConnectionError,
+    InstallationError,
+    ModelError,
+    UnsupportedOS,
+)
 
 
 async def ready() -> Outcome[dict]:
@@ -16,7 +22,10 @@ async def ready() -> Outcome[dict]:
 
     except EngineConnectionError as e:
         await bus.broadcast("Engine readiness check failed", {"error": str(e)})
-        return Outcome(success=False, message="Could not start the local inference engine. Please reinstall following the installation guide at https://eternego.ai")
+        return Outcome(
+            success=False,
+            message="Could not start the local inference engine. Please reinstall following the installation guide at https://eternego.ai",
+        )
 
 
 async def prepare(model: str | None = None) -> Outcome[dict]:
@@ -36,8 +45,13 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
             model = await local_inference_engine.get_default_model()
 
         if not model:
-            await bus.broadcast("Environment preparation failed", {"reason": "no_model"})
-            return Outcome(success=False, message="No model available. Please provide a model name.")
+            await bus.broadcast(
+                "Environment preparation failed", {"reason": "no_model"}
+            )
+            return Outcome(
+                success=False,
+                message="No model available. Please provide a model name.",
+            )
 
         if not await local_inference_engine.check(model):
             await local_inference_engine.pull(model)
@@ -49,37 +63,57 @@ async def prepare(model: str | None = None) -> Outcome[dict]:
 
         await bus.broadcast("Environment ready", {"model": model})
 
-        return Outcome(success=True, message="Environment is ready", data={"model": model})
+        return Outcome(
+            success=True, message="Environment is ready", data={"model": model}
+        )
 
     except UnsupportedOS as e:
-        await bus.broadcast("Environment preparation failed", {
-            "reason": "unsupported_os",
-            "error": str(e),
-        })
-        return Outcome(success=False, message="Your operating system is not supported. Eternego requires Linux, macOS, or Windows.")
+        await bus.broadcast(
+            "Environment preparation failed",
+            {
+                "reason": "unsupported_os",
+                "error": str(e),
+            },
+        )
+        return Outcome(
+            success=False,
+            message="Your operating system is not supported. Eternego requires Linux, macOS, or Windows.",
+        )
 
     except InstallationError as e:
-        await bus.broadcast("Environment preparation failed", {
-            "reason": "installation",
-            "error": str(e),
-        })
+        await bus.broadcast(
+            "Environment preparation failed",
+            {
+                "reason": "installation",
+                "error": str(e),
+            },
+        )
         return Outcome(success=False, message=str(e))
 
     except ModelError as e:
-        await bus.broadcast("Environment preparation failed", {
-            "reason": "model",
-            "model": model,
-            "error": str(e),
-        })
+        await bus.broadcast(
+            "Environment preparation failed",
+            {
+                "reason": "model",
+                "model": model,
+                "error": str(e),
+            },
+        )
         return Outcome(success=False, message=str(e))
 
     except EngineConnectionError as e:
-        await bus.broadcast("Environment preparation failed", {
-            "reason": "connection",
-            "model": model,
-            "error": str(e),
-        })
-        return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
+        await bus.broadcast(
+            "Environment preparation failed",
+            {
+                "reason": "connection",
+                "model": model,
+                "error": str(e),
+            },
+        )
+        return Outcome(
+            success=False,
+            message="Could not connect to the local inference engine. Please make sure it is running.",
+        )
 
 
 async def pair(code: str) -> Outcome[dict]:
@@ -89,19 +123,34 @@ async def pair(code: str) -> Outcome[dict]:
     try:
         persona, channel_type, channel_name = agents.take_code(code)
 
-        channel = next((ch for ch in (persona.channels or []) if ch.type == channel_type), None)
+        channel = next(
+            (ch for ch in (persona.channels or []) if ch.type == channel_type), None
+        )
         if not channel:
-            await bus.broadcast("Pairing failed", {"code": code, "reason": "invalid_channel"})
-            return Outcome(success=False, message="The channel associated with this pairing code could not be found.")
+            await bus.broadcast(
+                "Pairing failed", {"code": code, "reason": "invalid_channel"}
+            )
+            return Outcome(
+                success=False,
+                message="The channel associated with this pairing code could not be found.",
+            )
 
         if channel.verified_at:
-            await bus.broadcast("Pairing failed", {"code": code, "reason": "already_verified"})
+            await bus.broadcast(
+                "Pairing failed", {"code": code, "reason": "already_verified"}
+            )
             return Outcome(success=False, message="This channel is already verified.")
 
         channels.verify(persona, channel, channel_name)
 
-        await bus.broadcast("Channel paired", {"persona_id": persona.id, "channel": channel.name})
-        return Outcome(success=True, message="Channel paired successfully", data={"persona_id": persona.id, "channel": channel.name})
+        await bus.broadcast(
+            "Channel paired", {"persona_id": persona.id, "channel": channel.name}
+        )
+        return Outcome(
+            success=True,
+            message="Channel paired successfully",
+            data={"persona_id": persona.id, "channel": channel.name},
+        )
 
     except AgentError as e:
         await bus.broadcast("Pairing failed", {"code": code, "reason": str(e)})
@@ -115,23 +164,34 @@ async def check_model(model: str) -> Outcome[dict]:
     try:
         if await local_inference_engine.check(model):
             await bus.broadcast("Model is ready", {"model": model})
-            return Outcome(success=True, message="Model is ready", data={"model": model})
+            return Outcome(
+                success=True, message="Model is ready", data={"model": model}
+            )
 
         await bus.broadcast("Model check failed", {"model": model})
         return Outcome(success=False, message="Model is not available")
 
     except ModelError as e:
-        await bus.broadcast("Model check failed", {
-            "reason": "model",
-            "model": model,
-            "error": str(e),
-        })
+        await bus.broadcast(
+            "Model check failed",
+            {
+                "reason": "model",
+                "model": model,
+                "error": str(e),
+            },
+        )
         return Outcome(success=False, message=str(e))
 
     except EngineConnectionError as e:
-        await bus.broadcast("Model check failed", {
-            "reason": "connection",
-            "model": model,
-            "error": str(e),
-        })
-        return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
+        await bus.broadcast(
+            "Model check failed",
+            {
+                "reason": "connection",
+                "model": model,
+                "error": str(e),
+            },
+        )
+        return Outcome(
+            success=False,
+            message="Could not connect to the local inference engine. Please make sure it is running.",
+        )

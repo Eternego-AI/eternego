@@ -17,6 +17,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "cryptography>=41.0.0",
     "pywin32>=305; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+training = [
     "torch>=2.1.0",
     "transformers>=4.45.0",
     "peft>=0.13.0",

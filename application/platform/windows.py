@@ -88,21 +88,21 @@ def gpu_vram_gb() -> float | None:
 
 async def store_secret(key: str, value: str) -> None:
     """Store a secret in the Windows Credential Manager."""
-    import win32crypt
+    import win32cred
 
     credential = {
-        "Type": 1,  # CRED_TYPE_GENERIC
+        "Type": win32cred.CRED_TYPE_GENERIC,
         "TargetName": f"eternego:{key}",
         "UserName": "eternego",
         "CredentialBlob": value,
-        "Persist": 2,  # CRED_PERSIST_LOCAL_MACHINE
+        "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE,
     }
-    win32crypt.CredWrite(credential)
+    win32cred.CredWrite(credential, 0)
 
 
 async def retrieve_secret(key: str) -> str:
     """Retrieve a secret from the Windows Credential Manager."""
-    import win32crypt
+    import win32cred
 
-    credential = win32crypt.CredRead(f"eternego:{key}", 1)
-    return credential["CredentialBlob"].decode()
+    credential = win32cred.CredRead(f"eternego:{key}", win32cred.CRED_TYPE_GENERIC)
+    return credential["CredentialBlob"].decode("utf-16-le").rstrip("\x00")

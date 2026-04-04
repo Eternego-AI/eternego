@@ -16,8 +16,11 @@ PYTHON_BIN="$VENV_DIR/bin/python"
 print "Upgrading pip..."
 run "$PYTHON_BIN" -m pip install --upgrade pip $PIP_INDEX
 
-print "Installing eternego... estimation 3-5 minutes"
+print "Installing eternego..."
 run "$PYTHON_BIN" -m pip install -e "$SCRIPT_DIR" $PIP_INDEX
+
+print "Installing training dependencies... estimation 3-5 minutes"
+run "$PYTHON_BIN" -m pip install -e "$SCRIPT_DIR[training]" $PIP_INDEX
 
 ETERNEGO_BIN="$VENV_DIR/bin/eternego"
 

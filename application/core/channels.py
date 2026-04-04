@@ -1,9 +1,5 @@
 """Channels — open, close, send, and verify channel connections."""
 
-import asyncio
-import threading
-from collections.abc import Callable
-
 from application.core import paths
 from application.platform import logger, telegram, datetimes
 from application.core.data import Channel, Message, Persona
@@ -17,41 +13,31 @@ async def send_all(persona: Persona, text: str) -> None:
         await send(channel, text)
 
 
-def keep_open(persona: Persona, channel: Channel, on_message: Callable) -> Callable[[], None]:
-    """Open a persistent connection for a channel and return a stop callable."""
+def keep_open(persona: Persona, channel: Channel) -> dict:
+    """Return a channel strategy dict describing how to keep this channel alive.
+
+    For polling channels (telegram): returns connection callable that polls once
+    and returns a list of Message objects.
+    """
     logger.info("Opening channel", {"type": channel.type, "persona": persona})
     if channel.type == "telegram":
         token = (channel.credentials or {})["token"]
-        stop_event = threading.Event()
-        loop = asyncio.get_running_loop()
+        offset = [0]
 
-        def bridge(text: str, chat_id: str, message_id: str):
-            msg_channel = Channel(type="telegram", name=chat_id, credentials=channel.credentials)
-            message = Message(channel=msg_channel, content=text, id=message_id)
+        def connection():
+            try:
+                updates, offset[0] = telegram.poll(token, offset[0])
+            except Exception:
+                return []
+            messages = []
+            for text, chat_id, msg_id in telegram.direct_or_mentioned_in_group(persona.name, updates):
+                msg_channel = Channel(type="telegram", name=chat_id, credentials=channel.credentials)
+                messages.append(Message(channel=msg_channel, content=text, id=msg_id))
+            return messages
 
-            async def handle():
-                await on_message(message)
+        return {"type": "polling", "connection": connection}
 
-            asyncio.run_coroutine_threadsafe(handle(), loop)
-
-        def on_error(exc: Exception):
-            logger.warning("Telegram polling error", {"persona": persona, "error": str(exc)})
-
-        thread = threading.Thread(
-            target=telegram.poll,
-            kwargs={
-                "token": token,
-                "username": persona.name,
-                "on_message": bridge,
-                "stop": lambda: stop_event.is_set(),
-                "on_error": on_error,
-            },
-            daemon=True,
-        )
-        thread.start()
-        return stop_event.set
     raise ChannelError(f"Unsupported channel type: {channel.type}")
-
 
 
 async def express_thinking(persona: Persona) -> None:
@@ -61,7 +47,7 @@ async def express_thinking(persona: Persona) -> None:
         if channel.type == "telegram":
             token = (channel.credentials or {})["token"]
             try:
-                await asyncio.to_thread(telegram.typing_action, token=token, chat_id=channel.name)
+                await telegram.async_typing_action(token, channel.name)
             except Exception:
                 pass
 
@@ -72,11 +58,12 @@ async def send(channel: Channel, text: str) -> None:
     try:
         if channel.type == "telegram":
             token = (channel.credentials or {})["token"]
-            await asyncio.to_thread(telegram.send, token=token, chat_id=channel.name, message=text)
+            await telegram.async_send(token, channel.name, text)
         else:
             await channel.bus.put(text)
     except Exception as e:
         logger.error("Failed to send on channel", {"type": channel.type, "error": str(e)})
+
 
 def verify(persona: Persona, channel: Channel, name: str) -> None:
     channel.name = name

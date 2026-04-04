@@ -1,6 +1,6 @@
 """Frontier — escalation to a more powerful external model."""
 
-import asyncio, json
+import json
 from urllib.error import URLError
 
 from application.platform import logger
@@ -19,11 +19,9 @@ async def chat(model: Model, prompt: str) -> str:
     api_key = creds.get("api_key", "")
 
     try:
-        if provider == "openai":
-            return await asyncio.to_thread(openai.chat, api_key, model.name, messages)
         if provider == "anthropic":
-            return await asyncio.to_thread(anthropic.chat, api_key, model.name, messages)
-        raise FrontierError(f"Unsupported frontier provider: {provider}")
+            return await anthropic.async_chat(api_key, model.name, messages)
+        return await openai.async_chat(api_key, model.name, messages)
     except (URLError, OSError) as e:
         raise FrontierError(f"Failed to contact frontier model: {e}") from e
 
@@ -37,11 +35,9 @@ async def chat_json(model: Model, prompt: str) -> dict:
     api_key = creds.get("api_key", "")
 
     try:
-        if provider == "openai":
-            return await asyncio.to_thread(openai.chat_json, api_key, model.name, messages)
         if provider == "anthropic":
-            return await asyncio.to_thread(anthropic.chat_json, api_key, model.name, messages)
-        raise FrontierError(f"Unsupported frontier provider: {provider}")
+            return await anthropic.async_chat_json(api_key, model.name, messages)
+        return await openai.async_chat_json(api_key, model.name, messages)
     except (URLError, OSError) as e:
         raise FrontierError(f"Failed to contact frontier model: {e}") from e
 
@@ -111,4 +107,3 @@ async def read(data: str, source: str) -> list[dict]:
         return openai.to_messages(data)
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         raise FrontierError("Could not parse external data") from e
-

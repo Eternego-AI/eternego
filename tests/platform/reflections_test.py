@@ -1,0 +1,119 @@
+import types
+
+from application.platform.reflections import sorted_by, has_ability
+
+
+async def test_sorted_by_returns_callables_with_attribute():
+    mod = types.ModuleType("fake")
+
+    def first():
+        pass
+    first.stage = True
+    first.stage_order = 2
+
+    def second():
+        pass
+    second.stage = True
+    second.stage_order = 1
+
+    def helper():
+        pass
+
+    mod.first = first
+    mod.second = second
+    mod.helper = helper
+    result = sorted_by(mod, "stage")
+    names = [name for name, _ in result]
+    assert "first" in names
+    assert "second" in names
+    assert "helper" not in names
+
+
+async def test_sorted_by_respects_order():
+    mod = types.ModuleType("fake")
+
+    def first():
+        pass
+    first.stage = True
+    first.stage_order = 2
+
+    def second():
+        pass
+    second.stage = True
+    second.stage_order = 1
+
+    def helper():
+        pass
+
+    mod.first = first
+    mod.second = second
+    mod.helper = helper
+    result = sorted_by(mod, "stage")
+    names = [name for name, _ in result]
+    assert names.index("second") < names.index("first")
+
+
+async def test_has_ability_returns_true_for_matching():
+    mod = types.ModuleType("fake")
+
+    def first():
+        pass
+    first.stage = True
+    first.stage_order = 2
+
+    def second():
+        pass
+    second.stage = True
+    second.stage_order = 1
+
+    def helper():
+        pass
+
+    mod.first = first
+    mod.second = second
+    mod.helper = helper
+    assert has_ability(mod, "first", "stage")
+
+
+async def test_has_ability_returns_false_for_missing_attribute():
+    mod = types.ModuleType("fake")
+
+    def first():
+        pass
+    first.stage = True
+    first.stage_order = 2
+
+    def second():
+        pass
+    second.stage = True
+    second.stage_order = 1
+
+    def helper():
+        pass
+
+    mod.first = first
+    mod.second = second
+    mod.helper = helper
+    assert not has_ability(mod, "helper", "stage")
+
+
+async def test_has_ability_returns_false_for_missing_function():
+    mod = types.ModuleType("fake")
+
+    def first():
+        pass
+    first.stage = True
+    first.stage_order = 2
+
+    def second():
+        pass
+    second.stage = True
+    second.stage_order = 1
+
+    def helper():
+        pass
+
+    mod.first = first
+    mod.second = second
+    mod.helper = helper
+    assert not has_ability(mod, "nonexistent", "stage")

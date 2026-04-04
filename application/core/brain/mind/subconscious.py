@@ -1,6 +1,6 @@
 """Subconscious — sleep-time knowledge extraction.
 
-Each function receives (persona, conversation_text), where conversation_text
+Each function receives (client, persona, conversation_text), where conversation_text
 is a narrative rendering of the conversation. The system prompt tells the
 model what to extract; the conversation is passed as a single user message
 so the model treats it as data to analyse, not a chat to continue.
