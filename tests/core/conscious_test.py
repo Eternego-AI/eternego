@@ -1,501 +1,954 @@
-import os
-import json
-import tempfile
-from datetime import datetime
-
-from application.core.brain.mind import conscious
-from application.core.brain.mind.memory import Memory
-from application.core.brain.data import Signal, SignalEvent, Meaning
-from application.core.data import Model, Persona
-from application.platform import ollama
-
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-class TestMeaning(Meaning):
-    name = "Test"
-    def description(self): return "A test meaning"
-    def clarify(self): return "Please clarify"
-    def reply(self): return "Reply prompt"
-    def path(self): return "Extract JSON"
-    def summarize(self): return "Summarize the result"
-
-
-class NoPathMeaning(Meaning):
-    name = "NoPath"
-    def description(self): return "No path meaning"
-    def clarify(self): return None
-    def reply(self): return "Reply prompt"
-    def path(self): return None
-    def summarize(self): return None
-
-
-class NoSummaryMeaning(Meaning):
-    name = "NoSummary"
-    def description(self): return "No summary meaning"
-    def clarify(self): return None
-    def reply(self): return "Reply"
-    def path(self): return "Extract"
-    def summarize(self): return None
-
-
-class EscalationMeaning(Meaning):
-    name = "Escalation"
-    def description(self): return "Escalation"
-    def clarify(self): return None
-    def reply(self): return "I'll figure this out"
-    def path(self): return None
-    def summarize(self): return None
-
-
-_original_home = os.environ.get("HOME")
-
-
-def _setup():
-    tmp = tempfile.mkdtemp()
-    os.environ["HOME"] = tmp
-
-
-def _teardown():
-    if _original_home:
-        os.environ["HOME"] = _original_home
-
-
-def _persona():
-    return Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
-
-
-def _signal(id="s1", event=SignalEvent.heard, content="hello", ts=None):
-    return Signal(id=id, event=event, content=content, created_at=ts or datetime(2026, 3, 15, 10, 0))
-
-
-def _memory(meanings=None):
-    p = _persona()
-    if meanings is None:
-        meanings = [TestMeaning(p)]
-    return Memory(p, meanings)
-
-
-def _identity():
-    return "You are Primus."
-
-
-async def _noop_say(text):
-    pass
-
-
-async def _noop_escalate(thread_text, meanings):
-    return None
-
-
-def _stream_json(obj):
-    """Convert a dict to ollama streaming format — one chunk per character of JSON."""
-    text = json.dumps(obj)
-    return [{"message": {"content": c}} for c in text]
+from application.platform.processes import on_separate_process_async
 
 
 # ── Realize ──────────────────────────────────────────────────────────────────
 
-def test_realize_does_nothing_when_no_signals():
-    _setup()
-    memory = _memory()
-    import asyncio
-    asyncio.run(conscious.realize(memory, _persona(), _identity))
-    assert len(memory.perceptions) == 0
-    _teardown()
+async def test_realize_does_nothing_when_no_signals():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Meaning
+        from application.core.data import Model, Persona
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
+
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        memory = Memory(p, [TestMeaning(p)])
+        asyncio.run(conscious.realize(memory, p, lambda: "You are Primus."))
+        assert len(memory.perceptions) == 0
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_realize_routes_signal_to_new_impression():
-    _setup()
-    memory = _memory()
-    memory.trigger(_signal())
+async def test_realize_routes_signal_to_new_impression():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    ollama.assert_call(
-        run=lambda: conscious.realize(memory, _persona(), _identity),
-        response=_stream_json({"routes": [{"signal": 1, "threads": [], "new_impressions": ["greeting"]}]}),
-    )
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    assert len(memory.perceptions) == 1
-    assert memory.perceptions[0].impression == "greeting"
-    assert len(memory.needs_realizing) == 0
-    _teardown()
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
 
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
 
-def test_realize_routes_signal_to_existing_thread():
-    _setup()
-    memory = _memory()
-    s1 = _signal(id="s1", content="hi")
-    memory.trigger(s1)
-    memory.realize(s1, "greeting")
+        memory = Memory(p, [TestMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
 
-    s2 = _signal(id="s2", content="how are you")
-    memory.trigger(s2)
+        ollama.assert_call(
+            run=lambda: conscious.realize(memory, p, lambda: "You are Primus."),
+            response=stream_json({"routes": [{"signal": 1, "threads": [], "new_impressions": ["greeting"]}]}),
+        )
 
-    ollama.assert_call(
-        run=lambda: conscious.realize(memory, _persona(), _identity),
-        response=_stream_json({"routes": [{"signal": 1, "threads": [1], "new_impressions": []}]}),
-    )
+        assert len(memory.perceptions) == 1
+        assert memory.perceptions[0].impression == "greeting"
+        assert len(memory.needs_realizing) == 0
 
-    assert len(memory.perceptions) == 1
-    assert len(memory.perceptions[0].thread) == 2
-    _teardown()
-
-
-def test_realize_routes_signal_to_both_existing_and_new():
-    _setup()
-    memory = _memory()
-    s1 = _signal(id="s1", content="existing topic")
-    memory.trigger(s1)
-    memory.realize(s1, "topic A")
-
-    s2 = _signal(id="s2", content="mixed message")
-    memory.trigger(s2)
-
-    ollama.assert_call(
-        run=lambda: conscious.realize(memory, _persona(), _identity),
-        response=_stream_json({"routes": [{"signal": 1, "threads": [1], "new_impressions": ["topic B"]}]}),
-    )
-
-    assert len(memory.perceptions) == 2
-    impressions = [p.impression for p in memory.perceptions]
-    assert "topic A" in impressions
-    assert "topic B" in impressions
-    _teardown()
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_realize_skips_invalid_signal_number():
-    _setup()
-    memory = _memory()
-    memory.trigger(_signal())
+async def test_realize_routes_signal_to_existing_thread():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    ollama.assert_call(
-        run=lambda: conscious.realize(memory, _persona(), _identity),
-        response=_stream_json({"routes": [{"signal": 999, "threads": [], "new_impressions": ["x"]}]}),
-    )
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    assert len(memory.needs_realizing) == 1
-    _teardown()
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
+
+        memory = Memory(p, [TestMeaning(p)])
+        s1 = Signal(id="s1", event=SignalEvent.heard, content="hi", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s1)
+        memory.realize(s1, "greeting")
+
+        s2 = Signal(id="s2", event=SignalEvent.heard, content="how are you", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s2)
+
+        ollama.assert_call(
+            run=lambda: conscious.realize(memory, p, lambda: "You are Primus."),
+            response=stream_json({"routes": [{"signal": 1, "threads": [1], "new_impressions": []}]}),
+        )
+
+        assert len(memory.perceptions) == 1
+        assert len(memory.perceptions[0].thread) == 2
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_realize_routes_signal_to_both_existing_and_new():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
+
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
+
+        memory = Memory(p, [TestMeaning(p)])
+        s1 = Signal(id="s1", event=SignalEvent.heard, content="existing topic", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s1)
+        memory.realize(s1, "topic A")
+
+        s2 = Signal(id="s2", event=SignalEvent.heard, content="mixed message", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s2)
+
+        ollama.assert_call(
+            run=lambda: conscious.realize(memory, p, lambda: "You are Primus."),
+            response=stream_json({"routes": [{"signal": 1, "threads": [1], "new_impressions": ["topic B"]}]}),
+        )
+
+        assert len(memory.perceptions) == 2
+        impressions = [p.impression for p in memory.perceptions]
+        assert "topic A" in impressions
+        assert "topic B" in impressions
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_realize_skips_invalid_signal_number():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
+
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
+
+        memory = Memory(p, [TestMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+
+        ollama.assert_call(
+            run=lambda: conscious.realize(memory, p, lambda: "You are Primus."),
+            response=stream_json({"routes": [{"signal": 999, "threads": [], "new_impressions": ["x"]}]}),
+        )
+
+        assert len(memory.needs_realizing) == 1
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
 # ── Understand ───────────────────────────────────────────────────────────────
 
-def test_understand_does_nothing_when_no_perceptions():
-    _setup()
-    memory = _memory()
-    import asyncio
-    asyncio.run(conscious.understand(memory, _persona(), [TestMeaning(_persona())], _identity, _noop_escalate))
-    assert len(memory.intentions) == 0
-    _teardown()
+async def test_understand_does_nothing_when_no_perceptions():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Meaning
+        from application.core.data import Model, Persona
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
+
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        async def noop_escalate(thread_text, meanings):
+            return None
+
+        memory = Memory(p, [TestMeaning(p)])
+        asyncio.run(conscious.understand(memory, p, [TestMeaning(p)], lambda: "You are Primus.", noop_escalate))
+        assert len(memory.intentions) == 0
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_understand_picks_meaning_by_row():
-    _setup()
-    p = _persona()
-    meanings = [TestMeaning(p), EscalationMeaning(p)]
-    memory = _memory(meanings)
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "greeting")
+async def test_understand_picks_meaning_by_row():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    ollama.assert_call(
-        run=lambda: conscious.understand(memory, p, meanings, _identity, _noop_escalate),
-        response=_stream_json({"meaning_row": 1}),
-    )
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    assert len(memory.intentions) == 1
-    assert memory.intentions[0].meaning.name == "Test"
-    _teardown()
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        class EscalationMeaning(Meaning):
+            name = "Escalation"
+            def description(self): return "Escalation"
+            def clarify(self): return None
+            def reply(self): return "I'll figure this out"
+            def path(self): return None
+            def summarize(self): return None
+
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
+
+        async def noop_escalate(thread_text, meanings):
+            return None
+
+        meanings = [TestMeaning(p), EscalationMeaning(p)]
+        memory = Memory(p, meanings)
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "greeting")
+
+        ollama.assert_call(
+            run=lambda: conscious.understand(memory, p, meanings, lambda: "You are Primus.", noop_escalate),
+            response=stream_json({"meaning_row": 1}),
+        )
+
+        assert len(memory.intentions) == 1
+        assert memory.intentions[0].meaning.name == "Test"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_understand_falls_to_escalation_on_invalid_row():
-    _setup()
-    p = _persona()
-    meanings = [TestMeaning(p), EscalationMeaning(p)]
-    memory = _memory(meanings)
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "unknown topic")
+async def test_understand_falls_to_escalation_on_invalid_row():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    ollama.assert_call(
-        run=lambda: conscious.understand(memory, p, meanings, _identity, _noop_escalate),
-        response=_stream_json({"meaning_row": 99}),
-    )
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    assert len(memory.intentions) == 1
-    assert memory.intentions[0].meaning.name == "Escalation"
-    _teardown()
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        class EscalationMeaning(Meaning):
+            name = "Escalation"
+            def description(self): return "Escalation"
+            def clarify(self): return None
+            def reply(self): return "I'll figure this out"
+            def path(self): return None
+            def summarize(self): return None
+
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
+
+        async def noop_escalate(thread_text, meanings):
+            return None
+
+        meanings = [TestMeaning(p), EscalationMeaning(p)]
+        memory = Memory(p, meanings)
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "unknown topic")
+
+        ollama.assert_call(
+            run=lambda: conscious.understand(memory, p, meanings, lambda: "You are Primus.", noop_escalate),
+            response=stream_json({"meaning_row": 99}),
+        )
+
+        assert len(memory.intentions) == 1
+        assert memory.intentions[0].meaning.name == "Escalation"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_understand_escalation_with_no_code_uses_escalation_meaning():
-    _setup()
-    p = _persona()
-    meanings = [TestMeaning(p), EscalationMeaning(p)]
-    memory = _memory(meanings)
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "unknown")
+async def test_understand_escalation_with_no_code_uses_escalation_meaning():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    ollama.assert_call(
-        run=lambda: conscious.understand(memory, p, meanings, _identity, _noop_escalate),
-        response=_stream_json({"meaning_row": 2}),
-    )
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    assert memory.intentions[0].meaning.name == "Escalation"
-    _teardown()
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        class EscalationMeaning(Meaning):
+            name = "Escalation"
+            def description(self): return "Escalation"
+            def clarify(self): return None
+            def reply(self): return "I'll figure this out"
+            def path(self): return None
+            def summarize(self): return None
+
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
+
+        async def noop_escalate(thread_text, meanings):
+            return None
+
+        meanings = [TestMeaning(p), EscalationMeaning(p)]
+        memory = Memory(p, meanings)
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "unknown")
+
+        ollama.assert_call(
+            run=lambda: conscious.understand(memory, p, meanings, lambda: "You are Primus.", noop_escalate),
+            response=stream_json({"meaning_row": 2}),
+        )
+
+        assert memory.intentions[0].meaning.name == "Escalation"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
 # ── Recognize ────────────────────────────────────────────────────────────────
 
-def test_recognize_does_nothing_when_no_thoughts():
-    _setup()
-    memory = _memory()
-    import asyncio
-    asyncio.run(conscious.recognize(memory, _persona(), _identity, _noop_say))
-    _teardown()
+async def test_recognize_does_nothing_when_no_thoughts():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Meaning
+        from application.core.data import Model, Persona
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
+
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        async def noop_say(text):
+            pass
+
+        memory = Memory(p, [TestMeaning(p)])
+        asyncio.run(conscious.recognize(memory, p, lambda: "You are Primus.", noop_say))
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_recognize_replies_on_heard_signal():
-    _setup()
-    p = _persona()
-    memory = _memory()
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "greeting")
-    memory.understand(memory.perceptions[0], TestMeaning(p))
+async def test_recognize_replies_on_heard_signal():
+    def isolated():
+        import os
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    said = []
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    async def capture_say(text):
-        said.append(text)
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
 
-    ollama.assert_call(
-        run=lambda: conscious.recognize(memory, p, _identity, capture_say),
-        response={"message": {"content": "Hello there!"}},
-    )
+        memory = Memory(p, [TestMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "greeting")
+        memory.understand(memory.perceptions[0], TestMeaning(p))
 
-    assert said == ["Hello there!"]
-    last = memory.intentions[0].perception.thread[-1]
-    assert last.event == SignalEvent.answered
-    assert last.content == "Hello there!"
-    _teardown()
+        said = []
 
+        async def capture_say(text):
+            said.append(text)
 
-def test_recognize_uses_clarify_after_executed_signal():
-    _setup()
-    p = _persona()
-    memory = _memory()
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "task")
-    thought = memory.understand(memory.perceptions[0], TestMeaning(p))
-    memory.inform(thought, Signal(id="exec1", event=SignalEvent.executed, content="Error: failed"))
+        ollama.assert_call(
+            run=lambda: conscious.recognize(memory, p, lambda: "You are Primus.", capture_say),
+            response={"message": {"content": "Hello there!"}},
+        )
 
-    ollama.assert_call(
-        run=lambda: conscious.recognize(memory, p, _identity, _noop_say),
-        response={"message": {"content": "Let me try again"}},
-    )
+        assert said == ["Hello there!"]
+        last = memory.intentions[0].perception.thread[-1]
+        assert last.event == SignalEvent.answered
+        assert last.content == "Hello there!"
 
-    last = thought.perception.thread[-1]
-    assert last.event == SignalEvent.clarified
-    _teardown()
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_recognize_forgets_thought_when_no_path():
-    _setup()
-    p = _persona()
-    memory = _memory()
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "greeting")
-    memory.understand(memory.perceptions[0], NoPathMeaning(p))
+async def test_recognize_uses_clarify_after_executed_signal():
+    def isolated():
+        import os
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    ollama.assert_call(
-        run=lambda: conscious.recognize(memory, p, _identity, _noop_say),
-        response={"message": {"content": "Hi!"}},
-    )
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    assert len(memory.intentions) == 0
-    _teardown()
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        async def noop_say(text):
+            pass
+
+        memory = Memory(p, [TestMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "task")
+        thought = memory.understand(memory.perceptions[0], TestMeaning(p))
+        memory.inform(thought, Signal(id="exec1", event=SignalEvent.executed, content="Error: failed"))
+
+        ollama.assert_call(
+            run=lambda: conscious.recognize(memory, p, lambda: "You are Primus.", noop_say),
+            response={"message": {"content": "Let me try again"}},
+        )
+
+        last = thought.perception.thread[-1]
+        assert last.event == SignalEvent.clarified
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_recognize_forgets_thought_when_no_path():
+    def isolated():
+        import os
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
+
+        class NoPathMeaning(Meaning):
+            name = "NoPath"
+            def description(self): return "No path meaning"
+            def clarify(self): return None
+            def reply(self): return "Reply prompt"
+            def path(self): return None
+            def summarize(self): return None
+
+        async def noop_say(text):
+            pass
+
+        memory = Memory(p, [NoPathMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "greeting")
+        memory.understand(memory.perceptions[0], NoPathMeaning(p))
+
+        ollama.assert_call(
+            run=lambda: conscious.recognize(memory, p, lambda: "You are Primus.", noop_say),
+            response={"message": {"content": "Hi!"}},
+        )
+
+        assert len(memory.intentions) == 0
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
 # ── Decide ───────────────────────────────────────────────────────────────────
 
-def test_decide_does_nothing_when_no_thoughts():
-    _setup()
-    memory = _memory()
-    import asyncio
-    asyncio.run(conscious.decide(memory, _persona(), _identity))
-    _teardown()
+async def test_decide_does_nothing_when_no_thoughts():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Meaning
+        from application.core.data import Model, Persona
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
+
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        memory = Memory(p, [TestMeaning(p)])
+        asyncio.run(conscious.decide(memory, p, lambda: "You are Primus."))
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_decide_creates_recap_when_only_recap_returned():
-    _setup()
-    p = _persona()
-    memory = _memory()
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "task")
-    thought = memory.understand(memory.perceptions[0], TestMeaning(p))
-    memory.answer(thought, "acknowledged", SignalEvent.answered)
+async def test_decide_creates_recap_when_only_recap_returned():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    ollama.assert_call(
-        run=lambda: conscious.decide(memory, p, _identity),
-        response=_stream_json({"recap": "Already done"}),
-    )
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    last = thought.perception.thread[-1]
-    assert last.event == SignalEvent.recap
-    assert last.content == "Already done"
-    _teardown()
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
 
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
 
-def test_decide_runs_action_and_informs_with_output():
-    _setup()
-    p = _persona()
+        memory = Memory(p, [TestMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "task")
+        thought = memory.understand(memory.perceptions[0], TestMeaning(p))
+        memory.answer(thought, "acknowledged", SignalEvent.answered)
 
-    class ActionMeaning(Meaning):
-        name = "Action"
-        def description(self): return "Action meaning"
-        def clarify(self): return None
-        def reply(self): return None
-        def path(self): return "Extract tool call"
-        def summarize(self): return "Done"
-        async def run(self, persona_response):
-            async def action():
-                return "command output"
-            return action
+        ollama.assert_call(
+            run=lambda: conscious.decide(memory, p, lambda: "You are Primus."),
+            response=stream_json({"recap": "Already done"}),
+        )
 
-    memory = _memory([ActionMeaning(p)])
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "task")
-    memory.understand(memory.perceptions[0], ActionMeaning(p))
+        last = thought.perception.thread[-1]
+        assert last.event == SignalEvent.recap
+        assert last.content == "Already done"
 
-    ollama.assert_call(
-        run=lambda: conscious.decide(memory, p, _identity),
-        response=_stream_json({"tool": "shell.run", "command": "ls", "recap": "Running ls"}),
-    )
-
-    events = [s.event for s in memory.intentions[0].perception.thread]
-    assert SignalEvent.decided in events
-    assert SignalEvent.executed in events
-    executed = [s for s in memory.intentions[0].perception.thread if s.event == SignalEvent.executed][0]
-    assert "command output" in executed.content
-    _teardown()
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_decide_informs_error_when_run_raises():
-    _setup()
-    p = _persona()
+async def test_decide_runs_action_and_informs_with_output():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    class BrokenMeaning(Meaning):
-        name = "Broken"
-        def description(self): return "Broken"
-        def clarify(self): return None
-        def reply(self): return None
-        def path(self): return "Extract"
-        def summarize(self): return None
-        async def run(self, persona_response):
-            raise RuntimeError("run exploded")
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    memory = _memory([BrokenMeaning(p)])
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "task")
-    memory.understand(memory.perceptions[0], BrokenMeaning(p))
+        class ActionMeaning(Meaning):
+            name = "Action"
+            def description(self): return "Action meaning"
+            def clarify(self): return None
+            def reply(self): return None
+            def path(self): return "Extract tool call"
+            def summarize(self): return "Done"
+            async def run(self, persona_response):
+                async def action():
+                    return "command output"
+                return action
 
-    ollama.assert_call(
-        run=lambda: conscious.decide(memory, p, _identity),
-        response=_stream_json({"tool": "x", "recap": "trying"}),
-    )
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
 
-    executed = [s for s in memory.intentions[0].perception.thread if s.event == SignalEvent.executed]
-    assert len(executed) == 1
-    assert "run exploded" in executed[0].content
-    _teardown()
+        memory = Memory(p, [ActionMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "task")
+        memory.understand(memory.perceptions[0], ActionMeaning(p))
+
+        ollama.assert_call(
+            run=lambda: conscious.decide(memory, p, lambda: "You are Primus."),
+            response=stream_json({"tool": "shell.run", "command": "ls", "recap": "Running ls"}),
+        )
+
+        events = [s.event for s in memory.intentions[0].perception.thread]
+        assert SignalEvent.decided in events
+        assert SignalEvent.executed in events
+        executed = [s for s in memory.intentions[0].perception.thread if s.event == SignalEvent.executed][0]
+        assert "command output" in executed.content
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_decide_recaps_when_action_returns_none():
-    _setup()
-    p = _persona()
+async def test_decide_informs_error_when_run_raises():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    class NullActionMeaning(Meaning):
-        name = "NullAction"
-        def description(self): return "Null action"
-        def clarify(self): return None
-        def reply(self): return None
-        def path(self): return "Extract"
-        def summarize(self): return "Done"
-        async def run(self, persona_response):
-            return None
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    memory = _memory([NullActionMeaning(p)])
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "task")
-    memory.understand(memory.perceptions[0], NullActionMeaning(p))
+        class BrokenMeaning(Meaning):
+            name = "Broken"
+            def description(self): return "Broken"
+            def clarify(self): return None
+            def reply(self): return None
+            def path(self): return "Extract"
+            def summarize(self): return None
+            async def run(self, persona_response):
+                raise RuntimeError("run exploded")
 
-    ollama.assert_call(
-        run=lambda: conscious.decide(memory, p, _identity),
-        response=_stream_json({"tool": "x", "recap": "nothing to do"}),
-    )
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
 
-    last = memory.intentions[0].perception.thread[-1]
-    assert last.event == SignalEvent.recap
-    assert last.content == "nothing to do"
-    _teardown()
+        memory = Memory(p, [BrokenMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "task")
+        memory.understand(memory.perceptions[0], BrokenMeaning(p))
+
+        ollama.assert_call(
+            run=lambda: conscious.decide(memory, p, lambda: "You are Primus."),
+            response=stream_json({"tool": "x", "recap": "trying"}),
+        )
+
+        executed = [s for s in memory.intentions[0].perception.thread if s.event == SignalEvent.executed]
+        assert len(executed) == 1
+        assert "run exploded" in executed[0].content
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_decide_recaps_when_action_returns_none():
+    def isolated():
+        import os
+        import json
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
+
+        class NullActionMeaning(Meaning):
+            name = "NullAction"
+            def description(self): return "Null action"
+            def clarify(self): return None
+            def reply(self): return None
+            def path(self): return "Extract"
+            def summarize(self): return "Done"
+            async def run(self, persona_response):
+                return None
+
+        def stream_json(obj):
+            text = json.dumps(obj)
+            return [{"message": {"content": c}} for c in text]
+
+        memory = Memory(p, [NullActionMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "task")
+        memory.understand(memory.perceptions[0], NullActionMeaning(p))
+
+        ollama.assert_call(
+            run=lambda: conscious.decide(memory, p, lambda: "You are Primus."),
+            response=stream_json({"tool": "x", "recap": "nothing to do"}),
+        )
+
+        last = memory.intentions[0].perception.thread[-1]
+        assert last.event == SignalEvent.recap
+        assert last.content == "nothing to do"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
 # ── Conclude ─────────────────────────────────────────────────────────────────
 
-def test_conclude_does_nothing_when_no_thoughts():
-    _setup()
-    memory = _memory()
-    import asyncio
-    asyncio.run(conscious.conclude(memory, _persona(), _identity, _noop_say))
-    _teardown()
+async def test_conclude_does_nothing_when_no_thoughts():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Meaning
+        from application.core.data import Model, Persona
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
+
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
+
+        async def noop_say(text):
+            pass
+
+        memory = Memory(p, [TestMeaning(p)])
+        asyncio.run(conscious.conclude(memory, p, lambda: "You are Primus.", noop_say))
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_conclude_summarizes_with_model():
-    _setup()
-    p = _persona()
-    memory = _memory()
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "task")
-    thought = memory.understand(memory.perceptions[0], TestMeaning(p))
-    memory.answer(thought, "done", SignalEvent.recap)
+async def test_conclude_summarizes_with_model():
+    def isolated():
+        import os
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
+        from application.platform import ollama
 
-    said = []
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    async def capture_say(text):
-        said.append(text)
+        class TestMeaning(Meaning):
+            name = "Test"
+            def description(self): return "A test meaning"
+            def clarify(self): return "Please clarify"
+            def reply(self): return "Reply prompt"
+            def path(self): return "Extract JSON"
+            def summarize(self): return "Summarize the result"
 
-    ollama.assert_call(
-        run=lambda: conscious.conclude(memory, p, _identity, capture_say),
-        response={"message": {"content": "Task completed successfully."}},
-    )
+        memory = Memory(p, [TestMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "task")
+        thought = memory.understand(memory.perceptions[0], TestMeaning(p))
+        memory.answer(thought, "done", SignalEvent.recap)
 
-    assert said == ["Task completed successfully."]
-    last = thought.perception.thread[-1]
-    assert last.event == SignalEvent.summarized
-    _teardown()
+        said = []
+
+        async def capture_say(text):
+            said.append(text)
+
+        ollama.assert_call(
+            run=lambda: conscious.conclude(memory, p, lambda: "You are Primus.", capture_say),
+            response={"message": {"content": "Task completed successfully."}},
+        )
+
+        assert said == ["Task completed successfully."]
+        last = thought.perception.thread[-1]
+        assert last.event == SignalEvent.summarized
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_conclude_uses_recap_when_no_summarize():
-    _setup()
-    p = _persona()
-    memory = _memory()
-    s = _signal()
-    memory.trigger(s)
-    memory.realize(s, "task")
-    thought = memory.understand(memory.perceptions[0], NoSummaryMeaning(p))
-    memory.answer(thought, "all done here", SignalEvent.recap)
+async def test_conclude_uses_recap_when_no_summarize():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from datetime import datetime
+        from application.core.brain.mind import conscious
+        from application.core.brain.mind.memory import Memory
+        from application.core.brain.data import Signal, SignalEvent, Meaning
+        from application.core.data import Model, Persona
 
-    import asyncio
-    asyncio.run(conscious.conclude(memory, p, _identity, _noop_say))
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        p = Persona(id="test-conscious", name="Primus", model=Model(name="llama3"))
 
-    last = thought.perception.thread[-1]
-    assert last.event == SignalEvent.summarized
-    assert last.content == "all done here"
-    _teardown()
+        class NoSummaryMeaning(Meaning):
+            name = "NoSummary"
+            def description(self): return "No summary meaning"
+            def clarify(self): return None
+            def reply(self): return "Reply"
+            def path(self): return "Extract"
+            def summarize(self): return None
+
+        async def noop_say(text):
+            pass
+
+        memory = Memory(p, [NoSummaryMeaning(p)])
+        s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
+        memory.trigger(s)
+        memory.realize(s, "task")
+        thought = memory.understand(memory.perceptions[0], NoSummaryMeaning(p))
+        memory.answer(thought, "all done here", SignalEvent.recap)
+
+        asyncio.run(conscious.conclude(memory, p, lambda: "You are Primus.", noop_say))
+
+        last = thought.perception.thread[-1]
+        assert last.event == SignalEvent.summarized
+        assert last.content == "all done here"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error

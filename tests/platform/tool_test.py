@@ -1,69 +1,89 @@
-from application.platform.tool import tool, _registry, Tool
+from application.platform.processes import on_separate_process_async
 
 
-def _clear_registry():
-    _registry.clear()
+async def test_tool_decorator_registers_tool():
+    def isolated():
+        from application.platform.tool import tool, _registry, Tool
+
+        _registry.clear()
+
+        @tool("Run a shell command")
+        def execute(command: str) -> str:
+            pass
+
+        assert len(_registry) == 1
+        t = _registry[0]
+        assert isinstance(t, Tool)
+        assert t.instruction == "Run a shell command"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_tool_decorator_registers_tool():
-    _clear_registry()
+async def test_tool_extracts_params_from_signature():
+    def isolated():
+        from application.platform.tool import tool, _registry
 
-    @tool("Run a shell command")
-    def execute(command: str) -> str:
-        pass
+        _registry.clear()
 
-    assert len(_registry) == 1
-    t = _registry[0]
-    assert isinstance(t, Tool)
-    assert t.instruction == "Run a shell command"
-    _clear_registry()
+        @tool("Search files")
+        def search(pattern: str, directory: str) -> list:
+            pass
 
+        t = _registry[0]
+        assert "pattern" in t.params
+        assert "directory" in t.params
+        assert t.params["pattern"] == "str"
 
-def test_tool_extracts_params_from_signature():
-    _clear_registry()
-
-    @tool("Search files")
-    def search(pattern: str, directory: str) -> list:
-        pass
-
-    t = _registry[0]
-    assert "pattern" in t.params
-    assert "directory" in t.params
-    assert t.params["pattern"] == "str"
-    _clear_registry()
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_tool_extracts_return_type():
-    _clear_registry()
+async def test_tool_extracts_return_type():
+    def isolated():
+        from application.platform.tool import tool, _registry
 
-    @tool("Get count")
-    def count() -> int:
-        pass
+        _registry.clear()
 
-    t = _registry[0]
-    assert t.returns == "int"
-    _clear_registry()
+        @tool("Get count")
+        def count() -> int:
+            pass
 
+        t = _registry[0]
+        assert t.returns == "int"
 
-def test_tool_derives_name_from_module_and_function():
-    _clear_registry()
-
-    @tool("Test")
-    def my_function() -> str:
-        pass
-
-    t = _registry[0]
-    # module name is the last part of __module__
-    assert t.name.endswith(".my_function")
-    _clear_registry()
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_tool_returns_original_function():
-    _clear_registry()
+async def test_tool_derives_name_from_module_and_function():
+    def isolated():
+        from application.platform.tool import tool, _registry
 
-    @tool("Test")
-    def original():
-        return 42
+        _registry.clear()
 
-    assert original() == 42
-    _clear_registry()
+        @tool("Test")
+        def my_function() -> str:
+            pass
+
+        t = _registry[0]
+        assert t.name.endswith(".my_function")
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_tool_returns_original_function():
+    def isolated():
+        from application.platform.tool import tool, _registry
+
+        _registry.clear()
+
+        @tool("Test")
+        def original():
+            return 42
+
+        assert original() == 42
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error

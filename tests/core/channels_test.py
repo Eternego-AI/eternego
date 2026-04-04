@@ -1,198 +1,292 @@
-import os
-import asyncio
-import tempfile
-
-from application.core import channels, gateways, paths
-from application.core.data import Channel, Message, Model, Persona
-from application.core.exceptions import ChannelError
-from application.platform import telegram
-
-
-_original_home = os.environ.get("HOME")
-
-
-def _setup():
-    tmp = tempfile.mkdtemp()
-    os.environ["HOME"] = tmp
-    gateways._active.clear()
-
-
-def _teardown():
-    if _original_home:
-        os.environ["HOME"] = _original_home
-    gateways._active.clear()
-
-
-def _persona():
-    return Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+from application.platform.processes import on_separate_process_async
 
 
 # ── verify ───────────────────────────────────────────────────────────────────
 
-def test_verify_sets_channel_name_and_verified_at():
-    _setup()
-    p = _persona()
-    paths.home(p.id).mkdir(parents=True, exist_ok=True)
-    paths.save_as_string(paths.persona_identity(p.id), "{}")
+async def test_verify_sets_channel_name_and_verified_at():
+    def isolated():
+        import os
+        import tempfile
+        from application.core import channels, gateways, paths
+        from application.core.data import Channel, Model, Persona
 
-    ch = Channel(type="telegram", name="", credentials={"token": "t"})
-    p.channels = [ch]
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        paths.home(p.id).mkdir(parents=True, exist_ok=True)
+        paths.save_as_string(paths.persona_identity(p.id), "{}")
 
-    channels.verify(p, ch, "12345")
+        ch = Channel(type="telegram", name="", credentials={"token": "t"})
+        p.channels = [ch]
 
-    assert ch.name == "12345"
-    assert ch.verified_at is not None
-    _teardown()
+        channels.verify(p, ch, "12345")
+
+        assert ch.name == "12345"
+        assert ch.verified_at is not None
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
 # ── send (telegram) ─────────────────────────────────────────────────────────
 
-def test_send_telegram_sends_to_correct_chat():
-    _setup()
-    ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
+async def test_send_telegram_sends_to_correct_chat():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from application.core import channels, gateways
+        from application.core.data import Channel
+        from application.platform import telegram
 
-    telegram.assert_send(
-        run=lambda: asyncio.run(channels.send(ch, "Hello!")),
-        validate=lambda r: (
-            _assert_equal(r["body"]["chat_id"], "12345"),
-            _assert_equal(r["body"]["text"], "Hello!"),
-        ),
-        response={"ok": True},
-    )
-    _teardown()
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
+
+        def assert_equal(actual, expected):
+            assert actual == expected, f"Expected {expected}, got {actual}"
+
+        telegram.assert_send(
+            run=lambda: asyncio.run(channels.send(ch, "Hello!")),
+            validate=lambda r: (
+                assert_equal(r["body"]["chat_id"], "12345"),
+                assert_equal(r["body"]["text"], "Hello!"),
+            ),
+            response={"ok": True},
+        )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
 # ── send (web/bus) ───────────────────────────────────────────────────────────
 
-def test_send_web_puts_to_bus():
-    _setup()
-    received = []
+async def test_send_web_puts_to_bus():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from application.core import channels, gateways
+        from application.core.data import Channel
 
-    class FakeBus:
-        async def put(self, text):
-            received.append(text)
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        received = []
 
-    ch = Channel(type="web", name="uuid", bus=FakeBus())
-    asyncio.run(channels.send(ch, "Hello from web"))
+        class FakeBus:
+            async def put(self, text):
+                received.append(text)
 
-    assert received == ["Hello from web"]
-    _teardown()
+        ch = Channel(type="web", name="uuid", bus=FakeBus())
+        asyncio.run(channels.send(ch, "Hello from web"))
+
+        assert received == ["Hello from web"]
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
 # ── send_all ─────────────────────────────────────────────────────────────────
 
-def test_send_all_sends_to_all_active_channels():
-    _setup()
-    p = _persona()
-    received = []
+async def test_send_all_sends_to_all_active_channels():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from application.core import channels, gateways
+        from application.core.data import Channel, Model, Persona
 
-    class FakeBus:
-        async def put(self, text):
-            received.append(text)
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        received = []
 
-    ch1 = Channel(type="web", name="w1", bus=FakeBus())
-    ch2 = Channel(type="web", name="w2", bus=FakeBus())
-    gateways.of(p).add(ch1, {"type": "manual"})
-    gateways.of(p).add(ch2, {"type": "manual"})
+        class FakeBus:
+            async def put(self, text):
+                received.append(text)
 
-    asyncio.run(channels.send_all(p, "broadcast"))
+        ch1 = Channel(type="web", name="w1", bus=FakeBus())
+        ch2 = Channel(type="web", name="w2", bus=FakeBus())
+        gateways.of(p).add(ch1, {"type": "manual"})
+        gateways.of(p).add(ch2, {"type": "manual"})
 
-    assert len(received) == 2
-    _teardown()
+        asyncio.run(channels.send_all(p, "broadcast"))
+
+        assert len(received) == 2
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
 # ── express_thinking ─────────────────────────────────────────────────────────
 
-def test_express_thinking_sends_typing_to_telegram_channels():
-    _setup()
-    p = _persona()
-    ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
-    gateways.of(p).add(ch, {"type": "manual"})
+async def test_express_thinking_sends_typing_to_telegram_channels():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from application.core import channels, gateways
+        from application.core.data import Channel, Model, Persona
+        from application.platform import telegram
 
-    telegram.assert_typing_action(
-        run=lambda: asyncio.run(channels.express_thinking(p)),
-        validate=lambda r: _assert_equal(r["body"]["action"], "typing"),
-    )
-    _teardown()
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
+        gateways.of(p).add(ch, {"type": "manual"})
+
+        def assert_equal(actual, expected):
+            assert actual == expected, f"Expected {expected}, got {actual}"
+
+        telegram.assert_typing_action(
+            run=lambda: asyncio.run(channels.express_thinking(p)),
+            validate=lambda r: assert_equal(r["body"]["action"], "typing"),
+        )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_express_thinking_skips_non_telegram_channels():
-    _setup()
-    p = _persona()
+async def test_express_thinking_skips_non_telegram_channels():
+    def isolated():
+        import os
+        import asyncio
+        import tempfile
+        from application.core import channels, gateways
+        from application.core.data import Channel, Model, Persona
 
-    class FakeBus:
-        async def put(self, text): pass
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
 
-    ch = Channel(type="web", name="w1", bus=FakeBus())
-    gateways.of(p).add(ch, {"type": "manual"})
+        class FakeBus:
+            async def put(self, text): pass
 
-    asyncio.run(channels.express_thinking(p))
-    _teardown()
+        ch = Channel(type="web", name="w1", bus=FakeBus())
+        gateways.of(p).add(ch, {"type": "manual"})
+
+        asyncio.run(channels.express_thinking(p))
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
 # ── keep_open ────────────────────────────────────────────────────────────────
 
-def test_keep_open_returns_polling_strategy_for_telegram():
-    _setup()
-    p = _persona()
-    ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
+async def test_keep_open_returns_polling_strategy_for_telegram():
+    def isolated():
+        import os
+        import tempfile
+        from application.core import channels, gateways
+        from application.core.data import Channel, Model, Persona
 
-    strategy = channels.keep_open(p, ch)
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
 
-    assert strategy["type"] == "polling"
-    assert callable(strategy["connection"])
-    _teardown()
+        strategy = channels.keep_open(p, ch)
 
+        assert strategy["type"] == "polling"
+        assert callable(strategy["connection"])
 
-def test_keep_open_connection_returns_messages_from_poll():
-    _setup()
-    p = _persona()
-    ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
-
-    strategy = channels.keep_open(p, ch)
-
-    # Fake the poll response
-    telegram.assert_call(
-        run=lambda: _assert_messages(strategy["connection"](), expected_count=1),
-        validate=lambda r: _assert_equal(r["path"], "/botfake-token/getUpdates"),
-        response={"result": [
-            {"update_id": 100, "message": {"text": "hello", "chat": {"id": 123, "type": "private"}, "message_id": 1}}
-        ]},
-    )
-    _teardown()
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_keep_open_connection_filters_group_without_mention():
-    _setup()
-    p = _persona()
-    ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
+async def test_keep_open_connection_returns_messages_from_poll():
+    def isolated():
+        import os
+        import tempfile
+        from application.core import channels, gateways
+        from application.core.data import Channel, Message, Model, Persona
+        from application.platform import telegram
 
-    strategy = channels.keep_open(p, ch)
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
 
-    telegram.assert_call(
-        run=lambda: _assert_messages(strategy["connection"](), expected_count=0),
-        response={"result": [
-            {"update_id": 100, "message": {"text": "not for bot", "chat": {"id": 123, "type": "group"}, "message_id": 1}}
-        ]},
-    )
-    _teardown()
+        strategy = channels.keep_open(p, ch)
+
+        def assert_equal(actual, expected):
+            assert actual == expected, f"Expected {expected}, got {actual}"
+
+        def assert_messages(messages, expected_count):
+            assert len(messages) == expected_count, f"Expected {expected_count} messages, got {len(messages)}"
+            for msg in messages:
+                assert isinstance(msg, Message)
+
+        telegram.assert_call(
+            run=lambda: assert_messages(strategy["connection"](), expected_count=1),
+            validate=lambda r: assert_equal(r["path"], "/botfake-token/getUpdates"),
+            response={"result": [
+                {"update_id": 100, "message": {"text": "hello", "chat": {"id": 123, "type": "private"}, "message_id": 1}}
+            ]},
+        )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_keep_open_raises_on_unsupported_channel():
-    _setup()
-    try:
-        channels.keep_open(_persona(), Channel(type="unknown", name="x"))
-        assert False, "should have raised"
-    except ChannelError as e:
-        assert "Unsupported" in str(e)
-    _teardown()
+async def test_keep_open_connection_filters_group_without_mention():
+    def isolated():
+        import os
+        import tempfile
+        from application.core import channels, gateways
+        from application.core.data import Channel, Message, Model, Persona
+        from application.platform import telegram
+
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
+
+        strategy = channels.keep_open(p, ch)
+
+        def assert_messages(messages, expected_count):
+            assert len(messages) == expected_count, f"Expected {expected_count} messages, got {len(messages)}"
+            for msg in messages:
+                assert isinstance(msg, Message)
+
+        telegram.assert_call(
+            run=lambda: assert_messages(strategy["connection"](), expected_count=0),
+            response={"result": [
+                {"update_id": 100, "message": {"text": "not for bot", "chat": {"id": 123, "type": "group"}, "message_id": 1}}
+            ]},
+        )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def _assert_messages(messages, expected_count):
-    assert len(messages) == expected_count, f"Expected {expected_count} messages, got {len(messages)}"
-    for msg in messages:
-        assert isinstance(msg, Message)
+async def test_keep_open_raises_on_unsupported_channel():
+    def isolated():
+        import os
+        import tempfile
+        from application.core import channels, gateways
+        from application.core.data import Channel, Model, Persona
+        from application.core.exceptions import ChannelError
 
+        tmp = tempfile.mkdtemp()
+        os.environ["HOME"] = tmp
+        gateways._active.clear()
+        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
 
-def _assert_equal(actual, expected):
-    assert actual == expected, f"Expected {expected}, got {actual}"
+        try:
+            channels.keep_open(p, Channel(type="unknown", name="x"))
+            assert False, "should have raised"
+        except ChannelError as e:
+            assert "Unsupported" in str(e)
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
