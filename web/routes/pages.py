@@ -10,4 +10,4 @@ router = APIRouter()
 
 @router.get("/")
 async def root():
-    return FileResponse(Path(__file__).parent.parent / "os" / "index.html")
+    return FileResponse(Path(__file__).parent.parent / "ui" / "index.html")

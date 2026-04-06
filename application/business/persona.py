@@ -83,19 +83,58 @@ async def loaded(persona_id: str) -> Outcome[dict]:
 
 
 async def mind(persona_id: str) -> Outcome[dict]:
-    """Return all signals currently in the persona's mind, sorted by time."""
+    """Return the full cognitive state — signals, perceptions, thoughts, and pipeline position."""
     await bus.propose("Getting persona mind", {"persona_id": persona_id})
-    persona = await loaded(persona_id)
-    if not persona.success:
-        return persona
+    result = await loaded(persona_id)
+    if not result.success:
+        return result
     try:
-        signals = agents.persona(persona.data["persona"]).read()
-        await bus.broadcast("Persona mind loaded", {"persona": persona})
+        ego = agents.persona(result.data["persona"])
+        memory = ego.memory
+
+        def thought_stage(t):
+            thread = t.perception.thread
+            if not thread:
+                return "understand"
+            last = thread[-1].event
+            if last in ("heard", "queried", "nudged"):
+                return "recognize" if t.meaning.reply() is not None else "decide"
+            if last in ("answered", "clarified"):
+                return "decide"
+            if last == "executed":
+                return "decide"
+            if last == "recap":
+                return "conclude"
+            if last == "summarized":
+                return "concluded"
+            return "understand"
+
+        await bus.broadcast("Persona mind loaded", {"persona_id": persona_id})
         return Outcome(success=True, message="", data={
             "signals": [
-                {"event": s.event, "content": s.content, "created_at": s.created_at.isoformat()}
-                for s in signals
-            ]
+                {"id": s.id, "event": s.event, "content": s.content, "created_at": s.created_at.isoformat()}
+                for s in memory.signals
+            ],
+            "perceptions": [
+                {
+                    "impression": p.impression,
+                    "signals": len(p.thread),
+                    "last_event": p.thread[-1].event if p.thread else None,
+                }
+                for p in memory.perceptions
+            ],
+            "thoughts": [
+                {
+                    "id": t.id,
+                    "impression": t.perception.impression,
+                    "meaning": t.meaning.name,
+                    "priority": t.priority,
+                    "stage": thought_stage(t),
+                    "signals": len(t.perception.thread),
+                }
+                for t in memory.intentions
+            ],
+            "unattended": len(memory.needs_realizing),
         })
     except MindError as e:
         await bus.broadcast("Reading persona mind failed", {"persona_id": persona_id, "error": str(e)})
@@ -631,12 +670,43 @@ async def query(persona: Persona, messages) -> Outcome[dict]:
         return Outcome(success=False, message="Something went wrong. Please try again.")
 
 
+async def recover(persona: Persona, error: Exception) -> Outcome[dict]:
+    """It lets the persona recover from a failure — acknowledge what happened, restart, and carry on."""
+    await bus.propose("Recovering persona", {"persona": persona, "error": str(error)})
+
+    try:
+        ego = agents.persona(persona)
+
+        if isinstance(error, FrontierError):
+            message = "I tried to reach out to my mentor but they weren't around. Give me a moment to try again."
+        else:
+            message = "Sorry, it seems I got distracted. Let me see what I should be doing."
+
+        await ego.say(message)
+        ego.worker.reset()
+        ego.worker.nudge()
+
+        await bus.broadcast("Persona recovered", {"persona": persona, "error": str(error)})
+        return Outcome(success=True, message="Persona recovered.")
+
+    except MindError as e:
+        await bus.broadcast("Persona recovery failed", {"persona": persona, "error": str(e)})
+        return Outcome(success=False, message="Could not recover persona.")
+
+
 async def live(persona: Persona, dt) -> Outcome[dict]:
-    """Check for due destiny entries, archive them, and notify the persona."""
+    """Check persona health and due destiny entries."""
     import uuid
     from application.core.brain.data import Signal, SignalEvent, Perception
     from application.platform import filesystem
 
+    ego = agents.persona(persona)
+
+    # ── Health check: restart if the worker died ─────────────────────────
+    if ego.worker.idle and ego.worker.error:
+        await recover(persona, ego.worker.error)
+
+    # ── Due destiny entries ──────────────────────────────────────────────
     await bus.propose("Checking todos", {"persona": persona})
     try:
         due = paths.due_destiny_entries(persona.id, dt)
@@ -657,7 +727,7 @@ async def live(persona: Persona, dt) -> Outcome[dict]:
         )
         from application.platform import datetimes
         perception = Perception(impression=f"Due at {datetimes.iso_8601(datetimes.now())}", thread=[signal])
-        agents.persona(persona).incept(perception)
+        ego.incept(perception)
 
         await bus.broadcast("Todos checked", {"persona": persona, "due": len(due)})
         return Outcome(success=True, message=f"{len(due)} entries due.")
