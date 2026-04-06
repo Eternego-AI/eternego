@@ -83,6 +83,7 @@ async def get_persona(persona_id: str):
         "name": p.name,
         "base_model": p.base_model,
         "model": p.model.name if p.model else "",
+        "birthday": p.birthday or "",
         "channels": [
             {
                 "type": ch.type,
@@ -99,6 +100,17 @@ async def get_mind(persona_id: str):
     outcome = await persona.mind(persona_id)
     if not outcome.success:
         raise HTTPException(status_code=404, detail=outcome.message)
+    return outcome.data
+
+
+@router.get("/persona/{persona_id}/oversee")
+async def oversee_persona(persona_id: str):
+    find = await persona.loaded(persona_id)
+    if not find.success:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona.oversee(find.data["persona"])
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data
 
 
@@ -143,16 +155,29 @@ async def stop_persona(persona_id: str):
     return outcome.data
 
 
+@router.post("/persona/{persona_id}/start")
+async def start_persona(persona_id: str):
+    """Wake a stopped persona."""
+    from application.platform.asyncio_worker import Worker
+    # If already running, just return success
+    loaded_check = await persona.loaded(persona_id)
+    if loaded_check.success:
+        return {"status": "already running"}
+    outcome = await persona.wake(persona_id, Worker())
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
 @router.post("/persona/{persona_id}/restart")
 async def restart_persona(persona_id: str):
-    find = await persona.loaded(persona_id)
-    if not find.success:
-        raise HTTPException(status_code=404, detail=find.message)
-    await persona.nap(find.data["persona"])
-    find = await persona.find(persona_id)
-    if not find.success:
-        raise HTTPException(status_code=404, detail=find.message)
-    outcome = await persona.wake(find.data["persona"])
+    from application.platform.asyncio_worker import Worker
+    # Stop if running
+    loaded_check = await persona.loaded(persona_id)
+    if loaded_check.success:
+        await persona.nap(loaded_check.data["persona"])
+    # Wake
+    outcome = await persona.wake(persona_id, Worker())
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data

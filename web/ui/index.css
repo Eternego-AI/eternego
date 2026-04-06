@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
+
+:root {
+    --font: 'JetBrains Mono', monospace;
+
+    --bg: #050508;
+
+    --glass-bg: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.01) 100%);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.08);
+
+    --accent: rgba(140, 160, 255, 0.9);
+    --accent-soft: rgba(140, 160, 255, 0.06);
+    --accent-bg: rgba(140, 160, 255, 0.10);
+    --accent-border: rgba(140, 160, 255, 0.25);
+    --accent-text: rgba(180, 195, 255, 0.85);
+    --accent-hover-bg: rgba(140, 160, 255, 0.18);
+    --accent-hover-border: rgba(140, 160, 255, 0.4);
+
+    --destructive-bg: rgba(255, 80, 80, 0.08);
+    --destructive-border: rgba(255, 80, 80, 0.2);
+    --destructive-text: rgba(255, 120, 120, 0.85);
+
+    --success: #4ade80;
+
+    --text-primary: rgba(255, 255, 255, 0.92);
+    --text-body: rgba(255, 255, 255, 0.78);
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --text-muted: rgba(255, 255, 255, 0.4);
+    --text-dim: rgba(255, 255, 255, 0.25);
+    --text-faint: rgba(255, 255, 255, 0.15);
+    --text-ghost: rgba(255, 255, 255, 0.08);
+
+    --surface-overlay: rgba(0, 0, 0, 0.5);
+    --surface-recessed: rgba(0, 0, 0, 0.3);
+    --surface-hover: rgba(255, 255, 255, 0.04);
+    --surface-active: rgba(255, 255, 255, 0.07);
+
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-default: rgba(255, 255, 255, 0.10);
+    --border-hover: rgba(255, 255, 255, 0.2);
+    --border-focus: rgba(255, 255, 255, 0.3);
+
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-2xl: 20px;
+    --radius-full: 50%;
+
+    /* Sizes — relative to base font (15px) */
+    --text-xs: 0.65em;
+    --text-sm: 0.75em;
+    --text-base: 1em;
+    --text-lg: 1.15em;
+
+    --space-xs: 0.25em;
+    --space-sm: 0.5em;
+    --space-md: 0.75em;
+    --space-lg: 1em;
+    --space-xl: 1.5em;
+
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html, body {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    font-family: var(--font);
+    font-size: 15px;
+    background: var(--bg);
+    color: var(--text-body);
+}

@@ -14,7 +14,7 @@ from web.routes import api, openai, pages, websocket
 app = FastAPI(title="Eternego", docs_url=None, redoc_url=None)
 
 app.mount("/assets", StaticFiles(directory=Path(__file__).parent.parent / "assets"), name="assets")
-app.mount("/os", StaticFiles(directory=Path(__file__).parent / "os", html=True), name="os")
+app.mount("/ui", StaticFiles(directory=Path(__file__).parent / "ui", html=True), name="ui")
 
 app.include_router(openai.router)
 app.include_router(pages.router)

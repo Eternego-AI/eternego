@@ -8,7 +8,7 @@ import uuid
 
 from application.core.brain.data import Signal, SignalEvent
 from application.core.brain import perceptions, signals
-from application.core import channels, local_model
+from application.core import bus, channels, local_model
 from application.platform import logger
 
 
@@ -52,6 +52,7 @@ async def realize(memory, persona, identity_fn) -> None:
         return
 
     logger.debug("Realize", {"persona": persona})
+    await bus.share("Pipeline: realize", {"persona": persona, "stage": "realize", "unattended": len(memory.needs_realizing)})
 
     await channels.express_thinking(persona)
 
@@ -132,6 +133,7 @@ async def understand(memory, persona, meanings, identity_fn, escalate_fn) -> Non
         return
 
     logger.debug("Understand", {"persona": persona, "impression": perception.impression})
+    await bus.share("Pipeline: understand", {"persona": persona, "stage": "understand", "impression": perception.impression})
 
     await channels.express_thinking(persona)
 
@@ -200,6 +202,7 @@ async def recognize(memory, persona, identity_fn, say_fn) -> None:
         return
 
     logger.debug("Recognize", {"persona": persona, "impression": thought.perception.impression, "event": event})
+    await bus.share("Pipeline: recognize", {"persona": persona, "stage": "recognize", "impression": thought.perception.impression, "meaning": thought.meaning.name})
 
     await channels.express_thinking(persona)
 
@@ -232,6 +235,7 @@ async def decide(memory, persona, identity_fn) -> None:
     await channels.express_thinking(persona)
 
     logger.debug("Decide", {"persona": persona, "impression": thought.perception.impression})
+    await bus.share("Pipeline: decide", {"persona": persona, "stage": "decide", "impression": thought.perception.impression, "meaning": thought.meaning.name})
 
     system = (
         identity_fn()
@@ -293,6 +297,7 @@ async def conclude(memory, persona, identity_fn, say_fn) -> None:
     await channels.express_thinking(persona)
 
     logger.debug("Conclude", {"persona": persona, "impression": thought.perception.impression})
+    await bus.share("Pipeline: conclude", {"persona": persona, "stage": "conclude", "impression": thought.perception.impression, "meaning": thought.meaning.name})
 
     summary_prompt = thought.meaning.summarize()
     if summary_prompt:
