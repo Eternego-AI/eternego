@@ -87,6 +87,92 @@ async def test_chat_hits_correct_path():
     assert code == 0, error
 
 
+async def test_chat_json_sends_json_mode_flag():
+    def isolated():
+        from application.platform import openai
+        def validate(r):
+            assert r["body"]["response_format"] == {"type": "json_object"}, r["body"]
+        openai.assert_chat_json(
+            run=lambda: openai.chat_json("key", "gpt-4", [{"role": "user", "content": "json"}]),
+            validate=validate,
+            response={"choices": [{"message": {"content": '{"ok": true}'}}]},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_chat_json_returns_empty_on_invalid():
+    def isolated():
+        from application.platform import openai
+        result = {}
+        openai.assert_chat_json(
+            run=lambda: result.update(data=openai.chat_json("key", "gpt-4", [])),
+            response={"choices": [{"message": {"content": "not json"}}]},
+        )
+        assert result["data"] == {}, result
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_chat_passes_system_messages_in_messages():
+    def isolated():
+        from application.platform import openai
+        def validate(r):
+            assert r["body"]["messages"] == [
+                {"role": "system", "content": "Be helpful"},
+                {"role": "user", "content": "hi"},
+            ], r["body"]["messages"]
+        openai.assert_chat(
+            run=lambda: openai.chat("key", "gpt-4", [
+                {"role": "system", "content": "Be helpful"},
+                {"role": "user", "content": "hi"},
+            ]),
+            validate=validate,
+            response={"choices": [{"message": {"content": "ok"}}]},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_generate_json_returns_parsed_json():
+    def isolated():
+        from application.platform import openai
+        result = {}
+        openai.assert_chat_json(
+            run=lambda: result.update(data=openai.generate_json("key", "gpt-4", "give json")),
+            response={"choices": [{"message": {"content": '{"n": 1}'}}]},
+        )
+        assert result["data"] == {"n": 1}, result
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_generate_json_returns_empty_on_invalid():
+    def isolated():
+        from application.platform import openai
+        result = {}
+        openai.assert_chat_json(
+            run=lambda: result.update(data=openai.generate_json("key", "gpt-4", "give json")),
+            response={"choices": [{"message": {"content": "nope"}}]},
+        )
+        assert result["data"] == {}, result
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_generate_strips_whitespace():
+    def isolated():
+        from application.platform import openai
+        result = {}
+        openai.assert_chat(
+            run=lambda: result.update(text=openai.generate("key", "gpt-4", "write")),
+            response={"choices": [{"message": {"content": "  hello  "}}]},
+        )
+        assert result["text"] == "hello", result
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 def test_to_messages_parses_nested_export():
     export = json.dumps([
         {"mapping": {

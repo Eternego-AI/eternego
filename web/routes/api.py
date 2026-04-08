@@ -2,7 +2,10 @@
 
 import tempfile
 
+from pathlib import Path
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from application.business import environment, persona
 from web.requests import EnvironmentPrepareRequest, HearRequest, PersonaControlRequest, PersonaCreateRequest
@@ -20,7 +23,11 @@ async def list_personas():
 
 @router.post("/environment/prepare")
 async def prepare_environment(request: EnvironmentPrepareRequest):
-    outcome = await environment.prepare(request.model or None)
+    outcome = await environment.prepare(
+        model=request.model or None,
+        provider=request.provider,
+        credentials=request.credentials,
+    )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data
@@ -36,14 +43,48 @@ async def pair_channel(code: str):
 
 @router.post("/persona/create")
 async def create_persona(request: PersonaCreateRequest):
+    from application.core.data import Model, Channel
+
+    thinking = Model(
+        name=request.thinking_model,
+        provider=request.thinking_provider,
+        credentials=request.thinking_credentials,
+    )
+    outcome = await environment.prepare(
+        model=thinking.name,
+        provider=thinking.provider,
+        credentials=(thinking.credentials or {}).get("api_key"),
+    )
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+
+    frontier = None
+    if request.frontier_model:
+        frontier = Model(
+            name=request.frontier_model,
+            provider=request.frontier_provider,
+            credentials=request.frontier_credentials,
+        )
+        outcome = await environment.prepare(
+            model=frontier.name,
+            provider=frontier.provider,
+            credentials=(frontier.credentials or {}).get("api_key"),
+        )
+        if not outcome.success:
+            raise HTTPException(status_code=400, detail=outcome.message)
+
+    channel = Channel(type=request.channel_type, credentials=request.channel_credentials)
+
+    if request.channel_type == "telegram":
+        outcome = await environment.check_channel(request.channel_type, request.channel_credentials)
+        if not outcome.success:
+            raise HTTPException(status_code=400, detail=outcome.message)
+
     outcome = await persona.create(
         name=request.name,
-        model=request.model,
-        channel_type=request.channel_type,
-        channel_credentials=request.channel_credentials,
-        frontier_model=request.frontier_model,
-        frontier_provider=request.frontier_provider,
-        frontier_credentials=request.frontier_credentials,
+        thinking=thinking,
+        channel=channel,
+        frontier=frontier,
     )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
@@ -55,17 +96,32 @@ async def migrate_persona(
     diary: UploadFile = File(...),
     phrase: str = Form(...),
     model: str = Form(...),
+    provider: str = Form(None),
+    credentials: str = Form(None),
 ):
+    from application.core.data import Model
+
     filename = diary.filename or "diary"
     tmp_dir = tempfile.mkdtemp()
     tmp_path = f"{tmp_dir}/{filename}"
     with open(tmp_path, "wb") as f:
         f.write(await diary.read())
 
+    creds = {"api_key": credentials} if credentials else None
+    thinking = Model(name=model, provider=provider or None, credentials=creds)
+
+    outcome = await environment.prepare(
+        model=thinking.name,
+        provider=thinking.provider,
+        credentials=(thinking.credentials or {}).get("api_key"),
+    )
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+
     outcome = await persona.migrate(
         diary_path=tmp_path,
         phrase=phrase,
-        model=model,
+        thinking=thinking,
     )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
@@ -82,7 +138,7 @@ async def get_persona(persona_id: str):
         "id": p.id,
         "name": p.name,
         "base_model": p.base_model,
-        "model": p.model.name if p.model else "",
+        "model": p.thinking.name if p.thinking else "",
         "birthday": p.birthday or "",
         "channels": [
             {
@@ -181,6 +237,25 @@ async def restart_persona(persona_id: str):
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data
+
+
+@router.post("/persona/{persona_id}/export")
+async def export_persona(persona_id: str):
+    """Export a stopped persona's diary for download."""
+    loaded_check = await persona.loaded(persona_id)
+    if loaded_check.success:
+        raise HTTPException(status_code=400, detail="Persona must be stopped before exporting. Stop it first.")
+
+    outcome = await persona.export(persona_id)
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+
+    diary_path = Path(outcome.data["diary_path"])
+    return FileResponse(
+        path=diary_path,
+        filename=diary_path.name,
+        media_type="application/octet-stream",
+    )
 
 
 @router.post("/persona/{persona_id}/delete")

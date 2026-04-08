@@ -15,7 +15,7 @@ async def test_oversee_returns_persona_knowledge():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -42,7 +42,7 @@ async def test_oversee_returns_persona_knowledge():
         agents._personas[p.id] = ego
         paths.save_as_string(paths.person_identity(p.id), "The person lives in Amsterdam.")
         result = asyncio.run(spec.oversee(p))
-        assert result.success is True
+        assert result.success, result.message
         assert "person" in result.data
 
     code, error = await on_separate_process_async(isolated)

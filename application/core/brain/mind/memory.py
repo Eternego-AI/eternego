@@ -169,6 +169,10 @@ class Memory:
         """All Perceptions in the graph."""
         return list(self._perceptions.values())
 
+    def perception_by_impression(self, impression: str) -> Perception | None:
+        """Find a perception by its impression text."""
+        return self._perceptions.get(impression)
+
     @property
     def needs_understanding(self) -> list[Perception]:
         """Perceptions not yet assigned a Meaning (no Thought exists)."""
@@ -198,7 +202,7 @@ class Memory:
         return list(self._thoughts)
 
     @property
-    def needs_recognition(self) -> list[Thought]:
+    def needs_acknowledgement(self) -> list[Thought]:
         """Thoughts that need the persona to recognize — reply or clarify."""
         result = []
         for t in self._thoughts:
@@ -250,6 +254,57 @@ class Memory:
         return perceptions.to_messages(thread[start:])
 
     # ── Mutation methods ──────────────────────────────────────────────────────
+
+    def accept_reality(self, new_perceptions: list[dict], new_thoughts: list[dict],
+                        signal_index: dict, meaning_index: dict) -> None:
+        """Replace open memory with recognized reality. Keep only recap/concluded thoughts."""
+        logger.debug("memory.accept_reality", {"persona": self._persona})
+
+        # Identify closed thoughts (recap or summarized) — these survive
+        closed_impressions = set()
+        for t in self._thoughts:
+            last = self._last_event(t)
+            if last in (SignalEvent.recap, SignalEvent.summarized):
+                closed_impressions.add(t.perception.impression)
+
+        # Remove all open thoughts and their perceptions
+        open_thoughts = [t for t in self._thoughts if t.perception.impression not in closed_impressions]
+        for t in open_thoughts:
+            self._thoughts.remove(t)
+
+        open_perceptions = [imp for imp in self._perceptions
+                           if imp not in closed_impressions]
+        for imp in open_perceptions:
+            perception = self._perceptions.pop(imp)
+            for signal in perception.thread:
+                sigs = self._signal_perceptions.get(signal.id, [])
+                if imp in sigs:
+                    sigs.remove(imp)
+                if not sigs:
+                    self._signal_perceptions.pop(signal.id, None)
+
+        # Write new reality
+        for p in new_perceptions:
+            impression = p.get("impression")
+            if not impression:
+                continue
+            for signal_id in p.get("thread", []):
+                signal = signal_index.get(signal_id)
+                if signal:
+                    self.realize(signal, impression)
+
+        for t in new_thoughts:
+            impression = t.get("perception")
+            meaning_name = t.get("meaning")
+            priority = t.get("priority", 0)
+            if not impression or not meaning_name:
+                continue
+            meaning = meaning_index.get(meaning_name)
+            if not meaning:
+                continue
+            perception = self.perception_by_impression(impression)
+            if perception:
+                self.understand(perception, meaning, priority)
 
     def realize(self, signal: Signal, impression: str) -> None:
         """Attach signal to a perception. Only free existing thoughts when the person speaks."""
@@ -335,7 +390,7 @@ class Memory:
         """True when the mind has nothing left to process."""
         return (not self.needs_realizing
                 and not self.needs_understanding
-                and not self.needs_recognition
+                and not self.needs_acknowledgement
                 and not self.needs_decision
                 and not self.needs_conclusion)
 

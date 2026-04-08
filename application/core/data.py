@@ -27,7 +27,7 @@ class Channel(Data):
 class Persona(Data):
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str
-    model: Model
+    thinking: Model
     version: str = "v1"
     base_model: str = ""
     birthday: str = field(default_factory=lambda: str(date.today()))

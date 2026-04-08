@@ -15,7 +15,7 @@ async def test_shape_composes_full_character_prompt():
         persona = Persona(
             id="test-char",
             name="Primus",
-            model=Model(name="llama3"),
+            thinking=Model(name="llama3"),
             birthday="2026-01-15",
         )
 
@@ -54,7 +54,7 @@ async def test_shape_omits_empty_identity_sections():
         persona = Persona(
             id="test-empty",
             name="Primus",
-            model=Model(name="llama3"),
+            thinking=Model(name="llama3"),
         )
 
         home = paths.home(persona.id)

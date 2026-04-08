@@ -12,7 +12,10 @@ async def test_wake_succeeds():
         from application.business import persona as spec
         from application.core import agents, gateways
         from application.platform import ollama
+        from application.core.data import Model, Channel
         import config.inference as cfg
+        from application.platform import OS
+        OS._secret_cache_only = True
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
@@ -52,9 +55,9 @@ async def test_wake_succeeds():
         ollama.OLLAMA_BASE_URL = f"http://127.0.0.1:{port}"
         
         outcome = asyncio.run(spec.create(
-            name="WakeBot", model="llama3", channel_type="web", channel_credentials={},
+            name="WakeBot", thinking=Model(name="llama3"), channel=Channel(type="web", credentials={}),
         ))
-        assert outcome.success is True
+        assert outcome.success, outcome.message
         persona_id = outcome.data["persona_id"]
 
         # Nap first to unload
@@ -64,7 +67,7 @@ async def test_wake_succeeds():
         # Wake
         from application.platform.asyncio_worker import Worker
         outcome = asyncio.run(spec.wake(persona_id, Worker()))
-        assert outcome.success is True
+        assert outcome.success, outcome.message
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

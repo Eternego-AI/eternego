@@ -15,7 +15,7 @@ async def test_pair_generates_code():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
         p.channels = [Channel(type="telegram", name="")]
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
@@ -42,7 +42,7 @@ async def test_pair_generates_code():
         ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
         agents._personas[p.id] = ego
         result = asyncio.run(spec.pair(p, Channel(type="telegram", name="12345")))
-        assert result.success is True
+        assert result.success, result.message
         assert len(result.data["pairing_code"]) == 6
 
     code, error = await on_separate_process_async(isolated)
@@ -65,7 +65,7 @@ async def test_pair_fails_when_already_verified():
         agents._personas.clear()
         gateways._active.clear()
         result = asyncio.run(spec.pair(
-            Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3"),
+            Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3"),
             Channel(type="telegram", name="x", verified_at="2026-03-15")
         ))
         assert result.success is False
@@ -89,7 +89,7 @@ async def test_pair_fails_when_channel_not_on_persona():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
         p.channels = []
         result = asyncio.run(spec.pair(p, Channel(type="telegram", name="x")))
         assert result.success is False

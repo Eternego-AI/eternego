@@ -96,7 +96,7 @@ class SetupWidget extends Widget {
         `;
         s.querySelectorAll('.sw-choice-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                if (btn.dataset.action === 'create') { this._data = { name: '', model: '', botToken: '', frontierModel: '', frontierKey: '' }; this._renderName(); this._step.go('name'); }
+                if (btn.dataset.action === 'create') { this._data = { name: '', thinkingModel: '', thinkingProvider: null, thinkingKey: '', botToken: '', frontierModel: '', frontierKey: '' }; this._renderName(); this._step.go('name'); }
                 else { this._data = { file: null, phrase: '', model: '' }; this._renderMigrateFile(); this._step.go('migrate-file'); }
             });
         });
@@ -132,15 +132,68 @@ class SetupWidget extends Widget {
 
     _renderModel() {
         const s = this._panels.model;
+        const provider = this._data.thinkingProvider;
         s.innerHTML = `
-            <label class="sw-label">Base model</label>
-            <p class="sw-hint">Enter the Ollama model name (e.g. <code>qwen2.5:7b</code>)</p>
-            <input class="sw-input" type="text" placeholder="qwen2.5:7b" value="${this._esc(this._data.model)}">
+            <label class="sw-label">Thinking model</label>
+            <div class="sw-choice">
+                <div class="sw-choice-btn${!provider ? ' selected' : ''}" data-provider="">Local (Ollama)</div>
+                <div class="sw-choice-btn${provider === 'anthropic' ? ' selected' : ''}" data-provider="anthropic">Claude</div>
+                <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">ChatGPT</div>
+            </div>
+            <div class="sw-model-fields"></div>
             <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><button class="sw-btn primary">Next</button></div>
         `;
-        const input = s.querySelector('input');
-        const go = () => { const v = input.value.trim(); if (!v) return; this._data.model = v; this._renderChannel(); this._step.go('channel'); };
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+
+        const fieldsEl = s.querySelector('.sw-model-fields');
+        const renderFields = (prov) => {
+            if (!prov) {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Enter the Ollama model name (e.g. <code>qwen2.5:7b</code>)</p>
+                    <input class="sw-input" type="text" placeholder="qwen2.5:7b" value="${this._esc(this._data.thinkingModel)}">
+                `;
+            } else if (prov === 'anthropic') {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Enter the Claude model name and your Anthropic API key.</p>
+                    <input class="sw-input" type="text" placeholder="claude-sonnet-4-20250514" value="${this._esc(this._data.thinkingModel)}">
+                    <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.thinkingKey)}" style="margin-top:12px">
+                `;
+            } else {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Enter the OpenAI model name and your API key.</p>
+                    <input class="sw-input" type="text" placeholder="gpt-4o" value="${this._esc(this._data.thinkingModel)}">
+                    <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.thinkingKey)}" style="margin-top:12px">
+                `;
+            }
+        };
+
+        renderFields(provider);
+
+        s.querySelectorAll('.sw-choice-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                s.querySelectorAll('.sw-choice-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                const prov = btn.dataset.provider || null;
+                this._data.thinkingProvider = prov;
+                if (prov !== provider) { this._data.thinkingModel = ''; this._data.thinkingKey = ''; }
+                renderFields(prov);
+            });
+        });
+
+        const go = () => {
+            const inputs = fieldsEl.querySelectorAll('input');
+            const model = inputs[0]?.value.trim();
+            if (!model) return;
+            this._data.thinkingModel = model;
+            if (this._data.thinkingProvider) {
+                const key = inputs[1]?.value.trim();
+                if (!key) return;
+                this._data.thinkingKey = key;
+            } else {
+                this._data.thinkingKey = '';
+            }
+            this._renderChannel();
+            this._step.go('channel');
+        };
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }
@@ -199,17 +252,6 @@ class SetupWidget extends Widget {
         if (signalHandler) this._props.signals.addEventListener('update', signalHandler);
 
         try {
-            // Step 1: Prepare environment
-            if (this._props.onPrepare) {
-                const prep = await this._props.onPrepare(this._data.model);
-                if (!prep.success) {
-                    if (signalHandler) this._props.signals.removeEventListener('update', signalHandler);
-                    this._showError('frontier', prep.message);
-                    return;
-                }
-            }
-
-            // Step 2: Create persona
             statusEl.textContent = 'Creating persona...';
             if (this._props.onCreate) {
                 const result = await this._props.onCreate(this._data);

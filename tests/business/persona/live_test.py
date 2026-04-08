@@ -15,7 +15,7 @@ async def test_live_processes_due_destiny_entries():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,7 @@ async def test_live_processes_due_destiny_entries():
         paths.save_destiny_entry(p.id, "reminder", past.strftime("%Y-%m-%d %H:%M"), "Call the dentist")
 
         result = asyncio.run(spec.live(p, now))
-        assert result.success is True
+        assert result.success, result.message
         assert "1" in result.message
 
     code, error = await on_separate_process_async(isolated)
@@ -78,7 +78,7 @@ async def test_live_recovers_when_worker_has_error():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -143,7 +143,7 @@ async def test_live_returns_nothing_due_when_empty():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -177,7 +177,7 @@ async def test_live_returns_nothing_due_when_empty():
 
         from application.platform import datetimes
         result = asyncio.run(spec.live(p, datetimes.now()))
-        assert result.success is True
+        assert result.success, result.message
         assert "Nothing due" in result.message
 
     code, error = await on_separate_process_async(isolated)

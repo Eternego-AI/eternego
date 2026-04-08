@@ -11,6 +11,9 @@ async def test_write_diary_succeeds():
         from application.business import persona as spec
         from application.core import agents, gateways
         from application.platform import ollama
+        from application.core.data import Model, Channel
+        from application.platform import OS
+        OS._secret_cache_only = True
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
@@ -50,16 +53,16 @@ async def test_write_diary_succeeds():
         ollama.OLLAMA_BASE_URL = f"http://127.0.0.1:{port}"
         
         outcome = asyncio.run(spec.create(
-            name="DiaryBot", model="llama3", channel_type="web", channel_credentials={},
+            name="DiaryBot", thinking=Model(name="llama3"), channel=Channel(type="web", credentials={}),
         ))
-        assert outcome.success is True
+        assert outcome.success, outcome.message
         persona_id = outcome.data["persona_id"]
 
         outcome = asyncio.run(spec.find(persona_id))
         persona = outcome.data["persona"]
 
         outcome = asyncio.run(spec.write_diary(persona))
-        assert outcome.success is True
+        assert outcome.success, outcome.message
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

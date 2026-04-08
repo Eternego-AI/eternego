@@ -9,6 +9,7 @@ async def test_check_model_succeeds():
         from application.business import environment
         from application.core import agents, gateways
         from application.platform import ollama
+        from application.core.data import Model
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
@@ -18,7 +19,7 @@ async def test_check_model_succeeds():
         subprocess.run(["git", "config", "--global", "user.name", "Test"], env={**os.environ, "HOME": tmp})
         result = {}
         async def run():
-            result["value"] = await environment.check_model("llama3")
+            result["value"] = await environment.check_model(Model(name="llama3"))
         ollama.assert_call(
             run=run,
             responses=[
@@ -40,6 +41,7 @@ async def test_check_model_fails_when_not_found():
         from application.business import environment
         from application.core import agents, gateways
         from application.platform import ollama
+        from application.core.data import Model
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
@@ -49,7 +51,7 @@ async def test_check_model_fails_when_not_found():
         subprocess.run(["git", "config", "--global", "user.name", "Test"], env={**os.environ, "HOME": tmp})
         result = {}
         async def run():
-            result["value"] = await environment.check_model("nonexistent")
+            result["value"] = await environment.check_model(Model(name="nonexistent"))
         ollama.assert_call(
             run=run,
             response={"models": [{"name": "llama3"}]},

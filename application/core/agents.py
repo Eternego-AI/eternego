@@ -7,7 +7,7 @@ from datetime import timedelta
 from application.core.brain.data import Signal, Perception
 from application.core.brain.mind.memory import Memory
 from application.core.brain import character
-from application.core import local_model, frontier, tools, paths
+from application.core import models, tools, paths
 from application.core.data import Persona, Channel
 from application.core.exceptions import MindError, AgentError
 from application.platform import datetimes, logger
@@ -102,11 +102,12 @@ class Ego:
         from functools import partial
 
         return [
-            partial(conscious.realize, self.memory, self.persona, self.identity),
-            partial(conscious.understand, self.memory, self.persona, self.meanings, self.identity, self.escalate),
-            partial(conscious.recognize, self.memory, self.persona, self.identity, self.say),
-            partial(conscious.decide, self.memory, self.persona, self.identity),
-            partial(conscious.conclude, self.memory, self.persona, self.identity, self.say),
+            partial(conscious.recognize, self.memory, self.persona, self.meanings, self.identity, self.say, self.express_thinking),
+            partial(conscious.realize, self.memory, self.persona, self.identity, self.express_thinking),
+            partial(conscious.understand, self.memory, self.persona, self.meanings, self.identity, self.escalate, self.express_thinking),
+            partial(conscious.acknowledge, self.memory, self.persona, self.identity, self.say, self.express_thinking),
+            partial(conscious.decide, self.memory, self.persona, self.identity, self.express_thinking),
+            partial(conscious.conclude, self.memory, self.persona, self.identity, self.say, self.express_thinking),
         ]
 
     async def settle(self) -> None:
@@ -144,6 +145,18 @@ class Ego:
         logger.info("Incept perception", {"persona": self.persona, "perception": perception})
         self.memory.incept(perception)
         self.worker.nudge()
+
+    async def express_thinking(self) -> None:
+        """Signal to all active channels that the persona is working on something."""
+        from application.core import gateways
+        from application.platform import telegram
+        for channel in gateways.of(self.persona).all_channels():
+            if channel.type == "telegram":
+                try:
+                    token = (channel.credentials or {})["token"]
+                    await telegram.async_typing_action(token, channel.name)
+                except Exception:
+                    pass
 
     async def say(self, text: str) -> None:
         """Append to conversation.jsonl and send to all active channels."""
@@ -282,7 +295,7 @@ class Ego:
         code = None
         if self.persona.frontier:
             try:
-                response = await frontier.chat(self.persona.frontier, prompt)
+                response = await models.chat(self.persona.frontier, [{"role": "user", "content": prompt}])
                 code = response.strip()
                 if code.startswith("```"):
                     lines = code.split("\n")
@@ -293,8 +306,8 @@ class Ego:
 
         if not code:
             try:
-                code = await local_model.generate(self.persona.model.name, prompt)
+                code = await models.generate(self.persona.thinking, prompt)
             except Exception as e:
-                logger.warning("ego.escalate: local model failed", {"error": str(e)})
+                logger.warning("ego.escalate: thinking model failed", {"error": str(e)})
 
         return code or None

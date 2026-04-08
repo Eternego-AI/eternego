@@ -14,7 +14,7 @@ async def test_ego_initializes_with_persona_and_memory():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -45,7 +45,7 @@ async def test_ego_initializes_with_persona_and_memory():
 
 # ── Pipeline ─────────────────────────────────────────────────────────────────
 
-async def test_consciousness_returns_five_callables():
+async def test_consciousness_returns_six_callables():
     def isolated():
         import os
         import tempfile
@@ -56,7 +56,7 @@ async def test_consciousness_returns_five_callables():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -76,9 +76,9 @@ async def test_consciousness_returns_five_callables():
             def path(self): return None
             def summarize(self): return None
         ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
-        
+
         consciousness = ego.consciousness()
-        assert len(consciousness) == 5
+        assert len(consciousness) == 6
         assert all(callable(step) for step in consciousness)
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -98,7 +98,7 @@ async def test_trigger_adds_signal_to_memory_and_nudges():
         
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -139,7 +139,7 @@ async def test_trigger_ignores_signal_when_worker_stopped():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -182,7 +182,7 @@ async def test_incept_injects_perception_and_nudges():
         from application.core.brain.data import Perception
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -225,7 +225,7 @@ async def test_read_returns_signals_sorted_by_time():
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -270,7 +270,7 @@ async def test_register_stores_ego_and_find_retrieves_persona():
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -328,7 +328,7 @@ async def test_persona_returns_ego():
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -367,7 +367,7 @@ async def test_unload_persists_memory_and_unregisters():
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -417,7 +417,7 @@ async def test_pair_generates_code_and_take_code_claims_it():
         from application.core.data import Channel
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
@@ -484,7 +484,7 @@ async def test_identity_includes_character():
         from application.core.data import Model, Persona
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-ego", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ego", name="Primus", thinking=Model(name="llama3"))
         class FakeWorker:
             def __init__(self):
                 self.stopped = False

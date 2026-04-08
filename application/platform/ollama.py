@@ -65,11 +65,14 @@ async def delete(path: str, data: dict) -> dict:
 
 async def stream(path: str, data: dict):
     """Send a POST request and yield JSON chunks as they arrive."""
-    async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL, timeout=httpx.Timeout(None, connect=10.0)) as http:
-        async with http.stream("POST", path, json=data) as response:
-            async for line in response.aiter_lines():
-                if line.strip():
-                    yield json.loads(line)
+    try:
+        async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL, timeout=httpx.Timeout(None, connect=10.0)) as http:
+            async with http.stream("POST", path, json=data) as response:
+                async for line in response.aiter_lines():
+                    if line.strip():
+                        yield json.loads(line)
+    except httpx.ConnectError as e:
+        raise ConnectionError(str(e)) from e
 
 
 # ── Assertions ───────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 import asyncio
 import json
 
-from application.platform import logger, ollama, lora, OS, linux, mac, windows
+from application.platform import logger, ollama, lora, OS
 from application.core.exceptions import EngineConnectionError, ModelError
 
 
@@ -14,13 +14,13 @@ async def ensure_running() -> None:
         return
 
     logger.info("Local inference engine not responding, starting server")
-    platform = OS.get_supported()
-    if platform == "linux":
-        await linux.execute_on_sub_process("systemctl start ollama")
-    elif platform == "mac":
-        await mac.execute_on_sub_process("ollama serve >/dev/null 2>&1 &")
-    elif platform == "windows":
-        await windows.execute_on_sub_process("Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden")
+    os = OS.get_supported()
+    if os == "linux":
+        await OS.execute_on_sub_process("systemctl start ollama")
+    elif os == "mac":
+        await OS.execute_on_sub_process("ollama serve >/dev/null 2>&1 &")
+    elif os == "windows":
+        await OS.execute_on_sub_process("Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden")
 
     for _ in range(10):
         await asyncio.sleep(1)

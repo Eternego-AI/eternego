@@ -103,10 +103,13 @@ client = OpenAI(base_url="http://localhost:5000/v1", api_key="sk-no-need")
 - Shell commands (permission required each time)  
 - Meaningful search & recall of past conversations  
 - Self-teaching: learns new skills via escalation → permanent integration  
+- Local models (Ollama) or remote models (Anthropic, OpenAI, any OpenAI-compatible endpoint)  
+- Fine-tuning on local models using your persona's synthesized DNA
 
-## Status (March 2026)
+## Status (April 2026)
 
-Early but stable core loop. Biggest limit = local model quality (gets dramatically better as open models improve).  
+Early but stable core loop. Supports local and remote models.  
+Biggest limit = local model quality (gets dramatically better as open models improve).  
 Roadmap: smoother escalation, more channels, visual editor, voice, multi-persona.
 
 ## Who this is for

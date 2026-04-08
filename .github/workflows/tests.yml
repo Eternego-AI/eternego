@@ -34,7 +34,7 @@ jobs:
           pip install -e .
           pip install git+https://github.com/Eternego-AI/test-runner.git
 
-      - name: Install secret-tool and keyring (Linux)
+      - name: Install keyring (Linux)
         if: matrix.name == 'linux'
         run: |
           sudo apt-get update

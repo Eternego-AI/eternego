@@ -136,6 +136,24 @@ const UI = {
         } catch (e) { return { success: false, error: e.message }; }
     },
 
+    async exportPersona(id) {
+        try {
+            const response = await fetch(`/api/persona/${id}/export`, { method: 'POST' });
+            if (!response.ok) {
+                const err = await response.json();
+                return { success: false, error: err.detail };
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${id}.diary`;
+            a.click();
+            URL.revokeObjectURL(url);
+            return { success: true };
+        } catch (e) { return { success: false, error: e.message }; }
+    },
+
     async controlPersona(id, entryIds) {
         try {
             await this._post(`/api/persona/${id}/control`, { entry_ids: entryIds });
@@ -205,6 +223,7 @@ const UI = {
             fetchOversee: (id) => this.fetchOversee(id),
             hearPersona: (id, msg) => this.hearPersona(id, msg),
             actionPersona: (id, action) => this.actionPersona(id, action),
+            exportPersona: (id) => this.exportPersona(id),
             controlPersona: (id, ids) => this.controlPersona(id, ids),
             feedPersona: (id, file, source) => this.feedPersona(id, file, source),
             deletePersona: (id) => this.deletePersona(id),

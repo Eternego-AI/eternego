@@ -15,7 +15,7 @@ async def test_hear_succeeds():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -41,7 +41,7 @@ async def test_hear_succeeds():
         ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
         agents._personas[p.id] = ego
         result = asyncio.run(spec.hear(p, Message(channel=Channel(type="web", name="w1"), content="hello")))
-        assert result.success is True
+        assert result.success, result.message
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

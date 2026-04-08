@@ -14,7 +14,7 @@ async def test_conversation_returns_messages():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
         conv_path = paths.conversation(p.id)
         conv_path.parent.mkdir(parents=True, exist_ok=True)
         conv_path.write_text(
@@ -22,7 +22,7 @@ async def test_conversation_returns_messages():
             + json.dumps({"role": "persona", "content": "hi"}) + "\n"
         )
         result = asyncio.run(spec.conversation(p.id))
-        assert result.success is True
+        assert result.success, result.message
         assert len(result.data["messages"]) == 2
 
     code, error = await on_separate_process_async(isolated)
@@ -42,7 +42,7 @@ async def test_conversation_returns_empty_when_no_file():
         agents._personas.clear()
         gateways._active.clear()
         result = asyncio.run(spec.conversation("no-conv"))
-        assert result.success is True
+        assert result.success, result.message
         assert result.data["messages"] == []
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

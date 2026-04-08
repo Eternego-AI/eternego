@@ -12,6 +12,9 @@ async def test_migrate_restores_persona_from_diary():
         from application.business import persona as spec
         from application.core import agents, gateways, paths
         from application.platform import ollama
+        from application.core.data import Model, Channel
+        from application.platform import OS
+        OS._secret_cache_only = True
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
@@ -50,8 +53,8 @@ async def test_migrate_restores_persona_from_diary():
         
         ollama.OLLAMA_BASE_URL = f"http://127.0.0.1:{port}"
         
-        outcome = asyncio.run(spec.create(name="MigrateMe", model="llama3", channel_type="web", channel_credentials={}))
-        assert outcome.success is True
+        outcome = asyncio.run(spec.create(name="MigrateMe", thinking=Model(name="llama3"), channel=Channel(type="web", credentials={})))
+        assert outcome.success, outcome.message
         persona_id = outcome.data["persona_id"]
         phrase = outcome.data["recovery_phrase"]
 
@@ -59,7 +62,7 @@ async def test_migrate_restores_persona_from_diary():
         outcome = asyncio.run(spec.find(persona_id))
         persona = outcome.data["persona"]
         outcome = asyncio.run(spec.write_diary(persona))
-        assert outcome.success is True
+        assert outcome.success, outcome.message
 
         # 3. Get diary file path
         diary_file = paths.diary(persona_id) / f"{persona_id}.diary"
@@ -67,12 +70,12 @@ async def test_migrate_restores_persona_from_diary():
 
         # 4. Delete persona
         outcome = asyncio.run(spec.delete(persona))
-        assert outcome.success is True
+        assert outcome.success, outcome.message
 
         # 5. Migrate using diary and recovery phrase
-        outcome = asyncio.run(spec.migrate(str(diary_file), phrase, "llama3"))
+        outcome = asyncio.run(spec.migrate(str(diary_file), phrase, Model(name="llama3")))
     
-        assert outcome.success is True, f"Migrate failed: {outcome.message}"
+        assert outcome.success, outcome.message
         assert "persona_id" in outcome.data
         assert outcome.data["name"] == "MigrateMe"
 

@@ -15,11 +15,15 @@ class ChatRequest(BaseModel):
 
 class EnvironmentPrepareRequest(BaseModel):
     model: str = ""
+    provider: str | None = None
+    credentials: dict | None = None
 
 
 class PersonaCreateRequest(BaseModel):
     name: str
-    model: str
+    thinking_model: str
+    thinking_provider: str | None = None
+    thinking_credentials: dict | None = None
     channel_type: str
     channel_credentials: dict
     frontier_model: str | None = None

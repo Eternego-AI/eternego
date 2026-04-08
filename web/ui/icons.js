@@ -44,5 +44,8 @@ export const minus = (s = 20) => svg(s,
 export const upload = (s = 20) => svg(s,
     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>');
 
+export const download = (s = 20) => svg(s,
+    '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>');
+
 export const play = (s = 20) => svg(s,
     '<polygon points="6 3 20 12 6 21 6 3"/>');

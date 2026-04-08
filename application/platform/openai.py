@@ -2,6 +2,7 @@
 
 import json
 import threading
+import urllib.error
 import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -12,21 +13,28 @@ _TIMEOUT = 120
 
 def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False) -> str:
     """Send messages to the OpenAI API and return the response text."""
+    payload = {
+        "model": model,
+        "messages": messages,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+
     req = urllib.request.Request(
         f"{BASE_URL}/v1/chat/completions",
-        data=json.dumps({
-            "model": model,
-            "messages": messages,
-            "format": "json" if json_mode else "text",
-        }).encode(),
+        data=json.dumps(payload).encode(),
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         },
     )
-    with urllib.request.urlopen(req, timeout=_TIMEOUT) as response:
-        data = json.loads(response.read())
-        return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    try:
+        with urllib.request.urlopen(req, timeout=_TIMEOUT) as response:
+            data = json.loads(response.read())
+            return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise OSError(f"HTTP {e.code}: {body}") from e
 
 
 def chat_json(api_key: str, model: str, messages: list[dict]) -> dict:
@@ -62,6 +70,44 @@ async def async_chat_json(api_key: str, model: str, messages: list[dict]) -> dic
     """Async version of chat_json — runs the blocking call in a thread."""
     import asyncio
     return await asyncio.to_thread(chat_json, api_key, model, messages)
+
+
+async def async_chat_stream(api_key: str, model: str, messages: list[dict]) -> str:
+    """Stream response from OpenAI API, return full text. Cancellable at each chunk."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
+            async with http.stream("POST", f"{BASE_URL}/v1/chat/completions", json={
+                "model": model,
+                "messages": messages,
+                "stream": True,
+            }, headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            }) as response:
+                response.raise_for_status()
+                parts = []
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        event = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = event.get("choices", [])
+                    if not choices:
+                        continue
+                    content = choices[0].get("delta", {}).get("content", "")
+                    if content:
+                        parts.append(content)
+                return "".join(parts)
+    except httpx.HTTPStatusError as e:
+        raise OSError(f"HTTP {e.response.status_code}") from e
 
 
 def to_messages(data: str) -> list[dict]:

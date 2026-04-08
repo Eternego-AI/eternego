@@ -40,16 +40,14 @@ def keep_open(persona: Persona, channel: Channel) -> dict:
     raise ChannelError(f"Unsupported channel type: {channel.type}")
 
 
-async def express_thinking(persona: Persona) -> None:
-    """Signal to all active channels that the persona is working on something."""
-    from application.core import gateways
-    for channel in gateways.of(persona).all_channels():
-        if channel.type == "telegram":
-            token = (channel.credentials or {})["token"]
-            try:
-                await telegram.async_typing_action(token, channel.name)
-            except Exception:
-                pass
+async def show_typing(channel_type: str, credentials: dict) -> None:
+    """Send a typing indicator on the channel. No-op for unsupported types."""
+    logger.info("Showing typing", {"type": channel_type})
+    if channel_type == "telegram":
+        token = (credentials or {}).get("token", "")
+        bot = telegram.get_me(token)
+        await telegram.async_typing_action(token, bot["result"]["id"])
+
 
 
 async def send(channel: Channel, text: str) -> None:

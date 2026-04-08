@@ -85,6 +85,59 @@ async def test_chat_hits_correct_path():
     assert code == 0, error
 
 
+async def test_chat_extracts_system_message():
+    def isolated():
+        from application.platform import anthropic
+        def validate(r):
+            assert r["body"]["system"] == "You are helpful", r["body"]
+            assert r["body"]["messages"] == [{"role": "user", "content": "hi"}], r["body"]["messages"]
+        anthropic.assert_chat(
+            run=lambda: anthropic.chat("key", "model", [
+                {"role": "system", "content": "You are helpful"},
+                {"role": "user", "content": "hi"},
+            ]),
+            validate=validate,
+            response={"content": [{"text": "ok"}]},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_chat_joins_multiple_system_messages():
+    def isolated():
+        from application.platform import anthropic
+        def validate(r):
+            assert r["body"]["system"] == "First.\nSecond.", r["body"]
+            assert len(r["body"]["messages"]) == 1, r["body"]["messages"]
+        anthropic.assert_chat(
+            run=lambda: anthropic.chat("key", "model", [
+                {"role": "system", "content": "First."},
+                {"role": "system", "content": "Second."},
+                {"role": "user", "content": "hi"},
+            ]),
+            validate=validate,
+            response={"content": [{"text": "ok"}]},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_chat_omits_system_key_when_no_system_messages():
+    def isolated():
+        from application.platform import anthropic
+        def validate(r):
+            assert "system" not in r["body"], r["body"]
+        anthropic.assert_chat(
+            run=lambda: anthropic.chat("key", "model", [
+                {"role": "user", "content": "hi"},
+            ]),
+            validate=validate,
+            response={"content": [{"text": "ok"}]},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 def test_to_messages_parses_export():
     export = json.dumps([
         {"chat_messages": [

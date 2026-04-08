@@ -11,8 +11,10 @@ async def test_pair_claims_code():
         from http.server import HTTPServer, BaseHTTPRequestHandler
         from application.business import environment
         from application.core import agents, gateways
-        from application.core.data import Channel
+        from application.core.data import Model, Channel
         from application.platform import ollama
+        from application.platform import OS
+        OS._secret_cache_only = True
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
@@ -20,7 +22,7 @@ async def test_pair_claims_code():
         gateways._active.clear()
         subprocess.run(["git", "config", "--global", "user.email", "test@test.com"], env={**os.environ, "HOME": tmp})
         subprocess.run(["git", "config", "--global", "user.name", "Test"], env={**os.environ, "HOME": tmp})
-        from application.business import persona as spec        
+        from application.business import persona as spec
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
@@ -48,17 +50,17 @@ async def test_pair_claims_code():
         ollama.OLLAMA_BASE_URL = f"http://127.0.0.1:{port}"
 
         create_result = create_result = asyncio.run(spec.create(
-            name="PairBot", model="llama3", channel_type="telegram",
-            channel_credentials={"token": "fake"},
+            name="PairBot", thinking=Model(name="llama3"),
+            channel=Channel(type="telegram", credentials={"token": "fake"}),
         ))
-        assert create_result.success is True
+        assert create_result.success, create_result.message
         persona_id = create_result.data["persona_id"]
         find_result = asyncio.run(spec.find(persona_id))
         persona = find_result.data["persona"]
 
         code = agents.pair(persona, Channel(type="telegram", name="12345"))
         result = asyncio.run(environment.pair(code))
-        assert result.success is True
+        assert result.success, result.message
         assert "persona_id" in result.data
     
     code, error = await on_separate_process_async(isolated)
@@ -73,6 +75,8 @@ async def test_pair_fails_on_invalid_code():
         import subprocess
         from application.business import environment
         from application.core import agents, gateways
+        from application.platform import OS
+        OS._secret_cache_only = True
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp

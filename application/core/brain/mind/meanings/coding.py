@@ -29,9 +29,8 @@ class Coding(Meaning):
     def path(self) -> str | None:
         return (
             "Determine the next shell command needed to fulfill the person's coding request.\n"
-            "Use the execute_on_sub_process tool matching the person's OS "
-            "(linux.execute_on_sub_process, mac.execute_on_sub_process, or windows.execute_on_sub_process).\n"
-            'Return JSON: {"tool": "<os>.execute_on_sub_process", "command": "the shell command"}\n'
+            "Use the OS.execute_on_sub_process tool.\n"
+            'Return JSON: {"tool": "OS.execute_on_sub_process", "command": "the shell command"}\n'
             "Create a project directory with a descriptive name in the workspace for each new project. "
             "Keep related files together under that directory.\n"
             "Use only one command per step. If the task needs multiple steps, handle one at a time."

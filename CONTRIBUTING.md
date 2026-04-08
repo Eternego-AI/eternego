@@ -80,6 +80,34 @@ Always top-down:
 
 Every business function is `async`, returns `Outcome[T]`, starts with `bus.propose`, and ends with `bus.broadcast`. It catches domain exceptions from core and returns user-friendly messages. It never contains engineering logic.
 
+### Module Structure
+
+Business modules are packages where each function lives in its own file, with the filename matching the function name. The `__init__.py` uses dynamic discovery — add a file, it's automatically available.
+
+```
+business/
+├── __init__.py
+├── outcome.py
+├── environment/
+│   ├── __init__.py        ← dynamic import (importlib/pkgutil)
+│   ├── check_channel.py   ← one function: check_channel()
+│   ├── check_model.py
+│   ├── pair.py
+│   ├── prepare.py
+│   └── ready.py
+├── persona/
+│   ├── __init__.py
+│   ├── create.py
+│   ├── find.py
+│   ├── wake.py
+│   └── ...                ← 24 functions, one per file
+└── routine/
+    ├── __init__.py
+    └── trigger.py
+```
+
+All imports go at file level, never inside functions. This convention also applies to `core/models/` and `core/brain/mind/conscious/` and `core/brain/mind/subconscious/`.
+
 ### Signals
 
 The bus carries intent and results through the system:
@@ -120,6 +148,8 @@ Platform modules expose what external tools actually offer. Nothing invented. No
 
 If you can imagine copy-pasting a platform module into a completely different project and having it work — you've written it correctly.
 
+The `OS` module is a single system-agnostic module that handles all OS-specific operations: shell execution, program installation, secret storage (keyring), and hardware detection. The application never deals with OS differences directly — `OS.py` dispatches internally per platform. Secrets are cached in memory (write-through to the OS keyring) so repeated reads don't hit the keyring service.
+
 ---
 
 ## The Cognitive System
@@ -151,23 +181,26 @@ Think of it this way: signals are words, perceptions are conversations, meanings
 
 ### The Pipeline
 
-The mind runs a continuous loop:
+The mind runs a continuous loop of six stages:
 
 ```
-understand → recognize → answer → decide → conclude
+recognize → realize → understand → acknowledge → decide → conclude
 ```
 
 Each stage has a clear entry condition. A thought can only be in one stage at a time:
 
 | Stage | What Happens | Entry Condition |
 |-------|-------------|----------------|
-| **understand** | Route incoming signal to a conversation thread | Unattended user signal |
-| **recognize** | Match the thread to a meaning, creating a thought | Perception with no thought |
-| **answer** | Generate a response to the person | Thought is new, meaning has `reply` |
-| **decide** | Extract structured data, execute actions | Meaning has `path`, answer is done |
+| **recognize** | Experienced cognition: try to route, understand, and reply in one call | Unattended signals exist |
+| **realize** | Route each signal to a conversation thread (perception) | Unattended signals after recognize |
+| **understand** | Match the thread to a meaning, creating a thought | Perception with no thought |
+| **acknowledge** | Generate a response to the person | Thought is new, meaning has `reply` |
+| **decide** | Extract structured data, execute actions | Meaning has `path`, acknowledge is done |
 | **conclude** | Confirm the result to the person | Thought is processed but not wrapped up |
 
-After each stage, the clock checks if new signals arrived. If so, it restarts from `understand`. This ensures the persona is always responsive — it never gets stuck processing while you're waiting.
+After each stage, the clock checks if new signals arrived. If so, it restarts from `recognize`. This ensures the persona is always responsive — it never gets stuck processing while you're waiting.
+
+Each conscious function receives its capabilities as callbacks (`identity_fn`, `say_fn`, `express_thinking_fn`) from the Ego — it never imports channels or gateways directly.
 
 ### Meanings: Where Behavior Lives
 
@@ -192,7 +225,7 @@ class WeatherForecast(Meaning):
     def path(self):
         return (
             "Extract the weather request from what the person said.\n"
-            'Return JSON: {"tool": "linux.execute_on_sub_process", "command": "curl ..."}\n'
+            'Return JSON: {"tool": "OS.execute_on_sub_process", "command": "curl ..."}\n'
         )
 
     def summarize(self):
@@ -201,9 +234,9 @@ class WeatherForecast(Meaning):
 
 Each method serves one pipeline stage:
 
-- **`description()`** → used by `recognize` to match a conversation to this meaning
-- **`reply()`** → used by `answer` to generate the first response
-- **`clarify()`** → used by `answer` when retrying after an error
+- **`description()`** → used by `recognize` and `understand` to match a conversation to this meaning
+- **`reply()`** → used by `acknowledge` to generate the first response
+- **`clarify()`** → used by `acknowledge` when retrying after an error
 - **`path()`** → used by `decide` to extract structured data and determine actions
 - **`summarize()`** → used by `conclude` to confirm results
 - **`run()`** → executes the action (default dispatches tool calls; override for custom logic)
@@ -321,13 +354,36 @@ def test_it_does_the_thing():
 
 ### Test Structure
 
-Tests mirror the application structure:
+Tests mirror the application structure. Modules with one-function-per-file have matching test directories:
 
 ```
 tests/
-├── platform/    ← tests for platform modules
-├── core/        ← tests for core modules
-└── business/    ← tests for business specs
+├── platform/
+│   ├── anthropic_test.py
+│   ├── openai_test.py
+│   └── ...
+├── core/
+│   ├── models/
+│   │   ├── chat_test.py
+│   │   ├── chat_json_test.py
+│   │   └── ...
+│   ├── conscious/
+│   │   ├── realize_test.py
+│   │   ├── understand_test.py
+│   │   └── ...
+│   ├── subconscious/
+│   │   ├── person_identity_test.py
+│   │   └── ...
+│   └── channels_test.py
+└── business/
+    ├── environment/
+    │   ├── check_model_test.py
+    │   └── ...
+    ├── persona/
+    │   ├── create_test.py
+    │   └── ...
+    └── routine/
+        └── trigger_test.py
 ```
 
 ### Testing Platform Functions
@@ -345,7 +401,7 @@ def test_post_sends_correct_payload():
     )
 ```
 
-Available: `ollama.assert_post/get/delete/call`, `anthropic.assert_chat/chat_json/call`, `openai.assert_chat/chat_json/call`, `telegram.assert_send/get_me/typing_action/call`.
+Available: `ollama.assert_post/get/delete/call`, `anthropic.assert_chat/chat_json/call`, `openai.assert_chat/chat_json/call`, `telegram.assert_send/get_me/typing_action/call`. For OS keyring isolation, set `OS._secret_cache_only = True` in tests.
 
 ### Testing Core and Business Functions
 
@@ -363,15 +419,20 @@ def test_get_default_model():
     assert result["value"] == "llama3"
 ```
 
-Business spec tests verify the Outcome — not internals:
+Business spec tests verify the Outcome — not internals. Tests that create personas use `OS._secret_cache_only = True` to avoid hitting the real OS keyring:
 
 ```python
+from application.core.data import Model, Channel
+from application.platform import OS
+
 def test_create_succeeds():
+    OS._secret_cache_only = True
     result = with_fake_ollama(lambda: asyncio.run(spec.create(
-        name="TestBot", model="llama3", channel_type="web", channel_credentials={},
+        name="TestBot",
+        thinking=Model(name="llama3"),
+        channel=Channel(type="web", credentials={}),
     )))
-    assert result.success is True
-    assert result.data["name"] == "TestBot"
+    assert result.success, result.message
 ```
 
 ### What NOT to Test
@@ -395,6 +456,6 @@ Write tests to catch errors, not to prove obvious code works. If there's real lo
 
 **Want to add a new communication channel?** The platform layer has channel modules. Add a new one following the Telegram pattern, then wire it up in core.
 
-**Want to improve the pipeline itself?** Each stage is a separate function in `application/core/brain/mind/`. They're independently testable and modifiable.
+**Want to improve the pipeline itself?** Each stage is a separate file in `application/core/brain/mind/conscious/`. They're independently testable and modifiable.
 
-**Found a bug?** Open an issue with the stage name (understand/recognize/answer/decide/conclude) if it's pipeline-related. This helps us triage fast.
+**Found a bug?** Open an issue with the stage name (recognize/realize/understand/acknowledge/decide/conclude) if it's pipeline-related. This helps us triage fast.

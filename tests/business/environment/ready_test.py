@@ -46,7 +46,7 @@ async def test_ready_succeeds_when_engine_serving():
         ollama.OLLAMA_BASE_URL = f"http://127.0.0.1:{port}"
 
         result = asyncio.run(environment.ready())
-        assert result.success is True
+        assert result.success, result.message
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

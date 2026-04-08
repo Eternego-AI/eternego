@@ -12,13 +12,25 @@ BASE_URL = "https://api.anthropic.com"
 
 def chat(api_key: str, model: str, messages: list[dict]) -> str:
     """Send a list of messages to the Anthropic API and return the response text."""
+    system_parts = []
+    chat_messages = []
+    for m in messages:
+        if m.get("role") == "system":
+            system_parts.append(m.get("content", ""))
+        else:
+            chat_messages.append(m)
+
+    body = {
+        "model": model,
+        "messages": chat_messages,
+        "max_tokens": 4096,
+    }
+    if system_parts:
+        body["system"] = "\n".join(system_parts)
+
     req = urllib.request.Request(
         f"{BASE_URL}/v1/messages",
-        data=json.dumps({
-            "model": model,
-            "messages": messages,
-            "max_tokens": 4096,
-        }).encode(),
+        data=json.dumps(body).encode(),
         headers={
             "Content-Type": "application/json",
             "x-api-key": api_key,
@@ -54,6 +66,53 @@ async def async_chat_json(api_key: str, model: str, messages: list[dict]) -> dic
     """Async version of chat_json — runs the blocking call in a thread."""
     import asyncio
     return await asyncio.to_thread(chat_json, api_key, model, messages)
+
+
+async def async_chat_stream(api_key: str, model: str, messages: list[dict]) -> str:
+    """Stream response from Anthropic API, return full text. Cancellable at each chunk."""
+    import httpx
+
+    system_parts = []
+    chat_messages = []
+    for m in messages:
+        if m.get("role") == "system":
+            system_parts.append(m.get("content", ""))
+        else:
+            chat_messages.append(m)
+
+    body = {
+        "model": model,
+        "messages": chat_messages,
+        "max_tokens": 4096,
+        "stream": True,
+    }
+    if system_parts:
+        body["system"] = "\n".join(system_parts)
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
+            async with http.stream("POST", f"{BASE_URL}/v1/messages", json=body, headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            }) as response:
+                response.raise_for_status()
+                parts = []
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line.startswith("data: "):
+                        continue
+                    try:
+                        event = json.loads(line[6:].strip())
+                    except json.JSONDecodeError:
+                        continue
+                    if event.get("type") == "content_block_delta":
+                        parts.append(event.get("delta", {}).get("text", ""))
+                    if event.get("type") == "message_stop":
+                        break
+                return "".join(parts)
+    except httpx.HTTPStatusError as e:
+        raise OSError(f"HTTP {e.response.status_code}") from e
 
 
 def to_messages(data: str) -> list[dict]:

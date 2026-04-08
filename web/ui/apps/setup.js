@@ -39,10 +39,14 @@ export default class SetupApp extends App {
     async _create(data) {
         const body = {
             name: data.name,
-            model: data.model,
+            thinking_model: data.thinkingModel,
             channel_type: data.botToken ? 'telegram' : 'web',
             channel_credentials: data.botToken ? { token: data.botToken } : {},
         };
+        if (data.thinkingProvider) {
+            body.thinking_provider = data.thinkingProvider;
+            body.thinking_credentials = { api_key: data.thinkingKey };
+        }
         if (data.frontierModel) {
             body.frontier_model = data.frontierModel;
             body.frontier_provider = 'anthropic';
