@@ -16,8 +16,5 @@ from . import OS
 from . import persistent_memory
 from . import processes
 from . import reflections
-from . import linux
-from . import mac
 from . import telegram
 from . import tool
-from . import windows

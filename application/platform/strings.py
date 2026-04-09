@@ -11,6 +11,12 @@ def to_json(text: str) -> dict:
         return {}
 
 
+def strip_tag(text: str, tag: str) -> str:
+    """Remove all occurrences of <tag>...</tag> from text."""
+    import re
+    return re.sub(rf"<{tag}>.*?</{tag}>", "", text, flags=re.DOTALL).strip()
+
+
 def extract_json(text: str) -> dict:
     """Extract and parse the first JSON object from text, handling code fences and surrounding prose."""
     start = text.find("{")

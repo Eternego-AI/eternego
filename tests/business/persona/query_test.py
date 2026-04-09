@@ -16,7 +16,7 @@ async def test_query_returns_response():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", model=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -42,7 +42,8 @@ async def test_query_returns_response():
         ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
         agents._personas[p.id] = ego
         result = {}
-        async def run():
+        async def run(url):
+            p.thinking = Model(url=url, name="anything")
             result["value"] = await spec.query(p, {"role": "user", "content": "hi"})
         ollama.assert_call(
             run=run,

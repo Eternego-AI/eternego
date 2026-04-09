@@ -5,7 +5,6 @@ async def test_shape_composes_full_character_prompt():
     def isolated():
         import os
         import tempfile
-        from pathlib import Path
         from application.core.brain.character import shape
         from application.core.data import Model, Persona
         from application.core import paths
@@ -15,7 +14,7 @@ async def test_shape_composes_full_character_prompt():
         persona = Persona(
             id="test-char",
             name="Primus",
-            model=Model(name="llama3"),
+            thinking=Model(name="llama3", url="not required"),
             birthday="2026-01-15",
         )
 
@@ -44,7 +43,6 @@ async def test_shape_omits_empty_identity_sections():
     def isolated():
         import os
         import tempfile
-        from pathlib import Path
         from application.core.brain.character import shape
         from application.core.data import Model, Persona
         from application.core import paths
@@ -54,7 +52,7 @@ async def test_shape_omits_empty_identity_sections():
         persona = Persona(
             id="test-empty",
             name="Primus",
-            model=Model(name="llama3"),
+            thinking=Model(name="llama3", url="not required"),
         )
 
         home = paths.home(persona.id)

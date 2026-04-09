@@ -1,5 +1,5 @@
 import Mode from './mode.js';
-import { moon, square, refreshCw, trash2, upload, x, play } from '../icons.js';
+import { moon, square, refreshCw, trash2, upload, x, play, download } from '../icons.js';
 
 /**
  * Inner World — the window into a persona's consciousness.
@@ -307,12 +307,21 @@ class InnerWorld extends Mode {
 
         for (const def of [
             { id: 'start', icon: play(13), label: 'Start' },
+            { id: 'export', icon: download(13), label: 'Export' },
             { id: 'delete', icon: trash2(13), label: 'Delete', danger: true },
         ]) {
             const btn = document.createElement('button');
             btn.className = 'iw-action' + (def.danger ? ' iw-danger' : '');
             btn.innerHTML = `<span class="iw-action-icon">${def.icon}</span>${def.label}`;
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
+                if (def.id === 'export') {
+                    btn.disabled = true;
+                    btn.textContent = 'Exporting...';
+                    await this._props.api.exportPersona(this._personaId);
+                    btn.disabled = false;
+                    btn.innerHTML = `<span class="iw-action-icon">${def.icon}</span>${def.label}`;
+                    return;
+                }
                 const msg = {
                     start: 'Start this persona?',
                     delete: 'Permanently delete this persona and all its data?',

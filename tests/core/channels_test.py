@@ -13,7 +13,7 @@ async def test_verify_sets_channel_name_and_verified_at():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.persona_identity(p.id), "{}")
 
@@ -102,7 +102,7 @@ async def test_send_all_sends_to_all_active_channels():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         received = []
 
         class FakeBus:
@@ -122,61 +122,6 @@ async def test_send_all_sends_to_all_active_channels():
     assert code == 0, error
 
 
-# ── express_thinking ─────────────────────────────────────────────────────────
-
-async def test_express_thinking_sends_typing_to_telegram_channels():
-    def isolated():
-        import os
-        import asyncio
-        import tempfile
-        from application.core import channels, gateways
-        from application.core.data import Channel, Model, Persona
-        from application.platform import telegram
-
-        tmp = tempfile.mkdtemp()
-        os.environ["ETERNEGO_HOME"] = tmp
-        gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
-        ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
-        gateways.of(p).add(ch, {"type": "manual"})
-
-        def assert_equal(actual, expected):
-            assert actual == expected, f"Expected {expected}, got {actual}"
-
-        telegram.assert_typing_action(
-            run=lambda: asyncio.run(channels.express_thinking(p)),
-            validate=lambda r: assert_equal(r["body"]["action"], "typing"),
-        )
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
-async def test_express_thinking_skips_non_telegram_channels():
-    def isolated():
-        import os
-        import asyncio
-        import tempfile
-        from application.core import channels, gateways
-        from application.core.data import Channel, Model, Persona
-
-        tmp = tempfile.mkdtemp()
-        os.environ["ETERNEGO_HOME"] = tmp
-        gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
-
-        class FakeBus:
-            async def put(self, text): pass
-
-        ch = Channel(type="web", name="w1", bus=FakeBus())
-        gateways.of(p).add(ch, {"type": "manual"})
-
-        asyncio.run(channels.express_thinking(p))
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
 # ── keep_open ────────────────────────────────────────────────────────────────
 
 async def test_keep_open_returns_polling_strategy_for_telegram():
@@ -189,7 +134,7 @@ async def test_keep_open_returns_polling_strategy_for_telegram():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
 
         strategy = channels.keep_open(p, ch)
@@ -212,7 +157,7 @@ async def test_keep_open_connection_returns_messages_from_poll():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
 
         strategy = channels.keep_open(p, ch)
@@ -248,7 +193,7 @@ async def test_keep_open_connection_filters_group_without_mention():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
 
         strategy = channels.keep_open(p, ch)
@@ -280,7 +225,7 @@ async def test_keep_open_raises_on_unsupported_channel():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         try:
             channels.keep_open(p, Channel(type="unknown", name="x"))

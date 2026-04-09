@@ -15,7 +15,7 @@ async def test_trigger_fires_matching_spec():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-routine", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-routine", name="Primus", thinking=Model(name="llama3", url="not required"))
         home = paths.home(p.id)
         home.mkdir(parents=True, exist_ok=True)
         for f in ["person.md", "persona-trait.md", "wishes.md", "struggles.md", "traits.md"]:
@@ -48,7 +48,7 @@ async def test_trigger_fires_matching_spec():
         })
 
         result = asyncio.run(routine.trigger(p))
-        assert result.success is True
+        assert result.success, result.message
         assert "oversee" in result.message
     
     code, error = await on_separate_process_async(isolated)
@@ -65,13 +65,13 @@ async def test_trigger_fires_nothing_when_no_match():
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
         from application.core.brain.data import Meaning
-        from application.platform import datetimes, filesystem
+        from application.platform import filesystem
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-routine", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-routine", name="Primus", thinking=Model(name="llama3", url="not required"))
         home = paths.home(p.id)
         home.mkdir(parents=True, exist_ok=True)
         for f in ["person.md", "persona-trait.md", "wishes.md", "struggles.md", "traits.md"]:
@@ -100,7 +100,7 @@ async def test_trigger_fires_nothing_when_no_match():
         })
 
         result = asyncio.run(routine.trigger(p))
-        assert result.success is True
+        assert result.success, result.message
         assert "none" in result.message
     
     code, error = await on_separate_process_async(isolated)
@@ -117,13 +117,12 @@ async def test_trigger_succeeds_when_no_routines_file():
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
         from application.core.brain.data import Meaning
-        from application.platform import datetimes, filesystem
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-routine", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-routine", name="Primus", thinking=Model(name="llama3", url="not required"))
         home = paths.home(p.id)
         home.mkdir(parents=True, exist_ok=True)
         for f in ["person.md", "persona-trait.md", "wishes.md", "struggles.md", "traits.md"]:
@@ -146,7 +145,7 @@ async def test_trigger_succeeds_when_no_routines_file():
         agents._personas[p.id] = ego
 
         result = asyncio.run(routine.trigger(p))
-        assert result.success is True
+        assert result.success, result.message
         assert "none" in result.message
     
     code, error = await on_separate_process_async(isolated)
@@ -169,7 +168,7 @@ async def test_trigger_skips_unknown_spec():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-routine", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-routine", name="Primus", thinking=Model(name="llama3", url="not required"))
         home = paths.home(p.id)
         home.mkdir(parents=True, exist_ok=True)
         for f in ["person.md", "persona-trait.md", "wishes.md", "struggles.md", "traits.md"]:
@@ -199,7 +198,7 @@ async def test_trigger_skips_unknown_spec():
         })
 
         result = asyncio.run(routine.trigger(p))
-        assert result.success is True
+        assert result.success, result.message
         assert "none" in result.message
 
     code, error = await on_separate_process_async(isolated)

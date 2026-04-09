@@ -7,7 +7,7 @@ async def test_add_and_all_channels():
         from application.core.data import Channel, Persona, Model
 
         _active.clear()
-        p = Persona(id="test-gw", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-gw", name="Primus", thinking=Model(name="llama3", url="not required"))
         conn = of(p)
         ch = Channel(type="telegram", name="123")
         conn.add(ch, {"type": "manual"})
@@ -24,7 +24,7 @@ async def test_has_channel():
         from application.core.data import Channel, Persona, Model
 
         _active.clear()
-        p = Persona(id="test-gw", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-gw", name="Primus", thinking=Model(name="llama3", url="not required"))
         conn = of(p)
         ch = Channel(type="telegram", name="123")
         assert not conn.has_channel(ch)
@@ -41,7 +41,7 @@ async def test_has_channel_matches_by_type_and_name():
         from application.core.data import Channel, Persona, Model
 
         _active.clear()
-        p = Persona(id="test-gw", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-gw", name="Primus", thinking=Model(name="llama3", url="not required"))
         conn = of(p)
         conn.add(Channel(type="telegram", name="123"), {"type": "manual"})
         assert conn.has_channel(Channel(type="telegram", name="123"))
@@ -58,7 +58,7 @@ async def test_remove_channel():
         from application.core.data import Channel, Persona, Model
 
         _active.clear()
-        p = Persona(id="test-gw", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-gw", name="Primus", thinking=Model(name="llama3", url="not required"))
         conn = of(p)
         ch = Channel(type="telegram", name="123")
         conn.add(ch, {"type": "manual"})
@@ -75,7 +75,7 @@ async def test_clear_removes_all():
         from application.core.data import Channel, Persona, Model
 
         _active.clear()
-        p = Persona(id="test-gw", name="Primus", model=Model(name="llama3"))
+        p = Persona(id="test-gw", name="Primus", thinking=Model(name="llama3", url="not required"))
         conn = of(p)
         conn.add(Channel(type="telegram", name="1"), {"type": "manual"})
         conn.add(Channel(type="telegram", name="2"), {"type": "manual"})
@@ -92,8 +92,8 @@ async def test_connections_are_per_persona():
         from application.core.data import Channel, Persona, Model
 
         _active.clear()
-        p1 = Persona(id="p1", name="A", model=Model(name="llama3"))
-        p2 = Persona(id="p2", name="B", model=Model(name="llama3"))
+        p1 = Persona(id="p1", name="A", thinking=Model(name="llama3", url="not required"))
+        p2 = Persona(id="p2", name="B", thinking=Model(name="llama3", url="not required"))
         of(p1).add(Channel(type="telegram", name="1"), {"type": "manual"})
         of(p2).add(Channel(type="telegram", name="2"), {"type": "manual"})
         assert len(of(p1).all_channels()) == 1
@@ -128,7 +128,7 @@ async def test_polling_dispatches_messages_to_on_message():
             received.append(m)
 
         async def run():
-            p = Persona(id="test-gw", name="Primus", model=Model(name="llama3"))
+            p = Persona(id="test-gw", name="Primus", thinking=Model(name="llama3", url="not required"))
             ch = Channel(type="telegram", name="123")
             of(p).add(ch, {"type": "polling", "connection": connection, "on_message": on_message})
             await asyncio.sleep(0.2)
@@ -158,7 +158,7 @@ async def test_polling_stops_when_channel_removed():
             return []
 
         async def run():
-            p = Persona(id="test-gw", name="Primus", model=Model(name="llama3"))
+            p = Persona(id="test-gw", name="Primus", thinking=Model(name="llama3", url="not required"))
             ch = Channel(type="telegram", name="123")
             of(p).add(ch, {"type": "polling", "connection": connection, "on_message": lambda m: None})
             await asyncio.sleep(0.15)
@@ -197,7 +197,7 @@ async def test_polling_dispatches_async_on_message():
             received.append(m)
 
         async def run():
-            p = Persona(id="test-gw", name="Primus", model=Model(name="llama3"))
+            p = Persona(id="test-gw", name="Primus", thinking=Model(name="llama3", url="not required"))
             ch = Channel(type="telegram", name="123")
             of(p).add(ch, {"type": "polling", "connection": connection, "on_message": on_message})
             await asyncio.sleep(0.3)
@@ -229,7 +229,7 @@ async def test_polling_handles_connection_errors():
             return []
 
         async def run():
-            p = Persona(id="test-gw", name="Primus", model=Model(name="llama3"))
+            p = Persona(id="test-gw", name="Primus", thinking=Model(name="llama3", url="not required"))
             ch = Channel(type="telegram", name="123")
             of(p).add(ch, {"type": "polling", "connection": connection, "on_message": lambda m: None})
             await asyncio.sleep(0.2)

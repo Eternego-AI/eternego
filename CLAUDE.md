@@ -30,6 +30,8 @@ Business imports core. Core imports platform. Never upward. The entry point (`in
 - Catches domain exceptions, returns user-friendly messages
 - Never contains engineering logic — that belongs in core
 - Docstring comes from the README spec description
+- One function per file (filename matches function name), `__init__.py` uses dynamic discovery
+- All imports at file level, never inside functions
 
 ### Core layer conventions
 
@@ -44,6 +46,8 @@ Business imports core. Core imports platform. Never upward. The entry point (`in
 - Exposes only what the external tool provides
 - No project-specific logic
 - Portable across projects
+- `OS.py` is the single system-agnostic module for all OS operations (no separate linux/mac/windows modules)
+- Conscious functions receive capabilities as callbacks from Ego, never import channels/gateways directly
 
 ## Code Style
 

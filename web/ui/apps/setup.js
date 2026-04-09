@@ -15,9 +15,9 @@ export default class SetupApp extends App {
 
         this._setup = document.createElement('setup-widget');
         this._setup.init({
+            api: this._props.api,
             onCreate: (data) => this._create(data),
             onMigrate: (data) => this._migrate(data),
-            onPrepare: (model) => this._props.api.prepareEnvironment(model),
             onPair: (code) => this._props.api.pairChannel(code),
             onDone: (personaId) => {
                 if (this._props.onDone) this._props.onDone(personaId);
@@ -39,10 +39,15 @@ export default class SetupApp extends App {
     async _create(data) {
         const body = {
             name: data.name,
-            model: data.model,
+            thinking_model: data.thinkingModel,
             channel_type: data.botToken ? 'telegram' : 'web',
             channel_credentials: data.botToken ? { token: data.botToken } : {},
         };
+        if (data.thinkingUrl) body.thinking_url = data.thinkingUrl;
+        if (data.thinkingProvider) {
+            body.thinking_provider = data.thinkingProvider;
+            body.thinking_credentials = { api_key: data.thinkingKey };
+        }
         if (data.frontierModel) {
             body.frontier_model = data.frontierModel;
             body.frontier_provider = 'anthropic';
@@ -56,6 +61,9 @@ export default class SetupApp extends App {
         form.append('diary', data.file);
         form.append('phrase', data.phrase);
         form.append('model', data.model);
+        if (data.provider) form.append('provider', data.provider);
+        if (data.key) form.append('credentials', data.key);
+        if (data.url) form.append('url', data.url);
         return await this._props.api.migratePersona(form);
     }
 }

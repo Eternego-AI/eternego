@@ -7,7 +7,7 @@ from application.platform.objects import Data, safe, json, are_equal, sensitive,
 @dataclass
 class User(Data):
     name: str
-    password: str = sensitive()
+    password: str|None = sensitive()
     bus: object = hidden()
 
 

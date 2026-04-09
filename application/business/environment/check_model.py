@@ -1,0 +1,45 @@
+"""Environment — verifying a model is available and responding."""
+
+from application.business.outcome import Outcome
+from application.core import bus, local_inference_engine, models
+from application.core.data import Model
+from application.core.exceptions import EngineConnectionError, ModelError
+
+
+async def check_model(model: Model) -> Outcome[dict]:
+    """Verify the model is available and responding."""
+    await bus.propose("Checking model", {"model": model})
+
+    try:
+        if models.is_local(model):
+            if await local_inference_engine.check(model.url, model.name):
+                await bus.broadcast("Model is ready", {"model": model.name})
+                return Outcome(
+                    success=True, message="Model is ready", data={"model": model}
+                )
+
+            await bus.broadcast("Model check failed", {"model": model.name})
+            return Outcome(success=False, message="Model is not available")
+
+        await models.chat(model, [{"role": "user", "content": "hi"}])
+        await bus.broadcast("Model is ready", {"model": model.name, "provider": model.provider})
+        return Outcome(
+            success=True, message="Model is ready", data={"model": model}
+        )
+
+    except ModelError as e:
+        await bus.broadcast(
+            "Model check failed",
+            {"reason": "model", "model": model.name, "error": str(e)},
+        )
+        return Outcome(success=False, message=str(e))
+
+    except EngineConnectionError as e:
+        await bus.broadcast(
+            "Model check failed",
+            {"reason": "connection", "model": model.name, "error": str(e)},
+        )
+        return Outcome(
+            success=False,
+            message="Could not connect to the local inference engine. Please make sure it is running.",
+        )
