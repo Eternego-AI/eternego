@@ -15,6 +15,7 @@ class SetupWidget extends Widget {
             transition: border-color 0.3s var(--ease);
         }
         setup-widget .sw-input::placeholder { color: var(--text-faint); }
+        setup-widget .sw-url { font-size: 11px; color: var(--text-dim); padding: 8px 14px; }
         setup-widget .sw-input:focus { border-color: var(--accent-border); }
         setup-widget .sw-nav { display: flex; justify-content: space-between; align-items: center; padding-top: 20px; }
         setup-widget .sw-btn {
@@ -57,10 +58,15 @@ class SetupWidget extends Widget {
         setup-widget .sw-file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
     `;
 
-    // init({ onCreate(data), onMigrate(data), onPrepare(model), onPair(code), onCancel, signals })
+    // init({ onCreate(data), onMigrate(data), onPrepare(model), onPair(code), onCancel, signals, api })
     build() {
         this.constructor._injectStyles();
         this._data = {};
+        this._providerDefaults = { local: { url: 'http://localhost:11434' }, anthropic: { url: 'https://api.anthropic.com' }, openai: { url: 'https://api.openai.com' } };
+
+        if (this._props.api?.fetchProviderConfig) {
+            this._props.api.fetchProviderConfig().then(cfg => { this._providerDefaults = cfg; });
+        }
 
         const card = document.createElement('card-layout');
         card.init({ title: 'Get started' });
@@ -96,8 +102,8 @@ class SetupWidget extends Widget {
         `;
         s.querySelectorAll('.sw-choice-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                if (btn.dataset.action === 'create') { this._data = { name: '', thinkingModel: '', thinkingProvider: null, thinkingKey: '', botToken: '', frontierModel: '', frontierKey: '' }; this._renderName(); this._step.go('name'); }
-                else { this._data = { file: null, phrase: '', model: '' }; this._renderMigrateFile(); this._step.go('migrate-file'); }
+                if (btn.dataset.action === 'create') { this._data = { name: '', thinkingModel: '', thinkingProvider: null, thinkingKey: '', thinkingUrl: '', botToken: '', frontierModel: '', frontierKey: '' }; this._renderName(); this._step.go('name'); }
+                else { this._data = { file: null, phrase: '', model: '', provider: null, key: '', url: '' }; this._renderMigrateFile(); this._step.go('migrate-file'); }
             });
         });
         if (this._props.onCancel) {
@@ -138,7 +144,7 @@ class SetupWidget extends Widget {
             <div class="sw-choice">
                 <div class="sw-choice-btn${!provider ? ' selected' : ''}" data-provider="">Local (Ollama)</div>
                 <div class="sw-choice-btn${provider === 'anthropic' ? ' selected' : ''}" data-provider="anthropic">Claude</div>
-                <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">ChatGPT</div>
+                <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">OpenAI-compatible</div>
             </div>
             <div class="sw-model-fields"></div>
             <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><button class="sw-btn primary">Next</button></div>
@@ -146,21 +152,26 @@ class SetupWidget extends Widget {
 
         const fieldsEl = s.querySelector('.sw-model-fields');
         const renderFields = (prov) => {
+            const key = prov || 'local';
+            const urlVal = this._data.thinkingUrl || (this._providerDefaults[key] || {}).url || '';
             if (!prov) {
                 fieldsEl.innerHTML = `
                     <p class="sw-hint">Enter the Ollama model name (e.g. <code>qwen2.5:7b</code>)</p>
-                    <input class="sw-input" type="text" placeholder="qwen2.5:7b" value="${this._esc(this._data.thinkingModel)}">
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="qwen2.5:7b" value="${this._esc(this._data.thinkingModel)}" style="margin-top:12px">
                 `;
             } else if (prov === 'anthropic') {
                 fieldsEl.innerHTML = `
                     <p class="sw-hint">Enter the Claude model name and your Anthropic API key.</p>
-                    <input class="sw-input" type="text" placeholder="claude-sonnet-4-20250514" value="${this._esc(this._data.thinkingModel)}">
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="claude-sonnet-4-20250514" value="${this._esc(this._data.thinkingModel)}" style="margin-top:12px">
                     <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.thinkingKey)}" style="margin-top:12px">
                 `;
             } else {
                 fieldsEl.innerHTML = `
-                    <p class="sw-hint">Enter the OpenAI model name and your API key.</p>
-                    <input class="sw-input" type="text" placeholder="gpt-4o" value="${this._esc(this._data.thinkingModel)}">
+                    <p class="sw-hint">Works with ChatGPT, NVIDIA NIM, Together AI, Groq, or any OpenAI-compatible API.</p>
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="gpt-4o" value="${this._esc(this._data.thinkingModel)}" style="margin-top:12px">
                     <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.thinkingKey)}" style="margin-top:12px">
                 `;
             }
@@ -174,18 +185,19 @@ class SetupWidget extends Widget {
                 btn.classList.add('selected');
                 const prov = btn.dataset.provider || null;
                 this._data.thinkingProvider = prov;
-                if (prov !== provider) { this._data.thinkingModel = ''; this._data.thinkingKey = ''; }
+                if (prov !== provider) { this._data.thinkingModel = ''; this._data.thinkingKey = ''; this._data.thinkingUrl = ''; }
                 renderFields(prov);
             });
         });
 
         const go = () => {
             const inputs = fieldsEl.querySelectorAll('input');
-            const model = inputs[0]?.value.trim();
+            this._data.thinkingUrl = inputs[0]?.value.trim();
+            const model = inputs[1]?.value.trim();
             if (!model) return;
             this._data.thinkingModel = model;
             if (this._data.thinkingProvider) {
-                const key = inputs[1]?.value.trim();
+                const key = inputs[2]?.value.trim();
                 if (!key) return;
                 this._data.thinkingKey = key;
             } else {
@@ -342,15 +354,68 @@ class SetupWidget extends Widget {
 
     _renderMigrateModel() {
         const s = this._panels['migrate-model'];
+        const provider = this._data.provider;
         s.innerHTML = `
-            <label class="sw-label">Base model</label>
-            <p class="sw-hint">Enter the Ollama model name (e.g. <code>qwen2.5:7b</code>)</p>
-            <input class="sw-input" type="text" placeholder="qwen2.5:7b" value="${this._esc(this._data.model)}">
+            <label class="sw-label">Thinking model</label>
+            <div class="sw-choice">
+                <div class="sw-choice-btn${!provider ? ' selected' : ''}" data-provider="">Local (Ollama)</div>
+                <div class="sw-choice-btn${provider === 'anthropic' ? ' selected' : ''}" data-provider="anthropic">Claude</div>
+                <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">OpenAI-compatible</div>
+            </div>
+            <div class="sw-migrate-fields"></div>
             <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><button class="sw-btn primary">Migrate</button></div>
         `;
-        const input = s.querySelector('input');
-        const go = () => { const v = input.value.trim(); if (!v) return; this._data.model = v; this._submitMigrate(); };
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+
+        const fieldsEl = s.querySelector('.sw-migrate-fields');
+        const renderFields = (prov) => {
+            const key = prov || 'local';
+            const urlVal = this._data.url || (this._providerDefaults[key] || {}).url || '';
+            if (!prov) {
+                fieldsEl.innerHTML = `
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="qwen2.5:7b" value="${this._esc(this._data.model)}" style="margin-top:12px">
+                `;
+            } else if (prov === 'anthropic') {
+                fieldsEl.innerHTML = `
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="claude-sonnet-4-20250514" value="${this._esc(this._data.model)}" style="margin-top:12px">
+                    <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.key)}" style="margin-top:12px">
+                `;
+            } else {
+                fieldsEl.innerHTML = `
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="gpt-4o" value="${this._esc(this._data.model)}" style="margin-top:12px">
+                    <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.key)}" style="margin-top:12px">
+                `;
+            }
+        };
+
+        renderFields(provider);
+
+        s.querySelectorAll('.sw-choice-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                s.querySelectorAll('.sw-choice-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                const prov = btn.dataset.provider || null;
+                this._data.provider = prov;
+                if (prov !== provider) { this._data.model = ''; this._data.key = ''; this._data.url = ''; }
+                renderFields(prov);
+            });
+        });
+
+        const go = () => {
+            const inputs = fieldsEl.querySelectorAll('input');
+            this._data.url = inputs[0]?.value.trim();
+            const model = inputs[1]?.value.trim();
+            if (!model) return;
+            this._data.model = model;
+            if (this._data.provider) {
+                const key = inputs[2]?.value.trim();
+                if (!key) return;
+                this._data.key = key;
+            }
+            this._submitMigrate();
+        };
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }

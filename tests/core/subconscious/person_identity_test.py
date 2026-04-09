@@ -12,11 +12,15 @@ async def test_writes_model_response_to_file():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3", url="not required"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
+        async def run(url):
+            p.thinking.url = url
+            await subconscious.person_identity(p, "Person: I live in Amsterdam")
+
         ollama.assert_call(
-            run=lambda: subconscious.person_identity(p, "Person: I live in Amsterdam"),
+            run=run,
             response={"message": {"content": "The person lives in Amsterdam."}},
         )
 
@@ -38,16 +42,22 @@ async def test_includes_existing_facts_in_prompt():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3", url="TBD"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.person_identity(p.id), "The person is a developer.")
 
-        def assert_in(substring, text):
+        async def run(url):
+            p.thinking.url = url
+            await subconscious.person_identity(p, "Person: I moved to Paris")
+
+        def validate(r):
+            substring = "The person is a developer."
+            text = r["body"]["messages"][0]["content"]
             assert substring in text, f"Expected '{substring}' in '{text[:200]}...'"
 
         ollama.assert_call(
-            run=lambda: subconscious.person_identity(p, "Person: I moved to Paris"),
-            validate=lambda r: assert_in("The person is a developer.", r["body"]["messages"][0]["content"]),
+            run=run,
+            validate=validate,
             response={"message": {"content": "The person is a developer.\nThe person lives in Paris."}},
         )
 
@@ -66,21 +76,25 @@ async def test_sends_conversation_as_user_message():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3", url="not required"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
-        def assert_in(substring, text):
+        async def run(url):
+            p.thinking.url = url
+            await subconscious.person_identity(p, "Person: My name is Morteza")
+
+        def validate(r):
+            actual = r["body"]["messages"][1]["role"]
+            expected = "user"
+            assert actual == expected, f"Expected {expected}, got {actual}"
+            substring = "Morteza"
+            text = r["body"]["messages"][1]["content"]
             assert substring in text, f"Expected '{substring}' in '{text[:200]}...'"
 
-        def assert_equal(actual, expected):
-            assert actual == expected, f"Expected {expected}, got {actual}"
 
         ollama.assert_call(
-            run=lambda: subconscious.person_identity(p, "Person: My name is Morteza"),
-            validate=lambda r: (
-                assert_equal(r["body"]["messages"][1]["role"], "user"),
-                assert_in("Morteza", r["body"]["messages"][1]["content"]),
-            ),
+            run=run,
+            validate=validate,
             response={"message": {"content": "The person's name is Morteza."}},
         )
 

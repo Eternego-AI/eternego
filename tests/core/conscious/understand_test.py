@@ -7,7 +7,6 @@ async def test_does_nothing_when_no_perceptions():
         import os
         import asyncio
         import tempfile
-        from datetime import datetime
         from application.core.brain.mind import conscious
         from application.core.brain.mind.memory import Memory
         from application.core.brain.data import Meaning
@@ -15,7 +14,7 @@ async def test_does_nothing_when_no_perceptions():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -51,7 +50,7 @@ async def test_picks_meaning_by_row():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -82,8 +81,12 @@ async def test_picks_meaning_by_row():
         memory.trigger(s)
         memory.realize(s, "greeting")
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.understand(memory, p, meanings, lambda: "You are Primus.", noop_escalate, noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.understand(memory, p, meanings, lambda: "You are Primus.", noop_escalate, noop_thinking),
+            run=run,
             response=stream_json({"meaning_row": 1}),
         )
 
@@ -109,7 +112,7 @@ async def test_falls_to_escalation_on_invalid_row():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -140,8 +143,12 @@ async def test_falls_to_escalation_on_invalid_row():
         memory.trigger(s)
         memory.realize(s, "unknown topic")
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.understand(memory, p, meanings, lambda: "You are Primus.", noop_escalate, noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.understand(memory, p, meanings, lambda: "You are Primus.", noop_escalate, noop_thinking),
+            run=run,
             response=stream_json({"meaning_row": 99}),
         )
 
@@ -167,7 +174,7 @@ async def test_escalation_with_no_code_uses_escalation_meaning():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -198,8 +205,12 @@ async def test_escalation_with_no_code_uses_escalation_meaning():
         memory.trigger(s)
         memory.realize(s, "unknown")
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.understand(memory, p, meanings, lambda: "You are Primus.", noop_escalate, noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.understand(memory, p, meanings, lambda: "You are Primus.", noop_escalate, noop_thinking),
+            run=run,
             response=stream_json({"meaning_row": 2}),
         )
 

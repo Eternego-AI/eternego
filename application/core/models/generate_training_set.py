@@ -5,6 +5,7 @@ import json
 from application.core.data import Model
 from application.core.exceptions import ModelError, EngineConnectionError
 from application.platform import logger, ollama, anthropic, openai, strings
+import config.inference as cfg
 
 from .is_local import is_local
 
@@ -60,7 +61,7 @@ async def generate_training_set(model: Model, dna: str) -> list[dict]:
     if is_local(model):
         try:
             body = {"model": model.name, "prompt": prompt, "stream": False, "format": "json"}
-            response = await ollama.post("/api/generate", body)
+            response = await ollama.post(model.url, "/api/generate", body)
             response_text = response["response"].strip()
         except ollama.OllamaError as e:
             raise ModelError(f"Model returned an error: {e}") from e
@@ -72,9 +73,9 @@ async def generate_training_set(model: Model, dna: str) -> list[dict]:
         api_key = (model.credentials or {}).get("api_key", "")
         try:
             if model.provider == "anthropic":
-                response_text = await anthropic.async_chat(api_key, model.name, [{"role": "user", "content": prompt}])
+                response_text = await anthropic.async_chat(model.url, api_key, model.name, [{"role": "user", "content": prompt}])
             else:
-                response_text = await openai.async_chat(api_key, model.name, [{"role": "user", "content": prompt}])
+                response_text = await openai.async_chat(model.url, api_key, model.name, [{"role": "user", "content": prompt}])
         except OSError as e:
             raise ModelError(f"Model returned an error: {e}") from e
 

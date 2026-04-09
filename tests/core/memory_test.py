@@ -14,7 +14,7 @@ async def test_trigger_adds_signal():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -45,7 +45,7 @@ async def test_needs_realizing_returns_unattached_heard_signals():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -79,7 +79,7 @@ async def test_realize_creates_perception():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -112,7 +112,7 @@ async def test_realize_appends_to_existing_perception():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -147,7 +147,7 @@ async def test_realize_clears_signal_from_needs_realizing():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -179,7 +179,7 @@ async def test_realize_removes_existing_thought_on_heard_signal():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -218,7 +218,7 @@ async def test_understand_creates_thought():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -252,7 +252,7 @@ async def test_needs_understanding_returns_perceptions_without_thoughts():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -291,7 +291,7 @@ async def test_needs_acknowledgement_when_last_signal_is_heard():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -323,7 +323,7 @@ async def test_needs_acknowledgement_empty_when_no_reply():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class NoReplyMeaning(Meaning):
             name = "NoReply"
@@ -355,7 +355,7 @@ async def test_needs_decision_when_answered_and_has_path():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -388,7 +388,7 @@ async def test_needs_decision_when_no_reply_and_has_path():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class NoReplyMeaning(Meaning):
             name = "NoReply"
@@ -420,7 +420,7 @@ async def test_needs_conclusion_when_recap_present():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -455,7 +455,7 @@ async def test_answer_appends_signal_to_thread():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -490,7 +490,7 @@ async def test_inform_appends_tool_result_to_thread():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -527,7 +527,7 @@ async def test_forget_removes_thought_and_exclusive_signals():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -570,7 +570,7 @@ async def test_most_important_thought_selects_highest_priority():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -607,7 +607,7 @@ async def test_most_important_thought_returns_none_for_empty():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -636,7 +636,7 @@ async def test_settled_when_nothing_to_process():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -664,7 +664,7 @@ async def test_not_settled_when_signals_need_realizing():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -695,7 +695,7 @@ async def test_changed_detects_new_signals():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -726,7 +726,7 @@ async def test_changed_resets_after_signals_realized():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -760,7 +760,7 @@ async def test_persist_and_remember_roundtrip():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -808,7 +808,7 @@ async def test_prompts_builds_messages_from_thread():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -845,7 +845,7 @@ async def test_prompts_collapses_before_last_summary():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -887,7 +887,7 @@ async def test_accept_reality_clears_open_thoughts_keeps_concluded():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -935,7 +935,7 @@ async def test_accept_reality_routes_signals_to_new_perceptions():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -973,7 +973,7 @@ async def test_accept_reality_creates_thoughts_with_meanings():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -1016,7 +1016,7 @@ async def test_perception_by_impression_returns_matching():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -1049,7 +1049,7 @@ async def test_perception_by_impression_returns_none_for_unknown():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"

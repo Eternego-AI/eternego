@@ -7,7 +7,6 @@ async def test_does_nothing_when_no_thoughts():
         import os
         import asyncio
         import tempfile
-        from datetime import datetime
         from application.core.brain.mind import conscious
         from application.core.brain.mind.memory import Memory
         from application.core.brain.data import Meaning
@@ -15,7 +14,7 @@ async def test_does_nothing_when_no_thoughts():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -49,7 +48,7 @@ async def test_summarizes_with_model():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -71,8 +70,12 @@ async def test_summarizes_with_model():
         async def capture_say(text):
             said.append(text)
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.conclude(memory, p, lambda: "You are Primus.", capture_say, noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.conclude(memory, p, lambda: "You are Primus.", capture_say, noop_thinking),
+            run=run,
             response={"message": {"content": "Task completed successfully."}},
         )
 
@@ -98,7 +101,7 @@ async def test_uses_recap_when_no_summarize():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class NoSummaryMeaning(Meaning):
             name = "NoSummary"

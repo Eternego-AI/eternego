@@ -14,6 +14,7 @@ async def dispatch(args):
             name=args.model,
             provider=getattr(args, "provider", None),
             credentials={"api_key": getattr(args, "key", None)} if getattr(args, "key", None) else None,
+            url=getattr(args, "url", None),
         )
         outcome = await environment.check_model(model)
         if not outcome.success:
@@ -23,6 +24,7 @@ async def dispatch(args):
 
     elif action == "prepare":
         outcome = await environment.prepare(
+            url=getattr(args, "url", None),
             model=args.model or None,
             provider=getattr(args, "provider", None),
             credentials=getattr(args, "key", None),

@@ -12,11 +12,15 @@ async def test_writes_to_correct_file():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3", url="TBD"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
+        async def run(url):
+            p.thinking.url = url
+            await subconscious.persona_trait(p, "Person: don't give me filler")
+
         ollama.assert_call(
-            run=lambda: subconscious.persona_trait(p, "Person: don't give me filler"),
+            run=run,
             response={"message": {"content": "Be concise and direct."}},
         )
 
@@ -38,16 +42,22 @@ async def test_includes_person_traits_in_prompt():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3", url="TBD"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.person_traits(p.id), "The person is direct and technical.")
 
-        def assert_in(substring, text):
+        async def run(url):
+            p.thinking.url = url
+            await subconscious.persona_trait(p, "Person: use DDD")
+
+        def validate(r):
+            substring = "The person is direct and technical."
+            text = r["body"]["messages"][0]["content"]
             assert substring in text, f"Expected '{substring}' in '{text[:200]}...'"
 
         ollama.assert_call(
-            run=lambda: subconscious.persona_trait(p, "Person: use DDD"),
-            validate=lambda r: assert_in("The person is direct and technical.", r["body"]["messages"][0]["content"]),
+            run=run,
+            validate=validate,
             response={"message": {"content": "Be direct.\nUse DDD terminology."}},
         )
 

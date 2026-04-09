@@ -10,7 +10,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 BASE_URL = "https://api.anthropic.com"
 
 
-def chat(api_key: str, model: str, messages: list[dict]) -> str:
+def chat(base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
     """Send a list of messages to the Anthropic API and return the response text."""
     system_parts = []
     chat_messages = []
@@ -29,7 +29,7 @@ def chat(api_key: str, model: str, messages: list[dict]) -> str:
         body["system"] = "\n".join(system_parts)
 
     req = urllib.request.Request(
-        f"{BASE_URL}/v1/messages",
+        f"{base_url}/v1/messages",
         data=json.dumps(body).encode(),
         headers={
             "Content-Type": "application/json",
@@ -46,29 +46,29 @@ def chat(api_key: str, model: str, messages: list[dict]) -> str:
         raise OSError(f"HTTP {e.code}: {body}") from e
 
 
-def chat_json(api_key: str, model: str, messages: list[dict]) -> dict:
+def chat_json(base_url: str, api_key: str, model: str, messages: list[dict]) -> dict:
     """Send a list of messages to the Anthropic API and return the parsed JSON response."""
     from application.platform import strings
-    response = chat(api_key, model, messages)
+    response = chat(base_url, api_key, model, messages)
     try:
         return strings.extract_json(response)
     except json.JSONDecodeError:
         return {}
 
 
-async def async_chat(api_key: str, model: str, messages: list[dict]) -> str:
+async def async_chat(base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
     """Async version of chat — runs the blocking call in a thread."""
     import asyncio
-    return await asyncio.to_thread(chat, api_key, model, messages)
+    return await asyncio.to_thread(chat, base_url, api_key, model, messages)
 
 
-async def async_chat_json(api_key: str, model: str, messages: list[dict]) -> dict:
+async def async_chat_json(base_url: str, api_key: str, model: str, messages: list[dict]) -> dict:
     """Async version of chat_json — runs the blocking call in a thread."""
     import asyncio
-    return await asyncio.to_thread(chat_json, api_key, model, messages)
+    return await asyncio.to_thread(chat_json, base_url, api_key, model, messages)
 
 
-async def async_chat_stream(api_key: str, model: str, messages: list[dict]) -> str:
+async def async_chat_stream(base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
     """Stream response from Anthropic API, return full text. Cancellable at each chunk."""
     import httpx
 
@@ -91,7 +91,7 @@ async def async_chat_stream(api_key: str, model: str, messages: list[dict]) -> s
 
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
-            async with http.stream("POST", f"{BASE_URL}/v1/messages", json=body, headers={
+            async with http.stream("POST", f"{base_url}/v1/messages", json=body, headers={
                 "Content-Type": "application/json",
                 "x-api-key": api_key,
                 "anthropic-version": "2023-06-01",
@@ -135,17 +135,20 @@ def to_messages(data: str) -> list[dict]:
 
 # ── Assertions ───────────────────────────────────────────────────────────────
 
-def assert_chat(run, validate=None, response=None):
+def assert_chat(run, validate=None, response=None, status_code=200):
     """Run chat against a local server, validate the request, return controlled response."""
-    assert_call(run, validate, response or {"content": [{"text": ""}]})
+    assert_call(run, validate, response or {"content": [{"text": ""}]}, status_code=status_code)
 
 
-def assert_chat_json(run, validate=None, response=None):
+def assert_chat_json(run, validate=None, response=None, status_code=200):
     """Run chat_json against a local server, validate the request, return controlled response."""
-    assert_call(run, validate, response or {"content": [{"text": "{}"}]})
+    assert_call(run, validate, response or {"content": [{"text": "{}"}]}, status_code=status_code)
 
 
-def assert_call(run, validate, response_body):
+def assert_call(run, validate, response_body, status_code=200):
+    import asyncio
+    import inspect
+
     global BASE_URL
     received = {}
 
@@ -155,7 +158,7 @@ def assert_call(run, validate, response_body):
             received["body"] = body
             received["headers"] = dict(self.headers)
             received["path"] = self.path
-            self.send_response(200)
+            self.send_response(status_code)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps(response_body).encode())
@@ -166,13 +169,13 @@ def assert_call(run, validate, response_body):
     thread.start()
     port = server.server_address[1]
 
-    original = BASE_URL
-    BASE_URL = f"http://127.0.0.1:{port}"
+    url = f"http://127.0.0.1:{port}"
 
     try:
-        run()
+        result = run(url)
+        if inspect.iscoroutine(result):
+            asyncio.run(result)
         if validate:
             validate(received)
     finally:
-        BASE_URL = original
         server.shutdown()

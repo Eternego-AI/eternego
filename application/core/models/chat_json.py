@@ -15,7 +15,7 @@ async def chat_json(model: Model, messages: list[dict]) -> dict:
 
     if is_local(model):
         try:
-            response = await ollama.post("/api/chat", {"model": model.name, "messages": messages, "stream": False, "format": "json"})
+            response = await ollama.post(model.url, "/api/chat", {"model": model.name, "messages": messages, "stream": False, "format": "json"})
             return strings.extract_json(strings.strip_tag(response["message"]["content"], "think"))
         except ollama.OllamaError as e:
             raise ModelError(f"Model returned an error: {e}") from e
@@ -28,8 +28,8 @@ async def chat_json(model: Model, messages: list[dict]) -> dict:
 
     try:
         if model.provider == "anthropic":
-            return await anthropic.async_chat_json(api_key, model.name, messages)
+            return await anthropic.async_chat_json(model.url, api_key, model.name, messages)
 
-        return await openai.async_chat_json(api_key, model.name, messages)
+        return await openai.async_chat_json(model.url, api_key, model.name, messages)
     except OSError as e:
         raise ModelError(f"Model returned an error: {e}") from e

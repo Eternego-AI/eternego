@@ -11,7 +11,7 @@ BASE_URL = "https://api.openai.com"
 _TIMEOUT = 120
 
 
-def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False) -> str:
+def chat(base_url: str, api_key: str, model: str, messages: list[dict], json_mode: bool = False) -> str:
     """Send messages to the OpenAI API and return the response text."""
     payload = {
         "model": model,
@@ -21,7 +21,7 @@ def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False
         payload["response_format"] = {"type": "json_object"}
 
     req = urllib.request.Request(
-        f"{BASE_URL}/v1/chat/completions",
+        f"{base_url}/v1/chat/completions",
         data=json.dumps(payload).encode(),
         headers={
             "Content-Type": "application/json",
@@ -37,48 +37,48 @@ def chat(api_key: str, model: str, messages: list[dict], json_mode: bool = False
         raise OSError(f"HTTP {e.code}: {body}") from e
 
 
-def chat_json(api_key: str, model: str, messages: list[dict]) -> dict:
+def chat_json(base_url: str, api_key: str, model: str, messages: list[dict]) -> dict:
     """Send messages to the OpenAI API and return the parsed JSON response."""
-    response = chat(api_key, model, messages, json_mode=True)
+    response = chat(base_url, api_key, model, messages, json_mode=True)
     try:
         return json.loads(response)
     except json.JSONDecodeError:
         return {}
 
 
-def generate(api_key: str, model: str, prompt: str, json_mode: bool = False) -> str:
+def generate(base_url: str, api_key: str, model: str, prompt: str, json_mode: bool = False) -> str:
     """Send a prompt to the OpenAI API and return the response text."""
-    return chat(api_key, model, [{"role": "user", "content": prompt}], json_mode).strip()
+    return chat(base_url, api_key, model, [{"role": "user", "content": prompt}], json_mode).strip()
 
 
-def generate_json(api_key: str, model: str, prompt: str) -> dict:
+def generate_json(base_url: str, api_key: str, model: str, prompt: str) -> dict:
     """Send a prompt to the OpenAI API and return the parsed JSON response."""
-    response = generate(api_key, model, prompt, json_mode=True)
+    response = generate(base_url, api_key, model, prompt, json_mode=True)
     try:
         return json.loads(response)
     except json.JSONDecodeError:
         return {}
 
 
-async def async_chat(api_key: str, model: str, messages: list[dict]) -> str:
+async def async_chat(base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
     """Async version of chat — runs the blocking call in a thread."""
     import asyncio
-    return await asyncio.to_thread(chat, api_key, model, messages)
+    return await asyncio.to_thread(chat, base_url, api_key, model, messages)
 
 
-async def async_chat_json(api_key: str, model: str, messages: list[dict]) -> dict:
+async def async_chat_json(base_url: str, api_key: str, model: str, messages: list[dict]) -> dict:
     """Async version of chat_json — runs the blocking call in a thread."""
     import asyncio
-    return await asyncio.to_thread(chat_json, api_key, model, messages)
+    return await asyncio.to_thread(chat_json, base_url, api_key, model, messages)
 
 
-async def async_chat_stream(api_key: str, model: str, messages: list[dict]) -> str:
+async def async_chat_stream(base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
     """Stream response from OpenAI API, return full text. Cancellable at each chunk."""
     import httpx
 
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
-            async with http.stream("POST", f"{BASE_URL}/v1/chat/completions", json={
+            async with http.stream("POST", f"{base_url}/v1/chat/completions", json={
                 "model": model,
                 "messages": messages,
                 "stream": True,
@@ -129,17 +129,20 @@ def to_messages(data: str) -> list[dict]:
 
 # ── Assertions ───────────────────────────────────────────────────────────────
 
-def assert_chat(run, validate=None, response=None):
+def assert_chat(run, validate=None, response=None, status_code=200):
     """Run chat against a local server, validate the request, return controlled response."""
-    assert_call(run, validate, response or {"choices": [{"message": {"content": ""}}]})
+    assert_call(run, validate, response or {"choices": [{"message": {"content": ""}}]}, status_code=status_code)
 
 
-def assert_chat_json(run, validate=None, response=None):
+def assert_chat_json(run, validate=None, response=None, status_code=200):
     """Run chat_json against a local server, validate the request, return controlled response."""
-    assert_call(run, validate, response or {"choices": [{"message": {"content": "{}"}}]})
+    assert_call(run, validate, response or {"choices": [{"message": {"content": "{}"}}]}, status_code=status_code)
 
 
-def assert_call(run, validate, response_body):
+def assert_call(run, validate, response_body, status_code=200):
+    import asyncio
+    import inspect
+
     global BASE_URL
     received = {}
 
@@ -149,7 +152,7 @@ def assert_call(run, validate, response_body):
             received["body"] = body
             received["headers"] = dict(self.headers)
             received["path"] = self.path
-            self.send_response(200)
+            self.send_response(status_code)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps(response_body).encode())
@@ -160,13 +163,13 @@ def assert_call(run, validate, response_body):
     thread.start()
     port = server.server_address[1]
 
-    original = BASE_URL
-    BASE_URL = f"http://127.0.0.1:{port}"
+    url = f"http://127.0.0.1:{port}"
 
     try:
-        run()
+        result = run(url)
+        if inspect.iscoroutine(result):
+            asyncio.run(result)
         if validate:
             validate(received)
     finally:
-        BASE_URL = original
         server.shutdown()

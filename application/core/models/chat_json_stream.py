@@ -21,7 +21,7 @@ async def chat_json_stream(model: Model, messages: list[dict]) -> dict:
         try:
             body = {"model": model.name, "messages": messages, "format": "json"}
             parts = []
-            async for chunk in ollama.stream("/api/chat", body):
+            async for chunk in ollama.stream(model.url, "/api/chat", body):
                 parts.append(chunk.get("message", {}).get("content", ""))
             return strings.extract_json(strings.strip_tag("".join(parts), "think"))
         except ollama.OllamaError as e:
@@ -35,9 +35,9 @@ async def chat_json_stream(model: Model, messages: list[dict]) -> dict:
 
     try:
         if model.provider == "anthropic":
-            response_text = await anthropic.async_chat_stream(api_key, model.name, messages)
+            response_text = await anthropic.async_chat_stream(model.url, api_key, model.name, messages)
         else:
-            response_text = await openai.async_chat_stream(api_key, model.name, messages)
+            response_text = await openai.async_chat_stream(model.url, api_key, model.name, messages)
 
         return strings.extract_json(strings.strip_tag(response_text, "think"))
     except json.JSONDecodeError as e:

@@ -7,7 +7,6 @@ async def test_does_nothing_when_no_signals():
         import os
         import asyncio
         import tempfile
-        from datetime import datetime
         from application.core.brain.mind import conscious
         from application.core.brain.mind.memory import Memory
         from application.core.brain.data import Meaning
@@ -15,7 +14,7 @@ async def test_does_nothing_when_no_signals():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -48,7 +47,7 @@ async def test_routes_signal_to_new_impression():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -66,8 +65,12 @@ async def test_routes_signal_to_new_impression():
         s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
         memory.trigger(s)
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.realize(memory, p, lambda: "You are Primus.", noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.realize(memory, p, lambda: "You are Primus.", noop_thinking),
+            run=run,
             response=stream_json({"routes": [{"signal": 1, "threads": [], "new_impressions": ["greeting"]}]}),
         )
 
@@ -94,7 +97,7 @@ async def test_routes_signal_to_existing_thread():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -116,8 +119,12 @@ async def test_routes_signal_to_existing_thread():
         s2 = Signal(id="s2", event=SignalEvent.heard, content="how are you", created_at=datetime(2026, 3, 15, 10, 0))
         memory.trigger(s2)
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.realize(memory, p, lambda: "You are Primus.", noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.realize(memory, p, lambda: "You are Primus.", noop_thinking),
+            run=run,
             response=stream_json({"routes": [{"signal": 1, "threads": [1], "new_impressions": []}]}),
         )
 
@@ -143,7 +150,7 @@ async def test_routes_signal_to_both_existing_and_new():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -165,8 +172,12 @@ async def test_routes_signal_to_both_existing_and_new():
         s2 = Signal(id="s2", event=SignalEvent.heard, content="mixed message", created_at=datetime(2026, 3, 15, 10, 0))
         memory.trigger(s2)
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.realize(memory, p, lambda: "You are Primus.", noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.realize(memory, p, lambda: "You are Primus.", noop_thinking),
+            run=run,
             response=stream_json({"routes": [{"signal": 1, "threads": [1], "new_impressions": ["topic B"]}]}),
         )
 
@@ -194,7 +205,7 @@ async def test_skips_invalid_signal_number():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -212,8 +223,12 @@ async def test_skips_invalid_signal_number():
         s = Signal(id="s1", event=SignalEvent.heard, content="hello", created_at=datetime(2026, 3, 15, 10, 0))
         memory.trigger(s)
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.realize(memory, p, lambda: "You are Primus.", noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.realize(memory, p, lambda: "You are Primus.", noop_thinking),
+            run=run,
             response=stream_json({"routes": [{"signal": 999, "threads": [], "new_impressions": ["x"]}]}),
         )
 

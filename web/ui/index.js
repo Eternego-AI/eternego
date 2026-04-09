@@ -95,6 +95,12 @@ const UI = {
         return this.personas;
     },
 
+    async fetchProviderConfig() {
+        try {
+            return await this._get('/api/config/providers');
+        } catch { return { local: { url: 'http://localhost:11434' }, anthropic: { url: 'https://api.anthropic.com' }, openai: { url: 'https://api.openai.com' } }; }
+    },
+
     // ── API: persona data ────────────────────────────────────
     async fetchPersona(id) {
         try {
@@ -234,6 +240,7 @@ const UI = {
             createPersona: (data) => this.createPersona(data),
             migratePersona: (fd) => this.migratePersona(fd),
             prepareEnvironment: (model) => this.prepareEnvironment(model),
+            fetchProviderConfig: () => this.fetchProviderConfig(),
             pairChannel: (code) => this.pairChannel(code),
             fetchPersonas: () => this.fetchPersonas(),
         };

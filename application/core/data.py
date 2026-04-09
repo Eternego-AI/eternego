@@ -12,6 +12,7 @@ class Model(Data):
     name: str
     provider: str | None = None
     credentials: dict | None = sensitive()
+    url: str
 
 
 @dataclass(kw_only=True)

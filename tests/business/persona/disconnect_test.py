@@ -12,7 +12,7 @@ async def test_disconnect_succeeds():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         ch = Channel(type="web", name="w1")
         gateways.of(p).add(ch, {"type": "web"})
         result = asyncio.run(spec.disconnect(p, ch))

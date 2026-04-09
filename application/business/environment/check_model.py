@@ -12,7 +12,7 @@ async def check_model(model: Model) -> Outcome[dict]:
 
     try:
         if models.is_local(model):
-            if await local_inference_engine.check(model.name):
+            if await local_inference_engine.check(model.url, model.name):
                 await bus.broadcast("Model is ready", {"model": model.name})
                 return Outcome(
                     success=True, message="Model is ready", data={"model": model}

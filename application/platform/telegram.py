@@ -104,22 +104,24 @@ def is_mentioned(username: str, text: str) -> bool:
 
 # ── Assertions ───────────────────────────────────────────────────────────────
 
-def assert_send(run, validate=None, response=None):
+def assert_send(run, validate=None, response=None, status_code=200):
     """Run send against a local server, validate the request."""
-    assert_call(run, validate, response or {"ok": True})
+    assert_call(run, validate, response or {"ok": True}, status_code=status_code)
 
 
-def assert_get_me(run, validate=None, response=None):
+def assert_get_me(run, validate=None, response=None, status_code=200):
     """Run get_me against a local server, validate the request."""
-    assert_call(run, validate, response or {"ok": True, "result": {}})
+    assert_call(run, validate, response or {"ok": True, "result": {}}, status_code=status_code)
 
 
-def assert_typing_action(run, validate=None, response=None):
+def assert_typing_action(run, validate=None, response=None, status_code=200):
     """Run typing_action against a local server."""
-    assert_call(run, validate, response or {"ok": True})
+    assert_call(run, validate, response or {"ok": True}, status_code=status_code)
 
 
-def assert_call(run, validate=None, response=None):
+def assert_call(run, validate=None, response=None, status_code=200):
+    import asyncio
+    import inspect
     response_body = response or {"ok": True}
     global BASE_URL
     received = {}
@@ -130,7 +132,7 @@ def assert_call(run, validate=None, response=None):
             if content_length:
                 received["body"] = json.loads(self.rfile.read(int(content_length)))
             received["path"] = self.path
-            self.send_response(200)
+            self.send_response(status_code)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps(response_body).encode())
@@ -148,7 +150,10 @@ def assert_call(run, validate=None, response=None):
     BASE_URL = f"http://127.0.0.1:{port}"
 
     try:
-        run()
+        result = run()
+        if inspect.iscoroutine(result):
+            asyncio.run(result)
+
         if validate:
             validate(received)
     finally:

@@ -12,11 +12,15 @@ async def test_writes_to_correct_file():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3", url="TBD"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
+        async def run(url):
+            p.thinking.url = url
+            await subconscious.person_traits(p, "Person: just give me the answer")
+
         ollama.assert_call(
-            run=lambda: subconscious.person_traits(p, "Person: just give me the answer"),
+            run=run,
             response={"message": {"content": "The person prefers concise responses."}},
         )
 
@@ -38,16 +42,22 @@ async def test_includes_existing_in_prompt():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3", url="TBD"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.person_traits(p.id), "The person uses humor.")
 
-        def assert_in(substring, text):
+        async def run(url):
+            p.thinking.url = url
+            await subconscious.person_traits(p, "Person: be brief")
+
+        def validate(r):
+            substring = "The person uses humor."
+            text = r["body"]["messages"][0]["content"]
             assert substring in text, f"Expected '{substring}' in '{text[:200]}...'"
 
         ollama.assert_call(
-            run=lambda: subconscious.person_traits(p, "Person: be brief"),
-            validate=lambda r: assert_in("The person uses humor.", r["body"]["messages"][0]["content"]),
+            run=run,
+            validate=validate,
             response={"message": {"content": "The person uses humor.\nThe person prefers brevity."}},
         )
 

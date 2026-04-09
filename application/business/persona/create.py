@@ -44,10 +44,11 @@ async def create(
                 name=f"eternego-{uuid.uuid4()}",
                 provider=thinking.provider,
                 credentials=thinking.credentials,
+                url=thinking.url
             )
 
         if base_model:
-            await local_inference_engine.register(thinking.name, base_model)
+            await local_inference_engine.register(thinking.url, thinking.name, base_model)
 
         persona = Persona(
             name=name,

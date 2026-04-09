@@ -16,7 +16,7 @@ async def test_recover_from_local_model_error():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)
@@ -79,7 +79,7 @@ async def test_recover_from_frontier_error():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)

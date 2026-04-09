@@ -13,7 +13,7 @@ async def test_verify_sets_channel_name_and_verified_at():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
         paths.save_as_string(paths.persona_identity(p.id), "{}")
 
@@ -102,7 +102,7 @@ async def test_send_all_sends_to_all_active_channels():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         received = []
 
         class FakeBus:
@@ -134,7 +134,7 @@ async def test_keep_open_returns_polling_strategy_for_telegram():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         ch = Channel(type="telegram", name="12345", credentials={"token": "fake-token"})
 
         strategy = channels.keep_open(p, ch)
@@ -157,7 +157,7 @@ async def test_keep_open_connection_returns_messages_from_poll():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
 
         strategy = channels.keep_open(p, ch)
@@ -193,7 +193,7 @@ async def test_keep_open_connection_filters_group_without_mention():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
         ch = Channel(type="telegram", name="", credentials={"token": "fake-token"})
 
         strategy = channels.keep_open(p, ch)
@@ -225,7 +225,7 @@ async def test_keep_open_raises_on_unsupported_channel():
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         gateways._active.clear()
-        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-ch", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         try:
             channels.keep_open(p, Channel(type="unknown", name="x"))

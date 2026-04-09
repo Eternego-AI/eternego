@@ -12,11 +12,15 @@ async def test_writes_to_correct_file():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-sub", name="Primus", thinking=Model(name="llama3", url="TBD"))
         paths.home(p.id).mkdir(parents=True, exist_ok=True)
 
+        async def run(url):
+            p.thinking.url = url
+            await subconscious.wishes(p, "Person: I want to visit Japan")
+
         ollama.assert_call(
-            run=lambda: subconscious.wishes(p, "Person: I want to visit Japan"),
+            run=run,
             response={"message": {"content": "The person wants to visit Japan."}},
         )
 

@@ -1,5 +1,6 @@
 """Environment — setting up and preparing an environment for a persona to grow."""
 
+import config.inference as config
 from application.business.outcome import Outcome
 from application.core import bus, local_inference_engine, system, models
 from application.core.data import Model
@@ -14,6 +15,7 @@ from .check_model import check_model
 
 
 async def prepare(
+    url: str,
     model: str | None = None,
     provider: str | None = None,
     credentials: dict | None = None,
@@ -33,7 +35,7 @@ async def prepare(
 
         if not model:
             await local_inference_engine.ensure_running()
-            model = await local_inference_engine.get_default_model()
+            model = await local_inference_engine.get_default_model(config.OLLAMA_BASE_URL)
 
         if not model:
             await bus.broadcast(
@@ -45,7 +47,7 @@ async def prepare(
             )
         
 
-        model_obj = Model(name=model, provider=provider, credentials=credentials)
+        model_obj = Model(name=model, provider=provider, credentials=credentials, url=url)
 
         if not await system.is_installed("git"):
                 await system.install("git")
@@ -56,8 +58,8 @@ async def prepare(
 
             await local_inference_engine.ensure_running()
 
-            if not await local_inference_engine.check(model):
-                await local_inference_engine.pull(model)
+            if not await local_inference_engine.check(url, model):
+                await local_inference_engine.pull(config.OLLAMA_BASE_URL, model)
 
         
         outcome = await check_model(model_obj)

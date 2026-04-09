@@ -66,7 +66,7 @@ async def test_call_handles_tuple_return_success():
 
         @tool("Run command")
         def run(command: str) -> tuple:
-            return (0, "output here")
+            return 0, "output here"
 
         name = _registry[0].name
         result = asyncio.run(call(name, command="ls"))
@@ -86,7 +86,7 @@ async def test_call_handles_tuple_return_failure():
 
         @tool("Run command")
         def run(command: str) -> tuple:
-            return (1, "permission denied")
+            return 1, "permission denied"
 
         name = _registry[0].name
         result = asyncio.run(call(name, command="rm -rf"))

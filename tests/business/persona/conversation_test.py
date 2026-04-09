@@ -14,7 +14,7 @@ async def test_conversation_returns_messages():
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3"), base_model="llama3")
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         conv_path = paths.conversation(p.id)
         conv_path.parent.mkdir(parents=True, exist_ok=True)
         conv_path.write_text(

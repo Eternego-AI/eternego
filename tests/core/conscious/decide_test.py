@@ -7,7 +7,6 @@ async def test_does_nothing_when_no_thoughts():
         import os
         import asyncio
         import tempfile
-        from datetime import datetime
         from application.core.brain.mind import conscious
         from application.core.brain.mind.memory import Memory
         from application.core.brain.data import Meaning
@@ -15,7 +14,7 @@ async def test_does_nothing_when_no_thoughts():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="not required"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -47,7 +46,7 @@ async def test_creates_recap_when_only_recap_returned():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class TestMeaning(Meaning):
             name = "Test"
@@ -68,8 +67,12 @@ async def test_creates_recap_when_only_recap_returned():
         thought = memory.understand(memory.perceptions[0], TestMeaning(p))
         memory.answer(thought, "acknowledged", SignalEvent.answered)
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.decide(memory, p, lambda: "You are Primus.", noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.decide(memory, p, lambda: "You are Primus.", noop_thinking),
+            run=run,
             response=stream_json({"recap": "Already done"}),
         )
 
@@ -96,7 +99,7 @@ async def test_runs_action_and_informs_with_output():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class ActionMeaning(Meaning):
             name = "Action"
@@ -120,8 +123,12 @@ async def test_runs_action_and_informs_with_output():
         memory.realize(s, "task")
         memory.understand(memory.perceptions[0], ActionMeaning(p))
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.decide(memory, p, lambda: "You are Primus.", noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.decide(memory, p, lambda: "You are Primus.", noop_thinking),
+            run=run,
             response=stream_json({"tool": "shell.run", "command": "ls", "recap": "Running ls"}),
         )
 
@@ -150,7 +157,7 @@ async def test_informs_error_when_run_raises():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class BrokenMeaning(Meaning):
             name = "Broken"
@@ -172,8 +179,12 @@ async def test_informs_error_when_run_raises():
         memory.realize(s, "task")
         memory.understand(memory.perceptions[0], BrokenMeaning(p))
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.decide(memory, p, lambda: "You are Primus.", noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.decide(memory, p, lambda: "You are Primus.", noop_thinking),
+            run=run,
             response=stream_json({"tool": "x", "recap": "trying"}),
         )
 
@@ -200,7 +211,7 @@ async def test_recaps_when_action_returns_none():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3"))
+        p = Persona(id="test-conscious", name="Primus", thinking=Model(name="llama3", url="TBD"))
 
         class NullActionMeaning(Meaning):
             name = "NullAction"
@@ -222,8 +233,12 @@ async def test_recaps_when_action_returns_none():
         memory.realize(s, "task")
         memory.understand(memory.perceptions[0], NullActionMeaning(p))
 
+        async def run(url):
+            p.thinking.url = url
+            await conscious.decide(memory, p, lambda: "You are Primus.", noop_thinking)
+
         ollama.assert_call(
-            run=lambda: conscious.decide(memory, p, lambda: "You are Primus.", noop_thinking),
+            run=run,
             response=stream_json({"tool": "x", "recap": "nothing to do"}),
         )
 

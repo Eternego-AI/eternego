@@ -3,6 +3,7 @@
 from application.core.data import Model
 from application.core.exceptions import ModelError, EngineConnectionError
 from application.platform import logger, ollama
+import config.inference as cfg
 
 from .chat import chat
 from .is_local import is_local
@@ -21,7 +22,7 @@ async def generate(model: Model, prompt: str, json_mode: bool = False) -> str:
             body = {"model": model.name, "prompt": prompt, "stream": False}
             if json_mode:
                 body["format"] = "json"
-            response = await ollama.post("/api/generate", body)
+            response = await ollama.post(model.url, "/api/generate", body)
             return response["response"].strip()
         except ollama.OllamaError as e:
             raise ModelError(f"Model returned an error: {e}") from e

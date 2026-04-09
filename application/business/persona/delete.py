@@ -12,7 +12,7 @@ async def delete(persona: Persona) -> Outcome[dict]:
     try:
         paths.delete_recursively(paths.home(persona.id))
         if models.is_local(persona.thinking):
-            await local_inference_engine.delete(persona.thinking.name)
+            await local_inference_engine.delete(persona.thinking.url, persona.thinking.name)
         await bus.broadcast("Persona deleted", {"persona": persona})
         return Outcome(success=True, message="Persona deleted successfully")
     except IdentityError as e:

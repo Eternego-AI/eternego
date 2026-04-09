@@ -8,16 +8,17 @@ async def test_local_passes_dna_in_prompt():
         from application.platform import ollama
         from application.core import models
         from application.core.data import Model
+
         result = {}
+
+        async def run(url):
+            result["value"] = await models.generate_training_set(
+                Model(name="llama3", url=url),
+                "Be concise and direct",
+            )
 
         def validate(r):
             assert "Be concise and direct" in r["body"]["prompt"], "DNA not in prompt"
-
-        async def run():
-            result["value"] = await models.generate_training_set(
-                Model(name="llama3"),
-                "Be concise and direct",
-            )
 
         ollama.assert_call(
             run=run,
@@ -36,10 +37,10 @@ async def test_local_returns_empty_on_invalid_json():
         from application.platform import ollama
         from application.core import models
         from application.core.data import Model
-        result = {}
 
-        async def run():
-            result["value"] = await models.generate_training_set(Model(name="llama3"), "some dna")
+        result = {}
+        async def run(url):
+            result["value"] = await models.generate_training_set(Model(url=url, name="llama3"), "some dna")
 
         ollama.assert_call(run=run, response={"response": "not valid json at all"})
         assert result["value"] == []
@@ -50,20 +51,23 @@ async def test_local_returns_empty_on_invalid_json():
 
 async def test_anthropic_passes_dna_in_prompt():
     def isolated():
-        import asyncio
         from application.core import models
         from application.core.data import Model
         from application.platform import anthropic
 
-        model = Model(name="claude-3", provider="anthropic", credentials={"api_key": "test"})
+        model = Model(name="claude-3", provider="anthropic", credentials={"api_key": "test"}, url="TBD")
         result = {}
+        async def run(url):
+            model.url = url
+            result["value"] = await models.generate_training_set(model, "Be warm and supportive")
+        
 
         def validate(r):
             user_msg = r["body"]["messages"][0]["content"]
             assert "Be warm and supportive" in user_msg, "DNA not in prompt"
 
         anthropic.assert_chat(
-            run=lambda: result.update(value=asyncio.run(models.generate_training_set(model, "Be warm and supportive"))),
+            run=run,
             validate=validate,
             response={"content": [{"text": '{"training_pairs": [{"trait_source": "warm", "system": "s", "user": "u", "assistant": "a"}]}'}]},
         )
@@ -75,20 +79,22 @@ async def test_anthropic_passes_dna_in_prompt():
 
 async def test_openai_passes_dna_in_prompt():
     def isolated():
-        import asyncio
         from application.core import models
         from application.core.data import Model
         from application.platform import openai
 
-        model = Model(name="gpt-4", provider="openai", credentials={"api_key": "test"})
+        model = Model(name="gpt-4", provider="openai", credentials={"api_key": "test"}, url="TBD")
         result = {}
+        async def run(url):
+            model.url = url
+            result["value"] = await models.generate_training_set(model, "Use humor often")
 
         def validate(r):
             user_msg = r["body"]["messages"][0]["content"]
             assert "Use humor often" in user_msg, "DNA not in prompt"
 
         openai.assert_chat(
-            run=lambda: result.update(value=asyncio.run(models.generate_training_set(model, "Use humor often"))),
+            run=run,
             validate=validate,
             response={"choices": [{"message": {"content": '{"training_pairs": [{"trait_source": "humor", "system": "s", "user": "u", "assistant": "a"}]}'}}]},
         )

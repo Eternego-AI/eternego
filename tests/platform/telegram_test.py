@@ -64,12 +64,17 @@ def test_empty_updates_returns_empty():
 async def test_send_posts_to_correct_url():
     def isolated():
         from application.platform import telegram
+
         result = {}
+        def run():
+            result["response"] = telegram.send("fake-token", "12345", "Hello!")
+
         def validate(r):
             assert r["path"] == "/botfake-token/sendMessage", r["path"]
             assert r["body"] == {"chat_id": "12345", "text": "Hello!"}, r["body"]
+
         telegram.assert_send(
-            run=lambda: result.update(response=telegram.send("fake-token", "12345", "Hello!")),
+            run=run,
             validate=validate,
             response={"ok": True},
         )
@@ -81,10 +86,17 @@ async def test_send_posts_to_correct_url():
 async def test_get_me_calls_correct_endpoint():
     def isolated():
         from application.platform import telegram
+
         result = {}
+        def run():
+            result["response"] = telegram.get_me("fake-token")
+
+        def validate(r):
+            assert r["path"] == "/botfake-token/getMe", r["path"]
+
         telegram.assert_get_me(
-            run=lambda: result.update(response=telegram.get_me("fake-token")),
-            validate=lambda r: None if r["path"] == "/botfake-token/getMe" else (_ for _ in ()).throw(AssertionError(r["path"])),
+            run=run,
+            validate=validate,
             response={"ok": True, "result": {"username": "test_bot"}},
         )
         assert result["response"]["result"]["username"] == "test_bot", result
@@ -95,10 +107,15 @@ async def test_get_me_calls_correct_endpoint():
 async def test_typing_action_sends_correct_payload():
     def isolated():
         from application.platform import telegram
+
+        def run():
+            telegram.typing_action("fake-token", "12345")
+
         def validate(r):
             assert r["body"] == {"chat_id": "12345", "action": "typing"}, r["body"]
+
         telegram.assert_typing_action(
-            run=lambda: telegram.typing_action("fake-token", "12345"),
+            run=run,
             validate=validate,
         )
     code, error = await on_separate_process_async(isolated)
@@ -108,10 +125,12 @@ async def test_typing_action_sends_correct_payload():
 async def test_poll_returns_updates_and_next_offset():
     def isolated():
         from application.platform import telegram
+
         def run():
             updates, offset = telegram.poll("fake-token")
             assert len(updates) == 1, f"Expected 1 update, got {len(updates)}"
             assert offset == 101, f"Expected offset 101, got {offset}"
+
         telegram.assert_call(
             run=run,
             response={"result": [{"update_id": 100, "message": {"text": "hi", "chat": {"id": 1}, "message_id": 1}}]},
@@ -123,10 +142,14 @@ async def test_poll_returns_updates_and_next_offset():
 async def test_poll_sends_to_correct_path():
     def isolated():
         from application.platform import telegram
+
+        def run():
+            telegram.poll("my-token")
         def validate(r):
             assert r["path"] == "/botmy-token/getUpdates", r["path"]
+
         telegram.assert_call(
-            run=lambda: telegram.poll("my-token"),
+            run=run,
             validate=validate,
             response={"result": []},
         )
@@ -137,10 +160,15 @@ async def test_poll_sends_to_correct_path():
 async def test_poll_sends_offset_in_request():
     def isolated():
         from application.platform import telegram
+
+        def run():
+            telegram.poll("token", offset=42)
+
         def validate(r):
             assert r["body"]["offset"] == 42, r["body"]
+
         telegram.assert_call(
-            run=lambda: telegram.poll("token", offset=42),
+            run=run,
             validate=validate,
             response={"result": []},
         )

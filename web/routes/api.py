@@ -13,6 +13,16 @@ from web.requests import EnvironmentPrepareRequest, HearRequest, PersonaControlR
 router = APIRouter(prefix="/api")
 
 
+@router.get("/config/providers")
+async def get_provider_config():
+    import config.inference as cfg
+    return {
+        "local": {"url": cfg.OLLAMA_BASE_URL},
+        "anthropic": {"url": cfg.ANTHROPIC_BASE_URL},
+        "openai": {"url": cfg.OPENAI_BASE_URL},
+    }
+
+
 @router.get("/personas")
 async def list_personas():
     outcome = await persona.get_list()
@@ -24,6 +34,7 @@ async def list_personas():
 @router.post("/environment/prepare")
 async def prepare_environment(request: EnvironmentPrepareRequest):
     outcome = await environment.prepare(
+        url=request.url,
         model=request.model or None,
         provider=request.provider,
         credentials=request.credentials,
@@ -43,42 +54,31 @@ async def pair_channel(code: str):
 
 @router.post("/persona/create")
 async def create_persona(request: PersonaCreateRequest):
-    from application.core.data import Model, Channel
-
-    thinking = Model(
-        name=request.thinking_model,
+    outcome = await environment.prepare(
+        url=request.thinking_url,
+        model=request.thinking_model,
         provider=request.thinking_provider,
         credentials=request.thinking_credentials,
     )
-    outcome = await environment.prepare(
-        model=thinking.name,
-        provider=thinking.provider,
-        credentials=(thinking.credentials or {}).get("api_key"),
-    )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
+    thinking = outcome.data["model"]
 
     frontier = None
     if request.frontier_model:
-        frontier = Model(
-            name=request.frontier_model,
+        outcome = await environment.prepare(
+            model=request.frontier_model,
             provider=request.frontier_provider,
             credentials=request.frontier_credentials,
         )
-        outcome = await environment.prepare(
-            model=frontier.name,
-            provider=frontier.provider,
-            credentials=(frontier.credentials or {}).get("api_key"),
-        )
         if not outcome.success:
             raise HTTPException(status_code=400, detail=outcome.message)
+        frontier = outcome.data["model"]
 
-    channel = Channel(type=request.channel_type, credentials=request.channel_credentials)
-
-    if request.channel_type == "telegram":
-        outcome = await environment.check_channel(request.channel_type, request.channel_credentials)
-        if not outcome.success:
-            raise HTTPException(status_code=400, detail=outcome.message)
+    outcome = await environment.check_channel(request.channel_type, request.channel_credentials)
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    channel = outcome.data["channel"]
 
     outcome = await persona.create(
         name=request.name,
@@ -98,22 +98,19 @@ async def migrate_persona(
     model: str = Form(...),
     provider: str = Form(None),
     credentials: str = Form(None),
+    url: str = Form(None),
 ):
-    from application.core.data import Model
-
     filename = diary.filename or "diary"
     tmp_dir = tempfile.mkdtemp()
     tmp_path = f"{tmp_dir}/{filename}"
     with open(tmp_path, "wb") as f:
         f.write(await diary.read())
 
-    creds = {"api_key": credentials} if credentials else None
-    thinking = Model(name=model, provider=provider or None, credentials=creds)
-
     outcome = await environment.prepare(
-        model=thinking.name,
-        provider=thinking.provider,
-        credentials=(thinking.credentials or {}).get("api_key"),
+        url=url,
+        model=model,
+        provider=provider or None,
+        credentials=credentials,
     )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
@@ -121,7 +118,7 @@ async def migrate_persona(
     outcome = await persona.migrate(
         diary_path=tmp_path,
         phrase=phrase,
-        thinking=thinking,
+        thinking=outcome.data["model"],
     )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)

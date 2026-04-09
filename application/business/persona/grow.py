@@ -43,9 +43,9 @@ async def grow(persona: Persona) -> Outcome[dict]:
             await bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=True, message="Fine-tuning skipped — no GPU detected.", data={"dna": True, "finetune": False})
 
-        await local_inference_engine.fine_tune(hf_model_id, training_set, persona.base_model, persona.thinking.name, persona.id)
+        await local_inference_engine.fine_tune(hf_model_id, training_set, persona.thinking.url, persona.base_model, persona.thinking.name, persona.id)
 
-        if not await local_inference_engine.check(persona.thinking.name):
+        if not await local_inference_engine.check(persona.thinking.url, persona.thinking.name):
             raise DNAError("Fine-tuned model failed verification — previous model is still active")
 
         await bus.broadcast("Grown", {"persona": persona})

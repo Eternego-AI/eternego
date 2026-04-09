@@ -51,8 +51,8 @@ async def migrate(
 
         if thinking.provider is None:
             persona.base_model = thinking.name
-            persona.thinking = Model(name=f"eternego-{persona.id}")
-            await local_inference_engine.register(persona.thinking.name, thinking.name)
+            persona.thinking = Model(name=f"eternego-{persona.id}", url=persona.thinking.url)
+            await local_inference_engine.register(persona.thinking.url, persona.thinking.name, thinking.name)
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
