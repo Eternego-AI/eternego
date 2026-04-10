@@ -33,7 +33,11 @@ async def hear(persona: Persona, message: Message) -> Outcome[dict]:
             message_id=message.id,
         )
         agents.persona(persona).trigger(signal)
-        await bus.broadcast("Heard", {"persona": persona})
+        await bus.broadcast("Heard", {
+            "persona": persona,
+            "content": message.content,
+            "channel_type": message.channel.type if message.channel else "",
+        })
         return Outcome(success=True, message="")
     except MindError as e:
         await bus.broadcast("Hearing failed", {"persona": persona, "error": str(e)})

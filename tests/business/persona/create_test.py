@@ -60,7 +60,7 @@ async def test_create_with_frontier_succeeds():
                 name="FrontierBot",
                 thinking=Model(name="llama3", url=url),
                 channel=Channel(type="web", credentials={}),
-                frontier=Model(name="claude-3-opus-20240229", provider="anthropic", credentials={"api_key": "test-key"}, url="https://api.anthropic.com"),
+                frontier=Model(name="claude-3-opus-20240229", provider="anthropic", api_key="test-key", url="https://api.anthropic.com"),
             ))
             assert result.success, result.message
 
@@ -93,7 +93,7 @@ async def test_create_with_remote_thinking_model():
         def run(url):
             result = asyncio.run(spec.create(
                 name="RemoteBot",
-                thinking=Model(name="claude-3", provider="anthropic", credentials={"api_key": "test-key"}, url=url),
+                thinking=Model(name="claude-3", provider="anthropic", api_key="test-key", url=url),
                 channel=Channel(type="web", credentials={}),
             ))
             assert result.success, result.message

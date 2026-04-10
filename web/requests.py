@@ -17,20 +17,20 @@ class EnvironmentPrepareRequest(BaseModel):
     url: str | None = None
     model: str = ""
     provider: str | None = None
-    credentials: dict | None = None
+    api_key: str | None = None
 
 
 class PersonaCreateRequest(BaseModel):
     name: str
     thinking_model: str
     thinking_provider: str | None = None
-    thinking_credentials: dict | None = None
+    thinking_api_key: str | None = None
     thinking_url: str | None = None
     channel_type: str
     channel_credentials: dict
     frontier_model: str | None = None
     frontier_provider: str | None = None
-    frontier_credentials: dict | None = None
+    frontier_api_key: str | None = None
 
 
 class PersonaControlRequest(BaseModel):

@@ -43,7 +43,7 @@ async def create(
             thinking = Model(
                 name=f"eternego-{uuid.uuid4()}",
                 provider=thinking.provider,
-                credentials=thinking.credentials,
+                api_key=thinking.api_key,
                 url=thinking.url
             )
 

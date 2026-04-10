@@ -13,7 +13,7 @@ async def dispatch(args):
         model = Model(
             name=args.model,
             provider=getattr(args, "provider", None),
-            credentials={"api_key": getattr(args, "key", None)} if getattr(args, "key", None) else None,
+            api_key=getattr(args, "key", None),
             url=getattr(args, "url", None),
         )
         outcome = await environment.check_model(model)
@@ -27,7 +27,7 @@ async def dispatch(args):
             url=getattr(args, "url", None),
             model=args.model or None,
             provider=getattr(args, "provider", None),
-            credentials=getattr(args, "key", None),
+            api_key=getattr(args, "key", None),
         )
         if not outcome.success:
             print(f"Error: {outcome.message}")

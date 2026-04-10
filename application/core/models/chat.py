@@ -23,12 +23,10 @@ async def chat(model: Model, messages: list[dict]) -> str:
             logger.warning("models.chat invalid response", {"model": model.name, "response": str(response)})
             raise EngineConnectionError("Model returned an invalid response") from e
 
-    api_key = (model.credentials or {}).get("api_key", "")
-
     try:
         if model.provider == "anthropic":
-            return await anthropic.async_chat(model.url, api_key, model.name, messages)
+            return await anthropic.async_chat(model.url, model.api_key, model.name, messages)
 
-        return await openai.async_chat(model.url, api_key, model.name, messages)
+        return await openai.async_chat(model.url, model.api_key, model.name, messages)
     except OSError as e:
         raise ModelError(f"Model returned an error: {e}") from e

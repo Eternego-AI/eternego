@@ -31,13 +31,11 @@ async def chat_json_stream(model: Model, messages: list[dict]) -> dict:
         except json.JSONDecodeError as e:
             raise EngineConnectionError("Model returned an invalid JSON response") from e
 
-    api_key = (model.credentials or {}).get("api_key", "")
-
     try:
         if model.provider == "anthropic":
-            response_text = await anthropic.async_chat_stream(model.url, api_key, model.name, messages)
+            response_text = await anthropic.async_chat_stream(model.url, model.api_key, model.name, messages)
         else:
-            response_text = await openai.async_chat_stream(model.url, api_key, model.name, messages)
+            response_text = await openai.async_chat_stream(model.url, model.api_key, model.name, messages)
 
         return strings.extract_json(strings.strip_tag(response_text, "think"))
     except json.JSONDecodeError as e:

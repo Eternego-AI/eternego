@@ -3,6 +3,8 @@ from application.platform.processes import on_separate_process_async
 async def test_pair_claims_code():
     def isolated():
         import asyncio
+        import os
+        import tempfile
         from application.business import environment
         from application.core import agents, gateways
         from application.core.data import Persona, Model, Channel
@@ -10,6 +12,7 @@ async def test_pair_claims_code():
         from application.platform import OS
         OS._secret_cache_only = True
 
+        os.environ["ETERNEGO_HOME"] = tempfile.mkdtemp()
         agents._personas.clear()
         gateways._active.clear()
 
@@ -41,11 +44,14 @@ async def test_pair_claims_code():
 async def test_pair_fails_on_invalid_code():
     def isolated():
         import asyncio
+        import os
+        import tempfile
         from application.business import environment
         from application.core import agents, gateways
         from application.platform import OS
         OS._secret_cache_only = True
 
+        os.environ["ETERNEGO_HOME"] = tempfile.mkdtemp()
         agents._personas.clear()
         gateways._active.clear()
         result = asyncio.run(environment.pair("INVALID"))

@@ -55,7 +55,7 @@ async def test_anthropic_passes_dna_in_prompt():
         from application.core.data import Model
         from application.platform import anthropic
 
-        model = Model(name="claude-3", provider="anthropic", credentials={"api_key": "test"}, url="TBD")
+        model = Model(name="claude-3", provider="anthropic", api_key="test", url="TBD")
         result = {}
         async def run(url):
             model.url = url
@@ -83,7 +83,7 @@ async def test_openai_passes_dna_in_prompt():
         from application.core.data import Model
         from application.platform import openai
 
-        model = Model(name="gpt-4", provider="openai", credentials={"api_key": "test"}, url="TBD")
+        model = Model(name="gpt-4", provider="openai", api_key="test", url="TBD")
         result = {}
         async def run(url):
             model.url = url
