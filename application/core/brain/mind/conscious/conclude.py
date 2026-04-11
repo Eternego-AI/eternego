@@ -25,7 +25,7 @@ async def conclude(memory, persona, identity_fn, say_fn, express_thinking_fn) ->
             summary_prompt,
         ]))
         messages = [{"role": "system", "content": system}] + memory.prompts(thought)
-        text = await models.chat(persona.thinking, messages)
+        text = await models.chat_stream(persona.thinking, messages)
 
         if text:
             await say_fn(text)

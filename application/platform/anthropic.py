@@ -10,8 +10,9 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 BASE_URL = "https://api.anthropic.com"
 
 
-def chat(base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
+def chat(base_url: str, api_key: str | None, model: str, messages: list[dict]) -> str:
     """Send a list of messages to the Anthropic API and return the response text."""
+    api_key = api_key or ""
     system_parts = []
     chat_messages = []
     for m in messages:
@@ -68,10 +69,11 @@ async def async_chat_json(base_url: str, api_key: str, model: str, messages: lis
     return await asyncio.to_thread(chat_json, base_url, api_key, model, messages)
 
 
-async def async_chat_stream(base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
+async def async_chat_stream(base_url: str, api_key: str | None, model: str, messages: list[dict]) -> str:
     """Stream response from Anthropic API, return full text. Cancellable at each chunk."""
     import httpx
 
+    api_key = api_key or ""
     system_parts = []
     chat_messages = []
     for m in messages:

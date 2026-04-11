@@ -37,7 +37,7 @@ async def prepare_environment(request: EnvironmentPrepareRequest):
         url=request.url,
         model=request.model or None,
         provider=request.provider,
-        credentials=request.credentials,
+        api_key=request.api_key,
     )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
@@ -58,7 +58,7 @@ async def create_persona(request: PersonaCreateRequest):
         url=request.thinking_url,
         model=request.thinking_model,
         provider=request.thinking_provider,
-        credentials=request.thinking_credentials,
+        api_key=request.thinking_api_key,
     )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
@@ -69,7 +69,7 @@ async def create_persona(request: PersonaCreateRequest):
         outcome = await environment.prepare(
             model=request.frontier_model,
             provider=request.frontier_provider,
-            credentials=request.frontier_credentials,
+            api_key=request.frontier_api_key,
         )
         if not outcome.success:
             raise HTTPException(status_code=400, detail=outcome.message)
@@ -97,7 +97,7 @@ async def migrate_persona(
     phrase: str = Form(...),
     model: str = Form(...),
     provider: str = Form(None),
-    credentials: str = Form(None),
+    api_key: str = Form(None),
     url: str = Form(None),
 ):
     filename = diary.filename or "diary"
@@ -110,7 +110,7 @@ async def migrate_persona(
         url=url,
         model=model,
         provider=provider or None,
-        credentials=credentials,
+        api_key=api_key,
     )
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)

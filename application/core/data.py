@@ -11,7 +11,7 @@ from application.platform.objects import Data, hidden, sensitive
 class Model(Data):
     name: str
     provider: str | None = None
-    credentials: dict | None = sensitive()
+    api_key: str | None = sensitive()
     url: str
 
 

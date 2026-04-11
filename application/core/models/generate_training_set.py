@@ -70,12 +70,11 @@ async def generate_training_set(model: Model, dna: str) -> list[dict]:
         except KeyError as e:
             raise EngineConnectionError("Model returned an invalid response") from e
     else:
-        api_key = (model.credentials or {}).get("api_key", "")
         try:
             if model.provider == "anthropic":
-                response_text = await anthropic.async_chat(model.url, api_key, model.name, [{"role": "user", "content": prompt}])
+                response_text = await anthropic.async_chat(model.url, model.api_key, model.name, [{"role": "user", "content": prompt}])
             else:
-                response_text = await openai.async_chat(model.url, api_key, model.name, [{"role": "user", "content": prompt}])
+                response_text = await openai.async_chat(model.url, model.api_key, model.name, [{"role": "user", "content": prompt}])
         except OSError as e:
             raise ModelError(f"Model returned an error: {e}") from e
 

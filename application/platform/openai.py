@@ -11,8 +11,9 @@ BASE_URL = "https://api.openai.com"
 _TIMEOUT = 120
 
 
-def chat(base_url: str, api_key: str, model: str, messages: list[dict], json_mode: bool = False) -> str:
+def chat(base_url: str, api_key: str | None, model: str, messages: list[dict], json_mode: bool = False) -> str:
     """Send messages to the OpenAI API and return the response text."""
+    api_key = api_key or ""
     payload = {
         "model": model,
         "messages": messages,
@@ -72,10 +73,11 @@ async def async_chat_json(base_url: str, api_key: str, model: str, messages: lis
     return await asyncio.to_thread(chat_json, base_url, api_key, model, messages)
 
 
-async def async_chat_stream(base_url: str, api_key: str, model: str, messages: list[dict]) -> str:
+async def async_chat_stream(base_url: str, api_key: str | None, model: str, messages: list[dict]) -> str:
     """Stream response from OpenAI API, return full text. Cancellable at each chunk."""
     import httpx
 
+    api_key = api_key or ""
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
             async with http.stream("POST", f"{base_url}/v1/chat/completions", json={

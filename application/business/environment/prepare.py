@@ -18,7 +18,7 @@ async def prepare(
     url: str,
     model: str | None = None,
     provider: str | None = None,
-    credentials: dict | None = None,
+    api_key: str | None = None,
 ) -> Outcome[dict]:
     """It makes it easy to set up and prepare an environment for your persona to grow."""
     await bus.propose("Preparing environment", {"model": model, "provider": provider})
@@ -47,7 +47,7 @@ async def prepare(
             )
         
 
-        model_obj = Model(name=model, provider=provider, credentials=credentials, url=url)
+        model_obj = Model(name=model, provider=provider, api_key=api_key, url=url)
 
         if not await system.is_installed("git"):
                 await system.install("git")

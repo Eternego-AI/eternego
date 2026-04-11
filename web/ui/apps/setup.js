@@ -11,7 +11,7 @@ export default class SetupApp extends App {
         this._el.style.cssText = 'position:fixed;inset:0;justify-content:center;align-items:center;background:radial-gradient(ellipse at 50% 50%,rgba(140,160,255,0.03) 0%,transparent 60%),var(--bg);';
 
         const wrapper = document.createElement('div');
-        wrapper.style.cssText = 'width:100%;max-width:460px;';
+        wrapper.style.cssText = 'width:90%;max-width:640px;';
 
         this._setup = document.createElement('setup-widget');
         this._setup.init({
@@ -46,12 +46,12 @@ export default class SetupApp extends App {
         if (data.thinkingUrl) body.thinking_url = data.thinkingUrl;
         if (data.thinkingProvider) {
             body.thinking_provider = data.thinkingProvider;
-            body.thinking_credentials = { api_key: data.thinkingKey };
+            body.thinking_api_key = data.thinkingKey;
         }
         if (data.frontierModel) {
             body.frontier_model = data.frontierModel;
             body.frontier_provider = 'anthropic';
-            body.frontier_credentials = { api_key: data.frontierKey };
+            body.frontier_api_key = data.frontierKey;
         }
         return await this._props.api.createPersona(body);
     }
@@ -62,7 +62,7 @@ export default class SetupApp extends App {
         form.append('phrase', data.phrase);
         form.append('model', data.model);
         if (data.provider) form.append('provider', data.provider);
-        if (data.key) form.append('credentials', data.key);
+        if (data.key) form.append('api_key', data.key);
         if (data.url) form.append('url', data.url);
         return await this._props.api.migratePersona(form);
     }

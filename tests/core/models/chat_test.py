@@ -74,7 +74,7 @@ async def test_anthropic_returns_content():
 
         result = {}
         async def run(url):
-            model = Model(name="claude-3", provider="anthropic", credentials={"api_key": "test"}, url=url)
+            model = Model(name="claude-3", provider="anthropic", api_key="test", url=url)
             result["text"] = await models.chat(model, [{"role": "user", "content": "hello"}])
         
         anthropic.assert_chat(
@@ -92,7 +92,7 @@ async def test_anthropic_sends_correct_model():
         from application.core.data import Model
         from application.platform import anthropic
 
-        model = Model(name="claude-3", provider="anthropic", credentials={"api_key": "test"}, url="TBD")
+        model = Model(name="claude-3", provider="anthropic", api_key="test", url="TBD")
         async def run(url):
             model.url = url
             await models.chat(model, [{"role": "user", "content": "hi"}])
@@ -119,7 +119,7 @@ async def test_anthropic_raises_model_error_on_401():
             from application.core.exceptions import ModelError
             try:
                 await models.chat(
-                    Model(name="c", provider="anthropic", credentials={"api_key": "x"}, url=url),
+                    Model(name="c", provider="anthropic", api_key="x", url=url),
                     [{"role": "user", "content": "hi"}]
                 )
                 assert False, "Expected ModelError"
@@ -149,7 +149,7 @@ async def test_anthropic_raises_model_error_on_500():
             from application.core.exceptions import ModelError
             try:
                 await models.chat(
-                    Model(name="c", provider="anthropic", credentials={"api_key": "x"}, url=url),
+                    Model(name="c", provider="anthropic", api_key="x", url=url),
                     [{"role": "user", "content": "hi"}]
                 )
                 assert False, "Expected ModelError"
@@ -178,7 +178,7 @@ async def test_openai_returns_content():
         from application.core.data import Model
         from application.platform import openai
 
-        model = Model(name="gpt-4", provider="openai", credentials={"api_key": "test"}, url="TBD")
+        model = Model(name="gpt-4", provider="openai", api_key="test", url="TBD")
         result = {}
         async def run(url):
             model.url = url
@@ -199,7 +199,7 @@ async def test_openai_sends_correct_model():
         from application.core.data import Model
         from application.platform import openai
 
-        model = Model(name="gpt-4", provider="openai", credentials={"api_key": "test"}, url="TBD")
+        model = Model(name="gpt-4", provider="openai", api_key="test", url="TBD")
         async def run(url):
             model.url = url
             await models.chat(model, [{"role": "user", "content": "hi"}])
@@ -226,7 +226,7 @@ async def test_openai_raises_model_error_on_401():
             from application.core.exceptions import ModelError
             try:
                 await models.chat(
-                    Model(name="g", provider="openai", credentials={"api_key": "x"}, url=url),
+                    Model(name="g", provider="openai", api_key="x", url=url),
                     [{"role": "user", "content": "hi"}]
                 )
                 assert False, "Expected ModelError"
@@ -256,7 +256,7 @@ async def test_openai_raises_model_error_on_500():
             from application.core.exceptions import ModelError
             try:
                 await models.chat(
-                    Model(name="g", provider="openai", credentials={"api_key": "x"}, url=url),
+                    Model(name="g", provider="openai", api_key="x", url=url),
                     [{"role": "user", "content": "hi"}]
                 )
                 assert False, "Expected ModelError"

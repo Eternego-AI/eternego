@@ -1,4 +1,4 @@
-"""chat_json_stream — stream and return parsed JSON for all model kinds."""
+"""chat_stream — stream and return text for all model kinds."""
 
 from application.platform.processes import on_separate_process_async
 
@@ -6,23 +6,21 @@ from application.platform.processes import on_separate_process_async
 # ── Local ───────────────────────────────────────────────────────────────────
 
 
-async def test_local_streams_and_parses_json():
+async def test_local_streams_and_returns_text():
     def isolated():
-        import json
         from application.platform import ollama
         from application.core import models
         from application.core.data import Model
 
-        def stream_json(obj):
-            text = json.dumps(obj)
-            return [{"message": {"content": c}} for c in text]
+        text = "Hello, person."
+        chunks = [{"message": {"content": c}} for c in text]
 
         result = {}
         async def run(url):
-            result["value"] = await models.chat_json_stream(Model(name="llama3", url=url), [{"role": "user", "content": "json"}])
+            result["value"] = await models.chat_stream(Model(name="llama3", url=url), [{"role": "user", "content": "hi"}])
 
-        ollama.assert_call(run=run, response=stream_json({"answer": 42}))
-        assert result["value"] == {"answer": 42}, result["value"]
+        ollama.assert_call(run=run, response=chunks)
+        assert result["value"] == text, result["value"]
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -36,7 +34,7 @@ async def test_local_raises_engine_error_on_connection_failure():
         from application.core.exceptions import EngineConnectionError
 
         try:
-            asyncio.run(models.chat_json_stream(Model(name="llama3", url="http://127.0.0.1:1"), []))
+            asyncio.run(models.chat_stream(Model(name="llama3", url="http://127.0.0.1:1"), []))
             assert False, "should have raised"
         except EngineConnectionError:
             pass
@@ -51,15 +49,15 @@ async def test_local_strips_thinking_tags():
         from application.core import models
         from application.core.data import Model
 
-        thinking_then_json = '<think>let me reason about this</think>{"answer": 42}'
-        chunks = [{"message": {"content": c}} for c in thinking_then_json]
+        thinking_then_text = '<think>let me reason about this</think>The answer is 42.'
+        chunks = [{"message": {"content": c}} for c in thinking_then_text]
 
         result = {}
         async def run(url):
-            result["value"] = await models.chat_json_stream(Model(name="llama3", url=url), [])
+            result["value"] = await models.chat_stream(Model(name="llama3", url=url), [])
 
         ollama.assert_call(run=run, response=chunks)
-        assert result["value"] == {"answer": 42}, result["value"]
+        assert result["value"] == "The answer is 42.", result["value"]
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -77,7 +75,7 @@ async def test_anthropic_raises_model_error_on_http_error():
         async def run(url):
             from application.core.exceptions import ModelError
             try:
-                await models.chat_json_stream(Model(name="c", provider="anthropic", api_key="x", url=url), [])
+                await models.chat_stream(Model(name="c", provider="anthropic", api_key="x", url=url), [])
                 assert False, "Expected ModelError"
             except ModelError:
                 pass
@@ -106,7 +104,7 @@ async def test_openai_raises_model_error_on_http_error():
         async def run(url):
             from application.core.exceptions import ModelError
             try:
-                await models.chat_json_stream(Model(name="g", provider="openai", api_key="x", url=url), [])
+                await models.chat_stream(Model(name="g", provider="openai", api_key="x", url=url), [])
                 assert False, "Expected ModelError"
             except ModelError:
                 pass

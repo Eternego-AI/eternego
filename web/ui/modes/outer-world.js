@@ -69,6 +69,10 @@ class OuterWorld extends Mode {
                 else if (title.includes('hearing') || title.includes('heard')) this._mind.setState('thinking');
                 else if (title.includes('answered') || title.includes('queried')) this._mind.setState('idle');
 
+                if (title === 'heard' && details.content && details.channel_type && details.channel_type !== 'web') {
+                    this._conversation.addMessage('person', details.content);
+                }
+
                 if (title.startsWith('pipeline:') && details.stage) {
                     this._mind.activateStage(details.stage, details.impression, details.meaning);
                 }

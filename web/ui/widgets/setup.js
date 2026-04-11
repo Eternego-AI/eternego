@@ -5,17 +5,17 @@ class SetupWidget extends Widget {
         setup-widget {
             display: flex;
         }
-        setup-widget .sw-label { font-size: 13px; font-weight: 400; color: var(--text-secondary); }
-        setup-widget .sw-hint { font-size: 11px; font-weight: 300; color: var(--text-dim); line-height: 1.6; }
-        setup-widget .sw-hint strong { color: var(--text-muted); font-weight: 500; }
+        setup-widget .sw-label { font-size: 13px; font-weight: 400; color: var(--text-body); }
+        setup-widget .sw-hint { font-size: 11px; font-weight: 300; color: var(--text-secondary); line-height: 1.6; }
+        setup-widget .sw-hint strong { color: var(--text-body); font-weight: 500; }
         setup-widget .sw-hint code { background: var(--surface-hover); padding: 1px 5px; border-radius: var(--radius-sm); font-size: 10px; }
         setup-widget .sw-input {
             width: 100%; padding: 10px 14px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-default);
             border-radius: var(--radius-lg); color: var(--text-body); font-family: var(--font); font-size: 13px; outline: none;
             transition: border-color 0.3s var(--ease);
         }
-        setup-widget .sw-input::placeholder { color: var(--text-faint); }
-        setup-widget .sw-url { font-size: 11px; color: var(--text-dim); padding: 8px 14px; }
+        setup-widget .sw-input::placeholder { color: var(--text-dim); }
+        setup-widget .sw-url { font-size: 11px; color: var(--text-secondary); padding: 8px 14px; }
         setup-widget .sw-input:focus { border-color: var(--accent-border); }
         setup-widget .sw-nav { display: flex; justify-content: space-between; align-items: center; padding-top: 20px; }
         setup-widget .sw-btn {
@@ -54,7 +54,7 @@ class SetupWidget extends Widget {
             border-radius: var(--radius-lg); text-align: center; cursor: pointer; transition: border-color 0.3s, background 0.3s;
         }
         setup-widget .sw-dropzone:hover, setup-widget .sw-dropzone.dragover { border-color: var(--accent-border); background: var(--accent-bg); }
-        setup-widget .sw-dropzone-text { font-size: 12px; color: var(--text-dim); pointer-events: none; }
+        setup-widget .sw-dropzone-text { font-size: 12px; color: var(--text-secondary); pointer-events: none; }
         setup-widget .sw-file-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
     `;
 
@@ -246,7 +246,7 @@ class SetupWidget extends Widget {
         const loadingPanel = this._panels.loading;
         loadingPanel.innerHTML = `
             <div class="sw-spinner"></div>
-            <div class="sw-status" style="text-align:center;font-size:11px;color:var(--text-dim);margin-top:16px;">Preparing environment...</div>
+            <div class="sw-status" style="text-align:center;font-size:11px;color:var(--text-secondary);margin-top:16px;">Preparing environment...</div>
         `;
         const statusEl = loadingPanel.querySelector('.sw-status');
 

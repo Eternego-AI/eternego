@@ -55,7 +55,7 @@ async def test_anthropic_delegates_to_chat():
         from application.core.data import Model
         from application.platform import anthropic
 
-        model = Model(name="claude-3", provider="anthropic", credentials={"api_key": "test"}, url="TBD")
+        model = Model(name="claude-3", provider="anthropic", api_key="test", url="TBD")
         result = {}
         async def run(url):
             model.url = url
@@ -83,7 +83,7 @@ async def test_anthropic_raises_model_error_on_http_error():
         async def run(url):
             from application.core.exceptions import ModelError
             try:
-                await models.generate(Model(name="g", provider="openai", credentials={"api_key": "x"}, url=url), "hi")
+                await models.generate(Model(name="g", provider="openai", api_key="x", url=url), "hi")
                 assert False, "Expected ModelError"
             except ModelError:
                 pass
@@ -107,7 +107,7 @@ async def test_openai_delegates_to_chat():
         from application.core.data import Model
         from application.platform import openai
 
-        model = Model(name="gpt-4", provider="openai", credentials={"api_key": "test"}, url="TBD")
+        model = Model(name="gpt-4", provider="openai", api_key="test", url="TBD")
         result = {}
         async def run(url):
             model.url = url
@@ -135,7 +135,7 @@ async def test_openai_raises_model_error_on_http_error():
         async def run(url):
             from application.core.exceptions import ModelError
             try:
-                await models.generate(Model(name="g", provider="openai", credentials={"api_key": "x"}, url=url), "hi")
+                await models.generate(Model(name="g", provider="openai", api_key="x", url=url), "hi")
                 assert False, "Expected ModelError"
             except ModelError:
                 pass
