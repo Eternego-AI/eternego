@@ -1,12 +1,19 @@
 """Persona — preserving a persona's life in an encrypted diary."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import bus, paths, system
 from application.core.data import Persona
 from application.core.exceptions import DiaryError, SecretStorageError, UnsupportedOS
 
 
-async def write_diary(persona: Persona) -> Outcome[dict]:
+@dataclass
+class WriteDiaryData:
+    diary_path: str
+
+
+async def write_diary(persona: Persona) -> Outcome[WriteDiaryData]:
     """It preserves your persona's life so it survives across time, hardware, and changes."""
     await bus.propose("Saving diary", {"persona": persona})
 
@@ -21,9 +28,9 @@ async def write_diary(persona: Persona) -> Outcome[dict]:
 
         await bus.broadcast("Diary saved", {"persona": persona})
 
-        return Outcome(success=True, message="Diary saved successfully", data={
-            "diary_path": str(diary_path / diary_filename),
-        })
+        return Outcome(success=True, message="Diary saved successfully", data=WriteDiaryData(
+            diary_path=str(diary_path / diary_filename),
+        ))
 
     except UnsupportedOS as e:
         await bus.broadcast("Diary failed", {"reason": "unsupported_os", "persona": persona, "error": str(e)})

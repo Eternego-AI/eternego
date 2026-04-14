@@ -86,3 +86,55 @@ async def test_delete_sends_correct_path_and_body():
         )
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
+
+
+async def test_stream_yields_chunks():
+    def isolated():
+        import asyncio
+        from application.platform import ollama
+
+        chunks = []
+
+        async def consume(url):
+            async for chunk in ollama.stream(url, "/api/chat", {"model": "test"}):
+                chunks.append(chunk)
+
+        ollama.assert_call(
+            run=lambda url: consume(url),
+            responses=[
+                [
+                    {"message": {"content": "Hello"}, "done": False},
+                    {"message": {"content": " world"}, "done": False},
+                    {"message": {"content": ""}, "done": True},
+                ]
+            ],
+        )
+        assert len(chunks) == 3
+        assert chunks[0]["message"]["content"] == "Hello"
+        assert chunks[1]["message"]["content"] == " world"
+        assert chunks[2]["done"] is True
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_stream_sends_correct_body():
+    def isolated():
+        import asyncio
+        from application.platform import ollama
+
+        async def consume(url):
+            async for _ in ollama.stream(url, "/api/chat", {"model": "test", "format": "json", "messages": [{"role": "user", "content": "hi"}]}):
+                pass
+
+        def validate(r):
+            assert r["body"]["model"] == "test"
+            assert r["body"]["format"] == "json"
+            assert r["body"]["messages"] == [{"role": "user", "content": "hi"}]
+
+        ollama.assert_call(
+            run=lambda url: consume(url),
+            validate=validate,
+            responses=[[{"message": {"content": "{}"}, "done": True}]],
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error

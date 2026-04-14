@@ -20,7 +20,7 @@ async def test_find_returns_persona():
         filesystem.write_json(identity, objects.json(p))
         result = asyncio.run(spec.find(p.id))
         assert result.success, result.message
-        assert result.data["persona"].name == "Primus"
+        assert result.data.persona.name == "Primus"
     
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

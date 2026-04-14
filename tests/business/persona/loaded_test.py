@@ -8,7 +8,6 @@ async def test_loaded_returns_running_persona():
         from application.business import persona as spec
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
@@ -29,17 +28,9 @@ async def test_loaded_returns_running_persona():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
-        
-        ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
         agents._personas[p.id] = ego
-        result = asyncio.run(spec.loaded(p.id))
+        result = asyncio.run(spec.loaded(p))
         assert result.success, result.message
 
     code, error = await on_separate_process_async(isolated)
@@ -53,12 +44,14 @@ async def test_loaded_fails_when_not_running():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, gateways
+        from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        result = asyncio.run(spec.loaded("not-running"))
+        p = Persona(id="not-running", name="Ghost", thinking=Model(name="llama3", url="not required"), base_model="llama3")
+        result = asyncio.run(spec.loaded(p))
         assert result.success is False
 
     code, error = await on_separate_process_async(isolated)

@@ -20,9 +20,9 @@ async def test_connect_web_channel_succeeds():
         def run(url):
             outcome = asyncio.run(spec.create(name="ConnectBot", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={})))
             assert outcome.success, outcome.message
-            persona_id = outcome.data["persona_id"]
+            persona_id = outcome.data.persona.id
             outcome = asyncio.run(spec.find(persona_id))
-            persona = outcome.data["persona"]
+            persona = outcome.data.persona
             ch = Channel(type="web", name="new-web")
             outcome = asyncio.run(spec.connect(persona, ch))
             assert outcome.success, outcome.message

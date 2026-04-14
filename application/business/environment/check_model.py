@@ -1,12 +1,19 @@
 """Environment — verifying a model is available and responding."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import bus, local_inference_engine, models
 from application.core.data import Model
 from application.core.exceptions import EngineConnectionError, ModelError
 
 
-async def check_model(model: Model) -> Outcome[dict]:
+@dataclass
+class CheckModelData:
+    model: Model
+
+
+async def check_model(model: Model) -> Outcome[CheckModelData]:
     """Verify the model is available and responding."""
     await bus.propose("Checking model", {"model": model})
 
@@ -15,7 +22,7 @@ async def check_model(model: Model) -> Outcome[dict]:
             if await local_inference_engine.check(model.url, model.name):
                 await bus.broadcast("Model is ready", {"model": model.name})
                 return Outcome(
-                    success=True, message="Model is ready", data={"model": model}
+                    success=True, message="Model is ready", data=CheckModelData(model=model)
                 )
 
             await bus.broadcast("Model check failed", {"model": model.name})
@@ -24,7 +31,7 @@ async def check_model(model: Model) -> Outcome[dict]:
         await models.chat(model, [{"role": "user", "content": "hi"}])
         await bus.broadcast("Model is ready", {"model": model.name, "provider": model.provider})
         return Outcome(
-            success=True, message="Model is ready", data={"model": model}
+            success=True, message="Model is ready", data=CheckModelData(model=model)
         )
 
     except ModelError as e:

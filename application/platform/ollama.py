@@ -1,4 +1,4 @@
-"""Ollama — local model communication: serve, pull, generate, model management."""
+"""Ollama — local model communication."""
 
 import json
 import threading
@@ -7,6 +7,7 @@ import httpx
 
 from config.inference import OLLAMA_BASE_URL
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from application.platform.observer import send, Message
 
 
 class OllamaError(Exception):
@@ -75,6 +76,32 @@ async def stream(base_url: str, path: str, data: dict):
         raise ConnectionError(str(e)) from e
 
 
+async def chat(base_url: str, model: str, messages: list[dict]):
+    """Stream chat response, yielding content chunks."""
+    body = {"model": model, "messages": messages}
+    try:
+        async for chunk in stream(base_url, "/api/chat", body):
+            content = chunk.get("message", {}).get("content", "")
+            if content:
+                await send(Message("Ollama stream chunk received", {"chunk": content}))
+                yield content
+    except OllamaError as e:
+        raise OllamaError(str(e)) from e
+
+
+async def chat_json(base_url: str, model: str, messages: list[dict]):
+    """Stream JSON chat response, yielding content chunks. Uses format:json constraint."""
+    body = {"model": model, "messages": messages, "format": "json"}
+    try:
+        async for chunk in stream(base_url, "/api/chat", body):
+            content = chunk.get("message", {}).get("content", "")
+            if content:
+                await send(Message("Ollama stream chunk received", {"chunk": content}))
+                yield content
+    except OllamaError as e:
+        raise OllamaError(str(e)) from e
+
+
 # ── Assertions ───────────────────────────────────────────────────────────────
 
 def assert_post(run, validate=None, response=None, status_code=200):
@@ -116,7 +143,7 @@ def assert_call(run, validate=None, response=None, responses=None, status_code=2
             body = None
             if content_length:
                 body = json.loads(self.rfile.read(int(content_length)))
-            received_list.append({"body": body, "path": self.path, "method": self.command})
+            received_list.append({"body": body, "path": self.path, "method": self.command, "headers": dict(self.headers)})
 
             idx = min(call_index[0], len(responses) - 1)
             resp = responses[idx]
@@ -127,7 +154,6 @@ def assert_call(run, validate=None, response=None, responses=None, status_code=2
             self.end_headers()
 
             if isinstance(resp, list):
-                # Streaming: each item is a line-delimited JSON chunk
                 for chunk in resp:
                     self.wfile.write((json.dumps(chunk) + "\n").encode())
             else:

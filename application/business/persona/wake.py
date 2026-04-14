@@ -1,38 +1,36 @@
 """Persona — waking a persona and opening gateways."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import agents, bus
 from application.core.brain import situation
-from application.core.brain.mind import meanings
+from application.core.data import Persona
 
 from .connect import connect
-from .find import find
 
 
-async def wake(persona_id: str, worker) -> Outcome[dict]:
-    """Wake a persona — find, open gateways, construct ego, register."""
-    await bus.propose("Waking persona", {"persona_id": persona_id})
+@dataclass
+class WakeData:
+    persona: Persona
 
-    outcome = await find(persona_id)
-    if not outcome.success:
-        await bus.broadcast("Wake failed", {"persona_id": persona_id, "reason": "not_found"})
-        return outcome
 
-    agent = outcome.data["persona"]
+async def wake(persona: Persona, worker) -> Outcome[WakeData]:
+    """Wake a persona — open gateways, construct ego, register."""
+    await bus.propose("Waking persona", {"persona": persona})
 
-    if not (agent.channels or []):
-        await bus.broadcast("Wake failed", {"persona": agent, "reason": "no_channels"})
+    if not (persona.channels or []):
+        await bus.broadcast("Wake failed", {"persona": persona, "reason": "no_channels"})
         return Outcome(success=False, message="No channels configured for this persona.")
 
-    for channel in (agent.channels or []):
-        outcome = await connect(agent, channel)
+    for channel in (persona.channels or []):
+        outcome = await connect(persona, channel)
         if not outcome.success:
-            await bus.broadcast("Wake failed", {"persona": agent, "error": outcome.message})
+            await bus.broadcast("Wake failed", {"persona": persona, "error": outcome.message})
             return outcome
 
-    all_meanings = meanings.built_in(agent) + meanings.specific_to(agent)
-    ego = agents.Ego(agent, all_meanings, worker, situation.wake)
-    agents.register(agent, ego)
+    ego = agents.Ego(persona, worker, situation.wake)
+    agents.register(persona, ego)
 
-    await bus.broadcast("Persona awake", {"persona": agent})
-    return Outcome(success=True, message="Persona awake", data={"persona_id": agent.id})
+    await bus.broadcast("Persona awake", {"persona": persona})
+    return Outcome(success=True, message="Persona awake", data=WakeData(persona=persona))

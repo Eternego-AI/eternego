@@ -8,7 +8,6 @@ async def test_pair_claims_code():
         from application.business import environment
         from application.core import agents, gateways
         from application.core.data import Persona, Model, Channel
-        from application.core.brain.data import Meaning
         from application.platform import OS
         OS._secret_cache_only = True
 
@@ -21,21 +20,14 @@ async def test_pair_claims_code():
 
         class FakeWorker:
             def run(self, *args): pass
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
 
-        ego = agents.Ego(persona, [TestMeaning(persona)], FakeWorker())
+        ego = agents.Ego(persona, FakeWorker())
         agents._personas[persona.id] = ego
 
         pairing_code = agents.pair(persona, Channel(type="telegram", name="12345"))
         result = asyncio.run(environment.pair(pairing_code))
         assert result.success, result.message
-        assert "persona_id" in result.data
+        assert result.data.persona.id
     
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

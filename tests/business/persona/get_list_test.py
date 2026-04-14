@@ -14,7 +14,7 @@ async def test_get_list_returns_empty_when_no_personas():
         gateways._active.clear()
         outcome = asyncio.run(spec.get_list())
         assert outcome.success is False
-        assert outcome.data["personas"] == []
+        assert outcome.data.personas == []
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -40,7 +40,7 @@ async def test_get_list_returns_personas():
         filesystem.write_json(identity, objects.json(p))
         result = asyncio.run(spec.get_list())
         assert result.success, result.message
-        assert len(result.data["personas"]) == 1
+        assert len(result.data.personas) == 1
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

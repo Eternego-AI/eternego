@@ -39,11 +39,11 @@ def schedule(persona_id: str) -> str:
 
 
 def notes(persona_id: str) -> str:
-    """All active notes."""
-    entries = paths.read_files_matching(persona_id, paths.notes(persona_id), "*.md")
-    if not entries:
+    """Active notes."""
+    content = paths.read(paths.notes(persona_id))
+    if not content.strip():
         return ""
-    return "# Notes\n" + "\n\n".join(entries)
+    return "# Notes\n" + content.strip()
 
 
 def normal(persona_id: str) -> str:
@@ -54,7 +54,9 @@ def normal(persona_id: str) -> str:
 def sleep(persona_id: str) -> str:
     parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id), (
         'This is your last response before you shut down for the night. '
-        'Say goodnight and mention anything you want to pick up tomorrow.'
+        'Say goodnight and clearly mention anything you want to pick up tomorrow — '
+        'ongoing tasks, pending follow-ups, or important context so you can '
+        'continue where you left off when you wake up.'
     )]
     return "\n\n".join(p for p in parts if p)
 

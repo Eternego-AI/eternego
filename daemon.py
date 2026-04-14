@@ -29,16 +29,16 @@ async def start_web(host: str, port: int) -> None:
 async def on_channel_paired(signal: Signal):
     if signal.title != "Channel paired":
         return
-    persona_id = signal.details.get("persona_id")
-    if not persona_id:
+    agent = signal.details.get("persona")
+    if not agent:
         return
-    live = await persona.loaded(persona_id)
+    live = await persona.loaded(agent)
     if live.success:
-        worker = agents.persona(live.data["persona"]).worker
-        await persona.nap(live.data["persona"])
+        worker = agents.persona(live.data.persona).worker
+        await persona.nap(live.data.persona)
     else:
         worker = Worker()
-    await persona.wake(persona_id, worker)
+    await persona.wake(agent, worker)
 
 
 async def restart_gateway(command: Command):
@@ -55,7 +55,7 @@ async def restart_gateway(command: Command):
         print(f"Failed to nap {agent.name}: {outcome.message}")
         return
 
-    outcome = await persona.wake(agent.id, worker)
+    outcome = await persona.wake(agent, worker)
     if not outcome.success:
         print(f"Failed to wake {agent.name}: {outcome.message}")
 
@@ -86,9 +86,9 @@ async def run(config):
     if not outcome.success:
         print(f"No personas yet: {outcome.message}")
 
-    personas = (outcome.data or {}).get("personas", [])
+    personas = outcome.data.personas if outcome.data else []
     for agent in personas:
-        outcome = await persona.wake(agent.id, Worker())
+        outcome = await persona.wake(agent, Worker())
         if not outcome.success:
             print(f"Failed to wake {agent.name}: {outcome.message}")
 
@@ -110,9 +110,9 @@ async def run(config):
             elapsed = 0
             outcome = await persona.running()
             if outcome.success:
-                for agent in (outcome.data or {}).get("personas", []):
+                for agent in outcome.data.personas if outcome.data else []:
                     now = datetimes.now()
-                    logger.info("Heartbeat", {"persona": agent.id, "time": now.strftime("%Y-%m-%d %H:%M")})
+                    logger.info("Heartbeat", {"persona": agent, "time": now.strftime("%Y-%m-%d %H:%M")})
                     await persona.live(agent, now)
                     await routine.trigger(agent)
 
@@ -120,7 +120,7 @@ async def run(config):
     print("Shutting down...")
     outcome = await persona.running()
     if outcome.success:
-        for agent in (outcome.data or {}).get("personas", []):
+        for agent in outcome.data.personas if outcome.data else []:
             await persona.nap(agent)
 
     if _web_server:

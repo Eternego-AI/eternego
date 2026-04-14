@@ -21,9 +21,9 @@ async def test_conversation_returns_messages():
             json.dumps({"role": "person", "content": "hello"}) + "\n"
             + json.dumps({"role": "persona", "content": "hi"}) + "\n"
         )
-        result = asyncio.run(spec.conversation(p.id))
+        result = asyncio.run(spec.conversation(p))
         assert result.success, result.message
-        assert len(result.data["messages"]) == 2
+        assert len(result.data.messages) == 2
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -36,13 +36,15 @@ async def test_conversation_returns_empty_when_no_file():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, gateways
+        from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         agents._personas.clear()
         gateways._active.clear()
-        result = asyncio.run(spec.conversation("no-conv"))
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
+        result = asyncio.run(spec.conversation(p))
         assert result.success, result.message
-        assert result.data["messages"] == []
+        assert result.data.messages == []
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

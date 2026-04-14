@@ -129,10 +129,10 @@ async def test_anthropic_raises_model_error_on_401():
         def validate(r):
             pass
 
-        anthropic.assert_call(
+        anthropic.assert_chat(
             run=run,
             validate=validate,
-            response_body={"error": "invalid_api_key"},
+            response={"content": [{"text": ""}]},
             status_code=401,
         )
     code, error = await on_separate_process_async(isolated)
@@ -159,10 +159,10 @@ async def test_anthropic_raises_model_error_on_500():
         def validate(r):
             pass
 
-        anthropic.assert_call(
+        anthropic.assert_chat(
             run=run,
             validate=validate,
-            response_body={"error": "internal"},
+            response={"content": [{"text": ""}]},
             status_code=500,
         )
     code, error = await on_separate_process_async(isolated)
@@ -236,10 +236,10 @@ async def test_openai_raises_model_error_on_401():
         def validate(r):
             pass
 
-        openai.assert_call(
+        openai.assert_chat(
             run=run,
             validate=validate,
-            response_body={"error": "invalid_api_key"},
+            response={"choices": [{"message": {"content": ""}}]},
             status_code=401,
         )
     code, error = await on_separate_process_async(isolated)
@@ -266,10 +266,10 @@ async def test_openai_raises_model_error_on_500():
         def validate(r):
             pass
 
-        openai.assert_call(
+        openai.assert_chat(
             run=run,
             validate=validate,
-            response_body={"error": "server_error"},
+            response={"choices": [{"message": {"content": ""}}]},
             status_code=500,
         )
 

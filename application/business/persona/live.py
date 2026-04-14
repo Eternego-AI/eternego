@@ -1,26 +1,21 @@
 """Persona — health check and due destiny entries."""
 
-import uuid
-
 from application.business.outcome import Outcome
 from application.core import agents, bus, paths
-from application.core.brain.data import Perception, Signal, SignalEvent
-from application.core.data import Persona
+from application.core.data import Message, Persona
 from application.core.exceptions import MindError
-from application.platform import datetimes, filesystem
+from application.platform import filesystem
 
 from .recover import recover
 
 
-async def live(persona: Persona, dt) -> Outcome[dict]:
+async def live(persona: Persona, dt) -> Outcome[None]:
     """Check persona health and due destiny entries."""
     ego = agents.persona(persona)
 
-    # ── Health check: restart if the worker died ─────────────────────────
     if ego.worker.idle and ego.worker.error:
         await recover(persona, ego.worker.error)
 
-    # ── Due destiny entries ──────────────────────────────────────────────
     await bus.propose("Checking todos", {"persona": persona})
     try:
         due = paths.due_destiny_entries(persona.id, dt)
@@ -34,13 +29,8 @@ async def live(persona: Persona, dt) -> Outcome[dict]:
             filesystem.delete(filepath)
             notifications.append(content)
 
-        signal = Signal(
-            id=str(uuid.uuid4()),
-            event=SignalEvent.nudged,
-            content="Due now:\n" + "\n---\n".join(notifications),
-        )
-        perception = Perception(impression=f"Due at {datetimes.iso_8601(datetimes.now())}", thread=[signal])
-        ego.incept(perception)
+        ego.memory.add(Message(content="Due now:\n" + "\n---\n".join(notifications)))
+        ego.worker.nudge()
 
         await bus.broadcast("Todos checked", {"persona": persona, "due": len(due)})
         return Outcome(success=True, message=f"{len(due)} entries due.")

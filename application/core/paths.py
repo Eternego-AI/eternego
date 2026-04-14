@@ -64,6 +64,11 @@ def wishes(persona_id: str) -> Path:
     return home(persona_id) / "wishes.md"
 
 
+def permissions(persona_id: str) -> Path:
+    """Path to the permissions.md file for that persona."""
+    return home(persona_id) / "permissions.md"
+
+
 def memory(persona_id: str) -> Path:
     """Path to the memory.json file for that persona."""
     return home(persona_id) / "memory.json"
@@ -96,12 +101,7 @@ def history_briefing(persona_id: str) -> Path:
 
 def mind(persona_id: str) -> Path:
     """Path to the mind.json file — persisted signals for that persona."""
-    return home(persona_id) / "mind.json"
-
-
-def mind_state(persona_id: str) -> Path:
-    """Path to the cognitive memory graph for that persona."""
-    return home(persona_id) / "mind" / "memory.json"
+    return home(persona_id) / "memory.json"
 
 
 def training_set(persona_id: str) -> Path:
@@ -110,8 +110,8 @@ def training_set(persona_id: str) -> Path:
 
 
 def notes(persona_id: str) -> Path:
-    """Path to the notes directory for that persona."""
-    return home(persona_id) / "notes"
+    """Path to the notes.md file for that persona."""
+    return home(persona_id) / "notes.md"
 
 
 def dna(persona_id: str) -> Path:

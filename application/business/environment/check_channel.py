@@ -1,12 +1,19 @@
 """Environment — verifying channel credentials are valid."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import bus, channels
 from application.core.data import Channel
 from application.core.exceptions import ChannelError
 
 
-async def check_channel(channel_type: str, credentials: dict) -> Outcome[dict]:
+@dataclass
+class CheckChannelData:
+    channel: Channel
+
+
+async def check_channel(channel_type: str, credentials: dict) -> Outcome[CheckChannelData]:
     """Verify the channel credentials are valid and the connection works."""
     await bus.propose("Checking channel", {"type": channel_type})
 
@@ -16,7 +23,7 @@ async def check_channel(channel_type: str, credentials: dict) -> Outcome[dict]:
 
         channel = Channel(type=channel_type, credentials=credentials)
         await bus.broadcast("Channel is ready", {"type": channel_type})
-        return Outcome(success=True, message="Channel is ready", data={"channel": channel})
+        return Outcome(success=True, message="Channel is ready", data=CheckChannelData(channel=channel))
 
     except ChannelError as e:
         await bus.broadcast("Channel check failed", {"type": channel_type, "error": str(e)})

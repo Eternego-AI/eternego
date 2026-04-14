@@ -8,7 +8,6 @@ async def test_trigger_fires_matching_spec():
         from application.business import routine
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
         from application.platform import datetimes, filesystem
 
         tmp = tempfile.mkdtemp()
@@ -20,21 +19,13 @@ async def test_trigger_fires_matching_spec():
         home.mkdir(parents=True, exist_ok=True)
         for f in ["person.md", "persona-trait.md", "wishes.md", "struggles.md", "traits.md"]:
             (home / f).touch()
-        
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
 
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
             def run(self, *args): pass
             def nudge(self): pass
-        ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
         agents._personas[p.id] = ego
 
         current_time = datetimes.now().strftime("%H:%M")
@@ -64,7 +55,6 @@ async def test_trigger_fires_nothing_when_no_match():
         from application.business import routine
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
         from application.platform import filesystem
 
         tmp = tempfile.mkdtemp()
@@ -76,21 +66,13 @@ async def test_trigger_fires_nothing_when_no_match():
         home.mkdir(parents=True, exist_ok=True)
         for f in ["person.md", "persona-trait.md", "wishes.md", "struggles.md", "traits.md"]:
             (home / f).touch()
-        
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
 
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
             def run(self, *args): pass
             def nudge(self): pass
-        ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
         agents._personas[p.id] = ego
 
         routines_path = paths.routines(p.id)
@@ -116,7 +98,6 @@ async def test_trigger_succeeds_when_no_routines_file():
         from application.business import routine
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
@@ -127,21 +108,13 @@ async def test_trigger_succeeds_when_no_routines_file():
         home.mkdir(parents=True, exist_ok=True)
         for f in ["person.md", "persona-trait.md", "wishes.md", "struggles.md", "traits.md"]:
             (home / f).touch()
-        
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
 
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
             def run(self, *args): pass
             def nudge(self): pass
-        ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
         agents._personas[p.id] = ego
 
         result = asyncio.run(routine.trigger(p))
@@ -161,7 +134,6 @@ async def test_trigger_skips_unknown_spec():
         from application.business import routine
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
         from application.platform import datetimes, filesystem
 
         tmp = tempfile.mkdtemp()
@@ -173,21 +145,13 @@ async def test_trigger_skips_unknown_spec():
         home.mkdir(parents=True, exist_ok=True)
         for f in ["person.md", "persona-trait.md", "wishes.md", "struggles.md", "traits.md"]:
             (home / f).touch()
-        
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
 
         class FakeWorker:
             def __init__(self):
                 self.stopped = False
             def run(self, *args): pass
             def nudge(self): pass
-        ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
         agents._personas[p.id] = ego
 
         current_time = datetimes.now().strftime("%H:%M")

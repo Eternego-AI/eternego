@@ -37,9 +37,16 @@ class Persona(Data):
 
 
 @dataclass(kw_only=True)
-class Message(Data):
-    channel: Channel
+class Prompt(Data):
+    role: str
     content: str
+
+
+@dataclass(kw_only=True)
+class Message(Data):
+    content: str
+    channel: Channel | None = None
+    prompt: Prompt | None = None
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
@@ -47,12 +54,6 @@ class Message(Data):
 class Thread(Data):
     id: str
     public: bool = True
-
-
-@dataclass(kw_only=True)
-class Prompt:
-    role: str
-    content: str
 
 
 @dataclass(kw_only=True)

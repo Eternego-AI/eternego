@@ -23,8 +23,8 @@ async def test_delete_succeeds():
                 name="DeleteMe", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={}),
             ))
             assert outcome.success, outcome.message
-            outcome = asyncio.run(spec.find(outcome.data["persona_id"]))
-            outcome = asyncio.run(spec.delete(outcome.data["persona"]))
+            outcome = asyncio.run(spec.find(outcome.data.persona.id))
+            outcome = asyncio.run(spec.delete(outcome.data.persona))
             assert outcome.success, outcome.message
 
         ollama.assert_call(

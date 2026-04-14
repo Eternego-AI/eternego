@@ -1,12 +1,13 @@
 """Persona — recovering from a failure."""
 
 from application.business.outcome import Outcome
-from application.core import agents, bus
-from application.core.data import Persona
+from application.core import agents, bus, channels, paths
+from application.core.data import Message, Persona, Prompt
 from application.core.exceptions import FrontierError, MindError
+from application.platform import datetimes
 
 
-async def recover(persona: Persona, error: Exception) -> Outcome[dict]:
+async def recover(persona: Persona, error: Exception) -> Outcome[None]:
     """It lets the persona recover from a failure — acknowledge what happened, restart, and carry on."""
     await bus.propose("Recovering persona", {"persona": persona, "error": str(error)})
 
@@ -14,11 +15,21 @@ async def recover(persona: Persona, error: Exception) -> Outcome[dict]:
         ego = agents.persona(persona)
 
         if isinstance(error, FrontierError):
-            message = "I tried to reach out to my mentor but they weren't around. Give me a moment to try again."
+            text = "I tried to reach out to my mentor but they weren't around. Give me a moment to try again."
         else:
-            message = "Sorry, it seems I got distracted. Let me see what I should be doing."
+            text = "Sorry, it seems I got distracted. Let me see what I should be doing."
 
-        await ego.say(message)
+        ego.memory.add(Message(
+            content=text,
+            prompt=Prompt(role="assistant", content=text),
+        ))
+        paths.append_jsonl(paths.conversation(persona.id), {
+            "role": "persona",
+            "content": text,
+            "channel": "",
+            "time": datetimes.iso_8601(datetimes.now()),
+        })
+        await channels.send_all(persona, text)
         ego.worker.reset()
         ego.worker.nudge()
 

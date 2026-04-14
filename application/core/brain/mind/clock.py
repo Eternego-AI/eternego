@@ -3,21 +3,26 @@
 from application.platform import logger
 
 
-async def tick(consciousness: list, memory, worker) -> None:
-    """Run the consciousness sequence until the mind has nothing left to process.
+async def tick(consciousness: list, worker) -> None:
+    """Run the brain function sequence until a full pass returns True throughout.
 
-    Each step is dispatched through the worker. If a new signal arrives
-    mid-step, the worker cancels the job and changed() restarts the
-    sequence from the beginning.
+    A step must return True to let the loop advance. Anything else — False, or
+    None from a cancelled dispatch when a nudge interrupts the current step —
+    restarts the loop from the top. Exits when a full pass completes with every
+    step returning True, or when the worker is permanently stopped.
     """
     logger.debug("Ticking")
 
-    while not memory.settled:
-        if worker.stopped:
-            return
-        for step in consciousness:
-            await worker.dispatch(step)
+    while not worker.stopped:
+        restart = False
+        for i, step in enumerate(consciousness):
+            result = await worker.dispatch(step)
             if worker.stopped:
                 return
-            if memory.changed():
+            if result is not True:
+                if i == 0:
+                    return
+                restart = True
                 break
+        if not restart:
+            return

@@ -9,7 +9,6 @@ async def test_recover_from_local_model_error():
         from application.business import persona as spec
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
         from application.core.exceptions import EngineConnectionError
 
         tmp = tempfile.mkdtemp()
@@ -38,16 +37,8 @@ async def test_recover_from_local_model_error():
             def nudge(self): self.nudged += 1
             def reset(self): self._error = None
 
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
-
         worker = FakeWorker()
-        ego = agents.Ego(p, [TestMeaning(p)], worker)
+        ego = agents.Ego(p, worker)
         agents._personas[p.id] = ego
 
         error = EngineConnectionError("Model returned an invalid JSON response")
@@ -72,7 +63,6 @@ async def test_recover_from_frontier_error():
         from application.business import persona as spec
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
         from application.core.exceptions import FrontierError
 
         tmp = tempfile.mkdtemp()
@@ -101,16 +91,8 @@ async def test_recover_from_frontier_error():
             def nudge(self): self.nudged += 1
             def reset(self): self._error = None
 
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
-
         worker = FakeWorker()
-        ego = agents.Ego(p, [TestMeaning(p)], worker)
+        ego = agents.Ego(p, worker)
         agents._personas[p.id] = ego
 
         error = FrontierError("Failed to contact frontier model")

@@ -5,7 +5,7 @@ from application.core import bus, gateways
 from application.core.data import Channel, Persona
 
 
-async def disconnect(persona: Persona, channel: Channel) -> Outcome:
+async def disconnect(persona: Persona, channel: Channel) -> Outcome[None]:
     """Close a channel connection for a persona."""
     await bus.propose("Disconnecting channel", {"persona": persona, "channel": channel})
     stop = gateways.of(persona).remove(channel)

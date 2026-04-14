@@ -20,7 +20,28 @@ def strip_tag(text: str, tag: str) -> str:
 def extract_json(text: str) -> dict:
     """Extract and parse the first JSON object from text, handling code fences and surrounding prose."""
     start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
+    if start == -1:
         raise json.JSONDecodeError("No JSON object found", text, 0)
-    return json.loads(text[start:end + 1])
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if escape:
+            escape = False
+            continue
+        if c == "\\":
+            escape = True
+            continue
+        if c == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(text[start:i + 1])
+    raise json.JSONDecodeError("No complete JSON object found", text, 0)

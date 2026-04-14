@@ -9,7 +9,7 @@ from .hear import hear
 from .pair import pair
 
 
-async def connect(persona: Persona, channel: Channel) -> Outcome:
+async def connect(persona: Persona, channel: Channel) -> Outcome[None]:
     """Open a connection for a channel and register it."""
     await bus.propose("Connecting channel", {"persona": persona, "channel": channel})
     try:
@@ -28,7 +28,7 @@ async def connect(persona: Persona, channel: Channel) -> Outcome:
                 if not outcome.success:
                     await channels.send(message.channel, outcome.message)
                 else:
-                    code = outcome.data["pairing_code"]
+                    code = outcome.data.pairing_code
                     await channels.send(
                         message.channel,
                         f"Your pairing code is: {code}\n\nRun: eternego pair {code}\n\nThis code expires in 10 minutes.",

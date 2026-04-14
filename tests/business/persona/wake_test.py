@@ -22,15 +22,16 @@ async def test_wake_succeeds():
                 name="WakeBot", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={}),
             ))
             assert outcome.success, outcome.message
-            persona_id = outcome.data["persona_id"]
+            persona_id = outcome.data.persona.id
 
             # Nap first to unload
             outcome = asyncio.run(spec.find(persona_id))
-            asyncio.run(spec.nap(outcome.data["persona"]))
+            persona = outcome.data.persona
+            asyncio.run(spec.nap(persona))
 
             # Wake
             from application.platform.asyncio_worker import Worker
-            outcome = asyncio.run(spec.wake(persona_id, Worker()))
+            outcome = asyncio.run(spec.wake(persona, Worker()))
             assert outcome.success, outcome.message
 
         ollama.assert_call(

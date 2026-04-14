@@ -9,7 +9,6 @@ async def test_live_processes_due_destiny_entries():
         from application.business import persona as spec
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
@@ -36,15 +35,7 @@ async def test_live_processes_due_destiny_entries():
             def nudge(self): self.nudged += 1
             def reset(self): self._error = None
 
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
-        
-        ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
         agents._personas[p.id] = ego
 
         # Create a destiny entry that is due now
@@ -71,7 +62,6 @@ async def test_live_recovers_when_worker_has_error():
         from application.business import persona as spec
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
         from application.core.exceptions import EngineConnectionError
 
         tmp = tempfile.mkdtemp()
@@ -101,17 +91,9 @@ async def test_live_recovers_when_worker_has_error():
             def nudge(self): self.nudged += 1
             def reset(self): self._error = None
 
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
-
         worker = FakeWorker()
         worker._error = EngineConnectionError("Model returned an invalid JSON response")
-        ego = agents.Ego(p, [TestMeaning(p)], worker)
+        ego = agents.Ego(p, worker)
         agents._personas[p.id] = ego
 
         from application.platform import datetimes
@@ -137,7 +119,6 @@ async def test_live_returns_nothing_due_when_empty():
         from application.business import persona as spec
         from application.core import agents, gateways, paths
         from application.core.data import Model, Persona
-        from application.core.brain.data import Meaning
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
@@ -164,15 +145,7 @@ async def test_live_returns_nothing_due_when_empty():
             def nudge(self): self.nudged += 1
             def reset(self): self._error = None
 
-        class TestMeaning(Meaning):
-            name = "Test"
-            def description(self): return "Test"
-            def clarify(self): return None
-            def reply(self): return "Reply"
-            def path(self): return None
-            def summarize(self): return None
-        
-        ego = agents.Ego(p, [TestMeaning(p)], FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
         agents._personas[p.id] = ego
 
         from application.platform import datetimes

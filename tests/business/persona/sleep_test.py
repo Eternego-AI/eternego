@@ -22,9 +22,9 @@ async def test_sleep_succeeds():
                 name="SleepBot", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={}),
             ))
             assert outcome.success, outcome.message
-            persona_id = outcome.data["persona_id"]
+            persona_id = outcome.data.persona.id
             outcome = asyncio.run(spec.find(persona_id))
-            outcome = asyncio.run(spec.sleep(outcome.data["persona"]))
+            outcome = asyncio.run(spec.sleep(outcome.data.persona))
             assert outcome.success, outcome.message
 
         ollama.assert_call(

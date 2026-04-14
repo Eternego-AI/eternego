@@ -64,4 +64,17 @@ def shape(persona: Persona) -> str:
     if persona_ctx.strip():
         sections.append(f"# Your Personality\n{persona_ctx.strip()}")
 
+    perms = paths.read(paths.permissions(persona.id))
+    sections.append(
+        "# Permissions\n"
+        + (perms.strip() if perms.strip() else "(no permissions granted yet)")
+        + "\n\n"
+        "Your built-in tools (saving reminders, notes, recalling conversations) are part of "
+        "your core functionality and do not require permission. "
+        "For tools that access external systems, run system commands, modify the person's "
+        "files, or perform destructive operations, check your permissions first. "
+        "If you lack permission, explain what you would do if you had it. "
+        "If the person has explicitly rejected a permission, instruct them on how to do it themselves."
+    )
+
     return "\n".join(sections)

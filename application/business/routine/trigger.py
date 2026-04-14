@@ -7,7 +7,7 @@ from application.core.data import Persona
 from application.platform import logger, datetimes, filesystem, processes
 
 
-async def trigger(persona: Persona) -> Outcome[dict]:
+async def trigger(persona: Persona) -> Outcome[None]:
     """Fire all routine entries whose trigger time matches the current minute."""
     await bus.propose("Triggering routines", {"persona": persona})
     current_time = datetimes.now().strftime("%H:%M")
@@ -22,9 +22,9 @@ async def trigger(persona: Persona) -> Outcome[dict]:
             continue
         spec_fn = getattr(persona_spec, spec, None)
         if not spec_fn:
-            logger.warning("Unknown routine spec", {"spec": spec, "persona_id": persona.id})
+            logger.warning("Unknown routine spec", {"spec": spec, "persona": persona})
             continue
-        logger.info("Triggering routine", {"spec": spec, "persona_id": persona.id})
+        logger.info("Triggering routine", {"spec": spec, "persona": persona})
         processes.run_async(lambda fn=spec_fn: fn(persona))
         fired.append(spec)
 

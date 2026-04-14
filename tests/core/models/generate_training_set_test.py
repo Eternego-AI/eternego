@@ -18,12 +18,13 @@ async def test_local_passes_dna_in_prompt():
             )
 
         def validate(r):
-            assert "Be concise and direct" in r["body"]["prompt"], "DNA not in prompt"
+            user_msg = r["body"]["messages"][0]["content"]
+            assert "Be concise and direct" in user_msg, "DNA not in prompt"
 
         ollama.assert_call(
             run=run,
             validate=validate,
-            response={"response": '{"training_pairs": [{"trait_source": "concise", "system": "s", "user": "u", "assistant": "a"}]}'},
+            responses=[[{"message": {"content": '{"training_pairs": [{"trait_source": "concise", "system": "s", "user": "u", "assistant": "a"}]}'}, "done": True}]],
         )
         assert len(result["value"]) == 1
         assert result["value"][0]["trait_source"] == "concise"
@@ -42,7 +43,7 @@ async def test_local_returns_empty_on_invalid_json():
         async def run(url):
             result["value"] = await models.generate_training_set(Model(url=url, name="llama3"), "some dna")
 
-        ollama.assert_call(run=run, response={"response": "not valid json at all"})
+        ollama.assert_call(run=run, responses=[[{"message": {"content": "not valid json at all"}, "done": True}]])
         assert result["value"] == []
 
     code, error = await on_separate_process_async(isolated)

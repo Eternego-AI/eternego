@@ -10,13 +10,32 @@ from web.socket import manager, WebChannel
 router = APIRouter()
 
 
+@router.websocket("/ws/system")
+async def system_websocket(ws: WebSocket):
+    await manager.connect("__system__", ws)
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
+    except Exception as e:
+        logger.warning("System WebSocket error", {"error": str(e), "type": type(e).__name__})
+    finally:
+        manager.disconnect("__system__", ws)
+
+
 @router.websocket("/ws/{persona_id}")
 async def websocket_endpoint(persona_id: str, ws: WebSocket):
     await manager.connect(persona_id, ws)
-    find = await persona.loaded(persona_id)
+    find_result = await persona.find(persona_id)
+    live = None
+    if find_result.success and find_result.data:
+        loaded = await persona.loaded(find_result.data.persona)
+        if loaded.success and loaded.data:
+            live = loaded.data.persona
     channel = Channel(type="web", name=persona_id, bus=WebChannel(persona_id))
-    if find.success:
-        await persona.connect(find.data["persona"], channel)
+    if live:
+        await persona.connect(live, channel)
     try:
         while True:
             msg = await ws.receive()
@@ -26,5 +45,5 @@ async def websocket_endpoint(persona_id: str, ws: WebSocket):
         logger.warning("WebSocket session error", {"error": str(e), "type": type(e).__name__})
     finally:
         manager.disconnect(persona_id, ws)
-        if not manager.has_connections(persona_id) and find.success:
-            await persona.disconnect(find.data["persona"], channel)
+        if not manager.has_connections(persona_id) and live:
+            await persona.disconnect(live, channel)

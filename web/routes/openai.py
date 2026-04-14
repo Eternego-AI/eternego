@@ -16,7 +16,7 @@ async def list_models():
     if not outcome.success:
         raise HTTPException(status_code=500, detail=outcome.message)
 
-    personas = (outcome.data or {}).get("personas", [])
+    personas = outcome.data.personas if outcome.data else []
     return {
         "object": "list",
         "data": [{"id": p.id, "object": "model", "owned_by": "eternego"} for p in personas],
@@ -29,7 +29,7 @@ async def get_model(model_id: str):
     if not outcome.success:
         raise HTTPException(status_code=404, detail=outcome.message)
 
-    p = outcome.data["persona"]
+    p = outcome.data.persona
     return {"id": p.id, "object": "model", "owned_by": "eternego"}
 
 
@@ -37,11 +37,14 @@ async def get_model(model_id: str):
 
 @router.post("/v1/chat/completions")
 async def chat_completions(request: ChatRequest):
-    outcome = await persona.loaded(request.model)
-    if not outcome.success:
+    find = await persona.find(request.model)
+    if not find.success or not find.data:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona.loaded(find.data.persona)
+    if not outcome.success or not outcome.data:
         raise HTTPException(status_code=404, detail=outcome.message)
 
-    live = outcome.data["persona"]
+    live = outcome.data.persona
 
     outcome = await persona.query(live, request.message)
     if not outcome.success:
@@ -53,7 +56,7 @@ async def chat_completions(request: ChatRequest):
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": outcome.data.get("response", "")},
+                "message": {"role": "assistant", "content": outcome.data.response if outcome.data else ""},
                 "finish_reason": "stop",
             }
         ],

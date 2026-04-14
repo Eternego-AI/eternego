@@ -2,6 +2,8 @@
 
 import uuid
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import bus, local_inference_engine, paths, system
 from application.core.data import Channel, Model, Persona
@@ -22,12 +24,18 @@ from .wake import wake
 from .write_diary import write_diary
 
 
+@dataclass
+class CreateData:
+    persona: Persona
+    recovery_phrase: str
+
+
 async def create(
     name: str,
     thinking: Model,
     channel: Channel,
     frontier: Model | None = None,
-) -> Outcome[dict]:
+) -> Outcome[CreateData]:
     """It gives birth to your persona with minimum but powerful initial abilities."""
     await bus.propose(
         "Creating persona", {"name": name, "thinking": thinking, "channel": channel, "frontier": frontier if frontier else None}
@@ -64,7 +72,6 @@ async def create(
         paths.create_directory(paths.destiny(persona.id))
         paths.create_directory(paths.training_set(persona.id))
         paths.create_directory(paths.workspace(persona.id))
-        paths.create_directory(paths.notes(persona.id))
         paths.create_directory(paths.meanings(persona.id))
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
@@ -83,7 +90,7 @@ async def create(
             )
             return Outcome(success=False, message=outcome.message)
 
-        outcome = await wake(persona.id, Worker())
+        outcome = await wake(persona, Worker())
         if not outcome.success:
             await bus.broadcast("Persona creation failed", {"reason": outcome.message, "persona": persona})
             return outcome
@@ -93,11 +100,10 @@ async def create(
         return Outcome(
             success=True,
             message="Persona created successfully",
-            data={
-                "persona_id": persona.id,
-                "name": persona.name,
-                "recovery_phrase": phrase,
-            },
+            data=CreateData(
+                persona=persona,
+                recovery_phrase=phrase,
+            ),
         )
 
     except UnsupportedOS as e:
@@ -136,19 +142,22 @@ async def create(
         return Outcome(success=False, message="Could not set up person files.")
 
     except ContextError as e:
-        await delete(persona)
+        if persona is not None:
+            await delete(persona)
 
         await bus.broadcast("Persona creation failed", {"reason": "context", "error": str(e)})
         return Outcome(success=False, message="Could not set up initial context for the persona.")
 
     except SkillError as e:
-        await delete(persona)
+        if persona is not None:
+            await delete(persona)
 
         await bus.broadcast("Persona creation failed", {"reason": "skills", "error": str(e)})
         return Outcome(success=False, message="Could not assess default skills. The model may have returned an unexpected response — try again.")
 
     except DiaryError as e:
-        await delete(persona)
+        if persona is not None:
+            await delete(persona)
 
         await bus.broadcast("Persona creation failed", {"reason": "diary", "error": str(e)})
         return Outcome(success=False, message="Could not save the persona diary.")

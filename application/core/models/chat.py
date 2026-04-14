@@ -8,25 +8,24 @@ from .is_local import is_local
 
 
 async def chat(model: Model, messages: list[dict]) -> str:
-    """Send messages to a model and return the response text."""
-    logger.debug("models.chat", {"model": model.name, "provider": model.provider})
-
-    if is_local(model):
-        try:
-            response = await ollama.post(model.url, "/api/chat", {"model": model.name, "messages": messages, "stream": False})
-            return strings.strip_tag(response.get("message", {}).get("content", ""), "think")
-        except ollama.OllamaError as e:
-            raise ModelError(f"Model returned an error: {e}") from e
-        except ConnectionError as e:
-            raise EngineConnectionError("Could not connect to the local inference engine") from e
-        except KeyError as e:
-            logger.warning("models.chat invalid response", {"model": model.name, "response": str(response)})
-            raise EngineConnectionError("Model returned an invalid response") from e
+    """Stream messages to a model and return the complete response text."""
+    logger.debug("models.chat", {"model": model.name, "provider": model.provider, "messages": messages})
 
     try:
-        if model.provider == "anthropic":
-            return await anthropic.async_chat(model.url, model.api_key, model.name, messages)
-
-        return await openai.async_chat(model.url, model.api_key, model.name, messages)
+        parts = []
+        if is_local(model):
+            async for chunk in ollama.chat(model.url, model.name, messages):
+                parts.append(chunk)
+        elif model.provider == "anthropic":
+            async for chunk in anthropic.chat(model.url, model.api_key, model.name, messages):
+                parts.append(chunk)
+        else:
+            async for chunk in openai.chat(model.url, model.api_key, model.name, messages):
+                parts.append(chunk)
+        return strings.strip_tag("".join(parts), "think")
+    except ollama.OllamaError as e:
+        raise ModelError(f"Model returned an error: {e}") from e
+    except ConnectionError as e:
+        raise EngineConnectionError("Could not connect to the local inference engine") from e
     except OSError as e:
         raise ModelError(f"Model returned an error: {e}") from e

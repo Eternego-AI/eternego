@@ -5,7 +5,7 @@ from application.core import agents, bus, gateways
 from application.core.data import Persona
 
 
-async def nap(persona: Persona) -> Outcome[dict]:
+async def nap(persona: Persona) -> Outcome[None]:
     """Quick stop — clear gateways, force-stop thinking, unload."""
     await bus.propose("Napping", {"persona": persona})
 

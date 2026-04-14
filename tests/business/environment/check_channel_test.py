@@ -21,7 +21,7 @@ async def test_telegram_succeeds_with_valid_token():
             response={"ok": True, "result": {"id": 123, "first_name": "Bot"}},
         )
         assert result["value"].success, result["value"].message
-        assert result["value"].data["channel"].type == "telegram"
+        assert result["value"].data.channel.type == "telegram"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -51,7 +51,7 @@ async def test_web_channel_succeeds():
 
         result = asyncio.run(environment.check_channel("web", {}))
         assert result.success, result.message
-        assert result.data["channel"].type == "web"
+        assert result.data.channel.type == "web"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

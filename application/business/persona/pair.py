@@ -1,11 +1,18 @@
 """Persona — generating a pairing code for channel verification."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import agents, bus
 from application.core.data import Channel, Persona
 
 
-async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
+@dataclass
+class PairData:
+    pairing_code: str
+
+
+async def pair(persona: Persona, channel: Channel) -> Outcome[PairData]:
     """Generate a pairing code so the person can verify a new channel."""
     await bus.propose("Pairing channel", {"persona": persona, "channel": channel})
 
@@ -19,4 +26,4 @@ async def pair(persona: Persona, channel: Channel) -> Outcome[dict]:
 
     code = agents.pair(persona, channel)
     await bus.broadcast("Channel pairing started", {"persona": persona, "channel": channel})
-    return Outcome(success=True, message="Pairing code generated.", data={"pairing_code": code})
+    return Outcome(success=True, message="Pairing code generated.", data=PairData(pairing_code=code))
