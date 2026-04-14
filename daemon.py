@@ -1,4 +1,8 @@
-"""Eternego daemon — long-running process that serves personas."""
+"""Eternego daemon — the business owner that starts the building.
+
+Gives the manager its job description: for each customer, assign an agent.
+Runs heartbeat rounds. Shuts down gracefully.
+"""
 
 import asyncio
 import signal
@@ -6,14 +10,11 @@ import sys
 
 import uvicorn
 
-from application.business import environment, persona, routine
-from application.core import agents
-from application.platform import datetimes, logger
-from application.platform.asyncio_worker import Worker
-from application.platform.observer import Command, Signal, subscribe
+from application.business import environment, persona
+from application.platform.observer import subscribe
+import manager
 from web.app import app as web_app
 from web.socket import on_signal
-
 
 _web_server: uvicorn.Server | None = None
 
@@ -23,50 +24,16 @@ async def start_web(host: str, port: int) -> None:
     global _web_server
     config = uvicorn.Config(web_app, host=host, port=port, log_level="error")
     _web_server = uvicorn.Server(config)
-    await _web_server.serve()
-
-
-async def on_channel_paired(signal: Signal):
-    if signal.title != "Channel paired":
-        return
-    agent = signal.details.get("persona")
-    if not agent:
-        return
-    live = await persona.loaded(agent)
-    if live.success:
-        worker = agents.persona(live.data.persona).worker
-        await persona.nap(live.data.persona)
-    else:
-        worker = Worker()
-    await persona.wake(agent, worker)
-
-
-async def restart_gateway(command: Command):
-    if command.title != "Restart gateway":
-        return
-
-    agent = command.details.get("persona")
-    if not agent:
-        return
-
-    worker = agents.persona(agent).worker
-    outcome = await persona.nap(agent)
-    if not outcome.success:
-        print(f"Failed to nap {agent.name}: {outcome.message}")
-        return
-
-    outcome = await persona.wake(agent, worker)
-    if not outcome.success:
-        print(f"Failed to wake {agent.name}: {outcome.message}")
+    if _web_server is not None:
+        await _web_server.serve()
 
 
 async def run(config):
-    """Run the daemon — load personas, start web server, heartbeat loop."""
+    """Run the daemon — start manager, load personas, start web server, heartbeat."""
 
-    # Daemon-specific signal subscriptions
-    subscribe(restart_gateway, on_channel_paired, on_signal)
+    subscribe(on_signal)
+    manager.start(web_app)
 
-    # Graceful shutdown on SIGTERM/SIGINT
     loop = asyncio.get_running_loop()
     shutdown = asyncio.Event()
     if sys.platform == "win32":
@@ -81,47 +48,30 @@ async def run(config):
     if not outcome.success:
         print(f"Warning: {outcome.message}")
 
-    # Load and wake all personas
+    # For each customer, assign an agent
     outcome = await persona.get_list()
     if not outcome.success:
         print(f"No personas yet: {outcome.message}")
 
     personas = outcome.data.personas if outcome.data else []
-    for agent in personas:
-        outcome = await persona.wake(agent, Worker())
-        if not outcome.success:
-            print(f"Failed to wake {agent.name}: {outcome.message}")
+    for p in personas:
+        try:
+            manager.serve(p)
+        except Exception as e:
+            print(f"Failed to serve {p.name}: {e}")
 
-    # Start web server
+    # Open the door
     web_task = asyncio.create_task(start_web(config.host, config.port))
     web_task.add_done_callback(
         lambda t: print(f"Web server stopped: {t.exception()}") if not t.cancelled() and t.exception() else None
     )
 
-    # Heartbeat loop
-    elapsed = 0
-    while not shutdown.is_set():
-        try:
-            await asyncio.wait_for(shutdown.wait(), timeout=1)
-        except asyncio.TimeoutError:
-            pass
-        elapsed += 1
-        if elapsed >= 60:
-            elapsed = 0
-            outcome = await persona.running()
-            if outcome.success:
-                for agent in outcome.data.personas if outcome.data else []:
-                    now = datetimes.now()
-                    logger.info("Heartbeat", {"persona": agent, "time": now.strftime("%Y-%m-%d %H:%M")})
-                    await persona.live(agent, now)
-                    await routine.trigger(agent)
+    # Wait for shutdown — each agent runs its own heartbeat
+    await shutdown.wait()
 
     # Graceful shutdown
     print("Shutting down...")
-    outcome = await persona.running()
-    if outcome.success:
-        for agent in outcome.data.personas if outcome.data else []:
-            await persona.nap(agent)
+    await manager.release_all()
 
     if _web_server:
         _web_server.should_exit = True

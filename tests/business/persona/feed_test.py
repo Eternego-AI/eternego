@@ -6,7 +6,7 @@ async def test_feed_succeeds_with_anthropic_data():
         import os
         import json
         import asyncio
-        from application.core import agents, gateways
+        from application.core import agents
         from application.business import persona as spec
         from application.platform import ollama
         from application.core.data import Model, Channel
@@ -15,8 +15,6 @@ async def test_feed_succeeds_with_anthropic_data():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
 
         def run(url):
             outcome = asyncio.run(spec.create(
@@ -26,6 +24,12 @@ async def test_feed_succeeds_with_anthropic_data():
             persona_id = outcome.data.persona.id
             outcome = asyncio.run(spec.find(persona_id))
             persona = outcome.data.persona
+
+            class FakeWorker:
+                def run(self, *args): pass
+                def nudge(self): pass
+                async def stop(self): pass
+            persona.ego = agents.Ego(persona, FakeWorker())
 
             data = json.dumps([
                 {"chat_messages": [

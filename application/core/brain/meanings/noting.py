@@ -11,7 +11,6 @@ def intention(persona: Persona) -> str:
 def prompt(persona: Persona) -> str:
     existing = paths.read(paths.notes(persona.id))
     return (
-        "# Noting\n\n"
         "The person wants you to explicitly save something for later — a fact, "
         "a reference, a code, a configuration, anything they want you to remember.\n\n"
         f"## Current Notes\n\n{existing.strip() or '(no notes yet)'}\n\n"

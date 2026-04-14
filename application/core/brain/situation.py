@@ -12,13 +12,14 @@ from application.platform import datetimes, OS
 
 def time() -> str:
     now = datetimes.now()
-    return f"Current time: {now.strftime('%A, %B %d, %Y %H:%M')}."
+    return f"## Current Time\n{now.strftime('%A, %B %d, %Y %H:%M')}"
 
 
 def environment(persona_id: str) -> str:
     os_name = OS.get_supported() or "is unknown, consider a unix based os"
     ws = paths.workspace(persona_id)
     return (
+        f"## Environment\n"
         f"Current OS: {os_name}\n"
         "When running commands, installing software, or suggesting system operations, "
         "use commands and packages appropriate for this OS.\n"
@@ -35,7 +36,7 @@ def schedule(persona_id: str) -> str:
     entries = paths.read_files_matching(persona_id, paths.destiny(persona_id), pattern)
     if not entries:
         return ""
-    return "# Today's Schedule\n" + "\n\n".join(entries)
+    return "## Today's Schedule\n" + "\n\n".join(entries)
 
 
 def notes(persona_id: str) -> str:
@@ -43,7 +44,7 @@ def notes(persona_id: str) -> str:
     content = paths.read(paths.notes(persona_id))
     if not content.strip():
         return ""
-    return "# Notes\n" + content.strip()
+    return "## Notes\n" + content.strip()
 
 
 def normal(persona_id: str) -> str:

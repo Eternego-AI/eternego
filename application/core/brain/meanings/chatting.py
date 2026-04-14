@@ -31,8 +31,7 @@ def prompt(persona: Persona) -> str:
         learning = ""
 
     return (
-        "# Chatting\n\n"
-        + learning
+        learning
         + "Read the conversation and reply to the person as the persona. "
         "Follow the roles: user messages are from the person, assistant messages are from you.\n\n"
         "## Tools\n\n"

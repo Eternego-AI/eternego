@@ -22,7 +22,7 @@ class Memory:
 
     def remember(self) -> None:
         """Restore messages and context from persisted state."""
-        logger.debug("memory.remember", {"persona": self._persona.id})
+        logger.debug("memory.remember", {"persona": self._persona.id, "messages": self._messages})
         entries = persistent_memory.read(self._storage_id)
         if not entries:
             return
@@ -51,18 +51,16 @@ class Memory:
                 id=m.get("id", ""),
             ))
         self.context = state.get("context")
-        logger.debug("memory.remember loaded", {"messages": len(self._messages)})
 
     def persist(self) -> None:
         """Save messages and context to disk."""
-        logger.debug("memory.persist", {"persona": self._persona.id})
+        logger.debug("memory.persist", {"persona": self._persona.id, "messages": self._messages})
         state = {
             "messages": [to_json(m) for m in self._messages],
             "context": self.context,
         }
         persistent_memory.clear(self._storage_id)
         persistent_memory.append(self._storage_id, state)
-        logger.debug("memory.persist saved", {"messages": len(self._messages)})
 
     @property
     def messages(self) -> list[Message]:

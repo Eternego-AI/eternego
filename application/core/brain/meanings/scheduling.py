@@ -9,7 +9,6 @@ def intention(persona: Persona) -> str:
 
 def prompt(persona: Persona) -> str:
     return (
-        "# Scheduling\n\n"
         "The person wants to save a reminder or schedule an event at a specific time.\n"
         "A reminder is personal — 'remind me to buy milk.' "
         "A scheduled event is an appointment — 'I have a meeting at 3pm.'\n\n"

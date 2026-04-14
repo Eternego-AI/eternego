@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from application.business import persona
+import manager
 from web.requests import ChatRequest
 
 router = APIRouter()
@@ -37,22 +38,17 @@ async def get_model(model_id: str):
 
 @router.post("/v1/chat/completions")
 async def chat_completions(request: ChatRequest):
-    find = await persona.find(request.model)
-    if not find.success or not find.data:
-        raise HTTPException(status_code=404, detail=find.message)
-    outcome = await persona.loaded(find.data.persona)
-    if not outcome.success or not outcome.data:
-        raise HTTPException(status_code=404, detail=outcome.message)
+    agent = manager.find_or_none(request.model)
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"Model '{request.model}' not found or not running.")
 
-    live = outcome.data.persona
-
-    outcome = await persona.query(live, request.message)
+    outcome = await persona.query(agent.persona, request.message)
     if not outcome.success:
         raise HTTPException(status_code=500, detail=outcome.message)
 
     return {
         "object": "chat.completion",
-        "model": live.id,
+        "model": agent.persona.id,
         "choices": [
             {
                 "index": 0,

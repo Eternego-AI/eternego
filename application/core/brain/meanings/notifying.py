@@ -9,7 +9,6 @@ def intention(persona: Persona) -> str:
 
 def prompt(persona: Persona) -> str:
     return (
-        "# Notify\n\n"
         "You need to notify the person about a due event, reminder, or important matter.\n"
         "Be clear about what is due, include the time, and mention any urgency.\n\n"
         "## Tools\n\n"

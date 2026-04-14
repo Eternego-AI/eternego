@@ -19,14 +19,28 @@ async def recognize(persona: Persona, identity: str, memory: Memory) -> bool:
         )
         system = (
             identity
-            + "\n\n# Recognize\n\n"
-            "Here is a list of abilities that you have:\n"
+            + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# ▶ YOUR TASK: Recognize\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "You have these abilities — the activities you can actually perform:\n"
             + abilities + "\n"
-            "0. None of the above\n\n"
+            "0. None of the above — this task needs a capability I don't have yet\n\n"
             "Read the full conversation. Focus on the most recent unaddressed request or incomplete task. "
-            "Ignore messages that have already been handled. Which ability best matches what needs attention right now?\n\n"
-            "Return JSON with the number of the ability:\n"
-            '```json\n{"ability": 1}\n```'
+            "Ignore messages already handled.\n\n"
+            "IMPORTANT: Match by CAPABILITY, not by topic.\n"
+            "- If the task needs to run commands, check system state (disk, memory, files), browse the web, "
+            "send emails, access external services, or do anything my listed abilities cannot literally DO → return 0.\n"
+            "- Topic similarity is not enough. 'Check disk space' sounds adjacent to scheduling (both involve 'check') "
+            "but scheduling can only SAVE reminders for the future, not check current state.\n"
+            "- Do not force a match. Return 0 whenever no ability has the actual capability.\n\n"
+            "Examples:\n"
+            "- 'Remind me at 5pm' → 5 (scheduling CAN save reminders)\n"
+            "- 'What's on my calendar?' → 4 (recalling CAN check scheduled events)\n"
+            "- 'Check my disk space' → 0 (no ability can run commands)\n"
+            "- 'Browse this website' → 0 (no ability can access the web)\n"
+            "- 'How are you?' → 1 (chatting CAN have a conversation)\n\n"
+            "Return JSON with the number:\n"
+            '```json\n{"ability": 0}\n```'
         )
         prompt = [{"role": "system", "content": system}] + memory.prompts
         result = await models.chat_json(persona.thinking, prompt)
@@ -52,22 +66,24 @@ async def recognize(persona: Persona, identity: str, memory: Memory) -> bool:
 
     logger.debug("brain.recognize escalating", {"persona": persona, "meanings_available": meaning_names})
 
-    existing = "\n\n".join(
-        f"### {name}\n"
-        f"Intention: {m.intention(persona)}\n"
-        f"Prompt:\n{m.prompt(persona)}"
+    existing = "\n".join(
+        f"- **{name}**: {m.intention(persona)}"
         for name, m in meaning_map.items()
     )
-    tools_doc = (
+    from application.core import paths, tools
+    builtin_tools = (
         "- `say(text)`: Send a message to the person.\n"
         "- `save_destiny(type, trigger, content, recurrence)`: Save a reminder or scheduled event.\n"
+        "- `save_notes(content)`: Rewrite the notes file with updated content.\n"
         "- `recall_history(date)`: Look up past conversations for a date (YYYY-MM-DD).\n"
         "- `check_calendar(date)`: Look up scheduled events for a date (YYYY-MM-DD or YYYY-MM)."
     )
-    from application.core import paths
+    tools_doc = builtin_tools + "\n\n### Platform tools\n\n" + tools.document()
     workspace = str(paths.workspace(persona.id))
     system = (
-        f"You are generating a new meaning for an AI persona named {persona.name}.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"# ▶ YOUR TASK: Generate a new meaning for {persona.name}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "## What is a Meaning\n\n"
         "A meaning is an activity the persona engages in — an ongoing cognitive process, "
         "not a static label or a command. It represents what the persona is DOING when it "

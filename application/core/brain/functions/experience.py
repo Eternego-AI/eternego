@@ -28,7 +28,7 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
                 "channel": "",
                 "time": datetimes.iso_8601(datetimes.now()),
             })
-            await channels.send_all(persona, text)
+            await channels.send_all(persona.ego.channels if persona.ego else [], text)
 
         if not tool or tool == "say":
             logger.debug("brain.experience result", {"persona": persona, "tool": tool or "say", "text_sent": text})

@@ -15,7 +15,6 @@ def prompt(persona: Persona) -> str:
         else "No past conversations on record yet.\n\n"
     )
     return (
-        "# Recalling\n\n"
         "The person wants to look up something stored — a past conversation or a scheduled event.\n\n"
         + history_section
         + "## Tools\n\n"

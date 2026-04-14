@@ -6,7 +6,7 @@ async def test_write_diary_succeeds():
         import os
         import tempfile
         from application.business import persona as spec
-        from application.core import agents, gateways
+        from application.core import agents
         from application.platform import ollama
         from application.core.data import Model, Channel
         from application.platform import OS
@@ -14,8 +14,6 @@ async def test_write_diary_succeeds():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
 
         def run(url):
             outcome = asyncio.run(spec.create(

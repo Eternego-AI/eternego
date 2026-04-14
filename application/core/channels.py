@@ -6,10 +6,9 @@ from application.core.data import Channel, Message, Persona
 from application.core.exceptions import ChannelError
 
 
-async def send_all(persona: Persona, text: str) -> None:
-    """Send text to all active channels for this persona."""
-    from application.core import gateways
-    for channel in gateways.of(persona).all_channels():
+async def send_all(channels: list, text: str) -> None:
+    """Send text to each channel in the list."""
+    for channel in channels:
         await send(channel, text)
 
 

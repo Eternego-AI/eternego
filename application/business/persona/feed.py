@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from application.business.outcome import Outcome
-from application.core import agents, bus, models
+from application.core import bus, models
 from application.core.brain import functions
 from application.core.data import Message, Persona, Prompt
 from application.core.exceptions import EngineConnectionError, FrontierError
@@ -23,11 +23,9 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
         messages: list
         prompts: list
 
-
     try:
         conversations = await models.read_external_history(data, source)
-        ego = agents.persona(persona)
-        identity = ego.identity()
+        identity = persona.ego.identity()
 
         for conversation in conversations:
             messages = []
@@ -38,8 +36,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
                     content=content,
                     prompt=Prompt(role=role, content=content),
                 ))
-            
-            
+
             feed_memory = VirtualMemory(
                 messages=messages,
                 prompts=[{"role": m.prompt.role, "content": m.prompt.content} for m in messages],

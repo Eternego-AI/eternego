@@ -16,7 +16,9 @@ async def reflect(persona: Persona, identity: str, memory: Memory) -> bool:
         existing = memory.context or "(nothing yet)"
         system = (
             identity
-            + "\n\n# Extract Context\n\n"
+            + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# ▶ YOUR TASK: Extract Context\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "Extract what was discussed, what was decided, what is in progress, what is on "
             "the person's plate, reasons behind recent decisions, pending follow-ups, "
             "and anything the person or you committed to.\n\n"

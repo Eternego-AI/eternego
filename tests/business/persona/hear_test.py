@@ -7,13 +7,11 @@ async def test_hear_succeeds():
         import tempfile
 
         from application.business import persona as spec
-        from application.core import agents, gateways, paths
+        from application.core import agents, paths
         from application.core.data import Channel, Message, Model, Persona
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
@@ -29,8 +27,7 @@ async def test_hear_succeeds():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        ego = agents.Ego(p, FakeWorker())
-        agents._personas[p.id] = ego
+        p.ego = agents.Ego(p, FakeWorker())
         result = asyncio.run(spec.hear(p, Message(channel=Channel(type="web", name="w1"), content="hello")))
         assert result.success, result.message
 

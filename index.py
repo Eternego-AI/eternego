@@ -5,7 +5,7 @@ import asyncio
 import sys
 from dataclasses import dataclass
 
-from application.platform import logger
+from application.platform import logger, objects
 from application.platform.observer import Event, Plan, Signal, subscribe
 from config.application import log_file, signal_log_file
 from config.web import HOST as DEFAULT_HOST, PORT as DEFAULT_PORT
@@ -38,7 +38,7 @@ def bootstrap(args) -> Config:
             return
         logger.file_media(log_file)(message)
         if config.verbosity >= 3 or (config.verbosity >= 2 and levels.index(message.level) <= info_index):
-            print(f"[{message.level.value}] {message.title}", message.context)
+            print(f"[{message.level.value}] {message.title}", objects.safe(message.context))
 
     def log_signal(signal: Signal):
         def signal_log_media(message):
@@ -46,7 +46,7 @@ def bootstrap(args) -> Config:
                 logger.file_media(signal_log_file)(message)
         logger.info(signal.title, {"_type": signal.__class__.__name__, **signal.details}, signal_log_media)
         if config.verbosity >= 2 or (config.verbosity >= 1 and isinstance(signal, (Plan, Event))):
-            print(f"[{signal.__class__.__name__}] {signal.title}", signal.details)
+            print(f"[{signal.__class__.__name__}] {signal.title}", objects.safe(signal.details))
 
     logger.default_media(log_media)
     subscribe(log_signal)
@@ -86,10 +86,6 @@ def main():
     svc_sub.add_parser("status", help="Show service status")
     svc_sub.add_parser("logs", help="Follow service logs")
 
-    # pair
-    pair_p = sub.add_parser("pair", help="Pair a channel using a code sent by the persona")
-    pair_p.add_argument("code", help="6-character pairing code")
-
     # uninstall
     sub.add_parser("uninstall", help="Remove the Eternego service and source code (preserves persona data)")
 
@@ -111,10 +107,6 @@ def main():
     elif args.command == "service":
         from cli.service import dispatch
         dispatch(args)
-
-    elif args.command == "pair":
-        from cli.pair import run
-        run(args)
 
     elif args.command == "uninstall":
         from cli.uninstall import run

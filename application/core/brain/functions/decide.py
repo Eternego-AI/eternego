@@ -14,7 +14,13 @@ async def decide(persona: Persona, identity: str, memory: Memory) -> bool:
         meaning = meaning_map.get(memory.meaning)
         if not meaning:
             return False
-        system = identity + "\n\n" + meaning.prompt(persona)
+        system = (
+            identity
+            + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"# ▶ YOUR TASK: {memory.meaning.capitalize()}\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            + meaning.prompt(persona)
+        )
         prompt = [{"role": "system", "content": system}] + memory.prompts
         result = await models.chat_json(persona.thinking, prompt)
         if not isinstance(result, dict):
@@ -22,9 +28,9 @@ async def decide(persona: Persona, identity: str, memory: Memory) -> bool:
         memory.plan = result
         logger.debug("brain.decide plan", {"persona": persona, "plan": result})
         if result.get("say") or result.get("tool") == "say":
-            from application.core import gateways
             from application.platform import telegram
-            for channel in gateways.of(persona).all_channels():
+            active = persona.ego.channels if persona.ego else []
+            for channel in active:
                 if channel.type == "telegram":
                     try:
                         token = (channel.credentials or {})["token"]

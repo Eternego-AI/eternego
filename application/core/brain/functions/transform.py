@@ -15,6 +15,14 @@ _OUTPUT_CONSTRAINT = (
 )
 
 
+def _task_header(name: str) -> str:
+    return (
+        "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"# ▶ YOUR TASK: Extract {name}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    )
+
+
 def _conversation_text(memory: Memory) -> str:
     return "\n".join(
         f"{'Person' if p['role'] == 'user' else 'Persona'}: {p['content']}"
@@ -31,8 +39,8 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
         file_path = paths.person_identity(persona.id)
         existing = paths.read(file_path)
         system = (
-            persona_character + "\n\n# Extract Person Identity\n\n"
-            "Extract factual, stable data that identifies the person: name, age, birthday, "
+            persona_character + _task_header("Person Identity")
+            + "Extract factual, stable data that identifies the person: name, age, birthday, "
             "gender, where they live, job, employer, family members, relationships, "
             "important contacts (include name, phone, address when given).\n\n"
             "Only include facts that are unlikely to change. "
@@ -52,8 +60,8 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
         file_path = paths.person_traits(persona.id)
         existing = paths.read(file_path)
         system = (
-            persona_character + "\n\n# Extract Person Traits\n\n"
-            "Extract behavioral patterns, habits, likes, and dislikes that define the person: "
+            persona_character + _task_header("Person Traits")
+            + "Extract behavioral patterns, habits, likes, and dislikes that define the person: "
             "what they prefer, how they think, what they enjoy or avoid, dietary choices, "
             "hobbies, communication style, methodologies they follow.\n\n"
             "Only include lasting patterns, not one-time actions. "
@@ -73,8 +81,8 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
         file_path = paths.wishes(persona.id)
         existing = paths.read(file_path)
         system = (
-            persona_character + "\n\n# Extract Wishes\n\n"
-            "Extract long-term wishes, dreams, and aspirations: things the person wants to "
+            persona_character + _task_header("Wishes")
+            + "Extract long-term wishes, dreams, and aspirations: things the person wants to "
             "achieve, places they want to visit, goals they are working toward, "
             "directions they want their life to go.\n\n"
             "Only include aspirations with lasting significance, not daily tasks or short-term goals. "
@@ -94,8 +102,8 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
         file_path = paths.struggles(persona.id)
         existing = paths.read(file_path)
         system = (
-            persona_character + "\n\n# Extract Struggles\n\n"
-            "Extract long-term, persistent difficulties: things the person finds hard, "
+            persona_character + _task_header("Struggles")
+            + "Extract long-term, persistent difficulties: things the person finds hard, "
             "ongoing frustrations, obstacles they keep facing, fears that hold them back.\n\n"
             "Only include lasting struggles, not temporary frustrations or one-time complaints. "
             "Do NOT include identity facts, behavioral traits, wishes, "
@@ -114,8 +122,8 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
         file_path = paths.persona_trait(persona.id)
         existing = paths.read(file_path)
         system = (
-            persona_character + "\n\n# Extract Persona Traits\n\n"
-            "Based on how the person communicates, derive instructions for how YOU (the persona) "
+            persona_character + _task_header("Persona Traits")
+            + "Based on how the person communicates, derive instructions for how YOU (the persona) "
             "should behave: tone, humor, formality, brevity, level of detail, "
             "how to challenge or support them.\n\n"
             "These are instructions for yourself, not observations about the person. "
@@ -136,15 +144,20 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
         file_path = paths.permissions(persona.id)
         existing = paths.read(file_path)
         system = (
-            persona_character + "\n\n# Extract Permissions\n\n"
-            "Extract explicit permissions the person has granted or rejected. "
-            "Look for statements like 'go ahead and run commands', 'you can set reminders', "
-            "'don't touch my files', 'never send emails without asking'.\n\n"
-            "Only include clear, explicit grants or rejections — not implied ones. "
-            "Do NOT include identity facts, traits, wishes, struggles, or operational context.\n\n"
+            persona_character + _task_header("Permissions")
+            + "Extract explicit permissions the person granted or rejected IN THIS CONVERSATION. "
+            "A permission is something the person said giving or denying you the ability to do "
+            "a specific action (e.g. run a specific command, modify certain files, access a service).\n\n"
+            "Rules:\n"
+            "- Use the person's own words and specifics. If they said 'you can always run df', "
+            "extract 'Granted: run df command' — do NOT generalize to 'run any command'.\n"
+            "- Only extract clear, explicit grants or rejections the person actually stated.\n"
+            "- Do NOT invent, generalize, or copy generic examples.\n"
+            "- Do NOT include identity facts, traits, wishes, struggles, or operational context.\n\n"
             "Combine new permissions with your previous extraction. Newer statements override older ones. "
-            "If nothing new, return unchanged. One permission per line, starting with "
-            "'Granted:' or 'Rejected:'."
+            "If the person has not granted or rejected any permission in this conversation, "
+            "return your previous extraction exactly as it was. "
+            "One permission per line, starting with 'Granted:' or 'Rejected:'."
             + _OUTPUT_CONSTRAINT
         )
         result = await models.chat(persona.thinking, [

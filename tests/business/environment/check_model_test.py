@@ -5,12 +5,10 @@ async def test_check_model_succeeds():
     def isolated():
         import asyncio
         from application.business import environment
-        from application.core import agents, gateways
+        from application.core import agents
         from application.platform import ollama
         from application.core.data import Model
 
-        agents._personas.clear()
-        gateways._active.clear()
 
         result = {}
         def run(url):
@@ -33,12 +31,10 @@ async def test_check_model_fails_when_not_found():
     def isolated():
         import asyncio
         from application.business import environment
-        from application.core import agents, gateways
+        from application.core import agents
         from application.platform import ollama
         from application.core.data import Model
 
-        agents._personas.clear()
-        gateways._active.clear()
 
         result = {}
         def run(url):

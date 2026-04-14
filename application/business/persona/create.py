@@ -17,10 +17,8 @@ from application.core.exceptions import (
     SkillError,
     UnsupportedOS,
 )
-from application.platform.asyncio_worker import Worker
 
 from .delete import delete
-from .wake import wake
 from .write_diary import write_diary
 
 
@@ -89,11 +87,6 @@ async def create(
                 "Persona creation failed", {"reason": "diary", "persona": persona}
             )
             return Outcome(success=False, message=outcome.message)
-
-        outcome = await wake(persona, Worker())
-        if not outcome.success:
-            await bus.broadcast("Persona creation failed", {"reason": outcome.message, "persona": persona})
-            return outcome
 
         await bus.broadcast("Persona created", {"persona": persona})
 

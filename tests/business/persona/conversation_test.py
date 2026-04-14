@@ -7,13 +7,11 @@ async def test_conversation_returns_messages():
         import json
         import tempfile
         from application.business import persona as spec
-        from application.core import agents, gateways, paths
+        from application.core import agents, paths
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         conv_path = paths.conversation(p.id)
         conv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -35,13 +33,11 @@ async def test_conversation_returns_empty_when_no_file():
         import os
         import tempfile
         from application.business import persona as spec
-        from application.core import agents, gateways
+        from application.core import agents
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         result = asyncio.run(spec.conversation(p))
         assert result.success, result.message
