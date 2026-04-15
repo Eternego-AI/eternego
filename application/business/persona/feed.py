@@ -1,28 +1,53 @@
 """Persona — feeding external AI history."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
-from application.core import agents, bus, models
-from application.core.data import Persona
+from application.core import bus, models
+from application.core.brain import functions
+from application.core.data import Message, Persona, Prompt
 from application.core.exceptions import EngineConnectionError, FrontierError
 
 
-async def feed(persona: Persona, data: str, source: str) -> Outcome[dict]:
+@dataclass
+class FeedData:
+    persona: Persona
+
+
+async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
     """It lets you feed your persona with your existing AI history so it can know you faster."""
     await bus.propose("Feeding persona", {"persona": persona, "source": source})
 
+    @dataclass
+    class VirtualMemory:
+        messages: list
+        prompts: list
+
     try:
-        messages = await models.read_external_history(data, source)
-        conversation_text = "\n".join(
-            f"{'Person' if m['role'] == 'user' else 'Persona'}: {m['content']}"
-            for m in messages
-        )
-        await agents.persona(persona).learn(conversation_text)
+        conversations = await models.read_external_history(data, source)
+        identity = persona.ego.identity()
+
+        for conversation in conversations:
+            messages = []
+            for m in conversation:
+                role = "user" if m.get("role") == "user" else "assistant"
+                content = m.get("content", "")
+                messages.append(Message(
+                    content=content,
+                    prompt=Prompt(role=role, content=content),
+                ))
+
+            feed_memory = VirtualMemory(
+                messages=messages,
+                prompts=[{"role": m.prompt.role, "content": m.prompt.content} for m in messages],
+            )
+            await functions.transform(persona, identity, feed_memory)
 
         await bus.broadcast("Persona fed", {"persona": persona, "source": source})
         return Outcome(
             success=True,
             message="Persona fed successfully",
-            data={"persona_id": persona.id},
+            data=FeedData(persona=persona),
         )
 
     except FrontierError as e:

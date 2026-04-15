@@ -6,13 +6,11 @@ async def test_find_returns_persona():
         import os
         import tempfile
         from application.business import persona as spec
-        from application.core import agents, gateways, paths
+        from application.core import agents, paths
         from application.core.data import Model, Persona
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
@@ -20,7 +18,7 @@ async def test_find_returns_persona():
         filesystem.write_json(identity, objects.json(p))
         result = asyncio.run(spec.find(p.id))
         assert result.success, result.message
-        assert result.data["persona"].name == "Primus"
+        assert result.data.persona.name == "Primus"
     
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -32,12 +30,10 @@ async def test_find_fails_when_not_found():
         import os
         import tempfile
         from application.business import persona as spec
-        from application.core import agents, gateways
+        from application.core import agents
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
         result = asyncio.run(spec.find("nonexistent"))
         assert result.success is False
 

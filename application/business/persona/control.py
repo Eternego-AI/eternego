@@ -1,12 +1,19 @@
 """Persona — controlling what a persona knows."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import bus, paths
 from application.core.data import Persona
 from application.core.exceptions import IdentityError, PersonError
 
 
-async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
+@dataclass
+class ControlData:
+    removed: int
+
+
+async def control(persona: Persona, entry_ids: list[str]) -> Outcome[ControlData]:
     """It gives you full control over what your persona knows — you always have the final say."""
     await bus.propose("Controlling persona", {"persona": persona, "count": len(entry_ids)})
 
@@ -34,7 +41,7 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[dict]:
         return Outcome(
             success=True,
             message="Entries removed successfully",
-            data={"removed": len(entry_ids)},
+            data=ControlData(removed=len(entry_ids)),
         )
 
     except ValueError:

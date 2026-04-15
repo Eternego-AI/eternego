@@ -38,6 +38,12 @@ class SetupWidget extends Widget {
             border-radius: var(--radius-full); animation: sw-spin 0.8s linear infinite; margin: auto;
         }
         @keyframes sw-spin { to { transform: rotate(360deg); } }
+        setup-widget .sw-progress-bar {
+            width: 100%; height: 4px; background: var(--surface-recessed); border-radius: 2px; overflow: hidden; margin-top: 16px;
+        }
+        setup-widget .sw-progress-fill {
+            height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s var(--ease); width: 0%;
+        }
         setup-widget .sw-choice {
             display: flex; gap: 12px; padding: 12px 0;
         }
@@ -247,27 +253,45 @@ class SetupWidget extends Widget {
         loadingPanel.innerHTML = `
             <div class="sw-spinner"></div>
             <div class="sw-status" style="text-align:center;font-size:11px;color:var(--text-secondary);margin-top:16px;">Preparing environment...</div>
+            <div class="sw-progress-bar" style="display:none"><div class="sw-progress-fill"></div></div>
         `;
         const statusEl = loadingPanel.querySelector('.sw-status');
+        const progressBar = loadingPanel.querySelector('.sw-progress-bar');
+        const progressFill = loadingPanel.querySelector('.sw-progress-fill');
 
-        // Listen for progress signals
-        const signalHandler = this._props.signals ? (e) => {
-            for (const sig of e.detail) {
-                const title = sig.title || '';
-                if (title.toLowerCase().includes('prepar') || title.toLowerCase().includes('pull') ||
-                    title.toLowerCase().includes('engine') || title.toLowerCase().includes('model') ||
-                    title.toLowerCase().includes('creat')) {
-                    statusEl.textContent = title;
-                }
-            }
-        } : null;
-        if (signalHandler) this._props.signals.addEventListener('update', signalHandler);
+        // Connect system WebSocket for progress signals
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let ws;
+        try {
+            ws = new WebSocket(`${protocol}//${location.host}/ws/system`);
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    if (msg.title === 'Model pull progress') {
+                        const d = msg.details || {};
+                        statusEl.textContent = d.status || 'Downloading...';
+                        if (d.total && d.completed) {
+                            progressBar.style.display = 'block';
+                            const pct = Math.round((d.completed / d.total) * 100);
+                            progressFill.style.width = pct + '%';
+                            statusEl.textContent = `${d.status || 'Downloading'} — ${pct}%`;
+                        }
+                    } else if (msg.title === 'Model create progress') {
+                        statusEl.textContent = (msg.details || {}).status || 'Setting up model...';
+                        progressBar.style.display = 'none';
+                    } else if (msg.title) {
+                        const t = msg.title.toLowerCase();
+                        if (t.includes('persona') || t.includes('creat') || t.includes('wak'))
+                            statusEl.textContent = msg.title;
+                    }
+                } catch {}
+            };
+        } catch {}
 
         try {
-            statusEl.textContent = 'Creating persona...';
             if (this._props.onCreate) {
                 const result = await this._props.onCreate(this._data);
-                if (signalHandler) this._props.signals.removeEventListener('update', signalHandler);
+                if (ws) ws.close();
                 if (result.success) {
                     this._personaId = result.persona_id;
                     this._showResult(result.recovery_phrase);
@@ -276,7 +300,7 @@ class SetupWidget extends Widget {
                 }
             }
         } catch (e) {
-            if (signalHandler) this._props.signals.removeEventListener('update', signalHandler);
+            if (ws) ws.close();
             this._showError('frontier', 'Something went wrong');
         }
     }
@@ -422,15 +446,55 @@ class SetupWidget extends Widget {
 
     async _submitMigrate() {
         this._step.go('loading');
-        this._panels.loading.innerHTML = '<div class="sw-spinner"></div>';
-        if (this._props.onMigrate) {
-            const result = await this._props.onMigrate(this._data);
-            if (result.success) {
-                this._personaId = result.persona_id;
-                this._done();
-            } else {
-                this._showError('migrate-model', result.message);
+        const loadingPanel = this._panels.loading;
+        loadingPanel.innerHTML = `
+            <div class="sw-spinner"></div>
+            <div class="sw-status" style="text-align:center;font-size:11px;color:var(--text-secondary);margin-top:16px;">Migrating persona...</div>
+            <div class="sw-progress-bar" style="display:none"><div class="sw-progress-fill"></div></div>
+        `;
+        const statusEl = loadingPanel.querySelector('.sw-status');
+        const progressBar = loadingPanel.querySelector('.sw-progress-bar');
+        const progressFill = loadingPanel.querySelector('.sw-progress-fill');
+
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let ws;
+        try {
+            ws = new WebSocket(`${protocol}//${location.host}/ws/system`);
+            ws.onmessage = (e) => {
+                try {
+                    const msg = JSON.parse(e.data);
+                    if (msg.title === 'Model pull progress') {
+                        const d = msg.details || {};
+                        statusEl.textContent = d.status || 'Downloading...';
+                        if (d.total && d.completed) {
+                            progressBar.style.display = 'block';
+                            const pct = Math.round((d.completed / d.total) * 100);
+                            progressFill.style.width = pct + '%';
+                            statusEl.textContent = `${d.status || 'Downloading'} — ${pct}%`;
+                        }
+                    } else if (msg.title) {
+                        const t = msg.title.toLowerCase();
+                        if (t.includes('persona') || t.includes('migrat'))
+                            statusEl.textContent = msg.title;
+                    }
+                } catch {}
+            };
+        } catch {}
+
+        try {
+            if (this._props.onMigrate) {
+                const result = await this._props.onMigrate(this._data);
+                if (ws) ws.close();
+                if (result.success) {
+                    this._personaId = result.persona_id;
+                    this._done();
+                } else {
+                    this._showError('migrate-model', result.message);
+                }
             }
+        } catch (e) {
+            if (ws) ws.close();
+            this._showError('migrate-model', 'Something went wrong');
         }
     }
 

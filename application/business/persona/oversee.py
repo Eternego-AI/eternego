@@ -1,12 +1,25 @@
 """Persona — looking into what a persona knows and learned."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import bus, paths, system
 from application.core.data import Persona
 from application.core.exceptions import IdentityError, PersonError
 
 
-async def oversee(persona: Persona) -> Outcome[dict]:
+@dataclass
+class OverseeData:
+    person: list
+    traits: list
+    struggles: list
+    wishes: list
+    context: list
+    history: list
+    destiny: list
+
+
+async def oversee(persona: Persona) -> Outcome[OverseeData]:
     """It lets you look into your persona's mind — what it knows what it learned, and how it sees you."""
     await bus.propose("Overseeing persona", {"persona": persona})
 
@@ -24,15 +37,15 @@ async def oversee(persona: Persona) -> Outcome[dict]:
         return Outcome(
             success=True,
             message="Persona overview ready",
-            data={
-                "person": system.make_rows_traceable(facts, "pi"),
-                "traits": system.make_rows_traceable(traits, "pt"),
-                "struggles": system.make_rows_traceable(struggle_list, "ps"),
-                "wishes": system.make_rows_traceable(wish_list, "wi"),
-                "context": system.make_rows_traceable(persona_context, "pc"),
-                "history": system.make_rows_traceable([history_path.name for history_path in histories], "hist"),
-                "destiny": system.make_rows_traceable([destiny_path.name for destiny_path in destinies], "dest"),
-            },
+            data=OverseeData(
+                person=system.make_rows_traceable(facts, "pi"),
+                traits=system.make_rows_traceable(traits, "pt"),
+                struggles=system.make_rows_traceable(struggle_list, "ps"),
+                wishes=system.make_rows_traceable(wish_list, "wi"),
+                context=system.make_rows_traceable(persona_context, "pc"),
+                history=system.make_rows_traceable([history_path.name for history_path in histories], "hist"),
+                destiny=system.make_rows_traceable([destiny_path.name for destiny_path in destinies], "dest"),
+            ),
         )
 
     except IdentityError as e:

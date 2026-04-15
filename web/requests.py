@@ -23,12 +23,13 @@ class EnvironmentPrepareRequest(BaseModel):
 class PersonaCreateRequest(BaseModel):
     name: str
     thinking_model: str
+    thinking_url: str
     thinking_provider: str | None = None
     thinking_api_key: str | None = None
-    thinking_url: str | None = None
     channel_type: str
     channel_credentials: dict
     frontier_model: str | None = None
+    frontier_url: str | None = None
     frontier_provider: str | None = None
     frontier_api_key: str | None = None
 

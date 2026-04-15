@@ -8,15 +8,13 @@ async def test_create_succeeds():
         import tempfile
         from application.platform import ollama
         from application.business import persona as spec
-        from application.core import agents, gateways
+        from application.core import agents
         from application.core.data import Model, Channel
         from application.platform import OS
         OS._secret_cache_only = True
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
 
         def run(url):
             outcome = asyncio.run(spec.create(
@@ -25,8 +23,8 @@ async def test_create_succeeds():
                 channel=Channel(type="web", credentials={}),
             ))
             assert outcome.success, outcome.message
-            assert outcome.data["name"] == "TestBot"
-            assert len(outcome.data["recovery_phrase"].split()) == 24
+            assert outcome.data.persona.name == "TestBot"
+            assert len(outcome.data.recovery_phrase.split()) == 24
 
         ollama.assert_call(
             run=run,
@@ -44,7 +42,7 @@ async def test_create_with_frontier_succeeds():
         import os
         import tempfile
         from application.business import persona as spec
-        from application.core import agents, gateways
+        from application.core import agents
         from application.platform import ollama
         from application.core.data import Model, Channel
         from application.platform import OS
@@ -52,8 +50,6 @@ async def test_create_with_frontier_succeeds():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
 
         def run(url):
             result = asyncio.run(spec.create(
@@ -79,7 +75,7 @@ async def test_create_with_remote_thinking_model():
         import os
         import tempfile
         from application.business import persona as spec
-        from application.core import agents, gateways
+        from application.core import agents
         from application.platform import ollama
         from application.core.data import Model, Channel
         from application.platform import OS
@@ -87,8 +83,6 @@ async def test_create_with_remote_thinking_model():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
 
         def run(url):
             result = asyncio.run(spec.create(
@@ -97,7 +91,7 @@ async def test_create_with_remote_thinking_model():
                 channel=Channel(type="web", credentials={}),
             ))
             assert result.success, result.message
-            assert result.data["name"] == "RemoteBot"
+            assert result.data.persona.name == "RemoteBot"
 
         ollama.assert_call(
             run=run,

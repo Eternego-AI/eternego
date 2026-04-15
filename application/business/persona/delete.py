@@ -6,7 +6,7 @@ from application.core.data import Persona
 from application.core.exceptions import EngineConnectionError, IdentityError
 
 
-async def delete(persona: Persona) -> Outcome[dict]:
+async def delete(persona: Persona) -> Outcome[None]:
     """Delete a persona and all its data."""
     await bus.propose("Deleting persona", {"persona": persona})
     try:

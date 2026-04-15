@@ -4,10 +4,9 @@ import json
 
 from application.core.data import Model
 from application.core.exceptions import ModelError, EngineConnectionError
-from application.platform import logger, ollama, anthropic, openai, strings
-import config.inference as cfg
+from application.platform import logger, strings
 
-from .is_local import is_local
+from .chat_json import chat_json
 
 
 async def generate_training_set(model: Model, dna: str) -> list[dict]:
@@ -58,28 +57,8 @@ async def generate_training_set(model: Model, dna: str) -> list[dict]:
         "}"
     )
 
-    if is_local(model):
-        try:
-            body = {"model": model.name, "prompt": prompt, "stream": False, "format": "json"}
-            response = await ollama.post(model.url, "/api/generate", body)
-            response_text = response["response"].strip()
-        except ollama.OllamaError as e:
-            raise ModelError(f"Model returned an error: {e}") from e
-        except ConnectionError as e:
-            raise EngineConnectionError("Could not connect to the local inference engine") from e
-        except KeyError as e:
-            raise EngineConnectionError("Model returned an invalid response") from e
-    else:
-        try:
-            if model.provider == "anthropic":
-                response_text = await anthropic.async_chat(model.url, model.api_key, model.name, [{"role": "user", "content": prompt}])
-            else:
-                response_text = await openai.async_chat(model.url, model.api_key, model.name, [{"role": "user", "content": prompt}])
-        except OSError as e:
-            raise ModelError(f"Model returned an error: {e}") from e
-
     try:
-        parsed = strings.extract_json(response_text)
-    except (json.JSONDecodeError, TypeError):
+        result = await chat_json(model, [{"role": "user", "content": prompt}])
+        return result.get("training_pairs", [])
+    except (ModelError, EngineConnectionError):
         return []
-    return parsed.get("training_pairs", [])

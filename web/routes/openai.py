@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from application.business import persona
+import manager
 from web.requests import ChatRequest
 
 router = APIRouter()
@@ -16,7 +17,7 @@ async def list_models():
     if not outcome.success:
         raise HTTPException(status_code=500, detail=outcome.message)
 
-    personas = (outcome.data or {}).get("personas", [])
+    personas = outcome.data.personas if outcome.data else []
     return {
         "object": "list",
         "data": [{"id": p.id, "object": "model", "owned_by": "eternego"} for p in personas],
@@ -29,7 +30,7 @@ async def get_model(model_id: str):
     if not outcome.success:
         raise HTTPException(status_code=404, detail=outcome.message)
 
-    p = outcome.data["persona"]
+    p = outcome.data.persona
     return {"id": p.id, "object": "model", "owned_by": "eternego"}
 
 
@@ -37,23 +38,21 @@ async def get_model(model_id: str):
 
 @router.post("/v1/chat/completions")
 async def chat_completions(request: ChatRequest):
-    outcome = await persona.loaded(request.model)
-    if not outcome.success:
-        raise HTTPException(status_code=404, detail=outcome.message)
+    agent = manager.find_or_none(request.model)
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"Model '{request.model}' not found or not running.")
 
-    live = outcome.data["persona"]
-
-    outcome = await persona.query(live, request.message)
+    outcome = await persona.query(agent.persona, request.message)
     if not outcome.success:
         raise HTTPException(status_code=500, detail=outcome.message)
 
     return {
         "object": "chat.completion",
-        "model": live.id,
+        "model": agent.persona.id,
         "choices": [
             {
                 "index": 0,
-                "message": {"role": "assistant", "content": outcome.data.get("response", "")},
+                "message": {"role": "assistant", "content": outcome.data.response if outcome.data else ""},
                 "finish_reason": "stop",
             }
         ],

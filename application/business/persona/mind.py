@@ -1,38 +1,35 @@
 """Persona — reading the cognitive state of a persona."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
-from application.core import agents, bus
+from application.core import bus
+from application.core.data import Persona
 from application.core.exceptions import MindError
+from application.platform.objects import json as to_json
 
-from .loaded import loaded
+
+@dataclass
+class MindData:
+    messages: list
+    meaning: str
+    plan: str
+    context: str
 
 
-async def mind(persona_id: str) -> Outcome[dict]:
-    """Return the full cognitive state — signals, perceptions, thoughts, and pipeline position."""
-    await bus.propose("Getting persona mind", {"persona_id": persona_id})
-    result = await loaded(persona_id)
-    if not result.success:
-        return result
+async def mind(persona: Persona) -> Outcome[MindData]:
+    """Return the current memory state — messages, meaning, plan, and context."""
+    await bus.propose("Getting persona mind", {"persona": persona})
     try:
-        ego = agents.persona(result.data["persona"])
-        memory = ego.memory
+        memory = persona.ego.memory
 
-        await bus.broadcast("Persona mind loaded", {"persona_id": persona_id})
-        return Outcome(success=True, message="", data={
-            "signals": [
-                {"id": s.id, "event": s.event, "content": s.content, "created_at": s.created_at.isoformat()}
-                for s in memory.signals
-            ],
-            "perceptions": [
-                {"impression": p.impression, "thread": [s.id for s in p.thread]}
-                for p in memory.perceptions
-            ],
-            "thoughts": [
-                {"id": t.id, "perception": t.perception.impression, "meaning": t.meaning.name, "priority": t.priority}
-                for t in memory.intentions
-            ],
-            "unattended": len(memory.needs_realizing),
-        })
+        await bus.broadcast("Persona mind loaded", {"persona": persona})
+        return Outcome(success=True, message="", data=MindData(
+            messages=[to_json(m) for m in memory.messages],
+            meaning=memory.meaning,
+            plan=memory.plan,
+            context=memory.context,
+        ))
     except MindError as e:
-        await bus.broadcast("Reading persona mind failed", {"persona_id": persona_id, "error": str(e)})
+        await bus.broadcast("Reading persona mind failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))

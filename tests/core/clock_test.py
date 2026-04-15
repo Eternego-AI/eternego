@@ -3,110 +3,98 @@ import asyncio
 from application.core.brain.mind.clock import tick
 
 
-class FakeMemory:
-    def __init__(self):
-        self._settled = True
-        self._changed = False
-
-    @property
-    def settled(self):
-        return self._settled
-
-    def changed(self):
-        if self._changed:
-            self._changed = False
-            return True
-        return False
-
-
 class FakeWorker:
     def __init__(self):
         self.stopped = False
-        self.dispatched = []
 
     async def dispatch(self, step):
-        self.dispatched.append(step)
-        await step()
+        if self.stopped:
+            return None
+        return await step()
 
 
-async def test_tick_does_nothing_when_settled():
-    memory = FakeMemory()
+async def test_tick_stops_when_first_step_returns_false():
     worker = FakeWorker()
-    await tick([], memory, worker)
-    assert worker.dispatched == []
+    order = []
+
+    async def realize():
+        order.append("realize")
+        return False
+
+    async def recognize():
+        order.append("recognize")
+        return True
+
+    await tick([realize, recognize], worker)
+    assert order == ["realize"]
 
 
-async def test_tick_runs_consciousness_steps_in_order():
-    memory = FakeMemory()
-    memory._settled = False
+async def test_tick_runs_all_steps_in_order():
     worker = FakeWorker()
     order = []
 
     async def step_a():
         order.append("a")
+        return True
 
     async def step_b():
         order.append("b")
+        return True
 
     async def step_c():
         order.append("c")
-        memory._settled = True
+        return True
 
-    await tick([step_a, step_b, step_c], memory, worker)
+    await tick([step_a, step_b, step_c], worker)
     assert order == ["a", "b", "c"]
 
 
 async def test_tick_stops_when_worker_is_stopped():
-    memory = FakeMemory()
-    memory._settled = False
     worker = FakeWorker()
     order = []
 
     async def step_a():
         order.append("a")
         worker.stopped = True
+        return True
 
     async def step_b():
         order.append("b")
+        return True
 
-    await tick([step_a, step_b], memory, worker)
+    await tick([step_a, step_b], worker)
     assert order == ["a"]
 
 
-async def test_tick_restarts_consciousness_when_changed():
-    memory = FakeMemory()
-    memory._settled = False
+async def test_tick_restarts_when_non_first_step_returns_false():
     worker = FakeWorker()
     runs = []
     restart_count = 0
 
-    async def step_a():
+    async def realize():
+        runs.append("realize")
+        return True
+
+    async def decide():
         nonlocal restart_count
-        runs.append("a")
+        runs.append("decide")
         if restart_count == 0:
-            memory._changed = True
             restart_count += 1
+            return False
+        return True
 
-    async def step_b():
-        runs.append("b")
-        memory._settled = True
-
-    await tick([step_a, step_b], memory, worker)
-    # First run: a → changed → restart. Second run: a → b → settled
-    assert runs == ["a", "a", "b"]
+    await tick([realize, decide], worker)
+    assert runs == ["realize", "decide", "realize", "decide"]
 
 
-async def test_tick_loops_until_settled():
-    memory = FakeMemory()
-    memory._settled = False
+async def test_tick_exits_after_full_true_pass():
     worker = FakeWorker()
     count = 0
 
     async def step():
         nonlocal count
         count += 1
-        if count >= 3:
-            memory._settled = True
+        return True
 
-    await tick([step], memory, worker)
-    assert count == 3
+    await tick([step], worker)
+    assert count == 1

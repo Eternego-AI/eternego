@@ -6,7 +6,7 @@ from application.core.exceptions import ModelError
 from application.platform import logger, anthropic, openai
 
 
-async def read_external_history(data: str, source: str) -> list[dict]:
+async def read_external_history(data: str, source: str) -> list[list[dict]]:
     """Parse external AI history into role-based messages."""
     logger.info("models.read_external_history", {"source": source})
     try:

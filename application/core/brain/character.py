@@ -51,17 +51,30 @@ def morals(persona: Persona) -> str:
 def shape(persona: Persona) -> str:
     """Compose the full character: cornerstone + values + morals + identities."""
     sections = [
-        f"# Who You Are\n{cornerstone(persona)}",
-        f"# What Sustains and Threatens You\n{values(persona)}",
-        f"# How You Act\n{morals(persona)}",
+        f"## Who You Are\n{cornerstone(persona)}",
+        f"## What Sustains and Threatens You\n{values(persona)}",
+        f"## How You Act\n{morals(persona)}",
     ]
 
     person_id = paths.read(paths.person_identity(persona.id))
     if person_id.strip():
-        sections.append(f"# The Person You Live With\n{person_id.strip()}")
+        sections.append(f"## The Person You Live With\n{person_id.strip()}")
 
     persona_ctx = paths.read(paths.persona_trait(persona.id))
     if persona_ctx.strip():
-        sections.append(f"# Your Personality\n{persona_ctx.strip()}")
+        sections.append(f"## Your Personality\n{persona_ctx.strip()}")
+
+    perms = paths.read(paths.permissions(persona.id))
+    sections.append(
+        "## Permissions\n"
+        + (perms.strip() if perms.strip() else "(no permissions granted yet)")
+        + "\n\n"
+        "Your built-in tools (saving reminders, notes, recalling conversations) are part of "
+        "your core functionality and do not require permission. "
+        "For tools that access external systems, run system commands, modify the person's "
+        "files, or perform destructive operations, check your permissions first. "
+        "If you lack permission, explain what you would do if you had it. "
+        "If the person has explicitly rejected a permission, instruct them on how to do it themselves."
+    )
 
     return "\n".join(sections)

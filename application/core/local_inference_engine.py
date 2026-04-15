@@ -4,6 +4,7 @@ import asyncio
 import json
 
 from application.platform import logger, ollama, lora, OS
+from application.core import bus
 from application.core.exceptions import EngineConnectionError, ModelError
 
 
@@ -50,7 +51,8 @@ async def pull(url: str, model: str) -> None:
     """Pull a model into the local inference engine."""
     logger.info("Pulling model", {"url": url, "model": model})
     try:
-        await ollama.post(url, "/api/pull", {"name": model, "stream": False})
+        async for chunk in ollama.stream(url, "/api/pull", {"name": model}):
+            await bus.share("Model pull progress", {"model": model, "status": chunk.get("status", ""), "total": chunk.get("total"), "completed": chunk.get("completed")})
     except ollama.OllamaError as e:
         raise ModelError(f"Failed to pull model '{model}': {e}") from e
     except ConnectionError as e:
@@ -61,7 +63,8 @@ async def register(url: str, model_name: str, base_model: str) -> None:
     """Register a named model in Ollama pointing at base_model, with no adapter."""
     logger.info("Registering model", {"url": url, "model_name": model_name, "base_model": base_model})
     try:
-        await ollama.post(url, "/api/create", {"model": model_name, "from": base_model, "stream": False})
+        async for chunk in ollama.stream(url, "/api/create", {"model": model_name, "from": base_model}):
+            await bus.share("Model create progress", {"model": model_name, "status": chunk.get("status", "")})
     except ollama.OllamaError as e:
         raise ModelError(f"Failed to register model '{model_name}': {e}") from e
     except ConnectionError as e:

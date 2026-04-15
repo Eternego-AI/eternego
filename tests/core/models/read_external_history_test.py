@@ -12,9 +12,9 @@ def test_parses_anthropic_export():
         {"chat_messages": [{"sender": "human", "text": "Hi"}, {"sender": "assistant", "text": "Hello"}]}
     ])
     result = asyncio.run(models.read_external_history(export, "claude"))
-    assert len(result) == 2
-    assert result[0]["role"] == "user"
-    assert result[1]["role"] == "assistant"
+    assert len(result) == 1
+    assert result[0][0]["role"] == "user"
+    assert result[0][1]["role"] == "assistant"
 
 
 def test_parses_openai_export():
@@ -23,7 +23,7 @@ def test_parses_openai_export():
     ])
     result = asyncio.run(models.read_external_history(export, "openai"))
     assert len(result) == 1
-    assert result[0]["content"] == "Hi"
+    assert result[0][0]["content"] == "Hi"
 
 
 def test_raises_model_error_on_invalid_anthropic_data():

@@ -1,6 +1,8 @@
 """Environment — setting up and preparing an environment for a persona to grow."""
 
 import config.inference as config
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import bus, local_inference_engine, system, models
 from application.core.data import Model
@@ -14,12 +16,17 @@ from application.core.exceptions import (
 from .check_model import check_model
 
 
+@dataclass
+class PrepareData:
+    model: Model
+
+
 async def prepare(
     url: str,
     model: str | None = None,
     provider: str | None = None,
     api_key: str | None = None,
-) -> Outcome[dict]:
+) -> Outcome[PrepareData]:
     """It makes it easy to set up and prepare an environment for your persona to grow."""
     await bus.propose("Preparing environment", {"model": model, "provider": provider})
 
@@ -71,7 +78,7 @@ async def prepare(
         await bus.broadcast("Environment ready", {"model": model, "provider": provider})
 
         return Outcome(
-            success=True, message="Environment is ready", data={"model": model_obj}
+            success=True, message="Environment is ready", data=PrepareData(model=model_obj)
         )
 
     except UnsupportedOS as e:

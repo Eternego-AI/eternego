@@ -5,7 +5,7 @@ from application.core import bus, local_inference_engine
 from application.core.exceptions import EngineConnectionError
 
 
-async def ready() -> Outcome[dict]:
+async def ready() -> Outcome[None]:
     """Ensure the inference engine is running and ready to serve requests."""
     await bus.propose("Ensuring engine readiness", {})
 

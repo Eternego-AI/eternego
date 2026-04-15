@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import bus, local_inference_engine, paths, system
 from application.core.data import Model, Persona
@@ -13,19 +15,21 @@ from application.core.exceptions import (
     SecretStorageError,
     UnsupportedOS,
 )
-from application.platform.asyncio_worker import Worker
-
 from .delete import delete
 from .find import find
-from .wake import wake
 from .write_diary import write_diary
+
+
+@dataclass
+class MigrateData:
+    persona: Persona
 
 
 async def migrate(
     diary_path: str,
     phrase: str,
     thinking: Model,
-) -> Outcome[dict]:
+) -> Outcome[MigrateData]:
     """It enables you to migrate your persona so nothing is ever lost."""
     await bus.propose("Migrating persona", {"diary_path": diary_path, "thinking": thinking})
 
@@ -45,7 +49,7 @@ async def migrate(
             await bus.broadcast("Persona migration failed", {"reason": "identity"})
             return Outcome(success=False, message=outcome.message)
 
-        persona = outcome.data["persona"]
+        persona = outcome.data.persona
 
         persona.thinking = thinking
 
@@ -66,20 +70,14 @@ async def migrate(
             )
             return Outcome(success=False, message=outcome.message)
 
-        outcome = await wake(persona.id, Worker())
-        if not outcome.success:
-            await bus.broadcast("Persona migration failed", {"reason": outcome.message, "persona": persona})
-            return outcome
-
         await bus.broadcast("Persona migrated", {"persona": persona})
 
         return Outcome(
             success=True,
             message="Persona migrated successfully",
-            data={
-                "persona_id": persona.id,
-                "name": persona.name,
-            },
+            data=MigrateData(
+                persona=persona,
+            ),
         )
 
     except DiaryError as e:

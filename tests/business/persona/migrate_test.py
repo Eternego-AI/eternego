@@ -7,7 +7,7 @@ async def test_migrate_restores_persona_from_diary():
         import os
         import tempfile
         from application.business import persona as spec
-        from application.core import agents, gateways, paths
+        from application.core import agents, paths
         from application.platform import ollama
         from application.core.data import Model, Channel
         from application.platform import OS
@@ -15,18 +15,16 @@ async def test_migrate_restores_persona_from_diary():
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        agents._personas.clear()
-        gateways._active.clear()
 
         def run(url):
             outcome = asyncio.run(spec.create(name="MigrateMe", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={})))
             assert outcome.success, outcome.message
-            persona_id = outcome.data["persona_id"]
-            phrase = outcome.data["recovery_phrase"]
+            persona_id = outcome.data.persona.id
+            phrase = outcome.data.recovery_phrase
 
             # 2. Write diary (already done during create, but let's do it explicitly)
             outcome = asyncio.run(spec.find(persona_id))
-            persona = outcome.data["persona"]
+            persona = outcome.data.persona
             outcome = asyncio.run(spec.write_diary(persona))
             assert outcome.success, outcome.message
 
@@ -42,8 +40,8 @@ async def test_migrate_restores_persona_from_diary():
             outcome = asyncio.run(spec.migrate(str(diary_file), phrase, Model(name="llama3", url=url)))
 
             assert outcome.success, outcome.message
-            assert "persona_id" in outcome.data
-            assert outcome.data["name"] == "MigrateMe"
+            assert outcome.data.persona.id
+            assert outcome.data.persona.name == "MigrateMe"
 
         ollama.assert_call(
             run=run,

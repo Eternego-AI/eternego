@@ -32,7 +32,7 @@ async def dispatch(args):
         if not outcome.success:
             print(f"Error: {outcome.message}")
             sys.exit(1)
-        model_obj = (outcome.data or {}).get("model")
+        model_obj = outcome.data.model if outcome.data else None
         print(f"Environment is ready. Model: {model_obj.name if model_obj else ''}")
 
     else:

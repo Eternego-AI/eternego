@@ -1,12 +1,19 @@
 """Persona — finding a persona by ID."""
 
+from dataclasses import dataclass
+
 from application.business.outcome import Outcome
 from application.core import bus, paths
 from application.core.data import Channel, Model, Persona
 from application.core.exceptions import IdentityError
 
 
-async def find(persona_id: str) -> Outcome[dict]:
+@dataclass
+class FindData:
+    persona: Persona
+
+
+async def find(persona_id: str) -> Outcome[FindData]:
     """Find a persona by its ID."""
     await bus.propose("Finding persona", {"persona_id": persona_id})
     try:
@@ -29,7 +36,7 @@ async def find(persona_id: str) -> Outcome[dict]:
         )
 
         await bus.broadcast("Persona found", {"persona": persona})
-        return Outcome(success=True, message="", data={"persona": persona})
+        return Outcome(success=True, message="", data=FindData(persona=persona))
     except IdentityError as e:
         await bus.broadcast("Persona not found", {"persona_id": persona_id, "error": str(e)})
         return Outcome(success=False, message="Persona not found.")
