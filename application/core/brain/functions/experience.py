@@ -74,7 +74,7 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
                 tool_result = "\n\n".join(entries) if entries else "No conversations found for that date."
 
         else:
-            params = {k: v for k, v in plan.items() if k not in ("tool", "say")}
+            params = {k: v for k, v in plan.items() if k not in ("tool", "say", "reason")}
             tool_result = await tools.call(tool, **params)
 
         logger.debug("brain.experience result", {"persona": persona, "tool": tool, "tool_result": tool_result, "text_sent": text})

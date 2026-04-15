@@ -15,33 +15,24 @@ def prompt(persona: Persona) -> str:
         else "No past conversations on record yet.\n\n"
     )
     return (
-        "The person wants to look up something stored — a past conversation or a scheduled event.\n\n"
+        "Look up something stored — a past conversation or a scheduled event. Resolve the date "
+        "from the conversation and the Current Time. If unclear, ask with `say`.\n\n"
         + history_section
         + "## Tools\n\n"
-        "### recall_history\n"
-        "Look up past conversations from a specific date.\n\n"
-        "Parameters:\n"
-        "- `date` (string, required): The date to look up, format `\"YYYY-MM-DD\"`\n\n"
-        "### check_calendar\n"
-        "Look up scheduled events and reminders.\n\n"
-        "Parameters:\n"
-        "- `date` (string, required): Date to look up. "
-        "Use `\"YYYY-MM-DD\"` for a specific day or `\"YYYY-MM\"` for an entire month.\n\n"
-        "### say\n"
-        "Send a message to the person.\n\n"
-        "Parameters:\n"
-        "- `text` (string, required): The message to send.\n\n"
-        "## Response Format\n\n"
-        "For past conversations:\n"
+        "- `recall_history(date)` — past conversations on a date. `date` format: `YYYY-MM-DD`.\n"
+        "- `check_calendar(date)` — scheduled events. `date`: `YYYY-MM-DD` for a day or `YYYY-MM` for a month.\n"
+        "- `say(text)` — message the person.\n\n"
+        "## Output\n\n"
+        "Looking up a past conversation:\n"
         "```json\n"
-        '{"tool": "recall_history", "date": "2026-04-10", '
-        '"say": "Here\'s what we discussed:"}\n'
+        '{"reason": "<one sentence>", "tool": "recall_history", "date": "<YYYY-MM-DD>", "say": "<lead-in>"}\n'
         "```\n\n"
-        "For scheduled events:\n"
+        "Looking up scheduled events:\n"
         "```json\n"
-        '{"tool": "check_calendar", "date": "2026-04-14", '
-        '"say": "Here\'s what you have scheduled:"}\n'
+        '{"reason": "<one sentence>", "tool": "check_calendar", "date": "<YYYY-MM-DD or YYYY-MM>", "say": "<lead-in>"}\n'
         "```\n\n"
-        "If the date is unclear, use say to ask. "
-        "No special permissions are needed for recalling."
+        "Asking for clarification:\n"
+        "```json\n"
+        '{"reason": "<what is missing>", "tool": "say", "text": "<question>"}\n'
+        "```"
     )

@@ -31,6 +31,9 @@ def available(persona=None):
 def save_meaning(persona_id, name, code):
     import re
     name = re.sub(r"[^\w-]", "", name.lower().replace(" ", "-"))[:60]
+    if not name:
+        raise ValueError("meaning name is empty after sanitization")
+    compile(code, f"{name}.py", "exec")
     directory = paths.meanings(persona_id)
     directory.mkdir(parents=True, exist_ok=True)
     (directory / f"{name}.py").write_text(code)

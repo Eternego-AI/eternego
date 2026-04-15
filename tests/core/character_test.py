@@ -1,7 +1,7 @@
 from application.platform.processes import on_separate_process_async
 
 
-async def test_shape_composes_full_character_prompt():
+async def test_shape_starts_with_root_h1_and_includes_character():
     def isolated():
         import os
         import tempfile
@@ -20,26 +20,31 @@ async def test_shape_composes_full_character_prompt():
 
         home = paths.home(persona.id)
         home.mkdir(parents=True)
-        (home / "person.md").write_text("The person lives in Amsterdam.\nThe person is a software engineer.")
-        (home / "persona-trait.md").write_text("Be concise.\nUse humor when appropriate.")
+        (home / "person.md").write_text("The person lives in Amsterdam.")
+        (home / "persona-trait.md").write_text("Use Dutch idioms when possible.")
 
         result = shape(persona)
 
+        assert result.startswith("# You are an Eternego Persona"), "character must start with root H1"
         assert "Primus" in result
         assert "2026-01-15" in result
-        assert "Integrity" in result
-        assert "Speak plainly" in result
-        assert "Amsterdam" in result
-        assert "Be concise" in result
-        assert "# Who You Are" in result
-        assert "# The Person You Live With" in result
-        assert "# Your Personality" in result
+        assert "Truth" in result, "truth value should appear"
+        assert "Care" in result, "care value should appear"
+        assert "Responsibility" in result, "responsibility value should appear"
+        assert "say what is true" in result.lower()
+        assert "## Who You Are" in result
+        assert "## What Sustains and Threatens You" in result
+        assert "## How You Act" in result
+        assert "## Permissions" in result
+        # character is purely about the persona's being — no person data here
+        assert "Amsterdam" not in result
+        assert "Dutch idioms" not in result
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_shape_omits_empty_identity_sections():
+async def test_shape_includes_permissions_block_when_empty():
     def isolated():
         import os
         import tempfile
@@ -57,14 +62,11 @@ async def test_shape_omits_empty_identity_sections():
 
         home = paths.home(persona.id)
         home.mkdir(parents=True)
-        (home / "person.md").write_text("")
-        (home / "persona-trait.md").write_text("")
 
         result = shape(persona)
 
-        assert "# Who You Are" in result
-        assert "# The Person You Live With" not in result
-        assert "# Your Personality" not in result
+        assert "## Permissions" in result
+        assert "(none granted yet)" in result
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

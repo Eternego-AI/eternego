@@ -6,6 +6,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import httpx
 
+from application.platform import logger
 from application.platform.observer import send, Message
 
 BASE_URL = "https://api.openai.com"
@@ -24,7 +25,15 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}",
             }) as response:
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    body_bytes = await response.aread()
+                    body_text = body_bytes.decode("utf-8", errors="replace")
+                    logger.warning("OpenAI API error", {
+                        "status": response.status_code,
+                        "model": model,
+                        "body": body_text,
+                    })
+                    raise OSError(f"OpenAI HTTP {response.status_code}: {body_text}")
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if not line.startswith("data: "):
@@ -44,7 +53,8 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                         await send(Message("OpenAI stream chunk received", {"chunk": content}))
                         yield content
     except httpx.HTTPStatusError as e:
-        raise OSError(f"HTTP {e.response.status_code}") from e
+        logger.warning("OpenAI HTTP error", {"status": e.response.status_code, "model": model})
+        raise OSError(f"OpenAI HTTP {e.response.status_code}") from e
 
 
 async def chat_json(base_url: str, api_key: str | None, model: str, messages: list[dict]):
@@ -61,7 +71,15 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}",
             }) as response:
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    body_bytes = await response.aread()
+                    body_text = body_bytes.decode("utf-8", errors="replace")
+                    logger.warning("OpenAI API error", {
+                        "status": response.status_code,
+                        "model": model,
+                        "body": body_text,
+                    })
+                    raise OSError(f"OpenAI HTTP {response.status_code}: {body_text}")
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if not line.startswith("data: "):
@@ -81,7 +99,8 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
                         await send(Message("OpenAI stream chunk received", {"chunk": content}))
                         yield content
     except httpx.HTTPStatusError as e:
-        raise OSError(f"HTTP {e.response.status_code}") from e
+        logger.warning("OpenAI HTTP error", {"status": e.response.status_code, "model": model})
+        raise OSError(f"OpenAI HTTP {e.response.status_code}") from e
 
 
 def to_messages(data: str) -> list[list[dict]]:

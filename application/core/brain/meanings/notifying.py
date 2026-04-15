@@ -9,16 +9,14 @@ def intention(persona: Persona) -> str:
 
 def prompt(persona: Persona) -> str:
     return (
-        "You need to notify the person about a due event, reminder, or important matter.\n"
-        "Be clear about what is due, include the time, and mention any urgency.\n\n"
-        "## Tools\n\n"
-        "### say\n"
-        "Send a message to the person.\n\n"
-        "Parameters:\n"
-        "- `text` (string, required): The notification message.\n\n"
-        "## Response Format\n\n"
+        "Notify the person about a due item from Today's Schedule. State what is due, when, "
+        "and any urgency. Use the actual content of the due item — invent nothing.\n\n"
+        "## Tool: `say`\n\n"
+        "- `text` (string): the notification.\n\n"
+        "## Output\n\n"
         "```json\n"
-        '{"tool": "say", "text": "Hey, just a reminder: you have a meeting at 3pm today!"}\n'
-        "```\n\n"
-        "No special permissions are needed for notifications."
+        '{"reason": "<which scheduled item>",\n'
+        ' "tool": "say",\n'
+        ' "text": "<what is due, when, any urgency>"}\n'
+        "```"
     )

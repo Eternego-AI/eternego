@@ -3,7 +3,7 @@
 from application.core.brain import character, functions, situation
 from application.core.brain.mind.memory import Memory
 from application.core import paths
-from application.core.data import Message, Persona
+from application.core.data import Message, Persona, Prompt
 from application.platform import datetimes, logger
 
 
@@ -56,37 +56,52 @@ class Ego:
         return self.current_situation is situation.sleep
 
     def receive(self, message: Message) -> None:
-        """Ingest an incoming message — log it, remember it, wake up, think."""
+        """Ingest a person's message — log the words to conversation, mark the experience in memory."""
         paths.append_jsonl(paths.conversation(self.persona.id), {
             "role": "person",
             "content": message.content,
             "channel": message.channel.type if message.channel else "",
             "time": datetimes.iso_8601(datetimes.now()),
         })
+        message.prompt = Prompt(role="user", content=f"The person said: {message.content}")
         self.memory.add(message)
         self.current_situation = situation.normal
         self.worker.nudge()
 
     def identity(self) -> str:
-        """Return assembled identity text: character, knowledge, and situation."""
-        sections = ["# You are an Eternego Persona", character.shape(self.persona)]
+        """Return assembled identity text in onion order: character → situation → ego."""
+        sections = [character.shape(self.persona)]
 
         if self.current_situation:
-            sections.append(self.current_situation(self.persona.id))
+            situation_text = self.current_situation(self.persona.id)
+            if situation_text:
+                sections.append(situation_text)
 
-        wishes = paths.read(paths.wishes(self.persona.id))
-        if wishes.strip():
-            sections.append("## What the Person Wants\n" + wishes.strip())
-
-        struggles = paths.read(paths.struggles(self.persona.id))
-        if struggles.strip():
-            sections.append("## What the Person Struggles With\n" + struggles.strip())
+        ego = []
+        person_id = paths.read(paths.person_identity(self.persona.id))
+        if person_id.strip():
+            ego.append("## The Person\n\n" + person_id.strip())
 
         traits = paths.read(paths.person_traits(self.persona.id))
         if traits.strip():
-            sections.append("## The Person's Traits\n" + traits.strip())
+            ego.append("## The Person's Traits\n\n" + traits.strip())
+
+        wishes = paths.read(paths.wishes(self.persona.id))
+        if wishes.strip():
+            ego.append("## What They Wish For\n\n" + wishes.strip())
+
+        struggles = paths.read(paths.struggles(self.persona.id))
+        if struggles.strip():
+            ego.append("## What Stands in Their Way\n\n" + struggles.strip())
+
+        persona_trait = paths.read(paths.persona_trait(self.persona.id))
+        if persona_trait.strip():
+            ego.append("## Your Personality With Them\n\n" + persona_trait.strip())
 
         if self.memory.context:
-            sections.append("## Recent Context\n" + self.memory.context.strip())
+            ego.append("## Recent Context\n\n" + self.memory.context.strip())
+
+        if ego:
+            sections.append("# What You Know\n\n" + "\n\n".join(ego))
 
         return "\n\n".join(sections)

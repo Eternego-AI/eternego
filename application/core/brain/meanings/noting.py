@@ -11,24 +11,21 @@ def intention(persona: Persona) -> str:
 def prompt(persona: Persona) -> str:
     existing = paths.read(paths.notes(persona.id))
     return (
-        "The person wants you to explicitly save something for later — a fact, "
-        "a reference, a code, a configuration, anything they want you to remember.\n\n"
-        f"## Current Notes\n\n{existing.strip() or '(no notes yet)'}\n\n"
+        "The person has asked you to hold something for them — a fact, a reference, a code, a "
+        "configuration, anything they want you to remember. What you save here is what you will "
+        "be handed back on future ticks under *What You've Been Asked to Remember*, so write it "
+        "in a shape that will still make sense to you later.\n\n"
+        f"## What They've Already Asked You to Hold\n\n{existing.strip() or '(nothing yet)'}\n\n"
         "## Tools\n\n"
-        "### save_notes\n"
-        "Rewrite the notes file with the updated content.\n\n"
-        "Parameters:\n"
-        "- `content` (string, required): The complete updated notes text.\n\n"
-        "### say\n"
-        "Send a message to the person.\n\n"
-        "Parameters:\n"
-        "- `text` (string, required): The message to send.\n\n"
-        "## Response Format\n\n"
-        "Merge the new note into the existing notes. Remove anything the person "
-        "asks to remove. Keep everything else. Return the full updated text:\n"
+        "- `save_notes(content)` — REPLACES the whole notes file. `content` must contain every "
+        "line above byte-for-byte, plus the new note appended. Only drop a line if the person "
+        "explicitly asked to remove that item. Never reword or reorder the existing lines.\n"
+        "- `say(text)` — message the person.\n\n"
+        "## Output\n\n"
         "```json\n"
-        '{"tool": "save_notes", "content": "updated notes text here", '
-        '"say": "Noted!"}\n'
-        "```\n\n"
-        "No special permissions are needed for noting."
+        '{"reason": "<what is being added or removed>",\n'
+        ' "tool": "save_notes",\n'
+        ' "content": "<old notes verbatim + new note>",\n'
+        ' "say": "<short confirmation>"}\n'
+        "```"
     )

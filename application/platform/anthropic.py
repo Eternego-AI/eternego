@@ -6,6 +6,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import httpx
 
+from application.platform import logger
 from application.platform.observer import send, Message
 
 BASE_URL = "https://api.anthropic.com"
@@ -22,6 +23,12 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
         else:
             chat_messages.append(m)
 
+    # Anthropic requires the conversation to end with a user message. When it ends with an
+    # assistant turn (e.g. after a persona say), append a continuation marker so the model
+    # knows to proceed with the system-prompt task on this already-seen conversation.
+    if chat_messages and chat_messages[-1].get("role") == "assistant":
+        chat_messages.append({"role": "user", "content": "Proceed."})
+
     body = {"model": model, "messages": chat_messages, "max_tokens": 4096, "stream": True}
     if system_parts:
         body["system"] = "\n".join(system_parts)
@@ -33,7 +40,15 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                 "x-api-key": api_key,
                 "anthropic-version": "2023-06-01",
             }) as response:
-                response.raise_for_status()
+                if response.status_code >= 400:
+                    body_bytes = await response.aread()
+                    body_text = body_bytes.decode("utf-8", errors="replace")
+                    logger.warning("Anthropic API error", {
+                        "status": response.status_code,
+                        "model": model,
+                        "body": body_text,
+                    })
+                    raise OSError(f"Anthropic HTTP {response.status_code}: {body_text}")
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if not line.startswith("data: "):
@@ -50,7 +65,8 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                     if event.get("type") == "message_stop":
                         break
     except httpx.HTTPStatusError as e:
-        raise OSError(f"HTTP {e.response.status_code}") from e
+        logger.warning("Anthropic HTTP error", {"status": e.response.status_code, "model": model})
+        raise OSError(f"Anthropic HTTP {e.response.status_code}") from e
 
 
 async def chat_json(base_url: str, api_key: str | None, model: str, messages: list[dict]):

@@ -2,17 +2,23 @@ from application.platform.processes import on_separate_process_async
 
 
 async def test_escalation_prompt_includes_builtin_and_platform_tools():
-    """When recognize escalates, the prompt must list every available tool —
-    both built-in (say, save_destiny, etc.) and platform tools registered
-    via @tool (e.g. OS.execute_on_sub_process)."""
+    """When recognize escalates, the single escalation call must list every available tool —
+    both built-in (say, save_destiny, etc.) and platform tools registered via @tool
+    (e.g. OS.execute_on_sub_process) — and accept the full meaning module in one response."""
     def isolated():
-        import asyncio
         from application.core.brain import functions
         from application.core.brain.mind.memory import Memory
         from application.core.data import Message, Model, Persona, Prompt
         from application.platform import ollama
 
-        captured = {}
+        valid_module = (
+            '"""Meaning — checking."""\n'
+            'from application.core.data import Persona\n'
+            'def intention(persona: Persona) -> str:\n'
+            '    return "The person wants Tester to check disk space."\n'
+            'def prompt(persona: Persona) -> str:\n'
+            '    return "stub"\n'
+        )
 
         async def consume(url):
             persona = Persona(
@@ -29,10 +35,10 @@ async def test_escalation_prompt_includes_builtin_and_platform_tools():
             await functions.recognize(persona, "identity here", memory)
 
         def validate(received):
-            # Two calls: first is matching (returns 0 → escalate), second is escalation
+            # Two calls: matching (→ 0) and escalation (single call producing name + code)
             assert len(received) == 2, f"Expected 2 calls, got {len(received)}"
             escalation_prompt = received[1]["body"]["messages"][0]["content"]
-            # Built-in tools must appear
+            # Built-in tools must appear in the escalation prompt
             assert "say(text)" in escalation_prompt, "say tool missing"
             assert "save_destiny" in escalation_prompt, "save_destiny missing"
             assert "save_notes" in escalation_prompt, "save_notes missing"
@@ -44,14 +50,21 @@ async def test_escalation_prompt_includes_builtin_and_platform_tools():
             assert "OS.execute_on_sub_process" in escalation_prompt or "execute_on_sub_process" in escalation_prompt, \
                 "OS shell tool missing from platform tools"
 
+        import json as _json
+        escalation_json = _json.dumps({
+            "reason": "no existing meaning checks system state",
+            "new_meaning": "checking_disk_space",
+            "code_lines": valid_module.splitlines(),
+        })
+
         ollama.assert_call(
             run=lambda url: consume(url),
             validate=validate,
             responses=[
                 # First call: recognize matching — return 0 (none of the above)
-                [{"message": {"content": '{"ability": 0}'}, "done": True}],
-                # Second call: escalation — return a valid generated meaning
-                [{"message": {"content": '{"name": "checking", "code": "def intention(persona): return \\"...\\"\\ndef prompt(persona): return \\"...\\""}'}, "done": True}],
+                [{"message": {"content": '{"reason": "no ability", "ability": 0}'}, "done": True}],
+                # Second call: escalation — name + code in one response
+                [{"message": {"content": escalation_json}, "done": True}],
             ],
         )
 

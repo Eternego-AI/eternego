@@ -15,7 +15,7 @@ import threading
 from application.core.agents import Ego
 from application.core.brain import situation
 from application.core.brain.mind import clock
-from application.core.data import Channel, Persona
+from application.core.data import Channel, Message, Persona, Prompt
 from application.core.exceptions import AgentError
 from application.platform import logger
 from application.platform.asyncio_worker import Worker
@@ -36,6 +36,12 @@ class Agent:
         self._pending_connects = []  # in-flight connect tasks
         self.pairing_codes: dict = {}
         self.persona.ego = Ego(self.persona, Worker(), situation.wake)
+
+        wake_text = f"Wake up {self.persona.name}"
+        self.persona.ego.memory.add(Message(
+            content=wake_text,
+            prompt=Prompt(role="user", content=wake_text),
+        ))
 
         for channel in (self.persona.channels or []):
             self._pending_connects.append(asyncio.create_task(self.connect(channel)))
@@ -68,6 +74,10 @@ class Agent:
         from application.business.persona import sleep
         ego = self.persona.ego
         ego.current_situation = situation.sleep
+        ego.memory.add(Message(
+            content="Go to sleep",
+            prompt=Prompt(role="user", content="Go to sleep"),
+        ))
         await ego.settle()
         outcome = await sleep(self.persona)
 
@@ -75,6 +85,11 @@ class Agent:
         await ego.worker.stop()
         ego.worker = Worker()
         ego.current_situation = situation.wake
+        wake_text = f"Wake up {self.persona.name}"
+        ego.memory.add(Message(
+            content=wake_text,
+            prompt=Prompt(role="user", content=wake_text),
+        ))
         ego.worker.run(clock.tick, ego.consciousness(), ego.worker)
 
         return outcome

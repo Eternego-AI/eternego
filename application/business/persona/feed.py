@@ -32,9 +32,10 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
             for m in conversation:
                 role = "user" if m.get("role") == "user" else "assistant"
                 content = m.get("content", "")
+                prompt_content = f"The person said: {content}" if role == "user" else content
                 messages.append(Message(
                     content=content,
-                    prompt=Prompt(role=role, content=content),
+                    prompt=Prompt(role=role, content=prompt_content),
                 ))
 
             feed_memory = VirtualMemory(

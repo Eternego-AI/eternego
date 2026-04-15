@@ -23,6 +23,7 @@ async def tick(consciousness: list, worker) -> None:
                 if i == 0:
                     return
                 restart = True
+                logger.info("Tick restarting", {"step_index": i, "result": repr(result)})
                 break
         if not restart:
             return
