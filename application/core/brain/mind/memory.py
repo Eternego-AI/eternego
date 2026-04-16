@@ -1,7 +1,7 @@
 """Memory — the mind's stream of messages."""
 
 from application.core import paths
-from application.core.data import Channel, Message, Prompt
+from application.core.data import Channel, Media, Message, Prompt
 from application.platform import logger, persistent_memory
 from application.platform.objects import json as to_json
 
@@ -44,10 +44,18 @@ class Memory:
                     role=prompt_data.get("role", ""),
                     content=prompt_data.get("content", ""),
                 )
+            media_data = m.get("media")
+            media = None
+            if media_data:
+                media = Media(
+                    source=media_data.get("source", ""),
+                    query=media_data.get("query", ""),
+                )
             self._messages.append(Message(
                 content=m.get("content", ""),
                 channel=channel,
                 prompt=prompt,
+                media=media,
                 id=m.get("id", ""),
             ))
         self.context = state.get("context")

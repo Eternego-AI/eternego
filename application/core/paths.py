@@ -109,6 +109,11 @@ def training_set(persona_id: str) -> Path:
     return home(persona_id) / "training"
 
 
+def media(persona_id: str) -> Path:
+    """Path to the media directory for that persona."""
+    return home(persona_id) / "media"
+
+
 def notes(persona_id: str) -> Path:
     """Path to the notes.md file for that persona."""
     return home(persona_id) / "notes.md"

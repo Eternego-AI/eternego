@@ -57,13 +57,17 @@ class Ego:
 
     def receive(self, message: Message) -> None:
         """Ingest a person's message — log the words to conversation, mark the experience in memory."""
-        paths.append_jsonl(paths.conversation(self.persona.id), {
+        entry = {
             "role": "person",
             "content": message.content,
             "channel": message.channel.type if message.channel else "",
             "time": datetimes.iso_8601(datetimes.now()),
-        })
-        message.prompt = Prompt(role="user", content=f"The person said: {message.content}")
+        }
+        if message.media:
+            entry["media"] = {"source": message.media.source, "query": message.media.query}
+        paths.append_jsonl(paths.conversation(self.persona.id), entry)
+        if not message.media:
+            message.prompt = Prompt(role="user", content=f"The person said: {message.content}")
         self.memory.add(message)
         self.current_situation = situation.normal
         self.worker.nudge()

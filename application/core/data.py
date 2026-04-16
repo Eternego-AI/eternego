@@ -32,6 +32,7 @@ class Persona(Data):
     version: str = "v1"
     base_model: str = ""
     birthday: str = field(default_factory=lambda: str(date.today()))
+    vision: Model | None = None
     frontier: Model | None = None
     channels: list[Channel] | None = None
 
@@ -43,10 +44,17 @@ class Prompt(Data):
 
 
 @dataclass(kw_only=True)
+class Media(Data):
+    source: str
+    query: str
+
+
+@dataclass(kw_only=True)
 class Message(Data):
     content: str
     channel: Channel | None = None
     prompt: Prompt | None = None
+    media: Media | None = None
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
