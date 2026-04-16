@@ -10,12 +10,11 @@ async def reflect(persona: Persona, identity: str, memory: Memory) -> bool:
     logger.debug("brain.reflect", {"persona": persona, "messages": memory.messages, "context": memory.context})
     try:
         existing = (memory.context or "").strip() or "(nothing yet)"
-        system = (
-            identity
-            + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        question = (
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "# ▶ YOUR TASK: Close this cycle — summarize reality and choose what to carry forward\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "This tick is ending. Look across the conversation that follows and summarize what "
+            "This tick is ending. Look across the conversation above and summarize what "
             "actually happened — what was asked, what you did, what you said, what is resolved, "
             "what is left open.\n\n"
             "Then decide whether something is genuinely worth continuing right now. If there is a "
@@ -45,7 +44,7 @@ async def reflect(persona: Persona, identity: str, memory: Memory) -> bool:
             " \"leftover\": \"\"}\n"
             "```"
         )
-        result = await models.chat_json(persona.thinking, [{"role": "system", "content": system}] + memory.prompts)
+        result = await models.chat_json(persona.thinking, identity, memory.prompts, question)
         if not isinstance(result, dict):
             return False
 

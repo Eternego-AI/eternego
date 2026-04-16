@@ -28,7 +28,7 @@ async def check_model(model: Model) -> Outcome[CheckModelData]:
             await bus.broadcast("Model check failed", {"model": model.name})
             return Outcome(success=False, message="Model is not available")
 
-        await models.chat(model, [{"role": "user", "content": "hi"}])
+        await models.chat(model, "", [], "hi")
         await bus.broadcast("Model is ready", {"model": model.name, "provider": model.provider})
         return Outcome(
             success=True, message="Model is ready", data=CheckModelData(model=model)

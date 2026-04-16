@@ -14,15 +14,13 @@ async def decide(persona: Persona, identity: str, memory: Memory) -> bool:
         meaning = meaning_map.get(memory.meaning)
         if not meaning:
             return False
-        system = (
-            identity
-            + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        question = (
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"# ▶ YOUR TASK: {memory.meaning.capitalize()}\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             + meaning.prompt(persona)
         )
-        prompt = [{"role": "system", "content": system}] + memory.prompts
-        result = await models.chat_json(persona.thinking, prompt)
+        result = await models.chat_json(persona.thinking, identity, memory.prompts, question)
         if not isinstance(result, dict):
             return False
         memory.plan = result

@@ -16,9 +16,8 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
         existing_persona_trait = paths.read(paths.persona_trait(persona.id)).strip() or "(nothing yet)"
         existing_permissions = paths.read(paths.permissions(persona.id)).strip() or "(nothing yet)"
 
-        system = (
-            identity
-            + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        question = (
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "# ▶ YOUR TASK: Update what you know about the person and yourself\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "Through your previous interactions with this person, you came to know these:\n\n"
@@ -34,7 +33,7 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
             f"{existing_persona_trait}\n\n"
             "- **Permissions:**  \n"
             f"{existing_permissions}\n\n"
-            "Combining what you already know with what the person said in the conversation that follows, answer each in your own words.\n\n"
+            "Combining what you already know with what the person said in the conversation above, answer each in your own words.\n\n"
             "- Who is this person, and who are they to the people around them? (`identity`)\n"
             "- What patterns, habits, and ways of thinking mark how this person lives? (`traits`)\n"
             "- What do they aspire to, over time? (`wishes`)\n"
@@ -52,7 +51,7 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
             " \"permissions\": \"...\"}\n"
             "```"
         )
-        result = await models.chat_json(persona.thinking, [{"role": "system", "content": system}] + memory.prompts)
+        result = await models.chat_json(persona.thinking, identity, memory.prompts, question)
         if not isinstance(result, dict):
             return False
 

@@ -37,7 +37,7 @@ async def test_escalation_prompt_includes_builtin_and_platform_tools():
         def validate(received):
             # Two calls: matching (→ 0) and escalation (single call producing name + code)
             assert len(received) == 2, f"Expected 2 calls, got {len(received)}"
-            escalation_prompt = received[1]["body"]["messages"][0]["content"]
+            escalation_prompt = received[1]["body"]["messages"][-1]["content"]
             # Built-in tools must appear in the escalation prompt
             assert "say(text)" in escalation_prompt, "say tool missing"
             assert "save_destiny" in escalation_prompt, "save_destiny missing"

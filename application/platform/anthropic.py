@@ -23,12 +23,6 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
         else:
             chat_messages.append(m)
 
-    # Anthropic requires the conversation to end with a user message. When it ends with an
-    # assistant turn (e.g. after a persona say), append a continuation marker so the model
-    # knows to proceed with the system-prompt task on this already-seen conversation.
-    if chat_messages and chat_messages[-1].get("role") == "assistant":
-        chat_messages.append({"role": "user", "content": "Proceed."})
-
     body = {"model": model, "messages": chat_messages, "max_tokens": 4096, "stream": True}
     if system_parts:
         body["system"] = "\n".join(system_parts)

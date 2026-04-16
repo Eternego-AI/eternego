@@ -7,8 +7,13 @@ from application.platform import logger, ollama, anthropic, openai, strings
 from .is_local import is_local
 
 
-async def chat(model: Model, messages: list[dict]) -> str:
+async def chat(model: Model, identity: str, reality: list[dict], question: str) -> str:
     """Stream messages to a model and return the complete response text."""
+    messages = []
+    if identity:
+        messages.append({"role": "system", "content": identity})
+    messages.extend(reality)
+    messages.append({"role": "user", "content": question})
     logger.debug("models.chat", {"model": model.name, "provider": model.provider, "messages": messages})
 
     try:

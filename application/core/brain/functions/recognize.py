@@ -18,9 +18,8 @@ async def recognize(persona: Persona, identity: str, memory: Memory) -> bool:
             for i, name in enumerate(meaning_names, 1)
         )
         n = len(meaning_names)
-        system = (
-            identity
-            + "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        question = (
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "# ▶ YOUR TASK: Recognize what this moment calls for\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"Pick the ability — from the list below — that fits what the conversation now needs. "
@@ -36,8 +35,7 @@ async def recognize(persona: Persona, identity: str, memory: Memory) -> bool:
             f' "ability": <integer 0 to {n}>}}\n'
             "```"
         )
-        prompt = [{"role": "system", "content": system}] + memory.prompts
-        result = await models.chat_json(persona.thinking, prompt)
+        result = await models.chat_json(persona.thinking, identity, memory.prompts, question)
         if isinstance(result, dict):
             raw = result.get("ability", 0)
             try:
@@ -81,7 +79,7 @@ async def recognize(persona: Persona, identity: str, memory: Memory) -> bool:
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "A meaning is an ability the persona can perform. An earlier step did not match any "
         "existing meaning to what this moment calls for, and escalated to you.\n\n"
-        "Look at the existing meanings below and the conversation that follows. If one of them "
+        "Look at the existing meanings below and the conversation above. If one of them "
         "genuinely fits, return its name — the earlier step simply missed it. Otherwise, create "
         "a new meaning: pick a name, write an intention, and write the prompt the persona will "
         "read every time this ability is invoked — all delivered as a Python module.\n\n"
@@ -171,15 +169,13 @@ async def recognize(persona: Persona, identity: str, memory: Memory) -> bool:
         "```\n\n"
         "The `code_lines` array is one element per line, joined by the runtime with `\\n`."
     )
-    escalation_prompt = [{"role": "system", "content": escalation_system}] + memory.prompts
-
     model = persona.frontier if persona.frontier else persona.thinking
     try:
-        result = await models.chat_json(model, escalation_prompt)
+        result = await models.chat_json(model, "", memory.prompts, escalation_system)
     except Exception:
         if model != persona.thinking:
             try:
-                result = await models.chat_json(persona.thinking, escalation_prompt)
+                result = await models.chat_json(persona.thinking, "", memory.prompts, escalation_system)
             except Exception:
                 struggle = "[escalation_failed] You tried to understand what this asks of you, and with the abilities you have, you could not. You do not understand this meaning yet."
                 memory.add(Message(

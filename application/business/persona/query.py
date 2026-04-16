@@ -21,10 +21,7 @@ async def query(persona: Persona, messages) -> Outcome[QueryData]:
             await bus.broadcast("Queried", {"persona": persona})
             return Outcome(success=True, message="", data=QueryData(response=f"{persona.name} is sleeping."))
 
-        response = await models.chat(persona.thinking, [
-            {"role": "system", "content": persona.ego.identity()},
-            messages,
-        ])
+        response = await models.chat(persona.thinking, persona.ego.identity(), [], messages)
 
         await bus.broadcast("Queried", {"persona": persona})
         return Outcome(success=True, message="", data=QueryData(response=response))

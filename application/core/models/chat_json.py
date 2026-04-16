@@ -9,12 +9,17 @@ from application.platform import logger, ollama, anthropic, openai, strings
 from .is_local import is_local
 
 
-async def chat_json(model: Model, messages: list[dict], done=None) -> dict:
+async def chat_json(model: Model, identity: str, reality: list[dict], question: str, done=None) -> dict:
     """Stream messages to a model and return parsed JSON.
 
     When done is provided, it is called with the accumulated text after each chunk.
     If done returns True, streaming stops early and the accumulated text is parsed.
     """
+    messages = []
+    if identity:
+        messages.append({"role": "system", "content": identity})
+    messages.extend(reality)
+    messages.append({"role": "user", "content": question})
     logger.debug("models.chat_json", {"model": model.name, "provider": model.provider, "messages": messages, "done": done})
 
     try:
