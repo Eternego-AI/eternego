@@ -45,12 +45,50 @@ def typing_action(token: str, chat_id: str) -> None:
         json.loads(response.read())
 
 
-def direct_or_mentioned_in_group(username: str, updates: list[dict]) -> list[tuple[str, str, str]]:
-    """Filter updates to direct messages or group mentions.
+def set_commands(token: str, commands: list[dict]) -> dict:
+    """Register bot commands via setMyCommands. Each command: {"command": "...", "description": "..."}."""
+    req = urllib.request.Request(
+        f"{BASE_URL}/bot{token}/setMyCommands",
+        data=json.dumps({"commands": commands}).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as response:
+        return json.loads(response.read())
 
-    Returns list of (text, chat_id, message_id) tuples.
+
+def has_command(message: dict) -> str | None:
+    """If the message contains a bot_command entity, return the command name (without /). Otherwise None."""
+    for entity in message.get("entities", []):
+        if entity.get("type") == "bot_command":
+            offset = entity["offset"]
+            length = entity["length"]
+            text = message.get("text", "")
+            command = text[offset:offset + length].lstrip("/").split("@")[0]
+            return command
+    return None
+
+
+def direct_or_mentioned(username):
+    """Return a filter function that passes direct messages and group mentions."""
+    def filter_fn(text, chat_type):
+        if chat_type in ("group", "supergroup"):
+            return is_mentioned(username, text)
+        return True
+    return filter_fn
+
+
+def poll_with_signals(token, offset, context, filter_fn=None):
+    """Poll once, dispatch Command/Message signals for each update.
+
+    context: dict with keys the caller wants attached to every signal (e.g. persona_id, channel_type).
+    filter_fn: optional (text, chat_type) -> bool. If provided, only matching messages are dispatched.
+    Returns the next offset.
     """
-    results = []
+    from application.platform.observer import Command as CommandSignal, Message as MessageSignal, send as send_signal
+    import asyncio
+
+    updates, next_offset = poll(token, offset)
+
     for update in updates:
         message = update.get("message", {})
         text = message.get("text", "")
@@ -59,15 +97,34 @@ def direct_or_mentioned_in_group(username: str, updates: list[dict]) -> list[tup
         if not text or not chat_id:
             continue
 
+        chat_type = message.get("chat", {}).get("type", "")
         msg_id = str(message.get("message_id", ""))
 
-        is_group = message.get("chat", {}).get("type", "") in ("group", "supergroup")
-        if is_group and not is_mentioned(username, text):
+        command = has_command(message)
+        if command:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(send_signal(CommandSignal(
+                    f"Telegram command: {command}",
+                    {**context, "command": command, "chat_id": chat_id},
+                )))
+            except RuntimeError:
+                pass
             continue
 
-        results.append((text, chat_id, msg_id))
+        if filter_fn and not filter_fn(text, chat_type):
+            continue
 
-    return results
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(send_signal(MessageSignal(
+                "Telegram message received",
+                {**context, "text": text, "chat_id": chat_id, "msg_id": msg_id},
+            )))
+        except RuntimeError:
+            pass
+
+    return next_offset
 
 
 def poll(token: str, offset: int = 0) -> tuple[list[dict], int]:

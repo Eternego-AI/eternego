@@ -19,7 +19,7 @@ from application.core.data import Channel, Message, Persona, Prompt
 from application.core.exceptions import AgentError
 from application.platform import logger
 from application.platform.asyncio_worker import Worker
-from application.platform.observer import Command, Signal, subscribe
+from application.platform.observer import Command, Message as MessageSignal, Signal, subscribe
 
 
 # ── Agent (the desk) ──────────────────────────────────────────────────────────
@@ -30,11 +30,11 @@ class Agent:
     Creates Ego, connects its own channels, runs its own heartbeat.
     """
 
-    def __init__(self, persona: Persona):
+    def __init__(self, persona: Persona, commands: dict):
         self.persona = persona
+        self.commands = commands
         self._stops: dict = {}  # channel_key -> stop callable
         self._pending_connects = []  # in-flight connect tasks
-        self.pairing_codes: dict = {}
         self.persona.ego = Ego(self.persona, Worker(), situation.wake)
 
         wake_text = f"Wake up {self.persona.name}"
@@ -94,6 +94,28 @@ class Agent:
 
         return outcome
 
+    async def handle_command(self, command: str, details: dict, channel=None):
+        """Look up a command in the agent's command map and run it.
+
+        If the channel is not verified, send a pairing code instead.
+        """
+        if channel and not channel.verified_at:
+            from application.business.persona.pair_by import pair_by
+            outcome = await pair_by(self.persona, channel)
+            if outcome.success and outcome.data:
+                _pairing_codes[outcome.data.code] = {
+                    "channel_type": channel.type,
+                    "channel_name": channel.name,
+                }
+            return
+        entry = self.commands.get(command)
+        if not entry:
+            return
+        logger.info("Handling command", {"persona": self.persona, "command": command})
+        handler = entry.get("handler")
+        if handler:
+            await handler(self.persona, details)
+
     async def connect(self, channel: Channel):
         """Connect a channel — called at construction and from WebSocket route."""
         key = f"{channel.type}:{channel.name}"
@@ -101,7 +123,11 @@ class Agent:
             return
 
         from application.business.persona import connect
-        outcome = await connect(self.persona, channel, self.pairing_codes)
+        channel_commands = [
+            {"command": name, "description": entry["description"]}
+            for name, entry in self.commands.items()
+        ]
+        outcome = await connect(self.persona, channel, channel_commands)
         if not outcome.success or not outcome.data:
             return
 
@@ -112,19 +138,13 @@ class Agent:
             self._stops[key] = conn.close
             return
 
-        # Keep the channel alive: poll in a background thread, dispatch to the handler.
         running = [True]
-        loop = asyncio.get_running_loop()
         poll = conn.poll
-        handle_message = conn.handle_message
 
         def poll_loop():
             while running[0]:
                 try:
-                    messages = poll()
-                    if messages:
-                        for msg in messages:
-                            asyncio.run_coroutine_threadsafe(handle_message(msg), loop)
+                    poll()
                 except Exception as e:
                     logger.warning("Gateway polling error", {
                         "channel": f"{channel.type}:{channel.name}",
@@ -175,6 +195,7 @@ class Agent:
 # ── Registry (the floor plan) ────────────────────────────────────────────────
 
 _agents: dict[str, Agent] = {}
+_pairing_codes: dict[str, dict] = {}
 _app = None
 
 
@@ -195,6 +216,22 @@ def all_agents() -> list[Agent]:
 
 
 # ── Manager operations ────────────────────────────────────────────────────────
+
+def claim_pairing_code(code: str) -> dict | None:
+    """Look up and consume a pairing code. Returns {channel_type, channel_name} or None."""
+    from application.platform import datetimes
+    from datetime import timedelta
+
+    code_upper = code.upper()
+    entry = _pairing_codes.get(code_upper)
+    if not entry:
+        return None
+    if datetimes.now() - entry["created_at"] > timedelta(minutes=10):
+        _pairing_codes.pop(code_upper, None)
+        return None
+    _pairing_codes.pop(code_upper, None)
+    return {"channel_type": entry["channel_type"], "channel_name": entry["channel_name"]}
+
 
 def start(app) -> None:
     """Initialize the manager: store the web app and subscribe signals."""
@@ -217,12 +254,54 @@ def start(app) -> None:
             return
         await restart(p.id)
 
-    subscribe(restart_gateway, on_channel_paired)
+    async def on_telegram_command(command: Command):
+        if not command.title.startswith("Telegram command:"):
+            return
+        cmd = command.details.get("command")
+        chat_id = command.details.get("chat_id")
+        if not cmd or not chat_id:
+            return
+        for agent in all_agents():
+            for ch in (agent.persona.channels or []):
+                if ch.type == "telegram" and ch.name == chat_id:
+                    await agent.handle_command(cmd, command.details, ch)
+                    return
+        logger.warning("Telegram command from unknown channel", {"chat_id": chat_id, "command": cmd})
+
+    async def on_telegram_message(signal: MessageSignal):
+        if signal.title != "Telegram message received":
+            return
+        text = signal.details.get("text", "")
+        chat_id = signal.details.get("chat_id", "")
+        if not text or not chat_id:
+            return
+        for agent in all_agents():
+            for ch in (agent.persona.channels or []):
+                if ch.type == "telegram" and ch.name == chat_id:
+                    from application.business.persona.hear import hear
+                    await hear(agent.persona, content=text, channel_type="telegram", channel_name=chat_id)
+                    return
+
+    subscribe(restart_gateway, on_channel_paired, on_telegram_command, on_telegram_message)
 
 
 def serve(persona: Persona) -> Agent:
     """Assign an agent for this persona — construct, register routes, track."""
-    agent = Agent(persona)
+
+    async def handle_stop(p, details):
+        if p.ego:
+            await p.ego.stop()
+
+    async def handle_restart(p, details):
+        await restart(p.id)
+
+    commands = {
+        "start": {"description": "Pair this chat with the persona"},
+        "stop": {"description": "Stop the persona", "handler": handle_stop},
+        "restart": {"description": "Restart the persona", "handler": handle_restart},
+    }
+
+    agent = Agent(persona, commands)
     _agents[persona.id] = agent
 
     from web.routes.agent_routes import register_routes

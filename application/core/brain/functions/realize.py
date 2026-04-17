@@ -15,18 +15,12 @@ async def realize(persona: Persona, identity: str, memory: Memory) -> bool:
                 p.prompt.content for p in memory.messages
                 if p.prompt and p is not m
             )
-            question = (
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "# ▶ YOUR TASK: Describe what you see\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            )
+            question = f"{m.media.query}\n\n"
             if context:
-                question += f"## Conversation so far\n\n{context}\n\n"
+                question += f"Conversation so far:\n{context}\n\n"
             question += (
-                f"## What to look for\n\n{m.media.query}\n\n"
-                "Describe what you see in the image, focused on the query above. "
-                "If the image shows partial content (e.g. a spreadsheet with more rows below, "
-                "a page with content off-screen), say what is visible and what is not."
+                "Tell whether you see the full content or only part of it, "
+                "then answer the question about the image considering the conversation."
             )
             try:
                 description = await models.chat(model, identity, [], question)

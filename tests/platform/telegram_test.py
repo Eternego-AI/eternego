@@ -21,42 +21,39 @@ def test_is_mentioned_returns_false_when_absent():
     assert not telegram.is_mentioned("eternego_bot", "Hello everyone")
 
 
-def test_direct_message_is_returned():
-    updates = [{"update_id": 100, "message": {"text": "hello", "chat": {"id": 123, "type": "private"}, "message_id": 1}}]
-    result = telegram.direct_or_mentioned_in_group("bot", updates)
-    assert result == [("hello", "123", "1")]
+def test_direct_or_mentioned_filter_passes_direct():
+    filter_fn = telegram.direct_or_mentioned("bot")
+    assert filter_fn("hello", "private") is True
 
 
-def test_empty_text_is_skipped():
-    updates = [{"update_id": 100, "message": {"text": "", "chat": {"id": 123, "type": "private"}, "message_id": 1}}]
-    assert telegram.direct_or_mentioned_in_group("bot", updates) == []
+def test_direct_or_mentioned_filter_passes_group_mention():
+    filter_fn = telegram.direct_or_mentioned("eternego_bot")
+    assert filter_fn("hey @eternego_bot help", "group") is True
 
 
-def test_missing_chat_id_is_skipped():
-    updates = [{"update_id": 100, "message": {"text": "hi", "chat": {}, "message_id": 1}}]
-    assert telegram.direct_or_mentioned_in_group("bot", updates) == []
+def test_direct_or_mentioned_filter_rejects_group_without_mention():
+    filter_fn = telegram.direct_or_mentioned("eternego_bot")
+    assert filter_fn("hello everyone", "group") is False
 
 
-def test_group_without_mention_is_skipped():
-    updates = [{"update_id": 100, "message": {"text": "hello everyone", "chat": {"id": 123, "type": "group"}, "message_id": 1}}]
-    assert telegram.direct_or_mentioned_in_group("eternego_bot", updates) == []
+def test_has_command_detects_command():
+    message = {"text": "/stop", "entities": [{"type": "bot_command", "offset": 0, "length": 5}]}
+    assert telegram.has_command(message) == "stop"
 
 
-def test_group_with_mention_is_returned():
-    updates = [{"update_id": 100, "message": {"text": "hey @eternego_bot help", "chat": {"id": 123, "type": "group"}, "message_id": 1}}]
-    assert telegram.direct_or_mentioned_in_group("eternego_bot", updates) == [("hey @eternego_bot help", "123", "1")]
+def test_has_command_strips_bot_mention():
+    message = {"text": "/stop@mybot", "entities": [{"type": "bot_command", "offset": 0, "length": 11}]}
+    assert telegram.has_command(message) == "stop"
 
 
-def test_multiple_updates_processed():
-    updates = [
-        {"update_id": 100, "message": {"text": "first", "chat": {"id": 1, "type": "private"}, "message_id": 1}},
-        {"update_id": 101, "message": {"text": "second", "chat": {"id": 2, "type": "private"}, "message_id": 2}},
-    ]
-    assert len(telegram.direct_or_mentioned_in_group("bot", updates)) == 2
+def test_has_command_returns_none_for_regular_message():
+    message = {"text": "hello", "entities": []}
+    assert telegram.has_command(message) is None
 
 
-def test_empty_updates_returns_empty():
-    assert telegram.direct_or_mentioned_in_group("bot", []) == []
+def test_has_command_returns_none_when_no_entities():
+    message = {"text": "hello"}
+    assert telegram.has_command(message) is None
 
 
 # ── Isolated tests (swap BASE_URL) ──────────────────────────────────────────

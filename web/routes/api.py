@@ -56,21 +56,19 @@ async def prepare_environment(request: EnvironmentPrepareRequest):
 
 
 @router.post("/pair/{code}")
-async def pair_channel(code: str):
-    code_upper = code.upper()
-    for agent in manager.all_agents():
-        entry = agent.pairing_codes.get(code_upper)
-        if entry is None:
-            continue
-        if datetimes.now() - entry["created_at"] > timedelta(minutes=10):
-            agent.pairing_codes.pop(code_upper, None)
-            raise HTTPException(status_code=400, detail="Pairing code has expired.")
-        agent.pairing_codes.pop(code_upper, None)
-        outcome = await environment.pair(agent.persona, entry["channel_type"], entry["channel_name"])
-        if not outcome.success or not outcome.data:
-            raise HTTPException(status_code=400, detail=outcome.message)
-        return outcome.data
-    raise HTTPException(status_code=400, detail="Pairing code is invalid or has expired.")
+async def pair_channel(code: str, persona_id: str = Form(None)):
+    channel_info = manager.claim_pairing_code(code)
+    if not channel_info:
+        raise HTTPException(status_code=400, detail="Pairing code is invalid or has expired.")
+    if not persona_id:
+        raise HTTPException(status_code=400, detail="No persona specified for pairing.")
+    find = await persona.find(persona_id)
+    if not find.success or not find.data:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await environment.pair(find.data.persona, channel_info["channel_type"], channel_info["channel_name"])
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
 
 
 @router.post("/persona/create")

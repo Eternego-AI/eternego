@@ -2,7 +2,7 @@
 
 from application.core import paths
 from application.platform import logger, telegram, datetimes
-from application.core.data import Channel, Message, Persona
+from application.core.data import Channel, Persona
 from application.core.exceptions import ChannelError
 
 
@@ -12,27 +12,30 @@ async def send_all(channels: list, text: str) -> None:
         await send(channel, text)
 
 
-def keep_open(persona: Persona, channel: Channel) -> dict:
+def keep_open(persona: Persona, channel: Channel, commands: list[dict] | None = None) -> dict:
     """Return a channel strategy dict describing how to keep this channel alive.
 
-    For polling channels (telegram): returns connection callable that polls once
-    and returns a list of Message objects.
+    For polling channels (telegram): registers commands, returns a poll callable
+    that dispatches signals for messages and commands.
     """
     logger.info("Opening channel", {"type": channel.type, "persona": persona})
     if channel.type == "telegram":
         token = (channel.credentials or {})["token"]
         offset = [0]
+        filter_fn = telegram.direct_or_mentioned(persona.name)
+        context = {"channel_type": "telegram"}
+
+        if commands:
+            try:
+                telegram.set_commands(token, commands)
+            except Exception as e:
+                logger.warning("Failed to set Telegram commands", {"error": str(e)})
 
         def connection():
             try:
-                updates, offset[0] = telegram.poll(token, offset[0])
+                offset[0] = telegram.poll_with_signals(token, offset[0], context, filter_fn)
             except Exception:
-                return []
-            messages = []
-            for text, chat_id, msg_id in telegram.direct_or_mentioned_in_group(persona.name, updates):
-                msg_channel = Channel(type="telegram", name=chat_id, credentials=channel.credentials)
-                messages.append(Message(channel=msg_channel, content=text, id=msg_id))
-            return messages
+                pass
 
         return {"type": "polling", "connection": connection}
 

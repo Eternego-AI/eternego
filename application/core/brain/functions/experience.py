@@ -71,6 +71,13 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
                 tool_result = "Error: date is required."
             else:
                 entries = paths.read_files_matching(persona.id, paths.history(persona.id), f"*{date}*")
+                live = paths.read_jsonl(paths.conversation(persona.id))
+                live_lines = [
+                    f"[{e.get('time', '')}] {e['role']}: {e['content']}"
+                    for e in live if date in e.get("time", "")
+                ]
+                if live_lines:
+                    entries.append("Today's conversation:\n" + "\n".join(live_lines))
                 tool_result = "\n\n".join(entries) if entries else "No conversations found for that date."
 
         else:
