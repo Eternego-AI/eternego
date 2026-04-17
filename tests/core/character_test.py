@@ -31,7 +31,7 @@ async def test_shape_starts_with_root_h1_and_includes_character():
         assert "Truth" in result, "truth value should appear"
         assert "Care" in result, "care value should appear"
         assert "Responsibility" in result, "responsibility value should appear"
-        assert "say what is true" in result.lower()
+        assert "Be honest" in result
         assert "## Who You Are" in result
         assert "## What Sustains and Threatens You" in result
         assert "## How You Act" in result

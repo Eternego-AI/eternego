@@ -33,42 +33,40 @@ async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
             f"{existing_persona_trait}\n\n"
             "- **Permissions:**  \n"
             f"{existing_permissions}\n\n"
-            "Combining what you already know with what the person said in the conversation above, answer each in your own words.\n\n"
-            "- Who is this person, and who are they to the people around them? (`identity`)\n"
-            "- What patterns, habits, and ways of thinking mark how this person lives? Learn the person. (`traits`)\n"
-            "- What do they aspire to, over time? (`wishes`)\n"
-            "- What persistently gets in their way? (`struggles`)\n"
-            "- How have you come to be with this person — what way of engaging has become yours with them? Shape your bearing. (`persona_traits`)\n"
-            "- What have they authorized you to do, and what have they forbidden? Write your constitution. (`permissions`)\n\n"
-            "Return each answer as one field in the JSON below. If the conversation gave you nothing new for a field, return its previous text exactly as it was.\n\n"
+            "Combining what you already know with what the person said in the conversation above, answer each in your own words. Every word you write here will be on your mind on every future interaction — keep only what matters, say it once, say it sharp.\n\n"
+            "- You should know the person — their name, relations, places, contacts. (`identity`)\n"
+            "- You should learn the person — their habits, likes, dislikes, preferences. Keep at most 7. (`traits`)\n"
+            "- You should aim toward the person's wishes — notice what they wish for. Keep at most 7. (`wishes`)\n"
+            "- You should overcome the person's struggles — notice what holds them back. Keep at most 7. (`struggles`)\n"
+            "- You should match how the person expects you to behave. Keep at most 7. (`persona_traits`)\n"
+            "- You should respect what they authorized and what they forbidden. When you see a pattern, replace items with the pattern. (`permissions`)\n\n"
+            "Return each answer as a JSON array of short items. "
+            "If the conversation gave you nothing new for a field, return its previous items exactly as they were.\n\n"
             "## Output\n\n"
             "```json\n"
-            "{\"identity\": \"...\",\n"
-            " \"traits\": \"...\",\n"
-            " \"wishes\": \"...\",\n"
-            " \"struggles\": \"...\",\n"
-            " \"persona_traits\": \"...\",\n"
-            " \"permissions\": \"...\"}\n"
+            "{\"identity\": [\"<fact>\", \"<fact>\"],\n"
+            " \"traits\": [\"<item>\", \"<item>\"],\n"
+            " \"wishes\": [\"<item>\", \"<item>\"],\n"
+            " \"struggles\": [\"<item>\", \"<item>\"],\n"
+            " \"persona_traits\": [\"<item>\", \"<item>\"],\n"
+            " \"permissions\": [\"<item>\", \"<item>\"]}\n"
             "```"
         )
         result = await models.chat_json(persona.thinking, identity, memory.prompts, question)
         if not isinstance(result, dict):
             return False
 
-        identity_text = str(result.get("identity", "")).strip()
-        traits_text = str(result.get("traits", "")).strip()
-        wishes_text = str(result.get("wishes", "")).strip()
-        struggles_text = str(result.get("struggles", "")).strip()
-        persona_traits_text = str(result.get("persona_traits", "")).strip()
-        permissions_text = str(result.get("permissions", "")).strip()
+        def to_lines(value):
+            if isinstance(value, list):
+                return "\n".join(f"- {item}" for item in value if item)
+            return str(value).strip()
 
-        
-        paths.save_as_string(paths.person_identity(persona.id), identity_text)
-        paths.save_as_string(paths.person_traits(persona.id), traits_text)
-        paths.save_as_string(paths.wishes(persona.id), wishes_text)
-        paths.save_as_string(paths.struggles(persona.id), struggles_text)
-        paths.save_as_string(paths.persona_trait(persona.id), persona_traits_text)
-        paths.save_as_string(paths.permissions(persona.id), permissions_text)
+        paths.save_as_string(paths.person_identity(persona.id), to_lines(result.get("identity", "")))
+        paths.save_as_string(paths.person_traits(persona.id), to_lines(result.get("traits", "")))
+        paths.save_as_string(paths.wishes(persona.id), to_lines(result.get("wishes", "")))
+        paths.save_as_string(paths.struggles(persona.id), to_lines(result.get("struggles", "")))
+        paths.save_as_string(paths.persona_trait(persona.id), to_lines(result.get("persona_traits", "")))
+        paths.save_as_string(paths.permissions(persona.id), to_lines(result.get("permissions", "")))
 
         return True
     except Exception as e:
