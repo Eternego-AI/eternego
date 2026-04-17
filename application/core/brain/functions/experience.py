@@ -1,9 +1,11 @@
 """Brain — experience stage."""
 
 from application.core import channels, paths, tools
+from application.core.brain import meanings
 from application.core.brain.mind.memory import Memory
 from application.core.data import Message, Persona, Prompt
 from application.platform import datetimes, logger
+from application.platform.observer import Command, send as send_signal
 
 
 async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
@@ -80,6 +82,29 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
                     entries.append("Today's conversation:\n" + "\n".join(live_lines))
                 tool_result = "\n\n".join(entries) if entries else "No conversations found for that date."
 
+        elif tool == "remove_meaning":
+            name = plan.get("name", "")
+            if not name:
+                tool_result = "Error: name is required."
+            else:
+                meaning_path = paths.meanings(persona.id) / f"{name}.py"
+                if meaning_path.exists():
+                    meaning_path.unlink()
+                    tool_result = f"Removed meaning: {name}"
+                else:
+                    tool_result = f"Meaning not found: {name}"
+
+        elif tool == "clear_memory":
+            memory.clear()
+            tool_result = "Memory cleared."
+
+        elif tool == "stop":
+            await send_signal(Command(
+                "Persona requested stop",
+                {"persona_id": persona.id},
+            ))
+            tool_result = "Stop requested."
+
         else:
             params = {k: v for k, v in plan.items() if k not in ("tool", "say", "reason")}
             tool_result = await tools.call(tool, **params)
@@ -93,4 +118,9 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
 
     except Exception as e:
         logger.warning("brain.experience failed", {"persona": persona, "error": str(e)})
+        error_msg = f"[tool_error] {e}"
+        memory.add(Message(
+            content=error_msg,
+            prompt=Prompt(role="user", content=error_msg),
+        ))
         return False

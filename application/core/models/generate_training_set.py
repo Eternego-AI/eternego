@@ -4,7 +4,7 @@ import json
 
 from application.core.data import Model
 from application.core.exceptions import ModelError, EngineConnectionError
-from application.platform import logger, strings
+from application.platform import logger
 
 from .chat_json import chat_json
 

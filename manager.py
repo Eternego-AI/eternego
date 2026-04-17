@@ -282,7 +282,18 @@ def start(app) -> None:
                     await hear(agent.persona, content=text, channel_type="telegram", channel_name=chat_id)
                     return
 
-    subscribe(restart_gateway, on_channel_paired, on_telegram_command, on_telegram_message)
+    async def on_persona_stop(command: Command):
+        if command.title != "Persona requested stop":
+            return
+        persona_id = command.details.get("persona_id")
+        if not persona_id:
+            return
+        agent = find_or_none(persona_id)
+        if agent and agent.persona.ego:
+            logger.info("Persona requested stop", {"persona_id": persona_id})
+            await agent.persona.ego.stop()
+
+    subscribe(restart_gateway, on_channel_paired, on_telegram_command, on_telegram_message, on_persona_stop)
 
 
 def serve(persona: Persona) -> Agent:

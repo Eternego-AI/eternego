@@ -1,11 +1,10 @@
 """Models — send messages to a model and return parsed JSON."""
 
-import json
-
 from application.core.data import Model
 from application.core.exceptions import ModelError, EngineConnectionError
 from application.platform import logger, ollama, anthropic, openai, strings
 
+from .extract_json import extract_json
 from .is_local import is_local
 
 
@@ -37,12 +36,10 @@ async def chat_json(model: Model, identity: str, reality: list[dict], question: 
                 break
 
         raw = strings.strip_tag("".join(parts), "think")
-        return strings.extract_json(raw)
+        return extract_json(raw)
     except ollama.OllamaError as e:
         raise ModelError(f"Model returned an error: {e}") from e
     except ConnectionError as e:
         raise EngineConnectionError("Could not connect to the local inference engine") from e
-    except json.JSONDecodeError as e:
-        raise ModelError("Model returned an invalid JSON response") from e
     except OSError as e:
         raise ModelError(f"Model returned an error: {e}") from e

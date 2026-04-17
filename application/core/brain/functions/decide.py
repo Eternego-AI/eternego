@@ -3,7 +3,8 @@
 from application.core import models
 from application.core.brain import meanings
 from application.core.brain.mind.memory import Memory
-from application.core.data import Persona
+from application.core.data import Message, Persona, Prompt
+from application.core.exceptions import ModelError
 from application.platform import logger
 
 
@@ -36,6 +37,14 @@ async def decide(persona: Persona, identity: str, memory: Memory) -> bool:
                     except Exception:
                         pass
         return True
+    except ModelError as e:
+        logger.warning("brain.decide failed", {"persona": persona, "meaning": memory.meaning, "error": str(e)})
+        invalid = f"[invalid_json] Your previous response could not be parsed as JSON. Fix the issue or troubleshoot."
+        memory.add(Message(
+            content=invalid,
+            prompt=Prompt(role="user", content=invalid),
+        ))
+        return False
     except Exception as e:
         logger.warning("brain.decide failed", {"persona": persona, "meaning": memory.meaning, "error": str(e)})
         return False
