@@ -119,29 +119,12 @@ async def test_typing_action_sends_correct_payload():
     assert code == 0, error
 
 
-async def test_poll_returns_updates_and_next_offset():
-    def isolated():
-        from application.platform import telegram
-
-        def run():
-            updates, offset = telegram.poll("fake-token")
-            assert len(updates) == 1, f"Expected 1 update, got {len(updates)}"
-            assert offset == 101, f"Expected offset 101, got {offset}"
-
-        telegram.assert_call(
-            run=run,
-            response={"result": [{"update_id": 100, "message": {"text": "hi", "chat": {"id": 1}, "message_id": 1}}]},
-        )
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
 async def test_poll_sends_to_correct_path():
     def isolated():
         from application.platform import telegram
 
         def run():
-            telegram.poll("my-token")
+            telegram.poll("my-token", 0, {})
         def validate(r):
             assert r["path"] == "/botmy-token/getUpdates", r["path"]
 
@@ -159,7 +142,7 @@ async def test_poll_sends_offset_in_request():
         from application.platform import telegram
 
         def run():
-            telegram.poll("token", offset=42)
+            telegram.poll("token", 42, {})
 
         def validate(r):
             assert r["body"]["offset"] == 42, r["body"]

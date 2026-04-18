@@ -23,6 +23,26 @@ def get_me(token: str) -> dict:
         return json.loads(response.read())
 
 
+def get_file_path(token: str, file_id: str) -> str:
+    """Get the file path for a file_id via Telegram Bot API."""
+    req = urllib.request.Request(
+        f"{BASE_URL}/bot{token}/getFile",
+        data=json.dumps({"file_id": file_id}).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as response:
+        data = json.loads(response.read())
+    return data.get("result", {}).get("file_path", "")
+
+
+def download_file(token: str, file_path: str, destination: str) -> None:
+    """Download a file from Telegram servers to a local path."""
+    import os
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    url = f"{BASE_URL}/file/bot{token}/{file_path}"
+    urllib.request.urlretrieve(url, destination)
+
+
 def send(token: str, chat_id: str, message: str) -> dict:
     """Send a message via Telegram Bot API."""
     req = urllib.request.Request(
@@ -77,58 +97,16 @@ def direct_or_mentioned(username):
     return filter_fn
 
 
-def poll_with_signals(token, offset, context, filter_fn=None):
+def poll(token, offset, context, filter_fn=None):
     """Poll once, dispatch Command/Message signals for each update.
 
-    context: dict with keys the caller wants attached to every signal (e.g. persona_id, channel_type).
+    context: dict with keys the caller wants attached to every signal.
     filter_fn: optional (text, chat_type) -> bool. If provided, only matching messages are dispatched.
     Returns the next offset.
     """
     from application.platform.observer import Command as CommandSignal, Message as MessageSignal, send as send_signal
     import asyncio
 
-    updates, next_offset = poll(token, offset)
-
-    for update in updates:
-        message = update.get("message", {})
-        text = message.get("text", "")
-        chat_id = str(message.get("chat", {}).get("id", ""))
-
-        if not text or not chat_id:
-            continue
-
-        chat_type = message.get("chat", {}).get("type", "")
-        msg_id = str(message.get("message_id", ""))
-
-        command = has_command(message)
-        if command:
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(send_signal(CommandSignal(
-                    f"Telegram command: {command}",
-                    {**context, "command": command, "chat_id": chat_id},
-                )))
-            except RuntimeError:
-                pass
-            continue
-
-        if filter_fn and not filter_fn(text, chat_type):
-            continue
-
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(send_signal(MessageSignal(
-                "Telegram message received",
-                {**context, "text": text, "chat_id": chat_id, "msg_id": msg_id},
-            )))
-        except RuntimeError:
-            pass
-
-    return next_offset
-
-
-def poll(token: str, offset: int = 0) -> tuple[list[dict], int]:
-    """Make one long-poll request. Returns (updates, next_offset)."""
     req = urllib.request.Request(
         f"{BASE_URL}/bot{token}/getUpdates",
         data=json.dumps({"offset": offset, "timeout": POLL_TIMEOUT}).encode(),
@@ -139,7 +117,78 @@ def poll(token: str, offset: int = 0) -> tuple[list[dict], int]:
 
     updates = data.get("result", [])
     next_offset = updates[-1]["update_id"] + 1 if updates else offset
-    return updates, next_offset
+
+    for update in updates:
+        message = update.get("message", {})
+        chat_id = str(message.get("chat", {}).get("id", ""))
+        if not chat_id:
+            continue
+
+        chat_type = message.get("chat", {}).get("type", "")
+        msg_id = str(message.get("message_id", ""))
+        text = message.get("text", "")
+        caption = message.get("caption", "")
+        photos = message.get("photo", [])
+
+        if text:
+            command = has_command(message)
+            if command:
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(send_signal(CommandSignal(
+                        f"Telegram command: {command}",
+                        {**context, "command": command, "chat_id": chat_id},
+                    )))
+                except RuntimeError:
+                    pass
+                continue
+
+            if filter_fn and not filter_fn(text, chat_type):
+                continue
+
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(send_signal(MessageSignal(
+                    "Telegram message received",
+                    {**context, "text": text, "chat_id": chat_id, "msg_id": msg_id},
+                )))
+            except RuntimeError:
+                pass
+
+        elif photos:
+            if filter_fn and not filter_fn(caption or "(photo)", chat_type):
+                continue
+
+            file_id = photos[-1].get("file_id", "")
+            if not file_id:
+                continue
+
+            try:
+                remote_path = get_file_path(token, file_id)
+                if not remote_path:
+                    continue
+                import tempfile
+                ext = remote_path.rsplit(".", 1)[-1] if "." in remote_path else "jpg"
+                fd, local_path = tempfile.mkstemp(suffix=f".{ext}")
+                import os
+                os.close(fd)
+                download_file(token, remote_path, local_path)
+
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(send_signal(MessageSignal(
+                        "Telegram media received",
+                        {**context, "text": caption, "chat_id": chat_id, "msg_id": msg_id,
+                         "media_source": local_path, "media_query": caption or "The person sent an image. Describe what you see."},
+                    )))
+                except RuntimeError:
+                    pass
+            except Exception:
+                pass
+
+    return next_offset
+
+
 
 
 async def async_send(token: str, chat_id: str, message: str) -> dict:

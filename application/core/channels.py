@@ -33,7 +33,7 @@ def keep_open(persona: Persona, channel: Channel, commands: list[dict] | None = 
 
         def connection():
             try:
-                offset[0] = telegram.poll_with_signals(token, offset[0], context, filter_fn)
+                offset[0] = telegram.poll(token, offset[0], context, filter_fn)
             except Exception:
                 pass
 

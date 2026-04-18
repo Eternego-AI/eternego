@@ -8,6 +8,7 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from starlette.routing import Route
 
 from application.business import persona as persona_spec
+from application.core.data import Channel
 from web.requests import HearRequest, PersonaControlRequest
 
 
@@ -48,7 +49,7 @@ def register_routes(app: FastAPI, agent) -> None:
         return outcome.data
 
     async def hear(request: HearRequest):
-        outcome = await persona_spec.hear(p, content=request.message, channel_type="web", channel_name=p.id)
+        outcome = await persona_spec.hear(p, content=request.message, channel=Channel(type="web", name=p.id))
         if not outcome.success:
             raise HTTPException(status_code=500, detail=outcome.message)
         return {"status": "received"}

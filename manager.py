@@ -269,17 +269,25 @@ def start(app) -> None:
         logger.warning("Telegram command from unknown channel", {"chat_id": chat_id, "command": cmd})
 
     async def on_telegram_message(signal: MessageSignal):
-        if signal.title != "Telegram message received":
+        if signal.title not in ("Telegram message received", "Telegram media received"):
             return
-        text = signal.details.get("text", "")
         chat_id = signal.details.get("chat_id", "")
-        if not text or not chat_id:
+        if not chat_id:
             return
         for agent in all_agents():
             for ch in (agent.persona.channels or []):
                 if ch.type == "telegram" and ch.name == chat_id:
-                    from application.business.persona.hear import hear
-                    await hear(agent.persona, content=text, channel_type="telegram", channel_name=chat_id)
+                    if signal.title == "Telegram message received":
+                        text = signal.details.get("text", "")
+                        if text:
+                            from application.business.persona.hear import hear
+                            await hear(agent.persona, content=text, channel=ch)
+                    elif signal.title == "Telegram media received":
+                        media_source = signal.details.get("media_source", "")
+                        media_query = signal.details.get("media_query", "")
+                        if media_source:
+                            from application.business.persona.see import see
+                            await see(agent.persona, source=media_source, query=media_query, channel=ch)
                     return
 
     async def on_persona_stop(command: Command):

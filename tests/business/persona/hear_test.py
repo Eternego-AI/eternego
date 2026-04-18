@@ -28,7 +28,8 @@ async def test_hear_succeeds():
             def nudge(self): self.nudged += 1
 
         p.ego = agents.Ego(p, FakeWorker())
-        result = asyncio.run(spec.hear(p, content="hello", channel_type="web", channel_name="w1"))
+        from application.core.data import Channel
+        result = asyncio.run(spec.hear(p, content="hello", channel=Channel(type="web", name="w1")))
         assert result.success, result.message
 
     code, error = await on_separate_process_async(isolated)

@@ -13,18 +13,11 @@ class HearData:
     response: str
 
 
-async def hear(persona: Persona, content: str, channel_type: str = "", channel_name: str = "", channel_credentials: dict | None = None) -> Outcome[HearData]:
-    """Receive a message — filter noise, construct the core Message, pass it to the ego."""
-    if channel_type and channel_type != "web":
-        verified = next(
-            (c for c in (persona.channels or [])
-             if c.type == channel_type and c.verified_at),
-            None,
-        )
-        if not verified:
-            return Outcome(success=True, message="", data=HearData(response="Channel not verified."))
+async def hear(persona: Persona, content: str, channel: Channel | None = None) -> Outcome[HearData]:
+    """Receive a text message — filter noise, construct the core Message, pass it to the ego."""
+    if channel and channel.type != "web" and not channel.verified_at:
+        return Outcome(success=True, message="", data=HearData(response="Channel not verified."))
 
-    channel = Channel(type=channel_type, name=channel_name, credentials=channel_credentials)
     message = Message(channel=channel, content=content)
     await bus.propose("Hearing", {"persona": persona, "channel": channel})
     try:
@@ -37,7 +30,7 @@ async def hear(persona: Persona, content: str, channel_type: str = "", channel_n
         await bus.broadcast("Heard", {
             "persona": persona,
             "content": content,
-            "channel_type": channel_type,
+            "channel": channel,
         })
         return Outcome(success=True, message="")
     except MindError as e:
