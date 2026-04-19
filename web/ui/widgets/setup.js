@@ -332,7 +332,7 @@ class SetupWidget extends Widget {
             if (!code) return;
             pairBtn.disabled = true;
             try {
-                const result = await this._props.onPair(code);
+                const result = await this._props.onPair(code, this._personaId);
                 if (result.success) {
                     this._done();
                 } else {

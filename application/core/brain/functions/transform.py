@@ -1,6 +1,7 @@
 """Brain — transform stage."""
 
 from application.core import models, paths
+from application.core.brain import situation
 from application.core.brain.mind.memory import Memory
 from application.core.data import Persona
 from application.platform import logger
@@ -8,6 +9,10 @@ from application.platform import logger
 
 async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
     logger.debug("brain.transform", {"persona": persona, "messages": memory.messages})
+
+    if persona.ego and persona.ego.current_situation is situation.wake:
+        return True
+
     try:
         existing_identity = paths.read(paths.person_identity(persona.id)).strip() or "(nothing yet)"
         existing_traits = paths.read(paths.person_traits(persona.id)).strip() or "(nothing yet)"

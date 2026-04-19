@@ -15,7 +15,7 @@ class ControlData:
 
 async def control(persona: Persona, entry_ids: list[str]) -> Outcome[ControlData]:
     """It gives you full control over what your persona knows — you always have the final say."""
-    await bus.propose("Controlling persona", {"persona": persona, "count": len(entry_ids)})
+    bus.propose("Controlling persona", {"persona": persona, "count": len(entry_ids)})
 
     try:
         for entry_id in entry_ids:
@@ -36,7 +36,7 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[ControlData
             elif prefix == "ps":
                 paths.delete_entry(paths.struggles(persona.id), hash_part)
 
-        await bus.broadcast("Persona controlled", {"persona": persona, "removed": len(entry_ids)})
+        bus.broadcast("Persona controlled", {"persona": persona, "removed": len(entry_ids)})
 
         return Outcome(
             success=True,
@@ -45,13 +45,13 @@ async def control(persona: Persona, entry_ids: list[str]) -> Outcome[ControlData
         )
 
     except ValueError:
-        await bus.broadcast("Persona control failed", {"reason": "invalid_id", "persona": persona})
+        bus.broadcast("Persona control failed", {"reason": "invalid_id", "persona": persona})
         return Outcome(success=False, message="Invalid entry ID format.")
 
     except IdentityError as e:
-        await bus.broadcast("Persona control failed", {"reason": "identity", "error": str(e)})
+        bus.broadcast("Persona control failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not remove agent entry. It may have been modified or already deleted.")
 
     except PersonError as e:
-        await bus.broadcast("Persona control failed", {"reason": "person", "error": str(e)})
+        bus.broadcast("Persona control failed", {"reason": "person", "error": str(e)})
         return Outcome(success=False, message="Could not remove person entry. It may have been modified or already deleted.")

@@ -17,7 +17,7 @@ class PairingData:
 
 async def pair_by(persona: Persona, channel: Channel) -> Outcome[PairingData]:
     """Generate a pairing code for a channel and send it to the person."""
-    await bus.propose("Initiating pairing", {"persona": persona, "channel": channel})
+    bus.propose("Initiating pairing", {"persona": persona, "channel": channel})
 
     code = secrets.token_hex(3).upper()
 
@@ -28,7 +28,7 @@ async def pair_by(persona: Persona, channel: Channel) -> Outcome[PairingData]:
         "This code expires in 10 minutes.",
     )
 
-    await bus.broadcast("Pairing initiated", {"persona": persona, "channel": channel, "code": code})
+    bus.broadcast("Pairing initiated", {"persona": persona, "channel": channel, "code": code})
     return Outcome(
         success=True,
         message="",

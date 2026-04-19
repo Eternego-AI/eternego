@@ -14,11 +14,11 @@ class ConversationData:
 
 async def conversation(persona: Persona) -> Outcome[ConversationData]:
     """Return the conversation history for a persona."""
-    await bus.propose("Reading conversation", {"persona": persona})
+    bus.propose("Reading conversation", {"persona": persona})
     try:
         messages = paths.read_jsonl(paths.conversation(persona.id))
-        await bus.broadcast("Conversation read", {"persona": persona})
+        bus.broadcast("Conversation read", {"persona": persona})
         return Outcome(success=True, message="", data=ConversationData(messages=messages))
     except Exception as e:
-        await bus.broadcast("Conversation read failed", {"persona": persona, "error": str(e)})
+        bus.broadcast("Conversation read failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))

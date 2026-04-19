@@ -49,7 +49,7 @@ class Memory:
             if media_data:
                 media = Media(
                     source=media_data.get("source", ""),
-                    query=media_data.get("query", ""),
+                    caption=media_data.get("caption", ""),
                 )
             self._messages.append(Message(
                 content=m.get("content", ""),
@@ -76,9 +76,10 @@ class Memory:
 
     @property
     def prompts(self) -> list[dict]:
-        return [{"role": m.prompt.role, "content": m.prompt.content} for m in self._messages]
+        return [{"role": m.prompt.role, "content": m.prompt.content} for m in self._messages if m.prompt]
 
     def add(self, message: Message) -> None:
+        logger.debug("memory.add", {"persona": self._persona, "message": message})
         self._messages.append(message)
 
     def clear(self) -> None:

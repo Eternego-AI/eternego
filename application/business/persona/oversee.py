@@ -21,7 +21,7 @@ class OverseeData:
 
 async def oversee(persona: Persona) -> Outcome[OverseeData]:
     """It lets you look into your persona's mind — what it knows what it learned, and how it sees you."""
-    await bus.propose("Overseeing persona", {"persona": persona})
+    bus.propose("Overseeing persona", {"persona": persona})
 
     try:
         facts = paths.lines(paths.person_identity(persona.id))
@@ -32,7 +32,7 @@ async def oversee(persona: Persona) -> Outcome[OverseeData]:
         histories = paths.md_files(paths.history(persona.id))
         destinies = paths.md_files(paths.destiny(persona.id))
 
-        await bus.broadcast("Persona overseen", {"persona": persona})
+        bus.broadcast("Persona overseen", {"persona": persona})
 
         return Outcome(
             success=True,
@@ -49,9 +49,9 @@ async def oversee(persona: Persona) -> Outcome[OverseeData]:
         )
 
     except IdentityError as e:
-        await bus.broadcast("Persona oversight failed", {"reason": "identity", "error": str(e)})
+        bus.broadcast("Persona oversight failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not read agent data.")
 
     except PersonError as e:
-        await bus.broadcast("Persona oversight failed", {"reason": "person", "error": str(e)})
+        bus.broadcast("Persona oversight failed", {"reason": "person", "error": str(e)})
         return Outcome(success=False, message="Could not read person data.")

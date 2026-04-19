@@ -9,7 +9,7 @@ from application.platform import datetimes, filesystem, logger
 
 async def health_check(persona: Persona, dt) -> Outcome[None]:
     """Check worker health, recover if needed, process due destiny entries."""
-    await bus.propose("Health check", {"persona": persona})
+    bus.propose("Health check", {"persona": persona})
     ego = persona.ego
 
     if ego.worker.idle and ego.worker.error:
@@ -43,8 +43,8 @@ async def health_check(persona: Persona, dt) -> Outcome[None]:
             ego.memory.add(Message(content="Due now:\n" + "\n---\n".join(notifications)))
             ego.worker.nudge()
 
-        await bus.broadcast("Health checked", {"persona": persona})
+        bus.broadcast("Health checked", {"persona": persona})
         return Outcome(success=True, message="")
     except Exception as e:
-        await bus.broadcast("Health check failed", {"persona": persona, "error": str(e)})
+        bus.broadcast("Health check failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))

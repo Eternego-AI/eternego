@@ -106,6 +106,7 @@ class Agent:
                 _pairing_codes[outcome.data.code] = {
                     "channel_type": channel.type,
                     "channel_name": channel.name,
+                    "created_at": outcome.data.created_at,
                 }
             return
         entry = self.commands.get(command)
@@ -266,6 +267,12 @@ def start(app) -> None:
                 if ch.type == "telegram" and ch.name == chat_id:
                     await agent.handle_command(cmd, command.details, ch)
                     return
+        for agent in all_agents():
+            for ch in (agent.persona.channels or []):
+                if ch.type == "telegram" and not ch.verified_at:
+                    ch.name = chat_id
+                    await agent.handle_command(cmd, command.details, ch)
+                    return
         logger.warning("Telegram command from unknown channel", {"chat_id": chat_id, "command": cmd})
 
     async def on_telegram_message(signal: MessageSignal):
@@ -284,10 +291,10 @@ def start(app) -> None:
                             await hear(agent.persona, content=text, channel=ch)
                     elif signal.title == "Telegram media received":
                         media_source = signal.details.get("media_source", "")
-                        media_query = signal.details.get("media_query", "")
+                        caption = signal.details.get("media_caption", "") or signal.details.get("text", "")
                         if media_source:
                             from application.business.persona.see import see
-                            await see(agent.persona, source=media_source, query=media_query, channel=ch)
+                            await see(agent.persona, source=media_source, caption=caption, channel=ch)
                     return
 
     async def on_persona_stop(command: Command):

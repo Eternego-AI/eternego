@@ -11,7 +11,7 @@ from .write_diary import write_diary
 
 async def sleep(persona: Persona) -> Outcome[None]:
     """Close the day: archive conversation, grow from it (if local), write diary."""
-    await bus.propose("Sleeping", {"persona": persona})
+    bus.propose("Sleeping", {"persona": persona})
 
     try:
         conversation = paths.read_jsonl(paths.conversation(persona.id))
@@ -33,9 +33,9 @@ async def sleep(persona: Persona) -> Outcome[None]:
         if not diary_outcome.success:
             logger.error("Writing diary on sleep failed", {"persona": persona, "error": diary_outcome.message})
 
-        await bus.broadcast("Persona asleep", {"persona": persona})
+        bus.broadcast("Persona asleep", {"persona": persona})
         return Outcome(success=True, message="Sleep complete.")
 
     except Exception as e:
-        await bus.broadcast("Sleep failed", {"persona": persona, "error": str(e)})
+        bus.broadcast("Sleep failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Sleep failed unexpectedly.")

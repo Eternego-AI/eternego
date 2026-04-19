@@ -28,10 +28,10 @@ async def connect(persona: Persona, channel: Channel, commands: list[dict] | Non
     Messages and commands are dispatched as signals by the platform poll.
     Pairing is handled via the /start command.
     """
-    await bus.propose("Connecting channel", {"persona": persona, "channel": channel})
+    bus.propose("Connecting channel", {"persona": persona, "channel": channel})
     try:
         if channel.type == "web":
-            await bus.broadcast("Channel connected", {"persona": persona, "channel": channel})
+            bus.broadcast("Channel connected", {"persona": persona, "channel": channel})
             return Outcome(success=True, message="", data=ConnectData(
                 channel=channel,
                 poll=None,
@@ -40,7 +40,7 @@ async def connect(persona: Persona, channel: Channel, commands: list[dict] | Non
 
         strategy = channels.keep_open(persona, channel, commands)
 
-        await bus.broadcast("Channel connected", {"persona": persona, "channel": channel})
+        bus.broadcast("Channel connected", {"persona": persona, "channel": channel})
         return Outcome(success=True, message="", data=ConnectData(
             channel=channel,
             poll=strategy["connection"],
@@ -48,5 +48,5 @@ async def connect(persona: Persona, channel: Channel, commands: list[dict] | Non
         ))
 
     except ChannelError as e:
-        await bus.broadcast("Channel connection failed", {"persona": persona, "channel": channel, "error": str(e)})
+        bus.broadcast("Channel connection failed", {"persona": persona, "channel": channel, "error": str(e)})
         return Outcome(success=False, message=str(e))

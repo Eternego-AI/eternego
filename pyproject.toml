@@ -16,6 +16,7 @@ dependencies = [
     "jinja2>=3.0.0",
     "python-dotenv>=1.0.0",
     "cryptography>=41.0.0",
+    "mss>=9.0.0",
     "pywin32>=305; sys_platform == 'win32'",
 ]
 

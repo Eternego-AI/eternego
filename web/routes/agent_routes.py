@@ -7,9 +7,10 @@ The persona carries its own ego (dynamic attribute) for specs that need it.
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from starlette.routing import Route
 
-from application.business import persona as persona_spec
+from application.business import persona as persona_spec, environment
 from application.core.data import Channel
-from web.requests import HearRequest, PersonaControlRequest
+import manager
+from web.requests import HearRequest, PersonaControlRequest, PairRequest
 
 
 def register_routes(app: FastAPI, agent) -> None:
@@ -64,12 +65,22 @@ def register_routes(app: FastAPI, agent) -> None:
             raise HTTPException(status_code=400, detail=outcome.message)
         return outcome.data
 
+    async def pair(request: PairRequest):
+        channel_info = manager.claim_pairing_code(request.code)
+        if not channel_info:
+            raise HTTPException(status_code=400, detail="Pairing code is invalid or has expired.")
+        outcome = await environment.pair(p, channel_info["channel_type"], channel_info["channel_name"])
+        if not outcome.success:
+            raise HTTPException(status_code=400, detail=outcome.message)
+        return outcome.data
+
     app.add_api_route(f"{prefix}/mind", get_mind, methods=["GET"])
     app.add_api_route(f"{prefix}/oversee", oversee, methods=["GET"])
     app.add_api_route(f"{prefix}/conversation", get_conversation, methods=["GET"])
     app.add_api_route(f"{prefix}/control", control, methods=["POST"])
     app.add_api_route(f"{prefix}/sleep", sleep, methods=["POST"])
     app.add_api_route(f"{prefix}/hear", hear, methods=["POST"])
+    app.add_api_route(f"{prefix}/pair", pair, methods=["POST"])
     app.add_api_route(f"{prefix}/feed", feed, methods=["POST"])
 
 

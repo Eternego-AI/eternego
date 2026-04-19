@@ -18,19 +18,19 @@ class ExportData:
 
 async def export(persona: Persona) -> Outcome[ExportData]:
     """Write the persona's diary and return the file path for download. Persona must be stopped."""
-    await bus.propose("Exporting persona", {"persona": persona})
+    bus.propose("Exporting persona", {"persona": persona})
 
     try:
         outcome = await write_diary(persona)
         if not outcome.success:
-            await bus.broadcast("Export failed", {"persona": persona, "reason": "diary", "error": outcome.message})
+            bus.broadcast("Export failed", {"persona": persona, "reason": "diary", "error": outcome.message})
             return Outcome(success=False, message=outcome.message, data=ExportData(persona=persona, diary_path=""))
 
-        await bus.broadcast("Persona exported", {"persona": persona})
+        bus.broadcast("Persona exported", {"persona": persona})
         return Outcome(
             success=True,
             message="Persona exported successfully",data=ExportData(persona=persona, diary_path=outcome.data.diary_path))
 
     except (UnsupportedOS, SecretStorageError, DiaryError, IdentityError) as e:
-        await bus.broadcast("Export failed", {"persona": persona, "error": str(e)})
+        bus.broadcast("Export failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))

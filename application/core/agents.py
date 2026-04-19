@@ -64,7 +64,7 @@ class Ego:
             "time": datetimes.iso_8601(datetimes.now()),
         }
         if message.media:
-            entry["media"] = {"source": message.media.source, "query": message.media.query}
+            entry["media"] = {"source": message.media.source, "caption": message.media.caption}
         paths.append_jsonl(paths.conversation(self.persona.id), entry)
         if not message.media:
             message.prompt = Prompt(role="user", content=f"The person said: {message.content}")

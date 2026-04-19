@@ -37,6 +37,17 @@ class Command(Signal):
     pass
 
 
+# === Event Loop Reference ===
+
+_loop = None
+
+
+def set_loop(loop) -> None:
+    """Store the main event loop. Called once at startup by the daemon."""
+    global _loop
+    _loop = loop
+
+
 # === Subscription Registry ===
 
 _handlers: list[tuple[type | tuple[type, ...], Callable]] = []
@@ -50,6 +61,7 @@ def subscribe(*handlers: Callable) -> None:
 
 
 async def send(*signals: Signal) -> list[Signal]:
+    """Dispatch signals on the current async context. Use from async code."""
     results = []
     for signal in signals:
         for signal_type, handler in _handlers:
@@ -61,6 +73,16 @@ async def send(*signals: Signal) -> list[Signal]:
                 if isinstance(result, Signal):
                     results.append(result)
     return results
+
+
+def dispatch(*signals: Signal) -> None:
+    """Dispatch signals from any context — async or thread. Fire and forget."""
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(send(*signals))
+    except RuntimeError:
+        if _loop and _loop.is_running():
+            asyncio.run_coroutine_threadsafe(send(*signals), _loop)
 
 
 def _get_signal_type(handler: Callable) -> type | tuple[type, ...] | None:

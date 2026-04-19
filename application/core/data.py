@@ -32,6 +32,7 @@ class Persona(Data):
     version: str = "v1"
     base_model: str = ""
     birthday: str = field(default_factory=lambda: str(date.today()))
+    status: str = "active"
     vision: Model | None = None
     frontier: Model | None = None
     channels: list[Channel] | None = None
@@ -46,7 +47,7 @@ class Prompt(Data):
 @dataclass(kw_only=True)
 class Media(Data):
     source: str
-    query: str
+    caption: str
 
 
 @dataclass(kw_only=True)

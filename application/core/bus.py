@@ -2,24 +2,24 @@
 
 from typing import Any
 
-from application.platform.observer import Signal, Plan, Event, Message, Inquiry, Command, send
+from application.platform.observer import Plan, Event, Message, Inquiry, Command, dispatch
 
 
-async def propose(title: str, details: dict[str, Any]) -> list[Signal]:
-    return await send(Plan(title, details))
+def propose(title: str, details: dict[str, Any]) -> None:
+    dispatch(Plan(title, details))
 
 
-async def broadcast(title: str, details: dict[str, Any]) -> list[Signal]:
-    return await send(Event(title, details))
+def broadcast(title: str, details: dict[str, Any]) -> None:
+    dispatch(Event(title, details))
 
 
-async def share(title: str, details: dict[str, Any]) -> list[Signal]:
-    return await send(Message(title, details))
+def share(title: str, details: dict[str, Any]) -> None:
+    dispatch(Message(title, details))
 
 
-async def ask(title: str, details: dict[str, Any]) -> list[Signal]:
-    return await send(Inquiry(title, details))
+def ask(title: str, details: dict[str, Any]) -> None:
+    dispatch(Inquiry(title, details))
 
 
-async def order(title: str, details: dict[str, Any]) -> list[Signal]:
-    return await send(Command(title, details))
+def order(title: str, details: dict[str, Any]) -> None:
+    dispatch(Command(title, details))

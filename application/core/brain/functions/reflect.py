@@ -1,6 +1,7 @@
 """Brain — reflect stage."""
 
 from application.core import models
+from application.core.brain import situation
 from application.core.brain.mind.memory import Memory
 from application.core.data import Message, Persona, Prompt
 from application.platform import logger
@@ -8,6 +9,10 @@ from application.platform import logger
 
 async def reflect(persona: Persona, identity: str, memory: Memory) -> bool:
     logger.debug("brain.reflect", {"persona": persona, "messages": memory.messages, "context": memory.context})
+
+    if persona.ego and persona.ego.current_situation is situation.wake:
+        return True
+
     try:
         existing = (memory.context or "").strip() or "(nothing yet)"
         question = (

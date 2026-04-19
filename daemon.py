@@ -30,6 +30,8 @@ async def start_web(host: str, port: int) -> None:
 
 async def run(config):
     """Run the daemon — start manager, load personas, start web server, heartbeat."""
+    from application.platform.observer import set_loop
+    set_loop(asyncio.get_running_loop())
 
     subscribe(on_signal)
     manager.start(web_app)
@@ -55,6 +57,9 @@ async def run(config):
 
     personas = outcome.data.personas if outcome.data else []
     for p in personas:
+        if p.status == "hibernate":
+            print(f"Skipping {p.name} (hibernating)")
+            continue
         try:
             manager.serve(p)
         except Exception as e:

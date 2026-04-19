@@ -35,11 +35,12 @@ async def test_see_succeeds_with_media():
 
         p.ego = agents.Ego(p, FakeWorker())
         channel = Channel(type="telegram", name="123", verified_at="2026-04-17T00:00:00")
-        result = asyncio.run(see(p, source=image_path, query="What is in this image?", channel=channel))
+        result = asyncio.run(see(p, source=image_path, caption="What is in this image?", channel=channel))
         assert result.success, result.message
-        assert p.ego.memory.messages[-1].media is not None
-        assert p.ego.memory.messages[-1].media.source == image_path
-        assert p.ego.memory.messages[-1].media.query == "What is in this image?"
+        msg = p.ego.memory.messages[-1]
+        assert msg.media is not None
+        assert msg.media.caption == "What is in this image?"
+        assert "telegram-" in msg.media.source
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -58,7 +59,7 @@ async def test_see_rejects_unverified_channel():
         os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
         channel = Channel(type="telegram", name="123")
-        result = asyncio.run(see(p, source="/tmp/img.png", query="test", channel=channel))
+        result = asyncio.run(see(p, source="/tmp/img.png", caption="test", channel=channel))
         assert result.success
         assert result.data.response == "Channel not verified."
 

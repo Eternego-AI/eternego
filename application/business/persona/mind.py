@@ -19,11 +19,11 @@ class MindData:
 
 async def mind(persona: Persona) -> Outcome[MindData]:
     """Return the current memory state — messages, meaning, plan, and context."""
-    await bus.propose("Getting persona mind", {"persona": persona})
+    bus.propose("Getting persona mind", {"persona": persona})
     try:
         memory = persona.ego.memory
 
-        await bus.broadcast("Persona mind loaded", {"persona": persona})
+        bus.broadcast("Persona mind loaded", {"persona": persona})
         return Outcome(success=True, message="", data=MindData(
             messages=[to_json(m) for m in memory.messages],
             meaning=memory.meaning,
@@ -31,5 +31,5 @@ async def mind(persona: Persona) -> Outcome[MindData]:
             context=memory.context,
         ))
     except MindError as e:
-        await bus.broadcast("Reading persona mind failed", {"persona": persona, "error": str(e)})
+        bus.broadcast("Reading persona mind failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))

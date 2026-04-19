@@ -35,19 +35,20 @@ async def test_escalation_prompt_includes_builtin_and_platform_tools():
             await functions.recognize(persona, "identity here", memory)
 
         def validate(received):
-            # Two calls: matching (→ 0) and escalation (single call producing name + code)
+            # Two calls: matching (→ 0) and escalation (producing name + code)
             assert len(received) == 2, f"Expected 2 calls, got {len(received)}"
-            escalation_prompt = received[1]["body"]["messages"][-1]["content"]
-            # Built-in tools must appear in the escalation prompt
-            assert "say(text)" in escalation_prompt, "say tool missing"
-            assert "save_destiny" in escalation_prompt, "save_destiny missing"
-            assert "save_notes" in escalation_prompt, "save_notes missing"
-            assert "recall_history" in escalation_prompt, "recall_history missing"
-            assert "check_calendar" in escalation_prompt, "check_calendar missing"
+            escalation_messages = received[1]["body"]["messages"]
+            escalation_text = " ".join(m["content"] for m in escalation_messages if isinstance(m.get("content"), str))
+            # Built-in tools must appear in the escalation
+            assert "say(text)" in escalation_text, "say tool missing"
+            assert "save_destiny" in escalation_text, "save_destiny missing"
+            assert "save_notes" in escalation_text, "save_notes missing"
+            assert "recall_history" in escalation_text, "recall_history missing"
+            assert "check_calendar" in escalation_text, "check_calendar missing"
             # Platform tools section must exist
-            assert "Platform tools" in escalation_prompt, "Platform tools section missing"
+            assert "Platform tools" in escalation_text, "Platform tools section missing"
             # OS shell tool must be discoverable from the registry
-            assert "OS.execute_on_sub_process" in escalation_prompt or "execute_on_sub_process" in escalation_prompt, \
+            assert "OS.execute_on_sub_process" in escalation_text or "execute_on_sub_process" in escalation_text, \
                 "OS shell tool missing from platform tools"
 
         import json as _json
@@ -62,7 +63,7 @@ async def test_escalation_prompt_includes_builtin_and_platform_tools():
             validate=validate,
             responses=[
                 # First call: recognize matching — return 0 (none of the above)
-                [{"message": {"content": '{"reason": "no ability", "ability": 0}'}, "done": True}],
+                [{"message": {"content": '{"impression": "no ability", "ability": 0}'}, "done": True}],
                 # Second call: escalation — name + code in one response
                 [{"message": {"content": escalation_json}, "done": True}],
             ],

@@ -31,7 +31,7 @@ async def migrate(
     thinking: Model,
 ) -> Outcome[MigrateData]:
     """It enables you to migrate your persona so nothing is ever lost."""
-    await bus.propose("Migrating persona", {"diary_path": diary_path, "thinking": thinking})
+    bus.propose("Migrating persona", {"diary_path": diary_path, "thinking": thinking})
 
     persona = None
 
@@ -46,7 +46,7 @@ async def migrate(
 
         outcome = await find(persona_id)
         if not outcome.success:
-            await bus.broadcast("Persona migration failed", {"reason": "identity"})
+            bus.broadcast("Persona migration failed", {"reason": "identity"})
             return Outcome(success=False, message=outcome.message)
 
         persona = outcome.data.persona
@@ -65,12 +65,12 @@ async def migrate(
         outcome = await write_diary(persona)
         if not outcome.success:
             await delete(persona)
-            await bus.broadcast(
+            bus.broadcast(
                 "Persona migration failed", {"reason": "diary", "persona": persona}
             )
             return Outcome(success=False, message=outcome.message)
 
-        await bus.broadcast("Persona migrated", {"persona": persona})
+        bus.broadcast("Persona migrated", {"persona": persona})
 
         return Outcome(
             success=True,
@@ -84,38 +84,38 @@ async def migrate(
         if persona is not None:
             await delete(persona)
 
-        await bus.broadcast("Persona migration failed", {"reason": "diary", "error": str(e)})
+        bus.broadcast("Persona migration failed", {"reason": "diary", "error": str(e)})
         return Outcome(success=False, message="Could not restore from diary. Please check the file path and recovery phrase.")
 
     except IdentityError as e:
         if persona is not None:
             await delete(persona)
 
-        await bus.broadcast("Persona migration failed", {"reason": "identity", "error": str(e)})
+        bus.broadcast("Persona migration failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not restore persona. The diary data may be corrupted.")
 
     except PersonError as e:
         if persona is not None:
             await delete(persona)
 
-        await bus.broadcast("Persona migration failed", {"reason": "person", "error": str(e)})
+        bus.broadcast("Persona migration failed", {"reason": "person", "error": str(e)})
         return Outcome(success=False, message="Could not save person observations during migration.")
 
     except EngineConnectionError as e:
         if persona is not None:
             await delete(persona)
 
-        await bus.broadcast("Persona migration failed", {"reason": "connection", "error": str(e)})
+        bus.broadcast("Persona migration failed", {"reason": "connection", "error": str(e)})
         return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
 
     except UnsupportedOS as e:
         if persona is not None:
             await delete(persona)
-        await bus.broadcast("Persona migration failed", {"reason": "unsupported_os", "error": str(e)})
+        bus.broadcast("Persona migration failed", {"reason": "unsupported_os", "error": str(e)})
         return Outcome(success=False, message="Your operating system is not supported.")
 
     except SecretStorageError as e:
         if persona is not None:
             await delete(persona)
-        await bus.broadcast("Persona migration failed", {"reason": "secret_storage", "error": str(e)})
+        bus.broadcast("Persona migration failed", {"reason": "secret_storage", "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")

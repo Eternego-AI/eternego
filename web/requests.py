@@ -40,3 +40,7 @@ class PersonaControlRequest(BaseModel):
 
 class HearRequest(BaseModel):
     message: str
+
+
+class PairRequest(BaseModel):
+    code: str

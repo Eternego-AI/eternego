@@ -3,7 +3,7 @@
 from application.core import channels, paths, tools
 from application.core.brain import meanings
 from application.core.brain.mind.memory import Memory
-from application.core.data import Message, Persona, Prompt
+from application.core.data import Media, Message, Persona, Prompt
 from application.platform import datetimes, logger
 from application.platform.observer import Command, send as send_signal
 
@@ -36,41 +36,39 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
             logger.debug("brain.experience result", {"persona": persona, "tool": tool or "say", "text_sent": text})
             return True
 
-        tool_result = ""
-
         if tool == "save_notes":
             content = plan.get("content", "")
             if not content:
-                tool_result = "Error: content is required."
+                memory.add(Message(content="Error: content is required."))
             else:
                 paths.save_as_string(paths.notes(persona.id), content.strip())
-                tool_result = "Notes updated."
+                memory.add(Message(content="Notes updated."))
 
         elif tool == "save_destiny":
             trigger = plan.get("trigger", "")
             content = plan.get("content", "")
             if not trigger or not content:
-                tool_result = "Error: trigger and content are required."
+                memory.add(Message(content="Error: trigger and content are required."))
             else:
                 body = content
                 recurrence = plan.get("recurrence", "")
                 if recurrence:
                     body += f"\nrecurrence: {recurrence}"
                 paths.save_destiny_entry(persona.id, plan.get("type", "reminder"), trigger, body)
-                tool_result = f"Saved {plan.get('type', 'reminder')}: {content} at {trigger}"
+                memory.add(Message(content=f"Saved {plan.get('type', 'reminder')}: {content} at {trigger}"))
 
         elif tool == "check_calendar":
             date = plan.get("date", "")
             if not date:
-                tool_result = "Error: date is required."
+                memory.add(Message(content="Error: date is required."))
             else:
                 entries = paths.read_files_matching(persona.id, paths.destiny(persona.id), f"*{date}*")
-                tool_result = "\n\n".join(entries) if entries else "No events found for that date."
+                memory.add(Message(content="\n\n".join(entries) if entries else "No events found for that date."))
 
         elif tool == "recall_history":
             date = plan.get("date", "")
             if not date:
-                tool_result = "Error: date is required."
+                memory.add(Message(content="Error: date is required."))
             else:
                 entries = paths.read_files_matching(persona.id, paths.history(persona.id), f"*{date}*")
                 live = paths.read_jsonl(paths.conversation(persona.id))
@@ -80,40 +78,59 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
                 ]
                 if live_lines:
                     entries.append("Today's conversation:\n" + "\n".join(live_lines))
-                tool_result = "\n\n".join(entries) if entries else "No conversations found for that date."
+                import json
+                gallery_file = paths.media(persona.id) / "gallery.json"
+                if gallery_file.exists():
+                    gallery = json.loads(gallery_file.read_text())
+                    media_lines = []
+                    for source, looks in gallery.items():
+                        for look in looks:
+                            if date in look.get("time", ""):
+                                media_lines.append(f"[{look['time']}] Image: {source} — {look['answer']}")
+                    if media_lines:
+                        entries.append("Media from that date:\n" + "\n".join(media_lines))
+                memory.add(Message(content="\n\n".join(entries) if entries else "No conversations found for that date."))
 
         elif tool == "remove_meaning":
             name = plan.get("name", "")
             if not name:
-                tool_result = "Error: name is required."
+                memory.add(Message(content="Error: name is required."))
             else:
                 meaning_path = paths.meanings(persona.id) / f"{name}.py"
                 if meaning_path.exists():
                     meaning_path.unlink()
-                    tool_result = f"Removed meaning: {name}"
+                    memory.add(Message(content=f"Removed meaning: {name}"))
                 else:
-                    tool_result = f"Meaning not found: {name}"
+                    memory.add(Message(content=f"Meaning not found: {name}"))
 
         elif tool == "clear_memory":
             memory.clear()
-            tool_result = "Memory cleared."
+            memory.add(Message(content="Memory cleared."))
+
+        elif tool == "look_at":
+            source = plan.get("source", "")
+            question = plan.get("question", "")
+            if not source:
+                memory.add(Message(content="Error: source is required."))
+            else:
+                memory.add(Message(
+                    content=question,
+                    media=Media(source=source, caption=question),
+                ))
 
         elif tool == "stop":
             await send_signal(Command(
                 "Persona requested stop",
                 {"persona_id": persona.id},
             ))
-            tool_result = "Stop requested."
+            memory.add(Message(content="Stop requested."))
 
         else:
             params = {k: v for k, v in plan.items() if k not in ("tool", "say", "reason")}
-            tool_result = await tools.call(tool, **params)
+            result_message = await tools.call(tool, **params)
+            memory.add(result_message)
 
-        logger.debug("brain.experience result", {"persona": persona, "tool": tool, "tool_result": tool_result, "text_sent": text})
-        memory.add(Message(
-            content=tool_result,
-            prompt=Prompt(role="user", content=f"[{tool}] {tool_result}"),
-        ))
+
         return False
 
     except Exception as e:

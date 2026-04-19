@@ -11,7 +11,7 @@ async def trigger(persona: Persona, sleep_by) -> Outcome[None]:
 
     sleep_by: callable the agent provides — invoked if a sleep routine is due.
     """
-    await bus.propose("Triggering routines", {"persona": persona})
+    bus.propose("Triggering routines", {"persona": persona})
     current_time = datetimes.now().strftime("%H:%M")
     fired = []
 
@@ -26,5 +26,5 @@ async def trigger(persona: Persona, sleep_by) -> Outcome[None]:
             processes.run_async(sleep_by)
             fired.append("sleep")
 
-    await bus.broadcast("Routines triggered", {"persona": persona, "fired": fired})
+    bus.broadcast("Routines triggered", {"persona": persona, "fired": fired})
     return Outcome(success=True, message=f"Routines checked. Fired: {fired or 'none'}")

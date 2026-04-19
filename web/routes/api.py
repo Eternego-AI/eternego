@@ -55,20 +55,6 @@ async def prepare_environment(request: EnvironmentPrepareRequest):
     return outcome.data
 
 
-@router.post("/pair/{code}")
-async def pair_channel(code: str, persona_id: str = Form(None)):
-    channel_info = manager.claim_pairing_code(code)
-    if not channel_info:
-        raise HTTPException(status_code=400, detail="Pairing code is invalid or has expired.")
-    if not persona_id:
-        raise HTTPException(status_code=400, detail="No persona specified for pairing.")
-    find = await persona.find(persona_id)
-    if not find.success or not find.data:
-        raise HTTPException(status_code=404, detail=find.message)
-    outcome = await environment.pair(find.data.persona, channel_info["channel_type"], channel_info["channel_name"])
-    if not outcome.success:
-        raise HTTPException(status_code=400, detail=outcome.message)
-    return outcome.data
 
 
 @router.post("/persona/create")

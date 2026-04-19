@@ -18,7 +18,7 @@ export default class SetupApp extends App {
             api: this._props.api,
             onCreate: (data) => this._create(data),
             onMigrate: (data) => this._migrate(data),
-            onPair: (code) => this._props.api.pairChannel(code),
+            onPair: (code, personaId) => this._props.api.pairChannel(code, personaId),
             onDone: (personaId) => {
                 if (this._props.onDone) this._props.onDone(personaId);
             },

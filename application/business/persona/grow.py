@@ -20,15 +20,15 @@ class GrowData:
 
 async def grow(persona: Persona) -> Outcome[GrowData]:
     """Generate training pairs from persona traits and fine-tune the persona's model."""
-    await bus.propose("Growing", {"persona": persona})
+    bus.propose("Growing", {"persona": persona})
     try:
         if not models.is_local(persona.thinking):
-            await bus.broadcast("Grown", {"persona": persona})
+            bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=True, message="Fine-tuning skipped — not a local model.", data=GrowData(trained=False, finetune=False))
 
         traits = paths.read(paths.persona_trait(persona.id)).strip()
         if not traits:
-            await bus.broadcast("Grown", {"persona": persona})
+            bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=True, message="No traits to grow from.", data=GrowData(trained=False, finetune=False))
 
         persona_character = character.shape(persona)
@@ -45,12 +45,12 @@ async def grow(persona: Persona) -> Outcome[GrowData]:
 
         hf_model_id = hugging_face.id_for(persona.base_model)
         if hf_model_id is None:
-            await bus.broadcast("Grown", {"persona": persona})
+            bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=False, message=f"'{persona.base_model}' is not supported for fine-tuning.", data=GrowData(trained=True, finetune=False))
 
         vram = OS.gpu_vram_gb()
         if vram is None:
-            await bus.broadcast("Grown", {"persona": persona})
+            bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=True, message="Fine-tuning skipped — no GPU detected.", data=GrowData(trained=True, finetune=False))
 
         await local_inference_engine.fine_tune(hf_model_id, training_set, persona.thinking.url, persona.base_model, persona.thinking.name, persona.id)
@@ -58,9 +58,9 @@ async def grow(persona: Persona) -> Outcome[GrowData]:
         if not await local_inference_engine.check(persona.thinking.url, persona.thinking.name):
             raise EngineConnectionError("Fine-tuned model failed verification — previous model is still active")
 
-        await bus.broadcast("Grown", {"persona": persona})
+        bus.broadcast("Grown", {"persona": persona})
         return Outcome(success=True, message="Grow complete.")
 
     except EngineConnectionError as e:
-        await bus.broadcast("Grow failed", {"reason": "fine_tune", "persona": persona, "error": str(e)})
+        bus.broadcast("Grow failed", {"reason": "fine_tune", "persona": persona, "error": str(e)})
         return Outcome(success=False, message=str(e))

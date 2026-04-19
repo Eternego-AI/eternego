@@ -207,9 +207,9 @@ const UI = {
         } catch (e) { return { success: false, message: e.message }; }
     },
 
-    async pairChannel(code) {
+    async pairChannel(code, personaId) {
         try {
-            await this._post(`/api/pair/${code}`);
+            await this._post(`/api/persona/${personaId}/pair`, { code });
             return { success: true };
         } catch (e) { return { success: false, message: e.message }; }
     },

@@ -16,7 +16,7 @@ class FeedData:
 
 async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
     """It lets you feed your persona with your existing AI history so it can know you faster."""
-    await bus.propose("Feeding persona", {"persona": persona, "source": source})
+    bus.propose("Feeding persona", {"persona": persona, "source": source})
 
     @dataclass
     class VirtualMemory:
@@ -44,7 +44,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
             )
             await functions.transform(persona, identity, feed_memory)
 
-        await bus.broadcast("Persona fed", {"persona": persona, "source": source})
+        bus.broadcast("Persona fed", {"persona": persona, "source": source})
         return Outcome(
             success=True,
             message="Persona fed successfully",
@@ -52,9 +52,9 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
         )
 
     except FrontierError as e:
-        await bus.broadcast("Persona feeding failed", {"reason": "external_data", "error": str(e)})
+        bus.broadcast("Persona feeding failed", {"reason": "external_data", "error": str(e)})
         return Outcome(success=False, message="Could not parse the external data. Please check the file format.")
 
     except EngineConnectionError as e:
-        await bus.broadcast("Persona feeding failed", {"reason": "connection", "error": str(e)})
+        bus.broadcast("Persona feeding failed", {"reason": "connection", "error": str(e)})
         return Outcome(success=False, message="Could not analyze the conversations. Please make sure the model is running.")

@@ -9,8 +9,9 @@ async def test_call_returns_error_for_unknown_tool():
 
         _registry.clear()
         result = asyncio.run(call("nonexistent.tool"))
-        assert "[error]" in result
-        assert "Unknown tool" in result
+        assert result.prompt is not None
+        assert "[error]" in result.prompt.content
+        assert "Unknown tool" in result.prompt.content
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -30,7 +31,7 @@ async def test_call_executes_sync_tool():
 
         name = _registry[0].name
         result = asyncio.run(call(name, a=2, b=3))
-        assert result == "5"
+        assert result.content == "5"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -50,7 +51,7 @@ async def test_call_executes_async_tool():
 
         name = _registry[0].name
         result = asyncio.run(call(name, person="Primus"))
-        assert result == "Hello Primus"
+        assert result.content == "Hello Primus"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -70,7 +71,7 @@ async def test_call_handles_tuple_return_success():
 
         name = _registry[0].name
         result = asyncio.run(call(name, command="ls"))
-        assert result == "output here"
+        assert result.content == "output here"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -90,8 +91,8 @@ async def test_call_handles_tuple_return_failure():
 
         name = _registry[0].name
         result = asyncio.run(call(name, command="rm -rf"))
-        assert "[exit code 1]" in result
-        assert "permission denied" in result
+        assert "[exit code 1]" in result.content
+        assert "permission denied" in result.content
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -111,7 +112,7 @@ async def test_call_handles_tool_with_name_parameter():
 
         tool_name = _registry[0].name
         result = asyncio.run(call(tool_name, name="old.txt", new_name="new.txt"))
-        assert result == "renamed old.txt to new.txt"
+        assert result.content == "renamed old.txt to new.txt"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -131,8 +132,29 @@ async def test_call_catches_exceptions():
 
         name = _registry[0].name
         result = asyncio.run(call(name))
-        assert "[error]" in result
-        assert "boom" in result
+        assert "[tool_error]" in result.prompt.content
+        assert "boom" in result.prompt.content
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_call_converts_any_return_to_string():
+    def isolated():
+        import asyncio
+        from application.core.tools import call
+        from application.platform.tool import tool, _registry
+
+        _registry.clear()
+
+        @tool("Return a dict")
+        def info() -> dict:
+            return {"key": "value"}
+
+        name = _registry[0].name
+        result = asyncio.run(call(name))
+        assert result.content == "{'key': 'value'}"
+        assert result.prompt is not None
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

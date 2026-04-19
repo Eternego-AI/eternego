@@ -104,8 +104,9 @@ def poll(token, offset, context, filter_fn=None):
     filter_fn: optional (text, chat_type) -> bool. If provided, only matching messages are dispatched.
     Returns the next offset.
     """
-    from application.platform.observer import Command as CommandSignal, Message as MessageSignal, send as send_signal
-    import asyncio
+    import os
+    import tempfile
+    from application.platform.observer import Command as CommandSignal, Message as MessageSignal, dispatch
 
     req = urllib.request.Request(
         f"{BASE_URL}/bot{token}/getUpdates",
@@ -133,27 +134,19 @@ def poll(token, offset, context, filter_fn=None):
         if text:
             command = has_command(message)
             if command:
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(send_signal(CommandSignal(
-                        f"Telegram command: {command}",
-                        {**context, "command": command, "chat_id": chat_id},
-                    )))
-                except RuntimeError:
-                    pass
+                dispatch(CommandSignal(
+                    f"Telegram command: {command}",
+                    {**context, "command": command, "chat_id": chat_id},
+                ))
                 continue
 
             if filter_fn and not filter_fn(text, chat_type):
                 continue
 
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(send_signal(MessageSignal(
-                    "Telegram message received",
-                    {**context, "text": text, "chat_id": chat_id, "msg_id": msg_id},
-                )))
-            except RuntimeError:
-                pass
+            dispatch(MessageSignal(
+                "Telegram message received",
+                {**context, "text": text, "chat_id": chat_id, "msg_id": msg_id},
+            ))
 
         elif photos:
             if filter_fn and not filter_fn(caption or "(photo)", chat_type):
@@ -167,22 +160,16 @@ def poll(token, offset, context, filter_fn=None):
                 remote_path = get_file_path(token, file_id)
                 if not remote_path:
                     continue
-                import tempfile
                 ext = remote_path.rsplit(".", 1)[-1] if "." in remote_path else "jpg"
                 fd, local_path = tempfile.mkstemp(suffix=f".{ext}")
-                import os
                 os.close(fd)
                 download_file(token, remote_path, local_path)
 
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(send_signal(MessageSignal(
-                        "Telegram media received",
-                        {**context, "text": caption, "chat_id": chat_id, "msg_id": msg_id,
-                         "media_source": local_path, "media_query": caption or "The person sent an image. Describe what you see."},
-                    )))
-                except RuntimeError:
-                    pass
+                dispatch(MessageSignal(
+                    "Telegram media received",
+                    {**context, "text": caption, "chat_id": chat_id, "msg_id": msg_id,
+                     "media_source": local_path, "media_caption": caption},
+                ))
             except Exception:
                 pass
 

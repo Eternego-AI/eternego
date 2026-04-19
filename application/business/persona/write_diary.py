@@ -15,7 +15,7 @@ class WriteDiaryData:
 
 async def write_diary(persona: Persona) -> Outcome[WriteDiaryData]:
     """It preserves your persona's life so it survives across time, hardware, and changes."""
-    await bus.propose("Saving diary", {"persona": persona})
+    bus.propose("Saving diary", {"persona": persona})
 
     try:
         phrase = await system.get_phrases(persona)
@@ -26,20 +26,20 @@ async def write_diary(persona: Persona) -> Outcome[WriteDiaryData]:
         paths.save_as_binary(diary_path / diary_filename, encrypted_archive)
         paths.commit_diary(persona.id, diary_path)
 
-        await bus.broadcast("Diary saved", {"persona": persona})
+        bus.broadcast("Diary saved", {"persona": persona})
 
         return Outcome(success=True, message="Diary saved successfully", data=WriteDiaryData(
             diary_path=str(diary_path / diary_filename),
         ))
 
     except UnsupportedOS as e:
-        await bus.broadcast("Diary failed", {"reason": "unsupported_os", "persona": persona, "error": str(e)})
+        bus.broadcast("Diary failed", {"reason": "unsupported_os", "persona": persona, "error": str(e)})
         return Outcome(success=False, message="Your operating system is not supported.")
 
     except SecretStorageError as e:
-        await bus.broadcast("Diary failed", {"reason": "secret_storage", "persona": persona, "error": str(e)})
+        bus.broadcast("Diary failed", {"reason": "secret_storage", "persona": persona, "error": str(e)})
         return Outcome(success=False, message="Could not access secure storage. Please check your system keyring is available.")
 
     except DiaryError as e:
-        await bus.broadcast("Diary failed", {"reason": "diary", "persona": persona, "error": str(e)})
+        bus.broadcast("Diary failed", {"reason": "diary", "persona": persona, "error": str(e)})
         return Outcome(success=False, message="Could not save the persona diary.")
