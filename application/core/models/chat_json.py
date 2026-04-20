@@ -38,8 +38,8 @@ async def chat_json(model: Model, identity: str, reality: list[dict], question: 
         raw = strings.strip_tag("".join(parts), "think")
         return extract_json(raw)
     except ollama.OllamaError as e:
-        raise ModelError(f"Model returned an error: {e}") from e
+        raise EngineConnectionError(f"Model service returned an error: {e}", model=model) from e
     except ConnectionError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e
+        raise EngineConnectionError(f"Could not reach model service: {e}", model=model) from e
     except OSError as e:
-        raise ModelError(f"Model returned an error: {e}") from e
+        raise EngineConnectionError(f"Model service returned an error: {e}", model=model) from e

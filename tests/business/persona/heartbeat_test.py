@@ -23,9 +23,15 @@ async def test_heartbeat_calls_health_check():
             def __init__(self):
                 self.idle = True
                 self.error = None
+                self.stopped = False
+                self.loop_number = 0
+                self._events = []
             def run(self, *a): pass
             def nudge(self): pass
             def reset(self): pass
+            @property
+            def events(self): return list(self._events)
+            def clear_events(self): self._events = []
 
         p.ego = agents.Ego(p, FakeWorker())
 

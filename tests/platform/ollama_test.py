@@ -117,6 +117,61 @@ async def test_stream_yields_chunks():
     assert code == 0, error
 
 
+async def test_chat_raises_on_empty_stream():
+    def isolated():
+        import asyncio
+        from application.platform import ollama
+
+        async def consume(url):
+            async for _ in ollama.chat(url, "m", [{"role": "user", "content": "hi"}]):
+                pass
+
+        try:
+            ollama.assert_call(run=lambda url: consume(url), responses=[[]])
+            assert False, "Expected OllamaError"
+        except ollama.OllamaError:
+            pass
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_chat_raises_on_error_chunk():
+    def isolated():
+        from application.platform import ollama
+
+        async def consume(url):
+            async for _ in ollama.chat(url, "m", [{"role": "user", "content": "hi"}]):
+                pass
+
+        try:
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[[{"error": "model 'm' not found"}]],
+            )
+            assert False, "Expected OllamaError"
+        except ollama.OllamaError:
+            pass
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_chat_json_raises_on_empty_stream():
+    def isolated():
+        from application.platform import ollama
+
+        async def consume(url):
+            async for _ in ollama.chat_json(url, "m", [{"role": "user", "content": "hi"}]):
+                pass
+
+        try:
+            ollama.assert_call(run=lambda url: consume(url), responses=[[]])
+            assert False, "Expected OllamaError"
+        except ollama.OllamaError:
+            pass
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 async def test_stream_sends_correct_body():
     def isolated():
         import asyncio

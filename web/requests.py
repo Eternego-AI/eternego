@@ -28,6 +28,10 @@ class PersonaCreateRequest(BaseModel):
     thinking_api_key: str | None = None
     channel_type: str
     channel_credentials: dict
+    vision_model: str | None = None
+    vision_url: str | None = None
+    vision_provider: str | None = None
+    vision_api_key: str | None = None
     frontier_model: str | None = None
     frontier_url: str | None = None
     frontier_provider: str | None = None

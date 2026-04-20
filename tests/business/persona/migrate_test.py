@@ -37,7 +37,7 @@ async def test_migrate_restores_persona_from_diary():
             assert outcome.success, outcome.message
 
             # 5. Migrate using diary and recovery phrase
-            outcome = asyncio.run(spec.migrate(str(diary_file), phrase, Model(name="llama3", url=url)))
+            outcome = asyncio.run(spec.migrate(str(diary_file), phrase, Model(name="llama3", url=url), None, None))
 
             assert outcome.success, outcome.message
             assert outcome.data.persona.id

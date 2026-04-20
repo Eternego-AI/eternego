@@ -32,11 +32,12 @@ async def create(
     name: str,
     thinking: Model,
     channel: Channel,
+    vision: Model | None = None,
     frontier: Model | None = None,
 ) -> Outcome[CreateData]:
     """It gives birth to your persona with minimum but powerful initial abilities."""
     bus.propose(
-        "Creating persona", {"name": name, "thinking": thinking, "channel": channel, "frontier": frontier if frontier else None}
+        "Creating persona", {"name": name, "thinking": thinking, "channel": channel, "vision": vision if vision else None, "frontier": frontier if frontier else None}
     )
 
     persona = None
@@ -61,6 +62,7 @@ async def create(
             thinking=thinking,
             base_model=base_model,
             version="v1",
+            vision=vision,
             frontier=frontier,
             channels=[channel],
         )

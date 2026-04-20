@@ -20,7 +20,7 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
 
         text = plan.get("text") if tool == "say" else plan.get("say")
         if text:
-            memory.add(Message(
+            memory.remember(Message(
                 content=text,
                 prompt=Prompt(role="assistant", content=text),
             ))
@@ -39,36 +39,36 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
         if tool == "save_notes":
             content = plan.get("content", "")
             if not content:
-                memory.add(Message(content="Error: content is required."))
+                memory.remember(Message(content="Error: content is required."))
             else:
                 paths.save_as_string(paths.notes(persona.id), content.strip())
-                memory.add(Message(content="Notes updated."))
+                memory.remember(Message(content="Notes updated."))
 
         elif tool == "save_destiny":
             trigger = plan.get("trigger", "")
             content = plan.get("content", "")
             if not trigger or not content:
-                memory.add(Message(content="Error: trigger and content are required."))
+                memory.remember(Message(content="Error: trigger and content are required."))
             else:
                 body = content
                 recurrence = plan.get("recurrence", "")
                 if recurrence:
                     body += f"\nrecurrence: {recurrence}"
                 paths.save_destiny_entry(persona.id, plan.get("type", "reminder"), trigger, body)
-                memory.add(Message(content=f"Saved {plan.get('type', 'reminder')}: {content} at {trigger}"))
+                memory.remember(Message(content=f"Saved {plan.get('type', 'reminder')}: {content} at {trigger}"))
 
         elif tool == "check_calendar":
             date = plan.get("date", "")
             if not date:
-                memory.add(Message(content="Error: date is required."))
+                memory.remember(Message(content="Error: date is required."))
             else:
-                entries = paths.read_files_matching(persona.id, paths.destiny(persona.id), f"*{date}*")
-                memory.add(Message(content="\n\n".join(entries) if entries else "No events found for that date."))
+                entries = paths.destinies_in(persona.id, date)
+                memory.remember(Message(content="\n".join(entries) if entries else "No events found for that date."))
 
         elif tool == "recall_history":
             date = plan.get("date", "")
             if not date:
-                memory.add(Message(content="Error: date is required."))
+                memory.remember(Message(content="Error: date is required."))
             else:
                 entries = paths.read_files_matching(persona.id, paths.history(persona.id), f"*{date}*")
                 live = paths.read_jsonl(paths.conversation(persona.id))
@@ -89,31 +89,32 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
                                 media_lines.append(f"[{look['time']}] Image: {source} — {look['answer']}")
                     if media_lines:
                         entries.append("Media from that date:\n" + "\n".join(media_lines))
-                memory.add(Message(content="\n\n".join(entries) if entries else "No conversations found for that date."))
+                memory.remember(Message(content="\n\n".join(entries) if entries else "No conversations found for that date."))
 
         elif tool == "remove_meaning":
             name = plan.get("name", "")
             if not name:
-                memory.add(Message(content="Error: name is required."))
+                memory.remember(Message(content="Error: name is required."))
             else:
                 meaning_path = paths.meanings(persona.id) / f"{name}.py"
                 if meaning_path.exists():
                     meaning_path.unlink()
-                    memory.add(Message(content=f"Removed meaning: {name}"))
+                    memory.unlearn(name)
+                    memory.remember(Message(content=f"Removed meaning: {name}"))
                 else:
-                    memory.add(Message(content=f"Meaning not found: {name}"))
+                    memory.remember(Message(content=f"Meaning not found: {name}"))
 
         elif tool == "clear_memory":
-            memory.clear()
-            memory.add(Message(content="Memory cleared."))
+            memory.forget()
+            memory.remember(Message(content="Memory cleared."))
 
         elif tool == "look_at":
             source = plan.get("source", "")
             question = plan.get("question", "")
             if not source:
-                memory.add(Message(content="Error: source is required."))
+                memory.remember(Message(content="Error: source is required."))
             else:
-                memory.add(Message(
+                memory.remember(Message(
                     content=question,
                     media=Media(source=source, caption=question),
                 ))
@@ -121,14 +122,14 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
         elif tool == "stop":
             await send_signal(Command(
                 "Persona requested stop",
-                {"persona_id": persona.id},
+                {"persona": persona},
             ))
-            memory.add(Message(content="Stop requested."))
+            memory.remember(Message(content="Stop requested."))
 
         else:
             params = {k: v for k, v in plan.items() if k not in ("tool", "say", "reason")}
             result_message = await tools.call(tool, **params)
-            memory.add(result_message)
+            memory.remember(result_message)
 
 
         return False
@@ -136,7 +137,7 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
     except Exception as e:
         logger.warning("brain.experience failed", {"persona": persona, "error": str(e)})
         error_msg = f"[tool_error] {e}"
-        memory.add(Message(
+        memory.remember(Message(
             content=error_msg,
             prompt=Prompt(role="user", content=error_msg),
         ))

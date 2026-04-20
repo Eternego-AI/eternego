@@ -16,10 +16,9 @@ def discover() -> list[Tool]:
 def document() -> str:
     """Return a description of available tools for model prompts.
 
-    WARNING: This document is used in escalation prompts to teach models what
-    tools are available. If you change how tools are dispatched (the JSON schema
-    expected by Meaning.run()), update this document to match. The tool list is
-    generated from the registry so it stays in sync automatically.
+    Used by escalate() when teaching the frontier what tools exist. The tool
+    list is generated from the @tool registry — adding a new platform tool with
+    @tool makes it appear here automatically.
     """
     available = registered_tools()
     if not available:
@@ -29,9 +28,9 @@ def document() -> str:
         for t in available
     )
     return (
-        "Tools are platform functions the persona can use via the decide step.\n"
-        "When path() returns JSON with {\"tool\": \"tool_name\", ...params},\n"
-        "the default run() dispatches the call automatically.\n\n"
+        "Tools are platform functions the persona can call from a meaning's prompt.\n"
+        "A meaning asks its model for JSON like {\"tool\": \"<name>\", ...params}; the\n"
+        "experience stage dispatches that to the matching tool below.\n\n"
         f"{tool_list}"
     )
 

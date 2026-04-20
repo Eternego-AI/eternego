@@ -46,7 +46,4 @@ async def check_model(model: Model) -> Outcome[CheckModelData]:
             "Model check failed",
             {"reason": "connection", "model": model.name, "error": str(e)},
         )
-        return Outcome(
-            success=False,
-            message="Could not connect to the local inference engine. Please make sure it is running.",
-        )
+        return Outcome(success=False, message=str(e))

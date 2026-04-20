@@ -78,10 +78,10 @@ class SetupWidget extends Widget {
         card.init({ title: 'Get started' });
 
         this._step = document.createElement('step-layout');
-        this._step.init({ steps: ['name', 'model', 'channel', 'frontier'] });
+        this._step.init({ steps: ['name', 'model', 'vision', 'channel', 'frontier'] });
 
         this._panels = {};
-        for (const id of ['choice', 'name', 'model', 'channel', 'frontier', 'loading', 'result', 'pair', 'migrate-file', 'migrate-model']) {
+        for (const id of ['choice', 'name', 'model', 'vision', 'channel', 'frontier', 'loading', 'result', 'pair', 'migrate-file', 'migrate-model']) {
             const panel = document.createElement('step-panel');
             panel.init({ id });
             this._step.addPanel(panel);
@@ -108,7 +108,7 @@ class SetupWidget extends Widget {
         `;
         s.querySelectorAll('.sw-choice-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                if (btn.dataset.action === 'create') { this._data = { name: '', thinkingModel: '', thinkingProvider: null, thinkingKey: '', thinkingUrl: '', botToken: '', frontierModel: '', frontierKey: '' }; this._renderName(); this._step.go('name'); }
+                if (btn.dataset.action === 'create') { this._data = { name: '', thinkingModel: '', thinkingProvider: null, thinkingKey: '', thinkingUrl: '', visionModel: '', visionProvider: null, visionKey: '', visionUrl: '', botToken: '', frontierModel: '', frontierProvider: null, frontierKey: '', frontierUrl: '' }; this._renderName(); this._step.go('name'); }
                 else { this._data = { file: null, phrase: '', model: '', provider: null, key: '', url: '' }; this._renderMigrateFile(); this._step.go('migrate-file'); }
             });
         });
@@ -209,10 +209,96 @@ class SetupWidget extends Widget {
             } else {
                 this._data.thinkingKey = '';
             }
+            this._renderVision();
+            this._step.go('vision');
+        };
+        s.querySelector('.sw-btn.primary').addEventListener('click', go);
+        s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
+    }
+
+    _renderVision() {
+        const s = this._panels.vision;
+        const provider = this._data.visionProvider;
+        s.innerHTML = `
+            <label class="sw-label">Vision model (optional)</label>
+            <p class="sw-hint">Used when your persona receives images. Skip to fall back to the thinking model.</p>
+            <div class="sw-choice">
+                <div class="sw-choice-btn${!provider ? ' selected' : ''}" data-provider="">Local (Ollama)</div>
+                <div class="sw-choice-btn${provider === 'anthropic' ? ' selected' : ''}" data-provider="anthropic">Claude</div>
+                <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">OpenAI-compatible</div>
+            </div>
+            <div class="sw-vision-fields"></div>
+            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><div style="display:flex;gap:8px"><button class="sw-btn" data-skip>Skip</button><button class="sw-btn primary">Next</button></div></div>
+        `;
+
+        const fieldsEl = s.querySelector('.sw-vision-fields');
+        const renderFields = (prov) => {
+            const key = prov || 'local';
+            const urlVal = this._data.visionUrl || (this._providerDefaults[key] || {}).url || '';
+            if (!prov) {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Enter the Ollama vision model name (e.g. <code>llava:7b</code>).</p>
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="llava:7b" value="${this._esc(this._data.visionModel)}" style="margin-top:12px">
+                `;
+            } else if (prov === 'anthropic') {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Enter the Claude vision model name and your Anthropic API key.</p>
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="claude-sonnet-4-20250514" value="${this._esc(this._data.visionModel)}" style="margin-top:12px">
+                    <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.visionKey)}" style="margin-top:12px">
+                `;
+            } else {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Works with any OpenAI-compatible vision endpoint.</p>
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="gpt-4o" value="${this._esc(this._data.visionModel)}" style="margin-top:12px">
+                    <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.visionKey)}" style="margin-top:12px">
+                `;
+            }
+        };
+
+        renderFields(provider);
+
+        s.querySelectorAll('.sw-choice-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                s.querySelectorAll('.sw-choice-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                const prov = btn.dataset.provider || null;
+                this._data.visionProvider = prov;
+                if (prov !== provider) { this._data.visionModel = ''; this._data.visionKey = ''; this._data.visionUrl = ''; }
+                renderFields(prov);
+            });
+        });
+
+        const go = () => {
+            const inputs = fieldsEl.querySelectorAll('input');
+            this._data.visionUrl = inputs[0]?.value.trim();
+            const model = inputs[1]?.value.trim();
+            if (!model) return;
+            this._data.visionModel = model;
+            if (this._data.visionProvider) {
+                const key = inputs[2]?.value.trim();
+                if (!key) return;
+                this._data.visionKey = key;
+            } else {
+                this._data.visionKey = '';
+            }
             this._renderChannel();
             this._step.go('channel');
         };
+
+        const skip = () => {
+            this._data.visionModel = '';
+            this._data.visionKey = '';
+            this._data.visionUrl = '';
+            this._data.visionProvider = null;
+            this._renderChannel();
+            this._step.go('channel');
+        };
+
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
+        s.querySelector('[data-skip]').addEventListener('click', skip);
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }
 
@@ -233,17 +319,85 @@ class SetupWidget extends Widget {
 
     _renderFrontier() {
         const s = this._panels.frontier;
+        const provider = this._data.frontierProvider;
         s.innerHTML = `
             <label class="sw-label">Frontier model (optional)</label>
-            <p class="sw-hint">Used when your persona encounters something it can't handle alone. Leave blank to skip.</p>
-            <input class="sw-input" type="text" placeholder="Model (e.g. claude-opus-4-6)" value="${this._esc(this._data.frontierModel)}">
-            <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.frontierKey)}" style="margin-top:12px">
-            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><button class="sw-btn primary">Create</button></div>
+            <p class="sw-hint">Used when your persona encounters something it can't handle alone. Skip to leave unset.</p>
+            <div class="sw-choice">
+                <div class="sw-choice-btn${!provider ? ' selected' : ''}" data-provider="">Local (Ollama)</div>
+                <div class="sw-choice-btn${provider === 'anthropic' ? ' selected' : ''}" data-provider="anthropic">Claude</div>
+                <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">OpenAI-compatible</div>
+            </div>
+            <div class="sw-frontier-fields"></div>
+            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><div style="display:flex;gap:8px"><button class="sw-btn" data-skip>Skip</button><button class="sw-btn primary">Create</button></div></div>
         `;
-        const inputs = s.querySelectorAll('input');
-        const go = () => { this._data.frontierModel = inputs[0].value.trim(); this._data.frontierKey = inputs[1].value.trim(); this._submitCreate(); };
-        inputs[1].addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+
+        const fieldsEl = s.querySelector('.sw-frontier-fields');
+        const renderFields = (prov) => {
+            const key = prov || 'local';
+            const urlVal = this._data.frontierUrl || (this._providerDefaults[key] || {}).url || '';
+            if (!prov) {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Enter the Ollama model name (e.g. <code>qwen2.5:32b</code>).</p>
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="qwen2.5:32b" value="${this._esc(this._data.frontierModel)}" style="margin-top:12px">
+                `;
+            } else if (prov === 'anthropic') {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Enter the Claude model name and your Anthropic API key.</p>
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="claude-opus-4-6" value="${this._esc(this._data.frontierModel)}" style="margin-top:12px">
+                    <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.frontierKey)}" style="margin-top:12px">
+                `;
+            } else {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Works with ChatGPT, NVIDIA NIM, Together AI, Groq, or any OpenAI-compatible API.</p>
+                    <input class="sw-input sw-url" type="text" value="${this._esc(urlVal)}">
+                    <input class="sw-input" type="text" placeholder="gpt-4o" value="${this._esc(this._data.frontierModel)}" style="margin-top:12px">
+                    <input class="sw-input" type="password" placeholder="API Key" value="${this._esc(this._data.frontierKey)}" style="margin-top:12px">
+                `;
+            }
+        };
+
+        renderFields(provider);
+
+        s.querySelectorAll('.sw-choice-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                s.querySelectorAll('.sw-choice-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                const prov = btn.dataset.provider || null;
+                this._data.frontierProvider = prov;
+                if (prov !== provider) { this._data.frontierModel = ''; this._data.frontierKey = ''; this._data.frontierUrl = ''; }
+                renderFields(prov);
+            });
+        });
+
+        const go = () => {
+            const inputs = fieldsEl.querySelectorAll('input');
+            this._data.frontierUrl = inputs[0]?.value.trim();
+            const model = inputs[1]?.value.trim();
+            if (!model) return;
+            this._data.frontierModel = model;
+            if (this._data.frontierProvider) {
+                const key = inputs[2]?.value.trim();
+                if (!key) return;
+                this._data.frontierKey = key;
+            } else {
+                this._data.frontierKey = '';
+            }
+            this._submitCreate();
+        };
+
+        const skip = () => {
+            this._data.frontierModel = '';
+            this._data.frontierKey = '';
+            this._data.frontierUrl = '';
+            this._data.frontierProvider = null;
+            this._submitCreate();
+        };
+
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
+        s.querySelector('[data-skip]').addEventListener('click', skip);
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }
 

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from application.business.outcome import Outcome
 from application.core import bus, models
 from application.core.data import Persona
-from application.core.exceptions import MindError
+from application.core.exceptions import EngineConnectionError, MindError
 
 
 @dataclass
@@ -25,6 +25,9 @@ async def query(persona: Persona, messages) -> Outcome[QueryData]:
 
         bus.broadcast("Queried", {"persona": persona})
         return Outcome(success=True, message="", data=QueryData(response=response))
+    except EngineConnectionError as e:
+        bus.broadcast("Query failed", {"persona": persona, "reason": "connection", "error": str(e)})
+        return Outcome(success=False, message=str(e))
     except MindError as e:
         bus.broadcast("Query failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Something went wrong. Please try again.")

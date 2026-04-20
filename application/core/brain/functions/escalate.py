@@ -2,16 +2,18 @@
 
 from application.core import models, paths, tools
 from application.core.brain import meanings
+from application.core.brain.mind.memory import Memory
 from application.core.data import Persona
+from application.core.exceptions import EngineConnectionError, ModelError
 from application.platform import logger
 
 
-async def escalate(persona: Persona, impression: str) -> str | None:
+async def escalate(persona: Persona, memory: Memory, impression: str) -> str | None:
     logger.info("brain.escalate", {"persona": persona, "impression": impression})
 
-    meaning_map = meanings.available(persona)
+    meaning_map = memory.meanings
     existing = "\n".join(
-        f"- **{name}**: {m.intention(persona)}"
+        f"- **{name}**: {m.intention()}"
         for name, m in meaning_map.items()
     )
     builtin_tools = (
@@ -30,13 +32,11 @@ async def escalate(persona: Persona, impression: str) -> str | None:
 
     identity = (
         "You are the architect behind a persona's abilities. A persona is an AI being that "
-        "lives on a person's hardware. It interacts with the person through meanings — each "
-        "meaning is one ability the persona can perform, delivered as a Python module with an "
-        "intention (when it applies) and a prompt (what the persona reads when it acts)."
+        "lives on a person's hardware. It interacts through meanings — each meaning is one "
+        "ability the persona can perform, delivered as a Python module with a Meaning class."
     )
 
     reality = [{"role": "user", "content": (
-        f"## The persona\n\n{persona.name}\n\n"
         f"## Existing meanings\n\n{existing}\n\n"
         f"## Available tools\n\n{tools_doc}\n\n"
         f"## Workspace\n\n`{workspace}` — any files the persona creates must be saved there."
@@ -46,28 +46,24 @@ async def escalate(persona: Persona, impression: str) -> str | None:
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "# ▶ YOUR TASK: Find or create the meaning this moment needs\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "The persona formed the following impression but could not match it to any existing ability.\n\n"
+        "The persona formed the impression below. That impression is your only ground; the "
+        "conversation itself stays with the persona. Do not ask for it.\n\n"
         f"## The impression\n\n{impression}\n\n"
         "Look at the existing meanings above. If one of them genuinely fits, return its name — "
-        "the earlier step simply missed it. Otherwise, create a new meaning: pick a name, write "
-        "an intention, and write the prompt the persona will read every time this ability is "
-        "invoked — all delivered as a Python module.\n\n"
+        "the earlier step simply missed it. Otherwise, design a new meaning. Prefer one that "
+        "would match the next similar moment too — generic meanings serve more situations and "
+        "save on future escalations. But when the task is genuinely tied to this person's "
+        "habits or routine, be specific: the persona's character emerges partly through what "
+        "it does for this one person.\n\n"
         "## Name\n\n"
-        "The name is how this ability is identified in the persona's catalog of what it can do.\n\n"
-        "- Always in English, regardless of the language the person uses.\n"
         "- Lowercase ASCII letters and underscores only.\n"
-        "- Gerund verb followed by its subject, at minimum — the gerund names the action, the "
-        "subject names what the action acts on. `checking_disk_space`, not `checking`. "
-        "`drafting_email_reply`, not `drafting`. Longer is fine when the subject needs it.\n"
-        "- Plain and direct. No invented words, no cute labels, no abstractions.\n\n"
+        "- Gerund verb followed by its subject, at minimum — the gerund names the action, "
+        "the subject names what the action acts on. Longer is fine when the subject needs it.\n"
+        "- Plain and direct. No invented words, no cute labels.\n\n"
         "## Intention\n\n"
-        "The intention is one sentence that names the situation in which this ability applies. "
-        f"It must read: `The person wants {persona.name} to <specific verb phrase>`.\n\n"
-        "To write the verb phrase: imagine what you would ask a trusted friend to do for you, "
-        "and phrase it concretely. The sentence must be specific enough that a reader can tell "
-        "at a glance what kind of request it matches, and general enough that many variations "
-        "of the same kind of request all fit. It must not overlap with any existing meaning's "
-        "intention above.\n\n"
+        "A short gerund phrase naming the task, in the same shape as the intentions listed "
+        "above. No actor framing (no 'the person wants X'). Must not overlap with any existing "
+        "intention.\n\n"
         "## The meaning's prompt\n\n"
         "The prompt is the text the persona will read every time this ability is invoked. "
         "The persona is always the subject; the person is always the object. Address the persona "
@@ -101,30 +97,30 @@ async def escalate(persona: Persona, impression: str) -> str | None:
         "the persona will see in the conversation, and ending with the `say` format for the reply).\n\n"
         "5. **`## Response Format`** — the JSON schema the persona returns. Keys are `reason` "
         "(one short sentence), `tool` (the tool name, or `say`), the tool's parameters, and "
-        "optionally `say` (a message to the person alongside a tool call). All example values "
-        "inside the JSON block are abstract placeholders like `<YYYY-MM-DD>` or `<your reply>` — "
-        "never literal dates, names, or phrases the person might have used.\n\n"
+        "optionally `say` (a message to the person alongside a tool call). Placeholder values "
+        "inside the JSON block are abstract — never literal dates, names, or phrases.\n\n"
         "## Module structure\n\n"
-        "The Python module you return must fit this shape, with your chosen name, intention, "
-        "and prompt substituted as literals:\n\n"
+        "The Python module you return must fit this shape:\n\n"
         "```python\n"
         '"""Meaning — <name>."""\n\n'
         "from application.core import paths\n"
         "from application.core.data import Persona\n\n\n"
-        "def intention(persona: Persona) -> str:\n"
-        '    return "<your full intention sentence>"\n\n\n'
-        "def prompt(persona: Persona) -> str:\n"
-        '    return "<your full prompt text>"\n'
+        "class Meaning:\n"
+        "    def __init__(self, persona: Persona):\n"
+        "        self.persona = persona\n\n"
+        "    def intention(self) -> str:\n"
+        '        return "<your intention phrase>"\n\n'
+        "    def prompt(self) -> str:\n"
+        '        return "<your full prompt text>"\n'
         "```\n\n"
-        "Inside `prompt`, you may read persona files if the prompt genuinely needs them:\n"
-        "`paths.read(paths.notes(persona.id))`, `paths.read(paths.history_briefing(persona.id))`, "
-        "or `str(paths.workspace(persona.id))`. Most meanings do not need any of these.\n\n"
+        "Inside `prompt`, reach persona context through `self.persona` — e.g. "
+        "`paths.read(paths.notes(self.persona.id))`, `str(paths.workspace(self.persona.id))`. "
+        "Most meanings do not need any of these.\n\n"
         "## Coding discipline\n\n"
         "Your code will be compiled before it is saved. Follow these rules or it will not pass.\n\n"
         "- ASCII only. No em-dash, smart quotes, or unicode punctuation. Use `-` and `\"`.\n"
         "- No backslash line-continuation. Each element of `code_lines` is one complete line.\n"
-        "- Substitute literals, not placeholders. Write the persona's actual name in the "
-        f"intention — not `<persona.name>`. For this persona, write `{persona.name}`.\n\n"
+        "- Intention text is a literal string — no f-strings, no format placeholders.\n\n"
         "## Output\n\n"
         "Return JSON in one of two shapes, depending on whether you are using an existing "
         "meaning or creating a new one.\n\n"
@@ -137,7 +133,7 @@ async def escalate(persona: Persona, impression: str) -> str | None:
         "```json\n"
         "{\"reason\": \"<one short sentence on the design choice>\",\n"
         " \"new_meaning\": \"<gerund_verb_subject>\",\n"
-        " \"code_lines\": [\"\\\"\\\"\\\"Meaning — <name>.\\\"\\\"\\\"\", \"\", \"from application.core import paths\", \"...\"]}\n"
+        " \"code_lines\": [\"<line 1>\", \"<line 2>\", \"...\"]}\n"
         "```\n\n"
         "The `code_lines` array is one element per line, joined by the runtime with `\\n`."
     )
@@ -145,13 +141,17 @@ async def escalate(persona: Persona, impression: str) -> str | None:
     model = persona.frontier if persona.frontier else persona.thinking
     try:
         result = await models.chat_json(model, identity, reality, question)
-    except Exception:
-        if model != persona.thinking:
-            try:
-                result = await models.chat_json(persona.thinking, identity, reality, question)
-            except Exception:
-                return None
-        else:
+    except ModelError as e:
+        logger.warning("brain.escalate produced invalid JSON, skipping", {"persona": persona, "model": model.name, "error": str(e)})
+        return None
+    except EngineConnectionError as e:
+        if model == persona.thinking:
+            raise
+        logger.warning("brain.escalate frontier unreachable, falling back to thinking", {"persona": persona, "frontier_error": str(e)})
+        try:
+            result = await models.chat_json(persona.thinking, identity, reality, question)
+        except ModelError as e2:
+            logger.warning("brain.escalate fallback produced invalid JSON", {"persona": persona, "error": str(e2)})
             return None
 
     if not isinstance(result, dict):

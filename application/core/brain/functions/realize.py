@@ -7,6 +7,7 @@ from pathlib import Path
 from application.core import models, paths
 from application.core.brain.mind.memory import Memory
 from application.core.data import Message, Persona, Prompt
+from application.core.exceptions import EngineConnectionError, ModelError
 from application.platform import datetimes, logger
 
 
@@ -26,7 +27,7 @@ async def realize(persona: Persona, identity: str, memory: Memory) -> bool:
             continue
 
         if m.media.caption:
-            memory.add(Message(
+            memory.remember(Message(
                 content=m.media.caption,
                 prompt=Prompt(role="user", content=f"The person said: {m.media.caption}"),
             ))
@@ -81,7 +82,7 @@ async def realize(persona: Persona, identity: str, memory: Memory) -> bool:
             })
             gallery_file.write_text(json.dumps(gallery, indent=2))
 
-        except Exception as e:
+        except (ModelError, OSError, json.JSONDecodeError) as e:
             logger.warning("brain.realize vision failed", {"persona": persona, "error": str(e)})
             m.prompt = Prompt(role="user", content=m.content or "An image was received but could not be processed.")
 

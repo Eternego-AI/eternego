@@ -48,10 +48,21 @@ export default class SetupApp extends App {
             body.thinking_provider = data.thinkingProvider;
             body.thinking_api_key = data.thinkingKey;
         }
+        if (data.visionModel) {
+            body.vision_model = data.visionModel;
+            if (data.visionUrl) body.vision_url = data.visionUrl;
+            if (data.visionProvider) {
+                body.vision_provider = data.visionProvider;
+                body.vision_api_key = data.visionKey;
+            }
+        }
         if (data.frontierModel) {
             body.frontier_model = data.frontierModel;
-            body.frontier_provider = 'anthropic';
-            body.frontier_api_key = data.frontierKey;
+            if (data.frontierUrl) body.frontier_url = data.frontierUrl;
+            if (data.frontierProvider) {
+                body.frontier_provider = data.frontierProvider;
+                body.frontier_api_key = data.frontierKey;
+            }
         }
         return await this._props.api.createPersona(body);
     }

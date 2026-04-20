@@ -29,9 +29,17 @@ async def migrate(
     diary_path: str,
     phrase: str,
     thinking: Model,
+    vision: Model | None,
+    frontier: Model | None,
 ) -> Outcome[MigrateData]:
-    """It enables you to migrate your persona so nothing is ever lost."""
-    bus.propose("Migrating persona", {"diary_path": diary_path, "thinking": thinking})
+    """It enables you to migrate your persona so nothing is ever lost.
+
+    Every migration declares the new environment explicitly — the caller picks
+    all three models at the migration moment, because the diary's memory is
+    portable but the compute behind it is not. Passing `None` for vision or
+    frontier means the persona wakes up in the new environment without that
+    capacity; it's an explicit choice, not a forgotten carry-over."""
+    bus.propose("Migrating persona", {"diary_path": diary_path, "thinking": thinking, "vision": vision, "frontier": frontier})
 
     persona = None
 
@@ -57,6 +65,11 @@ async def migrate(
             persona.base_model = thinking.name
             persona.thinking = Model(name=f"eternego-{persona.id}", url=persona.thinking.url)
             await local_inference_engine.register(persona.thinking.url, persona.thinking.name, thinking.name)
+        else:
+            persona.base_model = ""
+
+        persona.vision = vision
+        persona.frontier = frontier
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 

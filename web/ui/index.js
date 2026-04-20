@@ -196,14 +196,14 @@ const UI = {
     async createPersona(data) {
         try {
             const result = await this._post('/api/persona/create', data);
-            return { success: true, persona_id: result.persona_id, recovery_phrase: result.recovery_phrase, message: result.message };
+            return { success: true, persona_id: result.persona?.id, recovery_phrase: result.recovery_phrase, message: result.message };
         } catch (e) { return { success: false, message: e.message }; }
     },
 
     async migratePersona(formData) {
         try {
             const result = await this._postForm('/api/persona/migrate', formData);
-            return { success: true, persona_id: result.persona_id, message: result.message };
+            return { success: true, persona_id: result.persona?.id, message: result.message };
         } catch (e) { return { success: false, message: e.message }; }
     },
 
@@ -241,7 +241,7 @@ const UI = {
             migratePersona: (fd) => this.migratePersona(fd),
             prepareEnvironment: (model) => this.prepareEnvironment(model),
             fetchProviderConfig: () => this.fetchProviderConfig(),
-            pairChannel: (code) => this.pairChannel(code),
+            pairChannel: (code, personaId) => this.pairChannel(code, personaId),
             fetchPersonas: () => this.fetchPersonas(),
         };
     },

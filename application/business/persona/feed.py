@@ -6,7 +6,7 @@ from application.business.outcome import Outcome
 from application.core import bus, models
 from application.core.brain import functions
 from application.core.data import Message, Persona, Prompt
-from application.core.exceptions import EngineConnectionError, FrontierError
+from application.core.exceptions import EngineConnectionError, ModelError
 
 
 @dataclass
@@ -51,7 +51,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
             data=FeedData(persona=persona),
         )
 
-    except FrontierError as e:
+    except ModelError as e:
         bus.broadcast("Persona feeding failed", {"reason": "external_data", "error": str(e)})
         return Outcome(success=False, message="Could not parse the external data. Please check the file format.")
 

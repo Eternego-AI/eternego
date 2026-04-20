@@ -186,6 +186,81 @@ async def test_read_files_matching():
     assert code == 0, error
 
 
+async def test_destinies_in_projects_recurring_forward_across_a_week():
+    def isolated():
+        import os
+        import tempfile
+        from application.core import paths
+
+        tmp = tempfile.mkdtemp()
+        os.environ["ETERNEGO_HOME"] = tmp
+        # Only the next file exists, for 2026-04-21. Asking about a later week
+        # should still see the daily recurrence projected into that week.
+        paths.save_destiny_entry("test-paths", "reminder", "2026-04-21 09:00", "morning check-in\nrecurrence: daily")
+        # A one-off on 2026-04-26
+        paths.save_destiny_entry("test-paths", "schedule", "2026-04-26 14:00", "dentist")
+
+        # Query the week 2026-04-25 to 2026-04-27 — all three should show
+        # (projected for daily, one-off for the dentist).
+        results_25 = paths.destinies_in("test-paths", "2026-04-25")
+        results_26 = paths.destinies_in("test-paths", "2026-04-26")
+        results_27 = paths.destinies_in("test-paths", "2026-04-27")
+
+        # Each day of the projected recurring event shows up on its day
+        assert any("2026-04-25 09:00" in r and "morning check-in" in r and "recurring: daily" in r for r in results_25), results_25
+        assert any("2026-04-26 09:00" in r and "recurring: daily" in r for r in results_26), results_26
+        assert any("2026-04-27 09:00" in r and "recurring: daily" in r for r in results_27), results_27
+
+        # The one-off on 2026-04-26 also shows (no recurrence tag)
+        assert any("dentist" in r and "recurring" not in r for r in results_26), results_26
+
+        # 2026-04-25 has no dentist
+        assert not any("dentist" in r for r in results_25), results_25
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_destinies_in_month_query_shows_all_recurring_days():
+    def isolated():
+        import os
+        import tempfile
+        from application.core import paths
+
+        tmp = tempfile.mkdtemp()
+        os.environ["ETERNEGO_HOME"] = tmp
+        paths.save_destiny_entry("test-paths", "reminder", "2026-04-21 09:00", "morning check-in\nrecurrence: daily")
+
+        results = paths.destinies_in("test-paths", "2026-04")
+        # 2026-04-21 through 2026-04-30 — 10 projections (including the actual)
+        assert len(results) == 10, f"Expected 10 entries, got {len(results)}: {results}"
+        assert all("recurring: daily" in r for r in results)
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_destinies_in_non_recurring_matches_only_its_day():
+    def isolated():
+        import os
+        import tempfile
+        from application.core import paths
+
+        tmp = tempfile.mkdtemp()
+        os.environ["ETERNEGO_HOME"] = tmp
+        paths.save_destiny_entry("test-paths", "schedule", "2026-04-21 14:00", "dentist")
+
+        on_day = paths.destinies_in("test-paths", "2026-04-21")
+        other_day = paths.destinies_in("test-paths", "2026-04-22")
+        assert len(on_day) == 1
+        assert "dentist" in on_day[0]
+        assert "recurring" not in on_day[0]
+        assert other_day == []
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 async def test_add_history_entry_creates_file():
     def isolated():
         import os

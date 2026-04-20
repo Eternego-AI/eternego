@@ -57,8 +57,8 @@ async def run(config):
 
     personas = outcome.data.personas if outcome.data else []
     for p in personas:
-        if p.status == "hibernate":
-            print(f"Skipping {p.name} (hibernating)")
+        if p.status != "active":
+            print(f"Skipping {p.name} ({p.status})")
             continue
         try:
             manager.serve(p)

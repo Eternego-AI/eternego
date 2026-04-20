@@ -43,6 +43,7 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                         "body": body_text,
                     })
                     raise OSError(f"Anthropic HTTP {response.status_code}: {body_text}")
+                yielded = False
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if not line.startswith("data: "):
@@ -51,16 +52,24 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                         event = json.loads(line[6:].strip())
                     except json.JSONDecodeError:
                         continue
+                    if event.get("type") == "error":
+                        err = event.get("error", {})
+                        message = err.get("message", "unknown error")
+                        logger.warning("Anthropic stream error event", {"model": model, "error": err})
+                        raise OSError(f"Anthropic stream error: {message}")
                     if event.get("type") == "content_block_delta":
                         text = event.get("delta", {}).get("text", "")
                         if text:
+                            yielded = True
                             await send(Message("Anthropic stream chunk received", {"chunk": text}))
                             yield text
                     if event.get("type") == "message_stop":
                         break
-    except httpx.HTTPStatusError as e:
-        logger.warning("Anthropic HTTP error", {"status": e.response.status_code, "model": model})
-        raise OSError(f"Anthropic HTTP {e.response.status_code}") from e
+                if not yielded:
+                    raise OSError("Anthropic returned empty response")
+    except httpx.RequestError as e:
+        logger.warning("Anthropic transport error", {"model": model, "error": str(e)})
+        raise ConnectionError(str(e)) from e
 
 
 async def chat_json(base_url: str, api_key: str | None, model: str, messages: list[dict]):

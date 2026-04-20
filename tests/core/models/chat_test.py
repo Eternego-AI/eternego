@@ -46,6 +46,47 @@ async def test_local_sends_correct_payload():
     assert code == 0, error
 
 
+async def test_local_raises_engine_error_on_empty_stream():
+    def isolated():
+        from application.platform import ollama
+        from application.core import models
+        from application.core.data import Model
+        from application.core.exceptions import EngineConnectionError
+
+        async def run(url):
+            try:
+                await models.chat(Model(name="llama3", url=url), "", [], "hi")
+                assert False, "Expected EngineConnectionError"
+            except EngineConnectionError:
+                pass
+
+        ollama.assert_call(run=run, responses=[[]])
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_local_raises_engine_error_on_error_chunk():
+    def isolated():
+        from application.platform import ollama
+        from application.core import models
+        from application.core.data import Model
+        from application.core.exceptions import EngineConnectionError
+
+        async def run(url):
+            try:
+                await models.chat(Model(name="llama3", url=url), "", [], "hi")
+                assert False, "Expected EngineConnectionError"
+            except EngineConnectionError:
+                pass
+
+        ollama.assert_call(
+            run=run,
+            responses=[[{"error": "model requires more system memory"}]],
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 async def test_local_raises_engine_error_on_connection_failure():
     def isolated():
         import asyncio
@@ -109,21 +150,21 @@ async def test_anthropic_sends_correct_model():
     assert code == 0, error
 
 
-async def test_anthropic_raises_model_error_on_401():
+async def test_anthropic_raises_engine_error_on_401():
     def isolated():
         import application.platform.anthropic as anthropic
         from application.core import models
         from application.core.data import Model
 
         async def run(url):
-            from application.core.exceptions import ModelError
+            from application.core.exceptions import EngineConnectionError
             try:
                 await models.chat(
                     Model(name="c", provider="anthropic", api_key="x", url=url),
                     "", [], "hi"
                 )
-                assert False, "Expected ModelError"
-            except ModelError:
+                assert False, "Expected EngineConnectionError"
+            except EngineConnectionError:
                 pass
 
         def validate(r):
@@ -139,21 +180,21 @@ async def test_anthropic_raises_model_error_on_401():
     assert code == 0, error
 
 
-async def test_anthropic_raises_model_error_on_500():
+async def test_anthropic_raises_engine_error_on_500():
     def isolated():
         import application.platform.anthropic as anthropic
         from application.core import models
         from application.core.data import Model
 
         async def run(url):
-            from application.core.exceptions import ModelError
+            from application.core.exceptions import EngineConnectionError
             try:
                 await models.chat(
                     Model(name="c", provider="anthropic", api_key="x", url=url),
                     "", [], "hi"
                 )
-                assert False, "Expected ModelError"
-            except ModelError:
+                assert False, "Expected EngineConnectionError"
+            except EngineConnectionError:
                 pass
 
         def validate(r):
@@ -216,21 +257,21 @@ async def test_openai_sends_correct_model():
     assert code == 0, error
 
 
-async def test_openai_raises_model_error_on_401():
+async def test_openai_raises_engine_error_on_401():
     def isolated():
         from application.platform import openai
         from application.core import models
         from application.core.data import Model
 
         async def run(url):
-            from application.core.exceptions import ModelError
+            from application.core.exceptions import EngineConnectionError
             try:
                 await models.chat(
                     Model(name="g", provider="openai", api_key="x", url=url),
                     "", [], "hi"
                 )
-                assert False, "Expected ModelError"
-            except ModelError:
+                assert False, "Expected EngineConnectionError"
+            except EngineConnectionError:
                 pass
 
         def validate(r):
@@ -246,21 +287,21 @@ async def test_openai_raises_model_error_on_401():
     assert code == 0, error
 
 
-async def test_openai_raises_model_error_on_500():
+async def test_openai_raises_engine_error_on_500():
     def isolated():
         from application.platform import openai
         from application.core import models
         from application.core.data import Model
 
         async def run(url):
-            from application.core.exceptions import ModelError
+            from application.core.exceptions import EngineConnectionError
             try:
                 await models.chat(
                     Model(name="g", provider="openai", api_key="x", url=url),
                     "", [], "hi"
                 )
-                assert False, "Expected ModelError"
-            except ModelError:
+                assert False, "Expected EngineConnectionError"
+            except EngineConnectionError:
                 pass
 
         def validate(r):

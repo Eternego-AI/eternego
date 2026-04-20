@@ -1,7 +1,7 @@
 """Models — send messages to a model and return text."""
 
 from application.core.data import Model
-from application.core.exceptions import ModelError, EngineConnectionError
+from application.core.exceptions import EngineConnectionError
 from application.platform import logger, ollama, anthropic, openai, strings
 
 from .is_local import is_local
@@ -29,8 +29,8 @@ async def chat(model: Model, identity: str, reality: list[dict], question: str) 
                 parts.append(chunk)
         return strings.strip_tag("".join(parts), "think")
     except ollama.OllamaError as e:
-        raise ModelError(f"Model returned an error: {e}") from e
+        raise EngineConnectionError(f"Model service returned an error: {e}", model=model) from e
     except ConnectionError as e:
-        raise EngineConnectionError("Could not connect to the local inference engine") from e
+        raise EngineConnectionError(f"Could not reach model service: {e}", model=model) from e
     except OSError as e:
-        raise ModelError(f"Model returned an error: {e}") from e
+        raise EngineConnectionError(f"Model service returned an error: {e}", model=model) from e

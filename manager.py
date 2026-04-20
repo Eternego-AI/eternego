@@ -38,7 +38,7 @@ class Agent:
         self.persona.ego = Ego(self.persona, Worker(), situation.wake)
 
         wake_text = f"Wake up {self.persona.name}"
-        self.persona.ego.memory.add(Message(
+        self.persona.ego.memory.remember(Message(
             content=wake_text,
             prompt=Prompt(role="user", content=wake_text),
         ))
@@ -74,7 +74,7 @@ class Agent:
         from application.business.persona import sleep
         ego = self.persona.ego
         ego.current_situation = situation.sleep
-        ego.memory.add(Message(
+        ego.memory.remember(Message(
             content="Go to sleep",
             prompt=Prompt(role="user", content="Go to sleep"),
         ))
@@ -86,7 +86,7 @@ class Agent:
         ego.worker = Worker()
         ego.current_situation = situation.wake
         wake_text = f"Wake up {self.persona.name}"
-        ego.memory.add(Message(
+        ego.memory.remember(Message(
             content=wake_text,
             prompt=Prompt(role="user", content=wake_text),
         ))
@@ -188,7 +188,6 @@ class Agent:
         self._stops.clear()
         if self.persona.ego:
             await self.persona.ego.stop()
-            self.persona.ego.persist()
             self.persona.ego = None
 
 
@@ -300,15 +299,22 @@ def start(app) -> None:
     async def on_persona_stop(command: Command):
         if command.title != "Persona requested stop":
             return
-        persona_id = command.details.get("persona_id")
-        if not persona_id:
-            return
-        agent = find_or_none(persona_id)
+        persona = command.details.get("persona")
+        agent = find_or_none(persona.id)
         if agent and agent.persona.ego:
-            logger.info("Persona requested stop", {"persona_id": persona_id})
+            logger.info("Persona requested stop", {"persona": persona})
             await agent.persona.ego.stop()
 
-    subscribe(restart_gateway, on_channel_paired, on_telegram_command, on_telegram_message, on_persona_stop)
+    async def on_persona_sick(command: Command):
+        if command.title != "Persona became sick":
+            return
+        persona = command.details.get("persona")
+        if not find_or_none(persona.id):
+            return
+        logger.info("Persona became sick — releasing", {"persona": persona})
+        await release(persona.id)
+
+    subscribe(restart_gateway, on_channel_paired, on_telegram_command, on_telegram_message, on_persona_stop, on_persona_sick)
 
 
 def serve(persona: Persona) -> Agent:
@@ -351,12 +357,16 @@ async def release(persona_id: str) -> None:
 
 
 async def restart(persona_id: str) -> Agent | None:
-    """Release the old agent, assign a fresh one."""
+    """Release the old agent and assign a fresh one. Skips if the persona is no
+    longer active (sick / hibernating) — the person has to wake it deliberately."""
     agent = find_or_none(persona_id)
     if not agent:
         return None
     p = agent.persona
     await release(persona_id)
+    if p.status != "active":
+        logger.info("Restart skipped — persona not active", {"persona": p})
+        return None
     return serve(p)
 
 

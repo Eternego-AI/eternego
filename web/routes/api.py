@@ -69,6 +69,18 @@ async def create_persona(request: PersonaCreateRequest):
         raise HTTPException(status_code=400, detail=outcome.message)
     thinking = outcome.data.model
 
+    vision = None
+    if request.vision_model:
+        outcome = await environment.prepare(
+            url=request.vision_url,
+            model=request.vision_model,
+            provider=request.vision_provider,
+            api_key=request.vision_api_key,
+        )
+        if not outcome.success or not outcome.data:
+            raise HTTPException(status_code=400, detail=outcome.message)
+        vision = outcome.data.model
+
     frontier = None
     if request.frontier_model:
         outcome = await environment.prepare(
@@ -90,6 +102,7 @@ async def create_persona(request: PersonaCreateRequest):
         name=request.name,
         thinking=thinking,
         channel=channel,
+        vision=vision,
         frontier=frontier,
     )
     if not outcome.success or not outcome.data:
@@ -111,6 +124,14 @@ async def migrate_persona(
     provider: str = Form(None),
     api_key: str = Form(None),
     url: str = Form(None),
+    vision_model: str = Form(None),
+    vision_provider: str = Form(None),
+    vision_api_key: str = Form(None),
+    vision_url: str = Form(None),
+    frontier_model: str = Form(None),
+    frontier_provider: str = Form(None),
+    frontier_api_key: str = Form(None),
+    frontier_url: str = Form(None),
 ):
     filename = diary.filename or "diary"
     tmp_dir = tempfile.mkdtemp()
@@ -126,11 +147,38 @@ async def migrate_persona(
     )
     if not outcome.success or not outcome.data:
         raise HTTPException(status_code=400, detail=outcome.message)
+    thinking = outcome.data.model
+
+    vision = None
+    if vision_model:
+        outcome = await environment.prepare(
+            url=vision_url,
+            model=vision_model,
+            provider=vision_provider or None,
+            api_key=vision_api_key,
+        )
+        if not outcome.success or not outcome.data:
+            raise HTTPException(status_code=400, detail=outcome.message)
+        vision = outcome.data.model
+
+    frontier = None
+    if frontier_model:
+        outcome = await environment.prepare(
+            url=frontier_url,
+            model=frontier_model,
+            provider=frontier_provider or None,
+            api_key=frontier_api_key,
+        )
+        if not outcome.success or not outcome.data:
+            raise HTTPException(status_code=400, detail=outcome.message)
+        frontier = outcome.data.model
 
     outcome = await persona.migrate(
         diary_path=tmp_path,
         phrase=phrase,
-        thinking=outcome.data.model,
+        thinking=thinking,
+        vision=vision,
+        frontier=frontier,
     )
     if not outcome.success or not outcome.data:
         raise HTTPException(status_code=400, detail=outcome.message)

@@ -20,19 +20,20 @@ class Ego:
         self.persona = p
         self.worker = worker
         self.memory = Memory(p)
-        self.memory.remember()
         self.current_situation = situation
         self.channels: list = []
 
     def consciousness(self) -> list:
-        """Build the brain function sequence as a list of zero-arg async callables."""
+        """Build the brain function sequence as (name, zero-arg async callable) pairs.
+        Names are what tick writes into the worker's event log so health_check knows
+        which cognitive step succeeded or faulted."""
         return [
-            lambda: functions.realize(self.persona, self.identity(), self.memory),
-            lambda: functions.recognize(self.persona, self.identity(), self.memory),
-            lambda: functions.decide(self.persona, self.identity(), self.memory),
-            lambda: functions.experience(self.persona, self.identity(), self.memory),
-            lambda: functions.transform(self.persona, self.identity(), self.memory),
-            lambda: functions.reflect(self.persona, self.identity(), self.memory),
+            ("realize",    lambda: functions.realize(self.persona, self.identity(), self.memory)),
+            ("recognize",  lambda: functions.recognize(self.persona, self.identity(), self.memory)),
+            ("decide",     lambda: functions.decide(self.persona, self.identity(), self.memory)),
+            ("experience", lambda: functions.experience(self.persona, self.identity(), self.memory)),
+            ("transform",  lambda: functions.transform(self.persona, self.identity(), self.memory)),
+            ("reflect",    lambda: functions.reflect(self.persona, self.identity(), self.memory)),
         ]
 
     async def settle(self) -> None:
@@ -45,11 +46,6 @@ class Ego:
         """Stop the worker — tick exits cooperatively."""
         logger.info("Stopping", {"persona": self.persona})
         await self.worker.stop()
-
-    def persist(self) -> None:
-        """Save memory to disk."""
-        logger.info("Persisting memory", {"persona": self.persona})
-        self.memory.persist()
 
     def is_sleeping(self) -> bool:
         """Return True if the ego is in the sleep situation."""
@@ -68,7 +64,7 @@ class Ego:
         paths.append_jsonl(paths.conversation(self.persona.id), entry)
         if not message.media:
             message.prompt = Prompt(role="user", content=f"The person said: {message.content}")
-        self.memory.add(message)
+        self.memory.remember(message)
         self.current_situation = situation.normal
         self.worker.nudge()
 
