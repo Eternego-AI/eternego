@@ -22,7 +22,12 @@ async def test_sleep_succeeds():
             assert outcome.success, outcome.message
             persona_id = outcome.data.persona.id
             outcome = asyncio.run(spec.find(persona_id))
-            outcome = asyncio.run(spec.sleep(outcome.data.persona))
+            persona = outcome.data.persona
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+            ego = agents.Ego(persona, FakeWorker())
+            outcome = asyncio.run(spec.sleep(ego))
             assert outcome.success, outcome.message
 
         ollama.assert_call(

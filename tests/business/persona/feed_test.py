@@ -29,7 +29,7 @@ async def test_feed_succeeds_with_anthropic_data():
                 def run(self, *args): pass
                 def nudge(self): pass
                 async def stop(self): pass
-            persona.ego = agents.Ego(persona, FakeWorker())
+            ego = agents.Ego(persona, FakeWorker())
 
             data = json.dumps([
                 {"chat_messages": [
@@ -37,7 +37,7 @@ async def test_feed_succeeds_with_anthropic_data():
                     {"sender": "assistant", "text": "Great choice"},
                 ]}
             ])
-            outcome = asyncio.run(spec.feed(persona, data, "claude"))
+            outcome = asyncio.run(spec.feed(ego, data, "claude"))
             assert outcome.success, outcome.message
 
         ollama.assert_call(

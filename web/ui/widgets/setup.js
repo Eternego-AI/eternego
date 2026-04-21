@@ -108,8 +108,8 @@ class SetupWidget extends Widget {
         `;
         s.querySelectorAll('.sw-choice-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                if (btn.dataset.action === 'create') { this._data = { name: '', thinkingModel: '', thinkingProvider: null, thinkingKey: '', thinkingUrl: '', visionModel: '', visionProvider: null, visionKey: '', visionUrl: '', botToken: '', frontierModel: '', frontierProvider: null, frontierKey: '', frontierUrl: '' }; this._renderName(); this._step.go('name'); }
-                else { this._data = { file: null, phrase: '', model: '', provider: null, key: '', url: '' }; this._renderMigrateFile(); this._step.go('migrate-file'); }
+                if (btn.dataset.action === 'create') { this._data = { name: '', thinkingModel: '', thinkingProvider: null, thinkingKey: '', thinkingUrl: '', visionModel: '', visionProvider: null, visionKey: '', visionUrl: '', channelType: 'telegram', botToken: '', frontierModel: '', frontierProvider: null, frontierKey: '', frontierUrl: '' }; this._history = []; this._history.push('choice'); this._renderName(); this._step.go('name'); }
+                else { this._data = { file: null, phrase: '', model: '', provider: null, key: '', url: '' }; this._history = []; this._history.push('choice'); this._renderMigrateFile(); this._step.go('migrate-file'); }
             });
         });
         if (this._props.onCancel) {
@@ -125,6 +125,19 @@ class SetupWidget extends Widget {
         if (this._props.onCancel) this._props.onCancel();
     }
 
+    _back() {
+        if (!this._history || this._history.length === 0) return;
+        const prev = this._history.pop();
+        if (prev === 'choice') { this._renderChoice(); this._step.go('choice'); }
+        else if (prev === 'name') { this._renderName(); this._step.go('name'); }
+        else if (prev === 'model') { this._renderModel(); this._step.go('model'); }
+        else if (prev === 'vision') { this._renderVision(); this._step.go('vision'); }
+        else if (prev === 'channel') { this._renderChannel(); this._step.go('channel'); }
+        else if (prev === 'frontier') { this._renderFrontier(); this._step.go('frontier'); }
+        else if (prev === 'migrate-file') { this._renderMigrateFile(); this._step.go('migrate-file'); }
+        else if (prev === 'migrate-model') { this._renderMigrateModel(); this._step.go('migrate-model'); }
+    }
+
     // ── Create flow ──────────────────────────────────────────
 
     _renderName() {
@@ -132,12 +145,13 @@ class SetupWidget extends Widget {
         s.innerHTML = `
             <label class="sw-label">What should we call your persona?</label>
             <input class="sw-input" type="text" placeholder="Name" value="${this._esc(this._data.name)}">
-            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><button class="sw-btn primary">Next</button></div>
+            <div class="sw-nav"><div style="display:flex;gap:8px"><button class="sw-btn" data-back>Back</button><button class="sw-btn" data-cancel>Cancel</button></div><button class="sw-btn primary">Next</button></div>
         `;
         const input = s.querySelector('input');
-        const go = () => { const v = input.value.trim(); if (!v) return; this._data.name = v; this._renderModel(); this._step.go('model'); };
+        const go = () => { const v = input.value.trim(); if (!v) return; this._data.name = v; this._history.push('name'); this._renderModel(); this._step.go('model'); };
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
+        s.querySelector('[data-back]').addEventListener('click', () => this._back());
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
         setTimeout(() => input.focus(), 50);
     }
@@ -153,7 +167,7 @@ class SetupWidget extends Widget {
                 <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">OpenAI-compatible</div>
             </div>
             <div class="sw-model-fields"></div>
-            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><button class="sw-btn primary">Next</button></div>
+            <div class="sw-nav"><div style="display:flex;gap:8px"><button class="sw-btn" data-back>Back</button><button class="sw-btn" data-cancel>Cancel</button></div><button class="sw-btn primary">Next</button></div>
         `;
 
         const fieldsEl = s.querySelector('.sw-model-fields');
@@ -209,10 +223,12 @@ class SetupWidget extends Widget {
             } else {
                 this._data.thinkingKey = '';
             }
+            this._history.push('model');
             this._renderVision();
             this._step.go('vision');
         };
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
+        s.querySelector('[data-back]').addEventListener('click', () => this._back());
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }
 
@@ -228,7 +244,7 @@ class SetupWidget extends Widget {
                 <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">OpenAI-compatible</div>
             </div>
             <div class="sw-vision-fields"></div>
-            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><div style="display:flex;gap:8px"><button class="sw-btn" data-skip>Skip</button><button class="sw-btn primary">Next</button></div></div>
+            <div class="sw-nav"><div style="display:flex;gap:8px"><button class="sw-btn" data-back>Back</button><button class="sw-btn" data-cancel>Cancel</button></div><div style="display:flex;gap:8px"><button class="sw-btn" data-skip>Skip</button><button class="sw-btn primary">Next</button></div></div>
         `;
 
         const fieldsEl = s.querySelector('.sw-vision-fields');
@@ -284,6 +300,7 @@ class SetupWidget extends Widget {
             } else {
                 this._data.visionKey = '';
             }
+            this._history.push('vision');
             this._renderChannel();
             this._step.go('channel');
         };
@@ -293,27 +310,72 @@ class SetupWidget extends Widget {
             this._data.visionKey = '';
             this._data.visionUrl = '';
             this._data.visionProvider = null;
+            this._history.push('vision');
             this._renderChannel();
             this._step.go('channel');
         };
 
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
         s.querySelector('[data-skip]').addEventListener('click', skip);
+        s.querySelector('[data-back]').addEventListener('click', () => this._back());
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }
 
     _renderChannel() {
         const s = this._panels.channel;
+        const type = this._data.channelType || 'telegram';
         s.innerHTML = `
-            <label class="sw-label">Telegram Bot Token</label>
-            <p class="sw-hint">Open <strong>@BotFather</strong> on Telegram, send <code>/newbot</code>, and paste the token here.</p>
-            <input class="sw-input" type="text" placeholder="123456:ABC-DEF..." value="${this._esc(this._data.botToken)}">
-            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><button class="sw-btn primary">Next</button></div>
+            <label class="sw-label">Messaging channel</label>
+            <div class="sw-choice">
+                <div class="sw-choice-btn${type === 'telegram' ? ' selected' : ''}" data-type="telegram">Telegram</div>
+                <div class="sw-choice-btn${type === 'discord' ? ' selected' : ''}" data-type="discord">Discord</div>
+                <div class="sw-choice-btn${type === 'web' ? ' selected' : ''}" data-type="web">Web only</div>
+            </div>
+            <div class="sw-channel-fields"></div>
+            <div class="sw-nav"><div style="display:flex;gap:8px"><button class="sw-btn" data-back>Back</button><button class="sw-btn" data-cancel>Cancel</button></div><button class="sw-btn primary">Next</button></div>
         `;
-        const input = s.querySelector('input');
-        const go = () => { this._data.botToken = input.value.trim(); this._renderFrontier(); this._step.go('frontier'); };
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+
+        const fieldsEl = s.querySelector('.sw-channel-fields');
+        const renderFields = (t) => {
+            if (t === 'telegram') {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Open <strong>@BotFather</strong> on Telegram, send <code>/newbot</code>, and paste the token here.</p>
+                    <input class="sw-input" type="text" placeholder="123456:ABC-DEF..." value="${this._esc(this._data.botToken)}">
+                `;
+            } else if (t === 'discord') {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Create an application at <strong>discord.com/developers/applications</strong>, add a bot, enable the <strong>Message Content Intent</strong>, and paste the bot token here.</p>
+                    <input class="sw-input" type="text" placeholder="MTA..." value="${this._esc(this._data.botToken)}">
+                `;
+            } else {
+                fieldsEl.innerHTML = `
+                    <p class="sw-hint">Your persona will talk only through this web interface.</p>
+                `;
+            }
+        };
+
+        this._data.channelType = type;
+        renderFields(type);
+
+        s.querySelectorAll('.sw-choice-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                s.querySelectorAll('.sw-choice-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                const t = btn.dataset.type;
+                this._data.channelType = t;
+                renderFields(t);
+            });
+        });
+
+        const go = () => {
+            const input = fieldsEl.querySelector('input');
+            this._data.botToken = input ? input.value.trim() : '';
+            this._history.push('channel');
+            this._renderFrontier();
+            this._step.go('frontier');
+        };
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
+        s.querySelector('[data-back]').addEventListener('click', () => this._back());
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }
 
@@ -329,7 +391,7 @@ class SetupWidget extends Widget {
                 <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">OpenAI-compatible</div>
             </div>
             <div class="sw-frontier-fields"></div>
-            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><div style="display:flex;gap:8px"><button class="sw-btn" data-skip>Skip</button><button class="sw-btn primary">Create</button></div></div>
+            <div class="sw-nav"><div style="display:flex;gap:8px"><button class="sw-btn" data-back>Back</button><button class="sw-btn" data-cancel>Cancel</button></div><div style="display:flex;gap:8px"><button class="sw-btn" data-skip>Skip</button><button class="sw-btn primary">Create</button></div></div>
         `;
 
         const fieldsEl = s.querySelector('.sw-frontier-fields');
@@ -398,6 +460,7 @@ class SetupWidget extends Widget {
 
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
         s.querySelector('[data-skip]').addEventListener('click', skip);
+        s.querySelector('[data-back]').addEventListener('click', () => this._back());
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }
 
@@ -467,15 +530,27 @@ class SetupWidget extends Widget {
             <code class="sw-phrase">${this._esc(phrase)}</code>
             <div class="sw-nav"><span></span><button class="sw-btn primary">I saved my phrase</button></div>
         `;
-        s.querySelector('.sw-btn').addEventListener('click', () => { this._renderPair(); this._step.go('pair'); });
+        s.querySelector('.sw-btn').addEventListener('click', () => {
+            if (this._data.channelType === 'telegram' || this._data.channelType === 'discord') {
+                this._renderPair();
+                this._step.go('pair');
+            } else {
+                this._done();
+            }
+        });
         this._step.go('result');
     }
 
     _renderPair() {
         const s = this._panels.pair;
+        const isDiscord = this._data.channelType === 'discord';
+        const label = isDiscord ? 'Connect to Discord' : 'Connect to Telegram';
+        const hint = isDiscord
+            ? 'Open a direct message with your bot on Discord and send any text. It will reply with a pairing code.'
+            : 'Send any message to your bot on Telegram. It will reply with a pairing code.';
         s.innerHTML = `
-            <label class="sw-label">Connect to Telegram</label>
-            <p class="sw-hint">Send any message to your bot on Telegram. It will reply with a pairing code.</p>
+            <label class="sw-label">${label}</label>
+            <p class="sw-hint">${hint}</p>
             <input class="sw-input" type="text" placeholder="Pairing code" style="text-transform:uppercase">
             <div class="sw-nav"><button class="sw-btn" data-skip>Skip</button><button class="sw-btn primary">Pair</button></div>
         `;
@@ -513,7 +588,7 @@ class SetupWidget extends Widget {
             </div>
             <label class="sw-label">Recovery phrase</label>
             <textarea class="sw-input" placeholder="Enter your recovery phrase" style="min-height:60px;resize:vertical">${this._esc(this._data.phrase || '')}</textarea>
-            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><button class="sw-btn primary">Next</button></div>
+            <div class="sw-nav"><div style="display:flex;gap:8px"><button class="sw-btn" data-back>Back</button><button class="sw-btn" data-cancel>Cancel</button></div><button class="sw-btn primary">Next</button></div>
         `;
         const fileInput = s.querySelector('.sw-file-input');
         const fileText = s.querySelector('.sw-dropzone-text');
@@ -525,8 +600,9 @@ class SetupWidget extends Widget {
         zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
         zone.addEventListener('drop', (e) => { e.preventDefault(); zone.classList.remove('dragover'); if (e.dataTransfer.files.length) { this._data.file = e.dataTransfer.files[0]; fileText.textContent = this._data.file.name; } });
 
-        const go = () => { if (!this._data.file || !phrase.value.trim()) return; this._data.phrase = phrase.value.trim(); this._renderMigrateModel(); this._step.go('migrate-model'); };
+        const go = () => { if (!this._data.file || !phrase.value.trim()) return; this._data.phrase = phrase.value.trim(); this._history.push('migrate-file'); this._renderMigrateModel(); this._step.go('migrate-model'); };
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
+        s.querySelector('[data-back]').addEventListener('click', () => this._back());
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }
 
@@ -541,7 +617,7 @@ class SetupWidget extends Widget {
                 <div class="sw-choice-btn${provider === 'openai' ? ' selected' : ''}" data-provider="openai">OpenAI-compatible</div>
             </div>
             <div class="sw-migrate-fields"></div>
-            <div class="sw-nav"><button class="sw-btn" data-cancel>Cancel</button><button class="sw-btn primary">Migrate</button></div>
+            <div class="sw-nav"><div style="display:flex;gap:8px"><button class="sw-btn" data-back>Back</button><button class="sw-btn" data-cancel>Cancel</button></div><button class="sw-btn primary">Migrate</button></div>
         `;
 
         const fieldsEl = s.querySelector('.sw-migrate-fields');
@@ -595,6 +671,7 @@ class SetupWidget extends Widget {
             this._submitMigrate();
         };
         s.querySelector('.sw-btn.primary').addEventListener('click', go);
+        s.querySelector('[data-back]').addEventListener('click', () => this._back());
         s.querySelector('[data-cancel]').addEventListener('click', () => this._cancel());
     }
 

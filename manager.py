@@ -1,213 +1,364 @@
-"""Manager — assigns agents to desks, keeps the floor plan.
+"""Manager — thin orchestration.
 
-Agent: the desk — self-sufficient, creates its own Ego, opens its own
-channels, stores pairing codes that specs produce.
-
-Registry: just the floor plan — {persona_id: agent}. No business logic.
-
-serve(persona): create agent, register routes, track.
-release(persona_id): teardown, remove routes, dismiss.
-"""
+Constructs connections, owns the agent registry, and exposes
+`find / add / remove / restart / start / stop`. Every lifecycle and
+signal concern for a served persona lives on the Agent itself."""
 
 import asyncio
+import os
 import threading
 
+from application.business.outcome import Outcome
 from application.core.agents import Ego
-from application.core.brain import situation
-from application.core.brain.mind import clock
-from application.core.data import Channel, Message, Persona, Prompt
-from application.core.exceptions import AgentError
+from application.core.data import Channel, Persona
+from application.platform import discord as discord_platform
 from application.platform import logger
+from application.platform import telegram as telegram_platform
+from application.platform import web as web_platform
 from application.platform.asyncio_worker import Worker
-from application.platform.observer import Command, Message as MessageSignal, Signal, subscribe
+from application.platform.observer import Command, Message as MessageSignal, subscribe, unsubscribe
 
 
-# ── Agent (the desk) ──────────────────────────────────────────────────────────
+_agents: dict[str, "Agent"] = {}
+
+telegram: telegram_platform.Connection | None = None
+discord: discord_platform.Connection | None = None
+web: web_platform.Connection | None = None
+
+_on_thread = lambda fn: threading.Thread(target=fn, daemon=True).start()
+
+DEFAULT_COMMANDS = [
+    {"command": "start", "description": "Pair this chat with the persona"},
+    {"command": "stop", "description": "Stop the persona"},
+    {"command": "restart", "description": "Restart the persona"},
+]
+
+
+# ── Agent ─────────────────────────────────────────────────────────────────────
 
 class Agent:
-    """A self-sufficient desk that serves one persona.
+    """The body — holds the brain (ego), connects nerves (gateways), routes
+    stimuli to business specs. Contains no business logic itself."""
 
-    Creates Ego, connects its own channels, runs its own heartbeat.
-    """
-
-    def __init__(self, persona: Persona, commands: dict):
+    def __init__(self, persona: Persona, ego: Ego, connections: dict):
         self.persona = persona
-        self.commands = commands
-        self._stops: dict = {}  # channel_key -> stop callable
-        self._pending_connects = []  # in-flight connect tasks
-        self.persona.ego = Ego(self.persona, Worker(), situation.wake)
+        self.ego = ego
+        self.connections = connections
+        self.gateways: list[dict] = []
+        self.pairing_codes: dict = {}
+        self._pending_connects: list = []
+        self._subscribers: list = []
 
-        wake_text = f"Wake up {self.persona.name}"
-        self.persona.ego.memory.remember(Message(
-            content=wake_text,
-            prompt=Prompt(role="user", content=wake_text),
-        ))
+    async def start(self) -> None:
+        """Wake the brain, connect nerves, wire reflexes."""
+        for channel in (self.persona.channels or []):
+            if channel.type not in self.connections:
+                logger.error("Cannot start agent — no connection for channel type",
+                             {"persona": self.persona, "channel_type": channel.type})
+                return
+
+        self.ego.wake()
 
         for channel in (self.persona.channels or []):
             self._pending_connects.append(asyncio.create_task(self.connect(channel)))
 
-        self.persona.ego.worker.run(clock.tick, self.persona.ego.consciousness(), self.persona.ego.worker)
+        import secrets
+        from application.business.persona.hear import hear
+        from application.business.persona.see import see
 
-        async def beat():
-            from application.business.persona import heartbeat
-            while True:
-                await asyncio.sleep(60)
+        persona = self.persona
+        ego = self.ego
+
+        def find_gateway(channel_type, token, target):
+            for gw in self.gateways:
+                if gw["channel"].type != channel_type:
+                    continue
+                if gw["channel"].name and gw["channel"].name != target:
+                    continue
+                if token and gw["token"] != token:
+                    continue
+                return gw
+            return None
+
+        async def try_claim(channel_type, token, target):
+            for gw in self.gateways:
+                if gw["channel"].type != channel_type:
+                    continue
+                if gw["channel"].verified_at is not None:
+                    continue
+                if token and gw["token"] != token:
+                    continue
+                gw["channel"].name = target
+                code = secrets.token_hex(3).upper()
                 try:
-                    await heartbeat(self.persona)
-                except Exception as e:
-                    logger.warning("Heartbeat failed", {"persona": self.persona, "error": str(e)})
-
-        async def check_schedule():
-            from application.business.routine import trigger
-            while True:
-                await asyncio.sleep(60)
-                try:
-                    await trigger(self.persona, self.sleep)
-                except Exception as e:
-                    logger.warning("Schedule check failed", {"persona": self.persona, "error": str(e)})
-
-        self.heartbeat_task = asyncio.create_task(beat())
-        self.schedule_task = asyncio.create_task(check_schedule())
-
-    async def sleep(self):
-        """End-of-shift: set sleep situation, settle, do paperwork, swap in a fresh worker."""
-        from application.business.persona import sleep
-        ego = self.persona.ego
-        ego.current_situation = situation.sleep
-        ego.memory.remember(Message(
-            content="Go to sleep",
-            prompt=Prompt(role="user", content="Go to sleep"),
-        ))
-        await ego.settle()
-        outcome = await sleep(self.persona)
-
-        # Fresh worker for tomorrow — no restart, channels and routes stay.
-        await ego.worker.stop()
-        ego.worker = Worker()
-        ego.current_situation = situation.wake
-        wake_text = f"Wake up {self.persona.name}"
-        ego.memory.remember(Message(
-            content=wake_text,
-            prompt=Prompt(role="user", content=wake_text),
-        ))
-        ego.worker.run(clock.tick, ego.consciousness(), ego.worker)
-
-        return outcome
-
-    async def handle_command(self, command: str, details: dict, channel=None):
-        """Look up a command in the agent's command map and run it.
-
-        If the channel is not verified, send a pairing code instead.
-        """
-        if channel and not channel.verified_at:
-            from application.business.persona.pair_by import pair_by
-            outcome = await pair_by(self.persona, channel)
-            if outcome.success and outcome.data:
-                _pairing_codes[outcome.data.code] = {
-                    "channel_type": channel.type,
-                    "channel_name": channel.name,
-                    "created_at": outcome.data.created_at,
+                    await gw["connection"].send(gw["token"], target,
+                        f"Your pairing code is: {code}\n\n"
+                        "Enter this code in the Eternego web UI to verify this channel.\n"
+                        "This code expires in 10 minutes.")
+                except Exception:
+                    return
+                from application.platform import datetimes
+                self.pairing_codes[code] = {
+                    "channel": Channel(
+                        type=gw["channel"].type,
+                        name=target,
+                        credentials=gw["channel"].credentials,
+                    ),
+                    "created_at": datetimes.now(),
                 }
-            return
-        entry = self.commands.get(command)
-        if not entry:
-            return
-        logger.info("Handling command", {"persona": self.persona, "command": command})
-        handler = entry.get("handler")
-        if handler:
-            await handler(self.persona, details)
+                return
 
-    async def connect(self, channel: Channel):
-        """Connect a channel — called at construction and from WebSocket route."""
-        key = f"{channel.type}:{channel.name}"
-        if key in self._stops:
-            return
+        def save_media(source_path, channel):
+            from application.core import paths
+            from application.platform import datetimes, filesystem
+            if not source_path:
+                return source_path
+            media_path = paths.media(persona.id)
+            ext = os.path.splitext(source_path)[1] or ".jpg"
+            filename = f"{channel.type}-{datetimes.now().strftime('%Y%m%d-%H%M%S')}{ext}"
+            dest = os.path.join(str(media_path), filename)
+            filesystem.copy_file(source_path, dest)
+            return dest
 
-        from application.business.persona import connect
-        channel_commands = [
-            {"command": name, "description": entry["description"]}
-            for name, entry in self.commands.items()
-        ]
-        outcome = await connect(self.persona, channel, channel_commands)
-        if not outcome.success or not outcome.data:
-            return
+        async def download_and_save(channel, url, filename):
+            import tempfile
+            import urllib.request
+            ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ".jpg"
+            fd, temp_path = tempfile.mkstemp(suffix=ext)
+            os.close(fd)
+            try:
+                await asyncio.to_thread(urllib.request.urlretrieve, url, temp_path)
+            except Exception:
+                return ""
+            return save_media(temp_path, channel)
 
-        conn = outcome.data
-        self.persona.ego.channels.append(conn.channel)
-
-        if conn.poll is None:
-            self._stops[key] = conn.close
-            return
-
-        running = [True]
-        poll = conn.poll
-
-        def poll_loop():
-            while running[0]:
+        async def on_say(command: Command):
+            if command.title != "Persona wants to say":
+                return
+            if command.details.get("persona") is not persona:
+                return
+            text = command.details.get("text", "")
+            if not text:
+                return
+            for gw in list(self.gateways):
                 try:
-                    poll()
-                except Exception as e:
-                    logger.warning("Gateway polling error", {
-                        "channel": f"{channel.type}:{channel.name}",
-                        "error": str(e),
-                    })
+                    await gw["connection"].send(gw["token"], gw["channel"].name, text)
+                except Exception:
+                    pass
 
-        threading.Thread(target=poll_loop, daemon=True).start()
+        async def on_typing(command: Command):
+            if command.title != "Persona wants to type":
+                return
+            if command.details.get("persona") is not persona:
+                return
+            channel_type = command.details.get("channel_type")
+            for gw in list(self.gateways):
+                if channel_type and gw["channel"].type != channel_type:
+                    continue
+                try:
+                    await gw["connection"].typing(gw["token"], gw["channel"].name)
+                except Exception:
+                    pass
 
-        def stop():
-            running[0] = False
-            conn.close()
+        async def on_persona_stop(command: Command):
+            if command.title != "Persona requested stop":
+                return
+            if command.details.get("persona") is not persona:
+                return
+            await ego.stop()
 
-        self._stops[key] = stop
+        async def on_persona_sick(command: Command):
+            if command.title != "Persona became sick":
+                return
+            if command.details.get("persona") is not persona:
+                return
+            asyncio.create_task(remove(persona.id))
 
-    async def disconnect(self, channel: Channel):
-        """Disconnect a specific channel — called from WebSocket route on close."""
-        key = f"{channel.type}:{channel.name}"
-        stop = self._stops.pop(key, None)
-        if stop:
-            stop()
-        if self.persona.ego:
-            self.persona.ego.channels = [
-                c for c in self.persona.ego.channels
-                if f"{c.type}:{c.name}" != key
-            ]
+        async def on_telegram_message(signal: MessageSignal):
+            if signal.title not in ("Telegram message received", "Telegram media received"):
+                return
+            token = signal.details.get("token", "")
+            chat_id = signal.details.get("chat_id", "")
+            gw = find_gateway("telegram", token, chat_id)
+            if gw is None:
+                await try_claim("telegram", token, chat_id)
+                return
+            if signal.title == "Telegram message received":
+                await hear(ego, content=signal.details.get("content", ""), channel=gw["channel"])
+            else:
+                path = signal.details.get("attachment_path", "")
+                saved = save_media(path, gw["channel"]) if path else ""
+                if saved:
+                    await see(ego, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
 
-    async def teardown(self):
-        """Stop periodic tasks, close all connections, turn off the computer, save work."""
+        async def on_telegram_command(signal: Command):
+            if signal.title != "Telegram command received":
+                return
+            token = signal.details.get("token", "")
+            chat_id = signal.details.get("chat_id", "")
+            gw = find_gateway("telegram", token, chat_id)
+            if gw is None:
+                await try_claim("telegram", token, chat_id)
+                return
+            cmd = signal.details.get("command", "")
+            if cmd == "stop":
+                await ego.stop()
+            elif cmd == "restart":
+                asyncio.create_task(restart(persona.id))
+
+        async def on_discord_message(signal: MessageSignal):
+            if signal.title != "Discord message received":
+                return
+            token = signal.details.get("token", "")
+            channel_id = signal.details.get("channel_id", "")
+            gw = find_gateway("discord", token, channel_id)
+            if gw is None:
+                await try_claim("discord", token, channel_id)
+                return
+            attachment_url = signal.details.get("attachment_url", "")
+            if attachment_url:
+                filename = signal.details.get("attachment_filename", "")
+                saved = await download_and_save(gw["channel"], attachment_url, filename)
+                if saved:
+                    await see(ego, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
+            else:
+                await hear(ego, content=signal.details.get("content", ""), channel=gw["channel"])
+
+        async def on_web_message(signal: MessageSignal):
+            if signal.title not in ("Web message received", "Web media received"):
+                return
+            persona_id = signal.details.get("persona_id", "")
+            if persona_id != persona.id:
+                return
+            gw = next((g for g in self.gateways if g["channel"].type == "web"), None)
+            if gw is None:
+                return
+            if signal.title == "Web message received":
+                await hear(ego, content=signal.details.get("content", ""), channel=gw["channel"])
+            else:
+                path = signal.details.get("attachment_path", "")
+                saved = save_media(path, gw["channel"]) if path else ""
+                if saved:
+                    await see(ego, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
+
+        self._subscribers = [
+            on_say, on_typing, on_persona_stop, on_persona_sick,
+            on_telegram_message, on_telegram_command,
+            on_discord_message, on_web_message,
+        ]
+        subscribe(*self._subscribers)
+
+        logger.info("Serving persona", {"persona": self.persona})
+
+    async def stop(self) -> None:
+        """Disconnect nerves, stop brain."""
         logger.info("Tearing down agent", {"persona": self.persona})
-        self.heartbeat_task.cancel()
-        self.schedule_task.cancel()
 
-        # Cancel in-flight connects and wait so no channel lands after teardown.
+        unsubscribe(*self._subscribers)
+        self._subscribers.clear()
+
         for task in self._pending_connects:
             task.cancel()
         await asyncio.gather(*self._pending_connects, return_exceptions=True)
 
-        for stop in self._stops.values():
-            stop()
-        self._stops.clear()
-        if self.persona.ego:
-            await self.persona.ego.stop()
-            self.persona.ego = None
+        for gw in list(self.gateways):
+            try:
+                gw["connection"].close_gateway(gw["token"])
+            except Exception:
+                pass
+        self.gateways.clear()
+
+        await self.ego.stop()
+
+    async def heartbeat_tick(self) -> None:
+        from application.business.persona import heartbeat
+        try:
+            await heartbeat(self.ego, sleep_fn=self.sleep)
+        except Exception as e:
+            logger.warning("Heartbeat failed", {"persona": self.persona, "error": str(e)})
+
+    async def sleep(self):
+        from application.business.persona import sleep
+        return await self.ego.sleep_cycle(sleep)
+
+    async def connect(self, channel: Channel) -> None:
+        for gw in self.gateways:
+            if gw["channel"] is channel:
+                return
+            if gw["channel"].type == channel.type and gw["channel"].name and gw["channel"].name == channel.name:
+                return
+
+        from application.core import paths
+        conn = self.connections[channel.type]
+        token = (channel.credentials or {}).get("token", "")
+        media_path = str(paths.media(self.persona.id))
+
+        if channel.type == "telegram":
+            conn.open_gateway(
+                token,
+                filter_by=telegram_platform.direct_or_mentioned(self.persona.name),
+                media_path=media_path,
+                commands=DEFAULT_COMMANDS,
+            )
+        elif channel.type == "discord":
+            conn.open_gateway(
+                token,
+                intents=discord_platform.INTENT_DIRECT_MESSAGES | discord_platform.INTENT_MESSAGE_CONTENT,
+            )
+        elif channel.type == "web":
+            conn.open_gateway(channel)
+
+        self.gateways.append({"channel": channel, "connection": conn, "token": token})
+
+    async def disconnect(self, channel: Channel) -> None:
+        gw = next(
+            (g for g in self.gateways if g["channel"] is channel
+             or (g["channel"].type == channel.type and g["channel"].name == channel.name and channel.name)),
+            None,
+        )
+        if gw is None:
+            return
+        if gw in self.gateways:
+            self.gateways.remove(gw)
+        try:
+            gw["connection"].close_gateway(gw["token"])
+        except Exception:
+            pass
+
+    async def pair(self, code: str) -> Outcome:
+        from application.business import environment
+        from application.platform import datetimes
+        from datetime import timedelta
+
+        code_upper = code.upper()
+        entry = self.pairing_codes.get(code_upper)
+        if not entry:
+            return Outcome(success=False, message="Pairing code is invalid or has expired.")
+        if datetimes.now() - entry["created_at"] > timedelta(minutes=10):
+            self.pairing_codes.pop(code_upper, None)
+            return Outcome(success=False, message="Pairing code is invalid or has expired.")
+        self.pairing_codes.pop(code_upper, None)
+        from application.business.persona.pair import pair
+        return await pair(self.persona, entry["channel"])
 
 
+# ── Channel validation ────────────────────────────────────────────────────────
 
-# ── Registry (the floor plan) ────────────────────────────────────────────────
-
-_agents: dict[str, Agent] = {}
-_pairing_codes: dict[str, dict] = {}
-_app = None
-
-
-def find(persona_id: str) -> Agent:
-    """Look up the floor plan. Raises AgentError if not found."""
-    agent = _agents.get(persona_id)
-    if agent is None:
-        raise AgentError(f"No agent assigned for '{persona_id}'.")
-    return agent
+async def validate_channel(channel_type: str, credentials: dict) -> Channel:
+    """Validate credentials against the provider. Returns a Channel or raises."""
+    token = (credentials or {}).get("token", "")
+    if channel_type == "telegram":
+        await asyncio.to_thread(telegram_platform.get_me, token)
+    elif channel_type == "discord":
+        await asyncio.to_thread(discord_platform.get_me, token)
+    elif channel_type != "web":
+        raise ValueError(f"Unsupported channel type: {channel_type}")
+    return Channel(type=channel_type, credentials=credentials)
 
 
-def find_or_none(persona_id: str) -> Agent | None:
+# ── Registry and orchestration ────────────────────────────────────────────────
+
+def find(persona_id: str) -> Agent | None:
     return _agents.get(persona_id)
 
 
@@ -215,163 +366,107 @@ def all_agents() -> list[Agent]:
     return list(_agents.values())
 
 
-# ── Manager operations ────────────────────────────────────────────────────────
-
-def claim_pairing_code(code: str) -> dict | None:
-    """Look up and consume a pairing code. Returns {channel_type, channel_name} or None."""
-    from application.platform import datetimes
-    from datetime import timedelta
-
-    code_upper = code.upper()
-    entry = _pairing_codes.get(code_upper)
-    if not entry:
-        return None
-    if datetimes.now() - entry["created_at"] > timedelta(minutes=10):
-        _pairing_codes.pop(code_upper, None)
-        return None
-    _pairing_codes.pop(code_upper, None)
-    return {"channel_type": entry["channel_type"], "channel_name": entry["channel_name"]}
+_heartbeat_task: asyncio.Task | None = None
+on_fatal = None
 
 
-def start(app) -> None:
-    """Initialize the manager: store the web app and subscribe signals."""
-    global _app
-    _app = app
+async def start() -> None:
+    """Boot: create connections, start the heart, load active personas."""
+    global _heartbeat_task, telegram, discord, web
 
-    async def on_channel_paired(signal: Signal):
-        if signal.title != "Channel paired":
-            return
-        p = signal.details.get("persona")
-        if not p:
-            return
-        await restart(p.id)
+    telegram = telegram_platform.Connection(
+        timeout=30,
+        polling=_on_thread,
+    )
+    discord = discord_platform.Connection(
+        timeout=30,
+        websocket=_on_thread,
+        properties={"os": "linux", "browser": "eternego", "device": "eternego"},
+        user_agent="DiscordBot (eternego, 0.1)",
+    )
+    web = web_platform.Connection()
 
-    async def restart_gateway(command: Command):
-        if command.title != "Restart gateway":
-            return
-        p = command.details.get("persona")
-        if not p:
-            return
-        await restart(p.id)
+    _heartbeat_task = asyncio.create_task(_heartbeat_loop())
 
-    async def on_telegram_command(command: Command):
-        if not command.title.startswith("Telegram command:"):
-            return
-        cmd = command.details.get("command")
-        chat_id = command.details.get("chat_id")
-        if not cmd or not chat_id:
-            return
-        for agent in all_agents():
-            for ch in (agent.persona.channels or []):
-                if ch.type == "telegram" and ch.name == chat_id:
-                    await agent.handle_command(cmd, command.details, ch)
-                    return
-        for agent in all_agents():
-            for ch in (agent.persona.channels or []):
-                if ch.type == "telegram" and not ch.verified_at:
-                    ch.name = chat_id
-                    await agent.handle_command(cmd, command.details, ch)
-                    return
-        logger.warning("Telegram command from unknown channel", {"chat_id": chat_id, "command": cmd})
-
-    async def on_telegram_message(signal: MessageSignal):
-        if signal.title not in ("Telegram message received", "Telegram media received"):
-            return
-        chat_id = signal.details.get("chat_id", "")
-        if not chat_id:
-            return
-        for agent in all_agents():
-            for ch in (agent.persona.channels or []):
-                if ch.type == "telegram" and ch.name == chat_id:
-                    if signal.title == "Telegram message received":
-                        text = signal.details.get("text", "")
-                        if text:
-                            from application.business.persona.hear import hear
-                            await hear(agent.persona, content=text, channel=ch)
-                    elif signal.title == "Telegram media received":
-                        media_source = signal.details.get("media_source", "")
-                        caption = signal.details.get("media_caption", "") or signal.details.get("text", "")
-                        if media_source:
-                            from application.business.persona.see import see
-                            await see(agent.persona, source=media_source, caption=caption, channel=ch)
-                    return
-
-    async def on_persona_stop(command: Command):
-        if command.title != "Persona requested stop":
-            return
-        persona = command.details.get("persona")
-        agent = find_or_none(persona.id)
-        if agent and agent.persona.ego:
-            logger.info("Persona requested stop", {"persona": persona})
-            await agent.persona.ego.stop()
-
-    async def on_persona_sick(command: Command):
-        if command.title != "Persona became sick":
-            return
-        persona = command.details.get("persona")
-        if not find_or_none(persona.id):
-            return
-        logger.info("Persona became sick — releasing", {"persona": persona})
-        await release(persona.id)
-
-    subscribe(restart_gateway, on_channel_paired, on_telegram_command, on_telegram_message, on_persona_stop, on_persona_sick)
+    from application.business.persona import get_list
+    outcome = await get_list()
+    personas = outcome.data.personas if outcome.data else []
+    for p in personas:
+        if p.status != "active":
+            logger.info("Skipping inactive persona", {"persona": p, "status": p.status})
+            continue
+        try:
+            await add(p)
+        except Exception as e:
+            logger.warning("Failed to add persona at boot", {"persona": p, "error": str(e)})
 
 
-def serve(persona: Persona) -> Agent:
-    """Assign an agent for this persona — construct, register routes, track."""
+async def stop() -> None:
+    """Teardown: stop every agent, stop every connection, stop the heart."""
+    global _heartbeat_task
+    if _heartbeat_task and not _heartbeat_task.done():
+        _heartbeat_task.cancel()
+    if _heartbeat_task:
+        try:
+            await _heartbeat_task
+        except (asyncio.CancelledError, Exception):
+            pass
+    _heartbeat_task = None
 
-    async def handle_stop(p, details):
-        if p.ego:
-            await p.ego.stop()
+    for agent in list(_agents.values()):
+        await agent.stop()
+    _agents.clear()
 
-    async def handle_restart(p, details):
-        await restart(p.id)
+    if telegram:
+        telegram.stop()
+    if discord:
+        discord.stop()
+    if web:
+        web.stop()
 
-    commands = {
-        "start": {"description": "Pair this chat with the persona"},
-        "stop": {"description": "Stop the persona", "handler": handle_stop},
-        "restart": {"description": "Restart the persona", "handler": handle_restart},
-    }
 
-    agent = Agent(persona, commands)
+async def _heartbeat_loop() -> None:
+    """Every 60s, tick every agent's heartbeat. If this loop dies, the daemon
+    shuts down — the body can't live without a heart."""
+    try:
+        while True:
+            await asyncio.sleep(60)
+            agents = list(_agents.values())
+            if agents:
+                await asyncio.gather(
+                    *[a.heartbeat_tick() for a in agents],
+                    return_exceptions=True,
+                )
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.error("Heartbeat loop crashed — daemon must shut down", {"error": str(e)})
+        if on_fatal:
+            on_fatal()
+        raise
+
+
+async def add(persona: Persona) -> Agent:
+    ego = Ego(persona, Worker())
+    agent = Agent(persona, ego, {"telegram": telegram, "discord": discord, "web": web})
     _agents[persona.id] = agent
-
-    from web.routes.agent_routes import register_routes
-    register_routes(_app, agent)
-
-    logger.info("Serving persona", {"persona": persona})
+    await agent.start()
     return agent
 
 
-async def release(persona_id: str) -> None:
-    """Release an agent — teardown, remove routes, dismiss."""
+async def remove(persona_id: str) -> None:
     agent = _agents.pop(persona_id, None)
-    if not agent:
-        return
-    await agent.teardown()
-
-    from web.routes.agent_routes import unregister_routes
-    unregister_routes(_app, persona_id)
-
-    logger.info("Released persona", {"persona_id": persona_id})
+    if agent:
+        await agent.stop()
 
 
 async def restart(persona_id: str) -> Agent | None:
-    """Release the old agent and assign a fresh one. Skips if the persona is no
-    longer active (sick / hibernating) — the person has to wake it deliberately."""
-    agent = find_or_none(persona_id)
+    agent = _agents.get(persona_id)
     if not agent:
         return None
     p = agent.persona
-    await release(persona_id)
+    await remove(persona_id)
     if p.status != "active":
         logger.info("Restart skipped — persona not active", {"persona": p})
         return None
-    return serve(p)
-
-
-async def release_all() -> None:
-    """Release all agents — used during shutdown."""
-    for agent in list(_agents.values()):
-        await agent.teardown()
-    _agents.clear()
+    return await add(p)

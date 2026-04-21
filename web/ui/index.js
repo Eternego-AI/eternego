@@ -135,6 +135,21 @@ const UI = {
         } catch (e) { return { success: false, error: e.message }; }
     },
 
+    async seePersona(id, file, caption) {
+        try {
+            const form = new FormData();
+            form.append('image', file);
+            if (caption) form.append('caption', caption);
+            await this._postForm(`/api/persona/${id}/see`, form);
+            return { success: true };
+        } catch (e) { return { success: false, error: e.message }; }
+    },
+
+    mediaUrl(id, source) {
+        const base = (source || '').split('/').pop();
+        return `/api/persona/${id}/media/${encodeURIComponent(base)}`;
+    },
+
     async actionPersona(id, action) {
         try {
             await this._post(`/api/persona/${id}/${action}`);
@@ -228,6 +243,8 @@ const UI = {
             fetchMind: (id) => this.fetchMind(id),
             fetchOversee: (id) => this.fetchOversee(id),
             hearPersona: (id, msg) => this.hearPersona(id, msg),
+            seePersona: (id, file, caption) => this.seePersona(id, file, caption),
+            mediaUrl: (id, source) => this.mediaUrl(id, source),
             actionPersona: (id, action) => this.actionPersona(id, action),
             exportPersona: (id) => this.exportPersona(id),
             controlPersona: (id, ids) => this.controlPersona(id, ids),
@@ -282,9 +299,24 @@ const UI = {
         this._notifyModeChange({ mode: 'setup' });
     },
 
-    // SetupApp class is injected from index.html to avoid circular imports
+    enterConversationalSetup() {
+        this.currentMode = 'conversational';
+        history.pushState(null, '', '/?v=setup-conversational');
+        const speaker = new this._SetupSpeaker();
+        speaker.init({
+            api: this._api(),
+            onCreated: (personaId) => {
+                this.fetchPersonas().then(() => this.enterOuterWorld(personaId));
+            },
+        });
+        this._notifyModeChange({ mode: 'conversational', speaker });
+    },
+
     _SetupApp: null,
     registerSetupApp(cls) { this._SetupApp = cls; },
+
+    _SetupSpeaker: null,
+    registerSetupSpeaker(cls) { this._SetupSpeaker = cls; },
 };
 
 window.addEventListener('popstate', () => {

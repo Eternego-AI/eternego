@@ -18,10 +18,9 @@ class Model(Data):
 @dataclass(kw_only=True)
 class Channel(Data):
     type: str
-    name: str = ""          # chat_id for telegram, uuid for web; empty for network-level channels
+    name: str = ""          # chat_id for telegram, channel_id for discord, persona_id for web
     credentials: dict | None = sensitive()
     verified_at: str | None = None
-    bus: object | None = hidden()
 
 
 @dataclass(kw_only=True)

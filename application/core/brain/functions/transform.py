@@ -8,10 +8,11 @@ from application.core.exceptions import ModelError
 from application.platform import logger
 
 
-async def transform(persona: Persona, identity: str, memory: Memory) -> bool:
+async def transform(ego, identity: str, memory: Memory) -> bool:
+    persona = ego.persona
     logger.debug("brain.transform", {"persona": persona, "messages": memory.messages})
 
-    if persona.ego and persona.ego.current_situation is situation.wake:
+    if ego.current_situation is situation.wake:
         return True
 
     existing_identity = paths.read(paths.person_identity(persona.id)).strip() or "(nothing yet)"

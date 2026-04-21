@@ -60,6 +60,11 @@ def subscribe(*handlers: Callable) -> None:
             _handlers.append((signal_type, handler))
 
 
+def unsubscribe(*handlers: Callable) -> None:
+    for handler in handlers:
+        _handlers[:] = [(t, h) for (t, h) in _handlers if h is not handler]
+
+
 async def send(*signals: Signal) -> list[Signal]:
     """Dispatch signals on the current async context. Use from async code."""
     results = []
@@ -76,13 +81,21 @@ async def send(*signals: Signal) -> list[Signal]:
 
 
 def dispatch(*signals: Signal) -> None:
-    """Dispatch signals from any context — async or thread. Fire and forget."""
+    """Dispatch signals from any context — async or thread. Fire and forget.
+    Signals always land on the registered main loop (`set_loop`). Handlers run
+    on that loop regardless of which thread called dispatch."""
     try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(send(*signals))
+        current = asyncio.get_running_loop()
     except RuntimeError:
-        if _loop and _loop.is_running():
+        current = None
+
+    if _loop and _loop.is_running():
+        if current is _loop:
+            current.create_task(send(*signals))
+        else:
             asyncio.run_coroutine_threadsafe(send(*signals), _loop)
+    elif current is not None:
+        current.create_task(send(*signals))
 
 
 def _get_signal_type(handler: Callable) -> type | tuple[type, ...] | None:

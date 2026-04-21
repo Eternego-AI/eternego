@@ -36,14 +36,14 @@ async def test_healthy_tick_writes_health_log_and_nudges():
         identity.parent.mkdir(parents=True, exist_ok=True)
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
-        p.ego = agents.Ego(p, FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
 
-        outcome = asyncio.run(spec.health_check(p, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
         assert outcome.success, outcome.message
         assert p.status == "active"
         # Healthy tick with no due entries = no reason to nudge a quiet worker
-        assert p.ego.worker.nudged == 0
-        assert p.ego.worker.cleared == 1
+        assert ego.worker.nudged == 0
+        assert ego.worker.cleared == 1
 
         entries = paths.read_jsonl(paths.health_log(p.id))
         assert len(entries) == 1, entries
@@ -101,15 +101,15 @@ async def test_frontier_fault_disables_frontier_and_persists_config():
             provider="anthropic", url="https://api.anthropic.com",
             model_name="claude-opus-4-6", error="HTTP 429",
         )]
-        p.ego = agents.Ego(p, FakeWorker(events, loop_number=1))
+        ego = agents.Ego(p, FakeWorker(events, loop_number=1))
 
-        outcome = asyncio.run(spec.health_check(p, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
         assert outcome.success, outcome.message
         assert p.frontier is None
         assert p.vision is None        # both used anthropic, both disabled
         assert p.status == "active"    # thinking is ollama, not sick
         # Disabling a capacity doesn't nudge — the tick reads the updated config inline
-        assert p.ego.worker.nudged == 0
+        assert ego.worker.nudged == 0
 
         reread = paths.read_json(paths.persona_identity(p.id))
         assert reread["frontier"] is None
@@ -166,9 +166,9 @@ async def test_vision_only_fault_disables_vision_leaves_frontier_alone():
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
 
         events = [Event(kind="fault", function="realize", loop=1, provider="anthropic", url="...", model_name="claude-haiku-4-5", error="empty")]
-        p.ego = agents.Ego(p, FakeWorker(events))
+        ego = agents.Ego(p, FakeWorker(events))
 
-        outcome = asyncio.run(spec.health_check(p, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
         assert outcome.success
         assert p.vision is None
         assert p.frontier is not None   # openai didn't fault
@@ -221,7 +221,7 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
 
         events = [Event(kind="fault", function="realize", loop=1, provider="anthropic", url="...", model_name="claude-haiku-4-5", error="HTTP 401")]
-        p.ego = agents.Ego(p, FakeWorker(events))
+        ego = agents.Ego(p, FakeWorker(events))
 
         commands = []
 
@@ -233,7 +233,7 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         result = {}
 
         async def run():
-            result["outcome"] = await spec.health_check(p, datetimes.now())
+            result["outcome"] = await spec.health_check(ego, datetimes.now())
             await asyncio.sleep(0)  # let the dispatched task run
 
         asyncio.run(run())
@@ -246,7 +246,7 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         assert outcome.data.log_entry["fault_providers"] == ["anthropic"]
 
         assert p.status == "sick"
-        assert p.ego.worker.nudged == 0   # no nudge when going down
+        assert ego.worker.nudged == 0   # no nudge when going down
 
         reread = paths.read_json(paths.persona_identity(p.id))
         assert reread["status"] == "sick"
@@ -292,12 +292,12 @@ async def test_unexpected_worker_error_recovers_with_apology():
         identity.parent.mkdir(parents=True, exist_ok=True)
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
-        p.ego = agents.Ego(p, FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
 
-        outcome = asyncio.run(spec.health_check(p, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
         assert outcome.success
-        assert p.ego.worker.reset_called is True
-        assert p.ego.worker.nudged >= 1
+        assert ego.worker.reset_called is True
+        assert ego.worker.nudged >= 1
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -336,13 +336,13 @@ async def test_due_destiny_entries_are_processed_after_health():
         identity.parent.mkdir(parents=True, exist_ok=True)
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
-        p.ego = agents.Ego(p, FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
 
         past = datetimes.now().replace(microsecond=0)
         trigger = past.strftime("%Y-%m-%d %H:%M")
         paths.save_destiny_entry(p.id, "reminder", trigger, "drink water")
 
-        outcome = asyncio.run(spec.health_check(p, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
         assert outcome.success
 
         remaining = list(paths.destiny(p.id).glob("*.md"))
@@ -350,7 +350,7 @@ async def test_due_destiny_entries_are_processed_after_health():
         history_files = list(paths.history(p.id).glob("*.md"))
         assert len(history_files) == 1
 
-        assert any("drink water" in (m.content or "") for m in p.ego.memory.messages)
+        assert any("drink water" in (m.content or "") for m in ego.memory.messages)
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

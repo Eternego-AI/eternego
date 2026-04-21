@@ -22,8 +22,9 @@ class Frame extends HTMLElement {
         /* Inner world: centered, shown above faded outer */
         ui-frame[data-mode="inner"] > .ui-mode-inner { display: flex !important; }
 
-        /* Setup and welcome: standalone */
+        /* Setup, conversational, welcome: standalone */
         ui-frame[data-mode="setup"] > .ui-mode-setup { display: flex !important; }
+        ui-frame[data-mode="conversational"] > .ui-mode-conversational { display: flex !important; }
         ui-frame[data-mode="welcome"] > .ui-mode-welcome { display: flex !important; }
 
         /* Switcher */
@@ -149,6 +150,10 @@ class Frame extends HTMLElement {
         this._setupView = this._createSetupView();
         this._setupView.el.classList.add('ui-mode', 'ui-mode-setup');
 
+        this._conversational = document.createElement('conversational-mode');
+        this._conversational.init({});
+        this._conversational.classList.add('ui-mode', 'ui-mode-conversational');
+
         this._welcome = document.createElement('div');
         this._welcome.className = 'ui-mode ui-mode-welcome';
         this._welcome.innerHTML = `
@@ -160,6 +165,7 @@ class Frame extends HTMLElement {
         this.appendChild(this._outerWorld);
         this.appendChild(this._innerWorld);
         this.appendChild(this._setupView.el);
+        this.appendChild(this._conversational);
         this.appendChild(this._welcome);
 
         // Switcher
@@ -173,6 +179,7 @@ class Frame extends HTMLElement {
             // Deactivate previous mode
             if (this._activeMode === 'outer') this._outerWorld.deactivate();
             if (this._activeMode === 'inner') this._innerWorld.deactivate();
+            if (this._activeMode === 'conversational') this._conversational.deactivate();
 
             // Set data-mode — CSS shows the right view
             this.setAttribute('data-mode', detail.mode);
@@ -187,6 +194,9 @@ class Frame extends HTMLElement {
                 const birthday = detail.persona?.birthday || null;
                 this._innerWorld.show(detail.personaId, name, birthday, detail.data);
                 this._innerWorld.activate();
+            } else if (detail.mode === 'conversational') {
+                this._conversational.bind(detail.speaker);
+                this._conversational.activate();
             } else if (detail.mode === 'setup') {
                 this._setupView.reset();
             }
@@ -220,7 +230,7 @@ class Frame extends HTMLElement {
         add.className = 'ui-tab-add';
         add.textContent = '+';
         add.addEventListener('click', () => {
-            if (UI.currentMode === 'setup') {
+            if (UI.currentMode === 'conversational' || UI.currentMode === 'setup') {
                 if (UI.personas.length > 0) UI.enterOuterWorld(UI.personas[0].id);
             } else {
                 UI.enterSetup();

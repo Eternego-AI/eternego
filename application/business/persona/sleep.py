@@ -9,8 +9,9 @@ from .grow import grow
 from .write_diary import write_diary
 
 
-async def sleep(persona: Persona) -> Outcome[None]:
+async def sleep(ego) -> Outcome[None]:
     """Close the day: archive conversation, grow from it (if local), write diary."""
+    persona = ego.persona
     bus.propose("Sleeping", {"persona": persona})
 
     try:

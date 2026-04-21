@@ -1,7 +1,6 @@
 # Core modules - implementation logic
 
 from . import bus
-from . import channels
 from . import data
 from . import paths
 from . import exceptions

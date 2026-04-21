@@ -38,7 +38,7 @@ async def get_model(model_id: str):
 
 @router.post("/v1/chat/completions")
 async def chat_completions(request: ChatRequest):
-    agent = manager.find_or_none(request.model)
+    agent = manager.find(request.model)
     if agent is None:
         raise HTTPException(status_code=404, detail=f"Model '{request.model}' not found or not running.")
 

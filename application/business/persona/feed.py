@@ -14,8 +14,9 @@ class FeedData:
     persona: Persona
 
 
-async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
+async def feed(ego, data: str, source: str) -> Outcome[FeedData]:
     """It lets you feed your persona with your existing AI history so it can know you faster."""
+    persona = ego.persona
     bus.propose("Feeding persona", {"persona": persona, "source": source})
 
     @dataclass
@@ -25,7 +26,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
 
     try:
         conversations = await models.read_external_history(data, source)
-        identity = persona.ego.identity()
+        identity = ego.identity()
 
         for conversation in conversations:
             messages = []
@@ -42,7 +43,7 @@ async def feed(persona: Persona, data: str, source: str) -> Outcome[FeedData]:
                 messages=messages,
                 prompts=[{"role": m.prompt.role, "content": m.prompt.content} for m in messages],
             )
-            await functions.transform(persona, identity, feed_memory)
+            await functions.transform(ego, identity, feed_memory)
 
         bus.broadcast("Persona fed", {"persona": persona, "source": source})
         return Outcome(

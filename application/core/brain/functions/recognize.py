@@ -10,7 +10,8 @@ from application.platform import logger
 from .escalate import escalate
 
 
-async def recognize(persona: Persona, identity: str, memory: Memory) -> bool:
+async def recognize(ego, identity: str, memory: Memory) -> bool:
+    persona = ego.persona
     meaning_map = memory.meanings
     meaning_names = list(meaning_map.keys())
     logger.debug("brain.recognize", {"persona": persona, "messages": memory.messages, "meanings_available": meaning_names})

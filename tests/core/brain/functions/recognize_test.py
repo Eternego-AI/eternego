@@ -9,8 +9,13 @@ async def test_empty_stream_does_not_escalate():
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
             from application.core.brain import functions
             from application.core.brain.mind.memory import Memory
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
             from application.core.data import Message, Model, Persona, Prompt
             from application.core.exceptions import EngineConnectionError
             from application.platform import ollama
@@ -29,7 +34,8 @@ async def test_empty_stream_does_not_escalate():
                     prompt=Prompt(role="user", content="Hello"),
                 ))
                 try:
-                    await functions.recognize(persona, "identity here", memory)
+                    ego = agents.Ego(persona, FakeWorker())
+                    await functions.recognize(ego, "identity here", memory)
                     assert False, "Expected EngineConnectionError"
                 except EngineConnectionError:
                     pass
@@ -56,8 +62,13 @@ async def test_invalid_json_retries_without_escalation():
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
             from application.core.brain import functions
             from application.core.brain.mind.memory import Memory
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
             from application.core.data import Message, Model, Persona, Prompt
             from application.platform import ollama
 
@@ -74,7 +85,8 @@ async def test_invalid_json_retries_without_escalation():
                     content="Hello",
                     prompt=Prompt(role="user", content="Hello"),
                 ))
-                result = await functions.recognize(persona, "identity here", memory)
+                ego = agents.Ego(persona, FakeWorker())
+                result = await functions.recognize(ego, "identity here", memory)
                 assert result is False, "Expected False on ModelError"
                 # Memory should now contain [invalid_json] seed for the next retry
                 assert any(
@@ -104,8 +116,13 @@ async def test_no_impression_does_not_escalate():
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
             from application.core.brain import functions
             from application.core.brain.mind.memory import Memory
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
             from application.core.data import Message, Model, Persona, Prompt
             from application.platform import ollama
 
@@ -122,7 +139,8 @@ async def test_no_impression_does_not_escalate():
                     content="Hi",
                     prompt=Prompt(role="user", content="Hi"),
                 ))
-                result = await functions.recognize(persona, "identity here", memory)
+                ego = agents.Ego(persona, FakeWorker())
+                result = await functions.recognize(ego, "identity here", memory)
                 assert result is False, "Expected False when no impression"
 
             def validate(received):
@@ -148,8 +166,13 @@ async def test_escalation_prompt_includes_builtin_and_platform_tools():
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
             from application.core.brain import functions
             from application.core.brain.mind.memory import Memory
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
             from application.core.data import Message, Model, Persona, Prompt
             from application.platform import ollama
 
@@ -177,7 +200,8 @@ async def test_escalation_prompt_includes_builtin_and_platform_tools():
                     content="Can you check my disk space?",
                     prompt=Prompt(role="user", content="Can you check my disk space?"),
                 ))
-                await functions.recognize(persona, "identity here", memory)
+                ego = agents.Ego(persona, FakeWorker())
+                await functions.recognize(ego, "identity here", memory)
 
             def validate(received):
                 # Two calls: matching (→ 0) and escalation (producing name + code)

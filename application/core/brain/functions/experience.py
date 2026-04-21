@@ -1,14 +1,15 @@
 """Brain — experience stage."""
 
-from application.core import channels, paths, tools
+from application.core import paths, tools
 from application.core.brain import meanings
 from application.core.brain.mind.memory import Memory
 from application.core.data import Media, Message, Persona, Prompt
 from application.platform import datetimes, logger
-from application.platform.observer import Command, send as send_signal
+from application.platform.observer import Command, dispatch, send as send_signal
 
 
-async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
+async def experience(ego, identity: str, memory: Memory) -> bool:
+    persona = ego.persona
     logger.debug("brain.experience", {"persona": persona, "plan": memory.plan})
     try:
         plan = memory.plan
@@ -30,7 +31,7 @@ async def experience(persona: Persona, identity: str, memory: Memory) -> bool:
                 "channel": "",
                 "time": datetimes.iso_8601(datetimes.now()),
             })
-            await channels.send_all(persona.ego.channels if persona.ego else [], text)
+            dispatch(Command("Persona wants to say", {"persona": persona, "text": text}))
 
         if not tool or tool == "say":
             logger.debug("brain.experience result", {"persona": persona, "tool": tool or "say", "text_sent": text})

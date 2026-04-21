@@ -8,10 +8,11 @@ from application.core.exceptions import ModelError
 from application.platform import logger
 
 
-async def reflect(persona: Persona, identity: str, memory: Memory) -> bool:
+async def reflect(ego, identity: str, memory: Memory) -> bool:
+    persona = ego.persona
     logger.debug("brain.reflect", {"persona": persona, "messages": memory.messages, "context": memory.context})
 
-    if persona.ego and persona.ego.current_situation is situation.wake:
+    if ego.current_situation is situation.wake:
         return True
 
     existing = (memory.context or "").strip() or "(nothing yet)"

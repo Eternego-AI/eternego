@@ -49,3 +49,6 @@ export const download = (s = 20) => svg(s,
 
 export const play = (s = 20) => svg(s,
     '<polygon points="6 3 20 12 6 21 6 3"/>');
+
+export const image = (s = 20) => svg(s,
+    '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>');

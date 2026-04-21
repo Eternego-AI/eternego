@@ -28,11 +28,11 @@ async def test_query_returns_response():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        p.ego = agents.Ego(p, FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
         result = {}
         async def run(url):
             p.thinking = Model(url=url, name="anything")
-            result["value"] = await spec.query(p, {"role": "user", "content": "hi"})
+            result["value"] = await spec.query(ego, {"role": "user", "content": "hi"})
         ollama.assert_call(
             run=run,
             response={"message": {"content": "Hello from the model"}},

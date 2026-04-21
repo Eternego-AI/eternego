@@ -11,7 +11,8 @@ from application.core.exceptions import EngineConnectionError, ModelError
 from application.platform import datetimes, logger
 
 
-async def realize(persona: Persona, identity: str, memory: Memory) -> bool:
+async def realize(ego, identity: str, memory: Memory) -> bool:
+    persona = ego.persona
     logger.debug("brain.realize", {"persona": persona, "messages": memory.messages})
     for m in memory.messages:
         if m.prompt is not None:

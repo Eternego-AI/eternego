@@ -1,9 +1,9 @@
-"""Internal API routes — static and manager endpoints.
+"""Internal API routes.
 
-Static routes handle general operations (list, create, config).
-Manager routes handle agent lifecycle (start, stop, restart, delete, export).
-Per-agent routes (hear, mind, oversee, etc.) are registered dynamically
-via web/routes/agent_routes.py when an agent is prepared.
+All per-persona routes are static with a `{persona_id}` path parameter. Routes
+that need a live agent look it up via `manager.find(persona_id)` and
+return 409 when the persona isn't being served. Routes that only touch
+persisted config work whether the persona is active or not.
 """
 
 import tempfile
@@ -13,17 +13,16 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from datetime import timedelta
-
-from application.business import environment, persona
-from application.platform import datetimes
+from application.business import environment, persona as persona_spec
+from application.core import paths
 import manager
-from web.requests import EnvironmentPrepareRequest, PersonaCreateRequest
+from web.requests import EnvironmentPrepareRequest, PersonaCreateRequest, HearRequest, PersonaControlRequest, PairRequest
+
 
 router = APIRouter(prefix="/api")
 
 
-# ── Static routes ─────────────────────────────────────────────────────────────
+# ── Config and list routes ────────────────────────────────────────────────────
 
 @router.get("/config/providers")
 async def get_provider_config():
@@ -37,7 +36,7 @@ async def get_provider_config():
 
 @router.get("/personas")
 async def list_personas():
-    outcome = await persona.get_list()
+    outcome = await persona_spec.get_list()
     personas_list = outcome.data.personas if outcome.data else []
     return {"personas": [{"id": p.id, "name": p.name} for p in personas_list]}
 
@@ -55,7 +54,7 @@ async def prepare_environment(request: EnvironmentPrepareRequest):
     return outcome.data
 
 
-
+# ── Create / Migrate ──────────────────────────────────────────────────────────
 
 @router.post("/persona/create")
 async def create_persona(request: PersonaCreateRequest):
@@ -93,12 +92,12 @@ async def create_persona(request: PersonaCreateRequest):
             raise HTTPException(status_code=400, detail=outcome.message)
         frontier = outcome.data.model
 
-    outcome = await environment.check_channel(request.channel_type, request.channel_credentials)
-    if not outcome.success or not outcome.data:
-        raise HTTPException(status_code=400, detail=outcome.message)
-    channel = outcome.data.channel
+    try:
+        channel = await manager.validate_channel(request.channel_type, request.channel_credentials)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Channel validation failed: {e}")
 
-    outcome = await persona.create(
+    outcome = await persona_spec.create(
         name=request.name,
         thinking=thinking,
         channel=channel,
@@ -109,7 +108,7 @@ async def create_persona(request: PersonaCreateRequest):
         raise HTTPException(status_code=400, detail=outcome.message)
 
     try:
-        manager.serve(outcome.data.persona)
+        await manager.add(outcome.data.persona)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Persona created but failed to start: {e}")
 
@@ -173,7 +172,7 @@ async def migrate_persona(
             raise HTTPException(status_code=400, detail=outcome.message)
         frontier = outcome.data.model
 
-    outcome = await persona.migrate(
+    outcome = await persona_spec.migrate(
         diary_path=tmp_path,
         phrase=phrase,
         thinking=thinking,
@@ -184,20 +183,22 @@ async def migrate_persona(
         raise HTTPException(status_code=400, detail=outcome.message)
 
     try:
-        manager.serve(outcome.data.persona)
+        await manager.add(outcome.data.persona)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Persona migrated but failed to start: {e}")
 
     return outcome.data
 
 
+# ── Persona config routes (available whether active or not) ──────────────────
+
 @router.get("/persona/{persona_id}")
 async def get_persona(persona_id: str):
-    find = await persona.find(persona_id)
+    find = await persona_spec.find(persona_id)
     if not find.success or not find.data:
         raise HTTPException(status_code=404, detail=find.message)
     p = find.data.persona
-    running = manager.find_or_none(persona_id) is not None
+    running = manager.find(persona_id) is not None
     return {
         "id": p.id,
         "name": p.name,
@@ -205,6 +206,7 @@ async def get_persona(persona_id: str):
         "model": p.thinking.name if p.thinking else "",
         "birthday": p.birthday or "",
         "running": running,
+        "status": p.status,
         "channels": [
             {
                 "type": ch.type,
@@ -216,19 +218,147 @@ async def get_persona(persona_id: str):
     }
 
 
-# ── Manager operation routes ──────────────────────────────────────────────────
+@router.get("/persona/{persona_id}/oversee")
+async def oversee_persona(persona_id: str):
+    find = await persona_spec.find(persona_id)
+    if not find.success or not find.data:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona_spec.oversee(find.data.persona)
+    if not outcome.success or not outcome.data:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+@router.get("/persona/{persona_id}/conversation")
+async def get_conversation(persona_id: str):
+    find = await persona_spec.find(persona_id)
+    if not find.success or not find.data:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona_spec.conversation(find.data.persona)
+    if not outcome.success or not outcome.data:
+        raise HTTPException(status_code=404, detail=outcome.message)
+    return outcome.data
+
+
+@router.post("/persona/{persona_id}/control")
+async def control_persona(persona_id: str, request: PersonaControlRequest):
+    find = await persona_spec.find(persona_id)
+    if not find.success or not find.data:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona_spec.control(find.data.persona, request.entry_ids)
+    if not outcome.success or not outcome.data:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+@router.get("/persona/{persona_id}/media/{filename}")
+async def persona_media(persona_id: str, filename: str):
+    media_dir = paths.media(persona_id).resolve()
+    target = (media_dir / filename).resolve()
+    if not str(target).startswith(str(media_dir)) or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found.")
+    return FileResponse(path=target)
+
+
+# ── Live-agent routes (require the persona to be served) ─────────────────────
+
+def _require_agent(persona_id: str):
+    agent = manager.find(persona_id)
+    if agent is None:
+        raise HTTPException(status_code=409, detail="Persona is not active.")
+    return agent
+
+
+@router.get("/persona/{persona_id}/mind")
+async def get_mind(persona_id: str):
+    agent = _require_agent(persona_id)
+    outcome = await persona_spec.mind(agent.ego)
+    if not outcome.success or not outcome.data:
+        raise HTTPException(status_code=404, detail=outcome.message)
+    return outcome.data
+
+
+@router.post("/persona/{persona_id}/sleep")
+async def sleep_persona(persona_id: str):
+    agent = _require_agent(persona_id)
+    outcome = await agent.sleep()
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+@router.post("/persona/{persona_id}/hear")
+async def hear_persona(persona_id: str, request: HearRequest):
+    agent = _require_agent(persona_id)
+    gw = next((g for g in agent.gateways if g.channel.type == "web"), None)
+    outcome = await persona_spec.hear(agent.ego, content=request.message, gateway=gw)
+    if not outcome.success:
+        raise HTTPException(status_code=500, detail=outcome.message)
+    return {"status": "received"}
+
+
+@router.post("/persona/{persona_id}/see")
+async def see_persona(persona_id: str, image: UploadFile = File(...), caption: str = Form("")):
+    agent = _require_agent(persona_id)
+    suffix = Path(image.filename or "").suffix or ".jpg"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        tmp.write(await image.read())
+        tmp.close()
+        gw = next((g for g in agent.gateways if g.channel.type == "web"), None)
+        saved = gw.save_media_copy(tmp.name) if gw else tmp.name
+        outcome = await persona_spec.see(
+            agent.ego,
+            source=saved,
+            caption=caption or "",
+            gateway=gw,
+        )
+        if not outcome.success:
+            raise HTTPException(status_code=500, detail=outcome.message)
+        return {"status": "received"}
+    finally:
+        try:
+            Path(tmp.name).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+@router.post("/persona/{persona_id}/feed")
+async def feed_persona(
+    persona_id: str,
+    history: UploadFile = File(...),
+    source: str = Form(...),
+):
+    agent = _require_agent(persona_id)
+    data = (await history.read()).decode("utf-8")
+    outcome = await persona_spec.feed(agent.ego, data, source)
+    if not outcome.success or not outcome.data:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+@router.post("/persona/{persona_id}/pair")
+async def pair_persona(persona_id: str, request: PairRequest):
+    agent = _require_agent(persona_id)
+    outcome = await agent.pair(request.code)
+    if not outcome.success:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return outcome.data
+
+
+# ── Lifecycle routes ─────────────────────────────────────────────────────────
 
 @router.post("/persona/{persona_id}/start")
 async def start_persona(persona_id: str):
-    if manager.find_or_none(persona_id):
+    if manager.find(persona_id):
         return {"status": "already running"}
 
-    find = await persona.find(persona_id)
+    find = await persona_spec.find(persona_id)
     if not find.success or not find.data:
         raise HTTPException(status_code=404, detail=find.message)
 
     try:
-        manager.serve(find.data.persona)
+        await manager.add(find.data.persona)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -237,23 +367,23 @@ async def start_persona(persona_id: str):
 
 @router.post("/persona/{persona_id}/stop")
 async def stop_persona(persona_id: str):
-    if not manager.find_or_none(persona_id):
+    if not manager.find(persona_id):
         raise HTTPException(status_code=404, detail="Persona is not running.")
 
-    await manager.release(persona_id)
+    await manager.remove(persona_id)
     return {"status": "stopped"}
 
 
 @router.post("/persona/{persona_id}/restart")
 async def restart_persona(persona_id: str):
-    if manager.find_or_none(persona_id):
+    if manager.find(persona_id):
         await manager.restart(persona_id)
     else:
-        find = await persona.find(persona_id)
+        find = await persona_spec.find(persona_id)
         if not find.success or not find.data:
             raise HTTPException(status_code=404, detail=find.message)
         try:
-            manager.serve(find.data.persona)
+            await manager.add(find.data.persona)
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -262,14 +392,14 @@ async def restart_persona(persona_id: str):
 
 @router.post("/persona/{persona_id}/export")
 async def export_persona(persona_id: str):
-    find = await persona.find(persona_id)
+    find = await persona_spec.find(persona_id)
     if not find.success or not find.data:
         raise HTTPException(status_code=404, detail=find.message)
 
-    if manager.find_or_none(persona_id):
+    if manager.find(persona_id):
         raise HTTPException(status_code=400, detail="Persona must be stopped before exporting. Stop it first.")
 
-    outcome = await persona.export(find.data.persona)
+    outcome = await persona_spec.export(find.data.persona)
     if not outcome.success or not outcome.data:
         raise HTTPException(status_code=400, detail=outcome.message)
 
@@ -283,14 +413,14 @@ async def export_persona(persona_id: str):
 
 @router.post("/persona/{persona_id}/delete")
 async def delete_persona(persona_id: str):
-    find = await persona.find(persona_id)
+    find = await persona_spec.find(persona_id)
     if not find.success or not find.data:
         raise HTTPException(status_code=404, detail=find.message)
 
-    if manager.find_or_none(persona_id):
-        await manager.release(persona_id)
+    if manager.find(persona_id):
+        await manager.remove(persona_id)
 
-    outcome = await persona.delete(find.data.persona)
+    outcome = await persona_spec.delete(find.data.persona)
     if not outcome.success:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data

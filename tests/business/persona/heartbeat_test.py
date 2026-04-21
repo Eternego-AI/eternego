@@ -33,9 +33,9 @@ async def test_heartbeat_calls_health_check():
             def events(self): return list(self._events)
             def clear_events(self): self._events = []
 
-        p.ego = agents.Ego(p, FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
 
-        outcome = asyncio.run(spec.heartbeat(p))
+        outcome = asyncio.run(spec.heartbeat(ego, sleep_fn=lambda: None))
         assert outcome.success, outcome.message
 
     code, error = await on_separate_process_async(isolated)

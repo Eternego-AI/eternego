@@ -4,9 +4,10 @@ shut down if thinking is compromised, process due destiny entries."""
 from dataclasses import dataclass
 
 from application.business.outcome import Outcome
-from application.core import bus, channels, paths
+from application.core import bus, paths
 from application.core.data import Message, Persona, Prompt
 from application.platform import datetimes, filesystem, logger
+from application.platform.observer import Command, dispatch
 
 
 @dataclass
@@ -15,7 +16,7 @@ class HealthCheckData:
     log_entry: dict
 
 
-async def health_check(persona: Persona, dt) -> Outcome[HealthCheckData]:
+async def health_check(ego, dt) -> Outcome[HealthCheckData]:
     """Every minute, check how the persona's body has been feeling.
 
     Log the observation first. Then, per field: thinking faulted → sick + shut
@@ -30,8 +31,8 @@ async def health_check(persona: Persona, dt) -> Outcome[HealthCheckData]:
     the tick is either running (and will see the updated config next
     iteration) or idle with nothing to do.
     """
+    persona = ego.persona
     bus.propose("Health check", {"persona": persona})
-    ego = persona.ego
 
     if ego.worker.idle and ego.worker.error:
         error = ego.worker.error
@@ -44,7 +45,7 @@ async def health_check(persona: Persona, dt) -> Outcome[HealthCheckData]:
             "channel": "",
             "time": datetimes.iso_8601(datetimes.now()),
         })
-        await channels.send_all(ego.channels, text)
+        dispatch(Command("Persona wants to say", {"persona": persona, "text": text}))
         ego.worker.reset()
         ego.worker.nudge()
 
@@ -67,7 +68,7 @@ async def health_check(persona: Persona, dt) -> Outcome[HealthCheckData]:
         if sample:
             message += f": {sample}"
         message += ". Stepping out for now."
-        await channels.send_all(ego.channels, message)
+        dispatch(Command("Persona wants to say", {"persona": persona, "text": message}))
         ego.worker.clear_events()
         bus.order("Persona became sick", {"persona": persona})
         return Outcome(
@@ -85,7 +86,7 @@ async def health_check(persona: Persona, dt) -> Outcome[HealthCheckData]:
             if sample:
                 message += f": {sample}"
             message += ". Escalation disabled until you restart."
-            await channels.send_all(ego.channels, message)
+            dispatch(Command("Persona wants to say", {"persona": persona, "text": message}))
             persona.frontier = None
             paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
@@ -98,7 +99,7 @@ async def health_check(persona: Persona, dt) -> Outcome[HealthCheckData]:
             if sample:
                 message += f": {sample}"
             message += ". Vision disabled until you restart."
-            await channels.send_all(ego.channels, message)
+            dispatch(Command("Persona wants to say", {"persona": persona, "text": message}))
             persona.vision = None
             paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 

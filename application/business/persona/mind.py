@@ -17,11 +17,12 @@ class MindData:
     context: str
 
 
-async def mind(persona: Persona) -> Outcome[MindData]:
+async def mind(ego) -> Outcome[MindData]:
     """Return the current memory state — messages, meaning, plan, and context."""
+    persona = ego.persona
     bus.propose("Getting persona mind", {"persona": persona})
     try:
-        memory = persona.ego.memory
+        memory = ego.memory
 
         bus.broadcast("Persona mind loaded", {"persona": persona})
         return Outcome(success=True, message="", data=MindData(

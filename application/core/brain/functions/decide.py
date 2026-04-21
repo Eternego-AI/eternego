@@ -5,9 +5,11 @@ from application.core.brain.mind.memory import Memory
 from application.core.data import Message, Persona, Prompt
 from application.core.exceptions import EngineConnectionError, ModelError
 from application.platform import logger
+from application.platform.observer import Command, dispatch
 
 
-async def decide(persona: Persona, identity: str, memory: Memory) -> bool:
+async def decide(ego, identity: str, memory: Memory) -> bool:
+    persona = ego.persona
     logger.debug("brain.decide", {"persona": persona, "meaning": memory.meaning})
     meaning = memory.meanings.get(memory.meaning)
     if not meaning:
@@ -35,13 +37,5 @@ async def decide(persona: Persona, identity: str, memory: Memory) -> bool:
     memory.plan = result
     logger.debug("brain.decide plan", {"persona": persona, "plan": result, "reason": result.get("reason")})
     if result.get("say") or result.get("tool") == "say":
-        from application.platform import telegram
-        active = persona.ego.channels if persona.ego else []
-        for channel in active:
-            if channel.type == "telegram":
-                try:
-                    token = (channel.credentials or {})["token"]
-                    await telegram.async_typing_action(token, channel.name)
-                except Exception:
-                    pass
+        dispatch(Command("Persona wants to type", {"persona": persona, "channel_type": "telegram"}))
     return True

@@ -5,7 +5,7 @@ async def test_pair_verifies_channel():
         import asyncio
         import os
         import tempfile
-        from application.business import environment
+        from application.business.persona.pair import pair
         from application.core import paths
         from application.core.data import Persona, Model, Channel
         from application.platform import OS, objects, filesystem
@@ -19,7 +19,8 @@ async def test_pair_verifies_channel():
         identity.parent.mkdir(parents=True, exist_ok=True)
         filesystem.write_json(identity, objects.json(persona))
 
-        result = asyncio.run(environment.pair(persona, "telegram", "12345"))
+        channel = Channel(type="telegram", name="12345", credentials={"token": "t"})
+        result = asyncio.run(pair(persona, channel))
         assert result.success, result.message
         assert result.data.persona.id == persona.id
         assert result.data.channel.name == "12345"
@@ -34,7 +35,7 @@ async def test_pair_fails_on_unknown_channel_type():
         import asyncio
         import os
         import tempfile
-        from application.business import environment
+        from application.business.persona.pair import pair
         from application.core.data import Persona, Model, Channel
         from application.platform import OS
         OS._secret_cache_only = True
@@ -44,7 +45,8 @@ async def test_pair_fails_on_unknown_channel_type():
         persona = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="x"), base_model="llama3")
         persona.channels = [Channel(type="telegram", name="")]
 
-        result = asyncio.run(environment.pair(persona, "discord", "xyz"))
+        channel = Channel(type="discord", name="xyz", credentials={"token": "t"})
+        result = asyncio.run(pair(persona, channel))
         assert result.success is False
 
     code, error = await on_separate_process_async(isolated)
@@ -56,7 +58,7 @@ async def test_pair_fails_on_already_verified_channel():
         import asyncio
         import os
         import tempfile
-        from application.business import environment
+        from application.business.persona.pair import pair
         from application.core.data import Persona, Model, Channel
         from application.platform import OS
         OS._secret_cache_only = True
@@ -66,7 +68,8 @@ async def test_pair_fails_on_already_verified_channel():
         persona = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="x"), base_model="llama3")
         persona.channels = [Channel(type="telegram", name="12345", verified_at="2020-01-01T00:00:00")]
 
-        result = asyncio.run(environment.pair(persona, "telegram", "12345"))
+        channel = Channel(type="telegram", name="12345", credentials={"token": "t"})
+        result = asyncio.run(pair(persona, channel))
         assert result.success is False
 
     code, error = await on_separate_process_async(isolated)

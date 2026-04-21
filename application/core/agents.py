@@ -1,19 +1,22 @@
 """Ego — runtime state for a served persona (the persona's current mind)."""
 
 from application.core.brain import character, functions, situation
+from application.core.brain.mind import clock
 from application.core.brain.mind.memory import Memory
 from application.core import paths
 from application.core.data import Message, Persona, Prompt
 from application.platform import datetimes, logger
+from application.platform.asyncio_worker import Worker
 
 
 class Ego:
     """The current mind of a served persona.
 
-    Attached to persona.ego while served; None when dormant. Holds memory,
-    worker, and current situation. Exposes behaviors (receive, identity,
-    consciousness, settle, stop, persist, is_sleeping) without leaking
-    internals.
+    Owned by the agent on shift (`agent.ego`). Created fresh each time manager
+    serves the persona; released when the agent tears down. Holds memory,
+    worker, and current situation; carries `self.persona` as a back-reference
+    for config access. Exposes behaviors (receive, identity, consciousness,
+    wake, sleep_cycle, settle, stop, is_sleeping) without leaking internals.
     """
 
     def __init__(self, p: Persona, worker, situation=None):
@@ -21,20 +24,43 @@ class Ego:
         self.worker = worker
         self.memory = Memory(p)
         self.current_situation = situation
-        self.channels: list = []
 
     def consciousness(self) -> list:
         """Build the brain function sequence as (name, zero-arg async callable) pairs.
         Names are what tick writes into the worker's event log so health_check knows
         which cognitive step succeeded or faulted."""
         return [
-            ("realize",    lambda: functions.realize(self.persona, self.identity(), self.memory)),
-            ("recognize",  lambda: functions.recognize(self.persona, self.identity(), self.memory)),
-            ("decide",     lambda: functions.decide(self.persona, self.identity(), self.memory)),
-            ("experience", lambda: functions.experience(self.persona, self.identity(), self.memory)),
-            ("transform",  lambda: functions.transform(self.persona, self.identity(), self.memory)),
-            ("reflect",    lambda: functions.reflect(self.persona, self.identity(), self.memory)),
+            ("realize",    lambda: functions.realize(self, self.identity(), self.memory)),
+            ("recognize",  lambda: functions.recognize(self, self.identity(), self.memory)),
+            ("decide",     lambda: functions.decide(self, self.identity(), self.memory)),
+            ("experience", lambda: functions.experience(self, self.identity(), self.memory)),
+            ("transform",  lambda: functions.transform(self, self.identity(), self.memory)),
+            ("reflect",    lambda: functions.reflect(self, self.identity(), self.memory)),
         ]
+
+    def wake(self) -> None:
+        """Set situation to wake, remember the wake message, start the clock."""
+        logger.info("Waking", {"persona": self.persona})
+        self.current_situation = situation.wake
+        self.memory.remember(Message(
+            content=f"Wake up {self.persona.name}",
+            prompt=Prompt(role="user", content=f"Wake up {self.persona.name}"),
+        ))
+        self.worker.run(clock.tick, self.consciousness(), self.worker)
+
+    async def sleep_cycle(self, sleep_spec) -> None:
+        """Full sleep cycle: settle, run sleep spec, restart with fresh worker."""
+        logger.info("Sleeping", {"persona": self.persona})
+        self.current_situation = situation.sleep
+        self.memory.remember(Message(
+            content="Go to sleep",
+            prompt=Prompt(role="user", content="Go to sleep"),
+        ))
+        await self.settle()
+        await sleep_spec(self)
+        await self.worker.stop()
+        self.worker = Worker()
+        self.wake()
 
     async def settle(self) -> None:
         """Nudge the tick and wait for it to finish processing."""

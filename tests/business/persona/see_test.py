@@ -10,11 +10,11 @@ async def test_see_succeeds_with_media():
         from application.business.persona.see import see
         from application.core import agents, paths
         from application.core.data import Channel, Model, Persona
+        from application.platform import objects, filesystem
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
-        from application.platform import objects, filesystem
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)
         filesystem.write_json(identity, objects.json(p))
@@ -33,14 +33,13 @@ async def test_see_succeeds_with_media():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        p.ego = agents.Ego(p, FakeWorker())
+        ego = agents.Ego(p, FakeWorker())
         channel = Channel(type="telegram", name="123", verified_at="2026-04-17T00:00:00")
-        result = asyncio.run(see(p, source=image_path, caption="What is in this image?", channel=channel))
+        result = asyncio.run(see(ego, source=image_path, caption="What is in this image?", channel=channel))
         assert result.success, result.message
-        msg = p.ego.memory.messages[-1]
+        msg = ego.memory.messages[-1]
         assert msg.media is not None
         assert msg.media.caption == "What is in this image?"
-        assert "telegram-" in msg.media.source
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -53,13 +52,20 @@ async def test_see_rejects_unverified_channel():
         import tempfile
 
         from application.business.persona.see import see
+        from application.core import agents, paths
         from application.core.data import Channel, Model, Persona
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"))
+
+        class FakeWorker:
+            def run(self, *args): pass
+            def nudge(self): pass
+
+        ego = agents.Ego(p, FakeWorker())
         channel = Channel(type="telegram", name="123")
-        result = asyncio.run(see(p, source="/tmp/img.png", caption="test", channel=channel))
+        result = asyncio.run(see(ego, source="/tmp/img.png", caption="test", channel=channel))
         assert result.success
         assert result.data.response == "Channel not verified."
 

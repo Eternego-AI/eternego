@@ -1,6 +1,5 @@
 """Persona — creation, migration, identity, learning, and lifecycle."""
 
-from .connect import connect
 from .control import control
 from .conversation import conversation
 from .create import create

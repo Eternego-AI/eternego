@@ -13,15 +13,16 @@ class QueryData:
     response: str
 
 
-async def query(persona: Persona, messages) -> Outcome[QueryData]:
+async def query(ego, messages) -> Outcome[QueryData]:
     """Answer a direct query using the local model — no pipeline, no memory."""
+    persona = ego.persona
     bus.propose("Querying", {"persona": persona, "messages": messages})
     try:
-        if persona.ego.is_sleeping():
+        if ego.is_sleeping():
             bus.broadcast("Queried", {"persona": persona})
             return Outcome(success=True, message="", data=QueryData(response=f"{persona.name} is sleeping."))
 
-        response = await models.chat(persona.thinking, persona.ego.identity(), [], messages)
+        response = await models.chat(persona.thinking, ego.identity(), [], messages)
 
         bus.broadcast("Queried", {"persona": persona})
         return Outcome(success=True, message="", data=QueryData(response=response))

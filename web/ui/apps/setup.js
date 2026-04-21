@@ -40,7 +40,7 @@ export default class SetupApp extends App {
         const body = {
             name: data.name,
             thinking_model: data.thinkingModel,
-            channel_type: data.botToken ? 'telegram' : 'web',
+            channel_type: data.channelType || 'web',
             channel_credentials: data.botToken ? { token: data.botToken } : {},
         };
         if (data.thinkingUrl) body.thinking_url = data.thinkingUrl;
