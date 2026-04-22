@@ -1,4 +1,11 @@
-"""Brain — realize stage."""
+"""Brain — realize stage.
+
+When an image arrives in memory, realize processes it by formulating
+vision questions (via thinking model, observer identity) and calling the
+vision model with the image. The resulting observation lands in memory as
+a synthetic assistant+TOOL_RESULT pair — as if the persona itself had
+called a `vision` tool. Subsequent stages see a normal tool-call sequence.
+"""
 
 import base64
 import json
@@ -6,8 +13,8 @@ from pathlib import Path
 
 from application.core import models, paths
 from application.core.brain.mind.memory import Memory
-from application.core.data import Message, Persona, Prompt
-from application.core.exceptions import EngineConnectionError, ModelError
+from application.core.data import Message, Prompt
+from application.core.exceptions import ModelError
 from application.platform import datetimes, logger
 
 
@@ -24,35 +31,43 @@ async def realize(ego, identity: str, memory: Memory) -> bool:
 
         image_path = Path(m.media.source)
         if not image_path.exists():
-            m.prompt = Prompt(role="user", content=f"An image was expected at {m.media.source} but the file was not found.")
+            m.prompt = Prompt(role="user", content=m.media.caption or "")
+            missing = f"TOOL_RESULT\ntool: vision\nstatus: error\nresult: image not found at {m.media.source}"
+            memory.remember(Message(content=missing, prompt=Prompt(role="user", content=missing)))
             continue
 
-        if m.media.caption:
-            memory.remember(Message(
-                content=m.media.caption,
-                prompt=Prompt(role="user", content=f"The person said: {m.media.caption}"),
-            ))
+        # The caption (if any) becomes the person-role user message attached to the image.
+        m.prompt = Prompt(role="user", content=m.media.caption or "")
 
-        try:
-            if m.media.caption and not m.channel:
-                question = m.media.caption
-            else:
-                context = "\n".join(p["content"] for p in memory.prompts)
-                question_prompt = (
-                    "You received an image. A vision model will describe what is in it. "
-                    "What should the vision model look for, considering the conversation?\n\n"
-                    f"Conversation:\n{context}\n\n"
-                    "```json\n"
-                    "{\"questions\": [\"<question>\", \"<question>\"]}\n"
-                    "```"
-                )
+        if m.media.caption and not m.channel:
+            question = m.media.caption
+        else:
+            context = "\n".join(p["content"] for p in memory.prompts)
+            question_prompt = (
+                "The persona just received an image. A vision model will look at it next. "
+                "Based on the conversation, what observable things in the image would best "
+                "serve the persona? Produce questions that can be answered by looking at "
+                "the image itself.\n\n"
+                f"## Conversation\n\n{context}\n\n"
+                "## Output\n\n"
+                "```json\n"
+                "{\"questions\": [\"<question>\", \"<question>\"]}\n"
+                "```"
+            )
+            try:
                 question_result = await models.chat_json(persona.thinking, identity, [], question_prompt)
                 questions = question_result.get("questions", []) if isinstance(question_result, dict) else []
-                if questions:
-                    question = "\n".join(f"- {q}" for q in questions)
-                else:
-                    question = "Describe what you see."
+            except ModelError as formulation_error:
+                logger.warning("brain.realize question formulation failed, defaulting", {"persona": persona, "error": str(formulation_error)})
+                questions = []
+            if questions:
+                question = "\n".join(f"- {q}" for q in questions)
+            else:
+                question = "Describe what you see."
 
+        vision_call = json.dumps({"tool": "vision", "question": question, "source": m.media.source})
+
+        try:
             vision_model = persona.vision or persona.thinking
             image_data = base64.b64encode(image_path.read_bytes()).decode()
             media_type = "image/png" if image_path.suffix == ".png" else "image/jpeg"
@@ -61,10 +76,15 @@ async def realize(ego, identity: str, memory: Memory) -> bool:
             ]}]
             answer = await models.chat(vision_model, "", image_reality, question)
 
-            m.prompt = Prompt(
-                role="user",
-                content=f"[vision] You received an image at {m.media.source}. You looked for: {question} You saw: {answer}",
-            )
+            memory.remember(Message(
+                content=vision_call,
+                prompt=Prompt(role="assistant", content=vision_call),
+            ))
+            result_text = f"TOOL_RESULT\ntool: vision\nstatus: ok\nresult: {answer}"
+            memory.remember(Message(
+                content=result_text,
+                prompt=Prompt(role="user", content=result_text),
+            ))
 
             gallery_file = paths.media(persona.id) / "gallery.json"
             gallery_file.parent.mkdir(parents=True, exist_ok=True)
@@ -85,6 +105,14 @@ async def realize(ego, identity: str, memory: Memory) -> bool:
 
         except (ModelError, OSError, json.JSONDecodeError) as e:
             logger.warning("brain.realize vision failed", {"persona": persona, "error": str(e)})
-            m.prompt = Prompt(role="user", content=m.content or "An image was received but could not be processed.")
+            memory.remember(Message(
+                content=vision_call,
+                prompt=Prompt(role="assistant", content=vision_call),
+            ))
+            error_text = f"TOOL_RESULT\ntool: vision\nstatus: error\nresult: {e}"
+            memory.remember(Message(
+                content=error_text,
+                prompt=Prompt(role="user", content=error_text),
+            ))
 
     return bool(memory.messages)

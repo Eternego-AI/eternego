@@ -39,7 +39,7 @@ class Meaning:
             "- `say(text)` — tell the person what happened and what you did about it.\n\n"
             "## Output\n\n"
             "```json\n"
-            '{"reason": "<what is wrong and what you are doing about it>",\n'
+            '{'
             ' "tool": "<remove_meaning|clear_memory|stop|say>",\n'
             ' "name": "<meaning name, only for remove_meaning>",\n'
             ' "text": "<message to the person, only for say>",\n'

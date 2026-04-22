@@ -1,9 +1,20 @@
-"""Brain — experience stage."""
+"""Brain — experience stage.
+
+Takes the plan decide produced, executes it, and writes two prompts per call
+to memory: an assistant-role message with the tool call JSON, then a
+user-role TOOL_RESULT message with the outcome. This mirrors the standard
+chat-agent convention — the model sees what it decided to do and what came
+back, in the format its training expects.
+
+If the plan contains a `say` alongside another tool, they run as two separate
+calls (two pairs in memory). Say is always delivered first.
+"""
+
+import json as _json
 
 from application.core import paths, tools
-from application.core.brain import meanings
 from application.core.brain.mind.memory import Memory
-from application.core.data import Media, Message, Persona, Prompt
+from application.core.data import Media, Message, Prompt
 from application.platform import datetimes, logger
 from application.platform.observer import Command, dispatch, send as send_signal
 
@@ -11,65 +22,69 @@ from application.platform.observer import Command, dispatch, send as send_signal
 async def experience(ego, identity: str, memory: Memory) -> bool:
     persona = ego.persona
     logger.debug("brain.experience", {"persona": persona, "plan": memory.plan})
+    plan = memory.plan
+    memory.plan = None
+    if not plan:
+        return True
     try:
-        plan = memory.plan
-        memory.plan = None
-        if not plan:
-            return True
 
         tool = plan.get("tool")
+        say_text = plan.get("text") if tool == "say" else plan.get("say")
 
-        text = plan.get("text") if tool == "say" else plan.get("say")
-        if text:
+        if say_text:
             memory.remember(Message(
-                content=text,
-                prompt=Prompt(role="assistant", content=text),
+                content=say_text,
+                prompt=Prompt(role="assistant", content=say_text),
             ))
-            paths.append_jsonl(paths.conversation(persona.id), {
-                "role": "persona",
-                "content": text,
-                "channel": "",
-                "time": datetimes.iso_8601(datetimes.now()),
-            })
-            dispatch(Command("Persona wants to say", {"persona": persona, "text": text}))
+            dispatch(Command("Persona wants to say", {"persona": persona, "text": say_text}))
 
         if not tool or tool == "say":
-            logger.debug("brain.experience result", {"persona": persona, "tool": tool or "say", "text_sent": text})
+            logger.debug("brain.experience result", {"persona": persona, "tool": tool or "say", "text_sent": say_text})
             return True
+
+        call_obj = {k: v for k, v in plan.items() if k != "say"}
+        call_json = _json.dumps(call_obj)
+        memory.remember(Message(
+            content=call_json,
+            prompt=Prompt(role="assistant", content=call_json),
+        ))
+
+        status = "ok"
+        result = ""
 
         if tool == "save_notes":
             content = plan.get("content", "")
             if not content:
-                memory.remember(Message(content="Error: content is required."))
+                status, result = "error", "content is required"
             else:
                 paths.save_as_string(paths.notes(persona.id), content.strip())
-                memory.remember(Message(content="Notes updated."))
+                result = "notes updated"
 
         elif tool == "save_destiny":
             trigger = plan.get("trigger", "")
             content = plan.get("content", "")
             if not trigger or not content:
-                memory.remember(Message(content="Error: trigger and content are required."))
+                status, result = "error", "trigger and content are required"
             else:
                 body = content
                 recurrence = plan.get("recurrence", "")
                 if recurrence:
                     body += f"\nrecurrence: {recurrence}"
                 paths.save_destiny_entry(persona.id, plan.get("type", "reminder"), trigger, body)
-                memory.remember(Message(content=f"Saved {plan.get('type', 'reminder')}: {content} at {trigger}"))
+                result = f"saved {plan.get('type', 'reminder')}: {content} at {trigger}"
 
         elif tool == "check_calendar":
             date = plan.get("date", "")
             if not date:
-                memory.remember(Message(content="Error: date is required."))
+                status, result = "error", "date is required"
             else:
                 entries = paths.destinies_in(persona.id, date)
-                memory.remember(Message(content="\n".join(entries) if entries else "No events found for that date."))
+                result = "\n".join(entries) if entries else "no events found for that date"
 
         elif tool == "recall_history":
             date = plan.get("date", "")
             if not date:
-                memory.remember(Message(content="Error: date is required."))
+                status, result = "error", "date is required"
             else:
                 entries = paths.read_files_matching(persona.id, paths.history(persona.id), f"*{date}*")
                 live = paths.read_jsonl(paths.conversation(persona.id))
@@ -79,10 +94,9 @@ async def experience(ego, identity: str, memory: Memory) -> bool:
                 ]
                 if live_lines:
                     entries.append("Today's conversation:\n" + "\n".join(live_lines))
-                import json
                 gallery_file = paths.media(persona.id) / "gallery.json"
                 if gallery_file.exists():
-                    gallery = json.loads(gallery_file.read_text())
+                    gallery = _json.loads(gallery_file.read_text())
                     media_lines = []
                     for source, looks in gallery.items():
                         for look in looks:
@@ -90,56 +104,59 @@ async def experience(ego, identity: str, memory: Memory) -> bool:
                                 media_lines.append(f"[{look['time']}] Image: {source} — {look['answer']}")
                     if media_lines:
                         entries.append("Media from that date:\n" + "\n".join(media_lines))
-                memory.remember(Message(content="\n\n".join(entries) if entries else "No conversations found for that date."))
+                result = "\n\n".join(entries) if entries else "no conversations found for that date"
 
         elif tool == "remove_meaning":
             name = plan.get("name", "")
             if not name:
-                memory.remember(Message(content="Error: name is required."))
+                status, result = "error", "name is required"
             else:
                 meaning_path = paths.meanings(persona.id) / f"{name}.py"
                 if meaning_path.exists():
                     meaning_path.unlink()
                     memory.unlearn(name)
-                    memory.remember(Message(content=f"Removed meaning: {name}"))
+                    result = f"removed meaning: {name}"
                 else:
-                    memory.remember(Message(content=f"Meaning not found: {name}"))
+                    status, result = "error", f"meaning not found: {name}"
 
         elif tool == "clear_memory":
             memory.forget()
-            memory.remember(Message(content="Memory cleared."))
+            result = "memory cleared"
 
         elif tool == "look_at":
             source = plan.get("source", "")
             question = plan.get("question", "")
             if not source:
-                memory.remember(Message(content="Error: source is required."))
+                status, result = "error", "source is required"
             else:
                 memory.remember(Message(
                     content=question,
                     media=Media(source=source, caption=question),
                 ))
+                result = f"queued vision look at {source}"
 
         elif tool == "stop":
-            await send_signal(Command(
-                "Persona requested stop",
-                {"persona": persona},
-            ))
-            memory.remember(Message(content="Stop requested."))
+            await send_signal(Command("Persona requested stop", {"persona": persona}))
+            result = "stop requested"
 
         else:
-            params = {k: v for k, v in plan.items() if k not in ("tool", "say", "reason")}
-            result_message = await tools.call(tool, **params)
-            memory.remember(result_message)
+            params = {k: v for k, v in plan.items() if k not in ("tool", "say")}
+            status, result = await tools.call(tool, **params)
 
+        result_text = f"TOOL_RESULT\ntool: {tool}\nstatus: {status}\nresult: {result}"
+        memory.remember(Message(
+            content=result_text,
+            prompt=Prompt(role="user", content=result_text),
+        ))
 
         return False
 
     except Exception as e:
         logger.warning("brain.experience failed", {"persona": persona, "error": str(e)})
-        error_msg = f"[tool_error] {e}"
+        failed_tool = plan.get("tool", "unknown")
+        error_text = f"TOOL_RESULT\ntool: {failed_tool}\nstatus: error\nresult: {e}"
         memory.remember(Message(
-            content=error_msg,
-            prompt=Prompt(role="user", content=error_msg),
+            content=error_text,
+            prompt=Prompt(role="user", content=error_text),
         ))
         return False

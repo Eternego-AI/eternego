@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from application.business.outcome import Outcome
 from application.core import bus, local_inference_engine, paths, system
-from application.core.data import Model, Persona
+from application.core.data import Channel, Model, Persona
 from application.core.exceptions import (
     DiaryError,
     EngineConnectionError,
@@ -31,15 +31,18 @@ async def migrate(
     thinking: Model,
     vision: Model | None,
     frontier: Model | None,
+    channels: list[Channel],
 ) -> Outcome[MigrateData]:
     """It enables you to migrate your persona so nothing is ever lost.
 
     Every migration declares the new environment explicitly — the caller picks
-    all three models at the migration moment, because the diary's memory is
-    portable but the compute behind it is not. Passing `None` for vision or
-    frontier means the persona wakes up in the new environment without that
-    capacity; it's an explicit choice, not a forgotten carry-over."""
-    bus.propose("Migrating persona", {"diary_path": diary_path, "thinking": thinking, "vision": vision, "frontier": frontier})
+    all three models and the reachable channels at the migration moment,
+    because the diary's memory is portable but the compute and reach behind
+    it are not. Passing `None` for vision or frontier means the persona wakes
+    up in the new environment without that capacity; an empty channel list
+    means it wakes reachable only from this web page. Every choice is
+    explicit, not a forgotten carry-over."""
+    bus.propose("Migrating persona", {"diary_path": diary_path, "thinking": thinking, "vision": vision, "frontier": frontier, "channels": channels})
 
     persona = None
 
@@ -70,6 +73,7 @@ async def migrate(
 
         persona.vision = vision
         persona.frontier = frontier
+        persona.channels = list(channels or [])
 
         paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
@@ -119,7 +123,7 @@ async def migrate(
             await delete(persona)
 
         bus.broadcast("Persona migration failed", {"reason": "connection", "error": str(e)})
-        return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
+        return Outcome(success=False, message=f"Could not connect to the local inference engine. Please make sure it is running. ({e})")
 
     except UnsupportedOS as e:
         if persona is not None:

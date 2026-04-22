@@ -12,8 +12,8 @@ def extract_json(text: str) -> dict:
     logger.debug("models.extract_json", {"raw": text})
     block = extract_braces(text)
     if block is None:
-        raise ModelError("No JSON object found in model response")
+        raise ModelError("No JSON object found in model response", raw=text)
     try:
         return json.loads(block)
     except json.JSONDecodeError:
-        raise ModelError("Model response contains malformed JSON")
+        raise ModelError("Model response contains malformed JSON", raw=text)

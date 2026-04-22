@@ -39,12 +39,6 @@ async def health_check(ego, dt) -> Outcome[HealthCheckData]:
         logger.info("Recovering ego from unexpected error", {"persona": persona, "error": str(error)})
         text = "Sorry, it seems I got distracted. Let me see what I should be doing."
         ego.memory.remember(Message(content=text, prompt=Prompt(role="assistant", content=text)))
-        paths.append_jsonl(paths.conversation(persona.id), {
-            "role": "persona",
-            "content": text,
-            "channel": "",
-            "time": datetimes.iso_8601(datetimes.now()),
-        })
         dispatch(Command("Persona wants to say", {"persona": persona, "text": text}))
         ego.worker.reset()
         ego.worker.nudge()
@@ -70,7 +64,7 @@ async def health_check(ego, dt) -> Outcome[HealthCheckData]:
         message += ". Stepping out for now."
         dispatch(Command("Persona wants to say", {"persona": persona, "text": message}))
         ego.worker.clear_events()
-        bus.order("Persona became sick", {"persona": persona})
+        bus.order("Persona became sick", {"persona": persona, "log_entry": log_entry})
         return Outcome(
             success=True,
             message=f"{persona.name} became sick — {thinking_provider} unreachable for thinking.",
@@ -113,10 +107,11 @@ async def health_check(ego, dt) -> Outcome[HealthCheckData]:
                 paths.add_history_entry(persona.id, filepath.stem, content)
                 filesystem.delete(filepath)
                 notifications.append(content)
-            ego.memory.remember(Message(content="Due now:\n" + "\n---\n".join(notifications)))
+            due_text = "due for:\n" + "\n---\n".join(notifications)
+            ego.memory.remember(Message(content=due_text, prompt=Prompt(role="user", content=due_text)))
             ego.worker.nudge()
 
-        bus.broadcast("Health checked", {"persona": persona})
+        bus.broadcast("Health checked", {"persona": persona, "log_entry": log_entry})
         return Outcome(
             success=True,
             message="",

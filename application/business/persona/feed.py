@@ -26,7 +26,7 @@ async def feed(ego, data: str, source: str) -> Outcome[FeedData]:
 
     try:
         conversations = await models.read_external_history(data, source)
-        identity = ego.identity()
+        identity = ego.personality()
 
         for conversation in conversations:
             messages = []

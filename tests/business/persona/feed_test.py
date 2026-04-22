@@ -18,7 +18,7 @@ async def test_feed_succeeds_with_anthropic_data():
 
         def run(url):
             outcome = asyncio.run(spec.create(
-                name="FeedBot", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={}),
+                name="FeedBot", thinking=Model(name="llama3", url=url), channels=[Channel(type="web", credentials={})],
             ))
             assert outcome.success, outcome.message
             persona_id = outcome.data.persona.id

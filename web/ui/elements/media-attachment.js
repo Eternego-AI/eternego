@@ -1,4 +1,11 @@
 import Element from './element.js';
+import { send, hash, globe } from '../icons.js';
+
+const CHANNEL_ICONS = {
+    telegram: send,
+    discord: hash,
+    web: globe,
+};
 
 class MediaAttachment extends Element {
     static _css = `
@@ -34,9 +41,24 @@ class MediaAttachment extends Element {
             color: var(--text-dim);
             white-space: nowrap;
         }
+        media-attachment .ma-meta {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-xs);
+            margin-left: var(--space-sm);
+            color: var(--text-dim);
+            white-space: nowrap;
+            vertical-align: baseline;
+        }
+        media-attachment .ma-channel {
+            display: inline-flex;
+            align-items: center;
+            color: var(--text-muted);
+        }
+        media-attachment .ma-channel svg { display: block; }
     `;
 
-    // init({ role, source, caption, time })
+    // init({ role, source, caption, time, channel })
     render() {
         this.constructor._injectStyles();
         this.className = `ma-${this._props.role}`;
@@ -48,23 +70,41 @@ class MediaAttachment extends Element {
         img.addEventListener('click', () => window.open(this._props.source, '_blank'));
         this.appendChild(img);
 
+        const channelType = this._props.channel;
+        const hasChannel = !!channelType && CHANNEL_ICONS[channelType];
+
         if (this._props.caption) {
             const cap = document.createElement('div');
             cap.className = 'ma-caption';
             cap.textContent = this._props.caption;
-            if (this._props.time) {
-                const t = document.createElement('span');
-                t.className = 'ma-time';
-                t.textContent = ' ' + this._props.time;
-                cap.appendChild(t);
-            }
+            const meta = this._buildMeta(hasChannel, channelType, this._props.time);
+            if (meta) cap.appendChild(meta);
             this.appendChild(cap);
-        } else if (this._props.time) {
-            const t = document.createElement('div');
-            t.className = 'ma-time';
-            t.textContent = this._props.time;
-            this.appendChild(t);
+        } else if (this._props.time || hasChannel) {
+            const meta = this._buildMeta(hasChannel, channelType, this._props.time);
+            meta.classList.add('ma-time');
+            this.appendChild(meta);
         }
+    }
+
+    _buildMeta(hasChannel, channelType, time) {
+        if (!hasChannel && !time) return null;
+        const meta = document.createElement('span');
+        meta.className = 'ma-meta';
+        if (hasChannel) {
+            const ch = document.createElement('span');
+            ch.className = 'ma-channel';
+            ch.title = channelType;
+            ch.innerHTML = CHANNEL_ICONS[channelType](12);
+            meta.appendChild(ch);
+        }
+        if (time) {
+            const t = document.createElement('span');
+            t.className = 'ma-time';
+            t.textContent = time;
+            meta.appendChild(t);
+        }
+        return meta;
     }
 }
 

@@ -1,11 +1,12 @@
 """Memory — the mind's stream of messages, known meanings, and carried context.
 
-Messages and context cross sleep (they're what the persona carries forward). Meaning
-and plan are ephemeral — they belong to one pass of cognition. On wake, the situation
-has changed; last night's meaning or plan no longer applies. The persona decides again
-from the messages and context it has now. Known meanings live here too — the persona
-has its abilities by heart, not re-discovered every tick. They're loaded from disk at
-construction; learned meanings join them immediately via learn(); next start re-reads.
+Messages and context cross sleep (they're what the persona carries forward). Impression,
+ability, meaning, and plan are ephemeral — they belong to one pass of cognition. On
+wake, the situation has changed; last night's impression or plan no longer applies.
+The persona decides again from the messages and context it has now. Known meanings
+live here too — the persona has its abilities by heart, not re-discovered every tick.
+They're loaded from disk at construction; learned meanings join them immediately via
+learn(); next start re-reads.
 """
 
 from application.core import paths
@@ -26,6 +27,8 @@ class Memory:
     def __init__(self, persona):
         self._persona = persona
         self._messages: list[Message] = []
+        self._impression: str | None = None
+        self._ability: int = 0
         self._meaning: str | None = None
         self._plan: dict | None = None
         self._context: str | None = None
@@ -86,6 +89,24 @@ class Memory:
     @property
     def prompts(self) -> list[dict]:
         return [{"role": m.prompt.role, "content": m.prompt.content} for m in self._messages if m.prompt]
+
+    @property
+    def impression(self) -> str | None:
+        return self._impression
+
+    @impression.setter
+    def impression(self, value: str | None) -> None:
+        logger.debug("memory.impression", {"persona": self._persona.id, "value": value})
+        self._impression = value
+
+    @property
+    def ability(self) -> int:
+        return self._ability
+
+    @ability.setter
+    def ability(self, value: int) -> None:
+        logger.debug("memory.ability", {"persona": self._persona.id, "value": value})
+        self._ability = value
 
     @property
     def meaning(self) -> str | None:

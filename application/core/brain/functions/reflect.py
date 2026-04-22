@@ -56,10 +56,9 @@ async def reflect(ego, identity: str, memory: Memory) -> bool:
     logger.debug("brain.reflect result", {"persona": persona, "context": memory.context, "leftover": leftover})
 
     if leftover:
-        seed_text = f"Return to: {leftover}"
         memory.remember(Message(
-            content=seed_text,
-            prompt=Prompt(role="user", content=seed_text),
+            content=leftover,
+            prompt=Prompt(role="assistant", content=leftover),
         ))
         return False
 

@@ -26,7 +26,7 @@ class Meaning:
             "- `say(text)` — message the person.\n\n"
             "## Output\n\n"
             "```json\n"
-            '{"reason": "<what is being added or removed>",\n'
+            '{'
             ' "tool": "save_notes",\n'
             ' "content": "<old notes verbatim + new note>",\n'
             ' "say": "<short confirmation>"}\n'

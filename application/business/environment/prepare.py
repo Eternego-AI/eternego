@@ -73,7 +73,7 @@ async def prepare(
 
         if not outcome.success:
             bus.broadcast("Environment preparation failed", {"model": model})
-            return Outcome(success=False, message="Environment preparation failed")
+            return Outcome(success=False, message=f"Environment preparation failed: {outcome.message}")
 
         bus.broadcast("Environment ready", {"model": model, "provider": provider})
 
@@ -126,5 +126,5 @@ async def prepare(
         )
         return Outcome(
             success=False,
-            message="Could not connect to the local inference engine. Please make sure it is running.",
+            message=f"Could not connect to the local inference engine. Please make sure it is running. ({e})",
         )

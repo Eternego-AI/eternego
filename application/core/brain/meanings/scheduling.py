@@ -25,12 +25,12 @@ class Meaning:
             "## Output\n\n"
             "Saving and confirming:\n"
             "```json\n"
-            '{"reason": "<one sentence>", "tool": "save_destiny", "type": "<reminder|schedule>",\n'
+            '{"tool": "save_destiny", "type": "<reminder|schedule>",\n'
             ' "trigger": "<YYYY-MM-DD HH:MM>", "content": "<what>", "recurrence": "<see above>",\n'
             ' "say": "<confirmation>"}\n'
             "```\n\n"
             "Asking for clarification:\n"
             "```json\n"
-            '{"reason": "<what is missing>", "tool": "say", "text": "<question>"}\n'
+            '{"tool": "say", "text": "<question>"}\n'
             "```"
         )

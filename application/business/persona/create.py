@@ -31,13 +31,13 @@ class CreateData:
 async def create(
     name: str,
     thinking: Model,
-    channel: Channel,
+    channels: list[Channel],
     vision: Model | None = None,
     frontier: Model | None = None,
 ) -> Outcome[CreateData]:
     """It gives birth to your persona with minimum but powerful initial abilities."""
     bus.propose(
-        "Creating persona", {"name": name, "thinking": thinking, "channel": channel, "vision": vision if vision else None, "frontier": frontier if frontier else None}
+        "Creating persona", {"name": name, "thinking": thinking, "channels": channels, "vision": vision if vision else None, "frontier": frontier if frontier else None}
     )
 
     persona = None
@@ -64,7 +64,7 @@ async def create(
             version="v1",
             vision=vision,
             frontier=frontier,
-            channels=[channel],
+            channels=list(channels or []),
         )
 
         paths.create_directory(paths.home(persona.id))
@@ -113,7 +113,7 @@ async def create(
             await delete(persona)
 
         bus.broadcast("Persona creation failed", {"reason": "connection", "error": str(e)})
-        return Outcome(success=False, message="Could not connect to the local inference engine. Please make sure it is running.")
+        return Outcome(success=False, message=f"Could not connect to the local inference engine. Please make sure it is running. ({e})")
 
     except SecretStorageError as e:
         if persona is not None:

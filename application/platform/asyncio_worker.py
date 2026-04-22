@@ -80,7 +80,10 @@ class Worker:
     def cancel(self) -> None:
         """Cancel the currently running job (not the tick loop)."""
         if self._job and not self._job.done():
-            self._job.cancel()
+            try:
+                self._job.cancel()
+            except (RecursionError, Exception):
+                pass
 
     # ── Nudge ─────────────────────────────────────────────────────────────
 
@@ -109,8 +112,8 @@ class Worker:
         self.cancel()
         if self._tick_task and not self._tick_task.done():
             try:
-                await self._tick_task
-            except Exception:
+                await asyncio.wait_for(self._tick_task, timeout=5)
+            except (asyncio.TimeoutError, RecursionError, Exception):
                 pass
 
     # ── Status ────────────────────────────────────────────────────────────

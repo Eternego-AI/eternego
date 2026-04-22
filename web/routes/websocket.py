@@ -35,20 +35,20 @@ async def websocket_endpoint(persona_id: str, ws: WebSocket):
 
     if agent:
         web_gateway = next(
-            (g for g in agent.gateways if g.channel.type == "web"),
+            (g for g in agent.gateways if g["channel"].type == "web"),
             None,
         )
         if web_gateway is None:
             await agent.connect(Channel(type="web", name=persona_id))
             web_gateway = next(
-                (g for g in agent.gateways if g.channel.type == "web"),
+                (g for g in agent.gateways if g["channel"].type == "web"),
                 None,
             )
 
         if web_gateway is not None:
             async def send_to_ws(data: str) -> None:
                 await ws.send_text(data)
-            web_gateway.connection.subscribe(persona_id, send_to_ws)
+            web_gateway["connection"].subscribe(persona_id, send_to_ws)
             sender = send_to_ws
 
     try:
@@ -60,5 +60,5 @@ async def websocket_endpoint(persona_id: str, ws: WebSocket):
         logger.warning("WebSocket session error", {"error": str(e), "type": type(e).__name__})
     finally:
         if web_gateway and sender:
-            web_gateway.connection.unsubscribe(persona_id, sender)
+            web_gateway["connection"].unsubscribe(persona_id, sender)
         ws_manager.disconnect(persona_id, ws)

@@ -1,13 +1,11 @@
 """Brain — recognize stage."""
 
 from application.core import models
-from application.core.brain import meanings
 from application.core.brain.mind.memory import Memory
-from application.core.data import Message, Persona, Prompt
-from application.core.exceptions import EngineConnectionError, ModelError
+from application.core.data import Message, Prompt
+from application.core.exceptions import BrainException, ModelError
 from application.platform import logger
-
-from .escalate import escalate
+from application.platform.observer import Command, dispatch
 
 
 async def recognize(ego, identity: str, memory: Memory) -> bool:
@@ -41,50 +39,52 @@ async def recognize(ego, identity: str, memory: Memory) -> bool:
     try:
         result = await models.chat_json(persona.thinking, identity, memory.prompts, question)
     except ModelError as e:
-        invalid = "[invalid_json] Your previous response could not be parsed as JSON. Try again."
-        logger.info("brain.recognize invalid JSON, seeding retry", {"persona": persona, "error": str(e)})
-        memory.remember(Message(content=invalid, prompt=Prompt(role="user", content=invalid)))
-        return False
-
-    impression = ""
-    if isinstance(result, dict):
-        impression = str(result.get("impression", "")).strip()
-        raw = result.get("ability", 0)
-        try:
-            idx = int(raw)
-        except (TypeError, ValueError):
-            if isinstance(raw, str):
-                match = raw.strip().lower()
-                for name in meaning_names:
-                    if name == match or name.startswith(match):
-                        memory.meaning = name
-                        logger.debug("brain.recognize selected", {"persona": persona, "meaning": memory.meaning})
-                        return True
-            idx = 0
-        if 1 <= idx <= len(meaning_names):
-            memory.meaning = meaning_names[idx - 1]
-            logger.debug("brain.recognize selected", {"persona": persona, "meaning": memory.meaning})
+        logger.info("brain.recognize chose prose, dispatching as say", {"persona": persona, "raw": e.raw})
+        memory.remember(Message(content=e.raw, prompt=Prompt(role="assistant", content=e.raw)))
+        dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
+        if memory.meaning == "troubleshooting":
+            logger.warning("brain.recognize refused while on troubleshooting — raising thinking fault", {"persona": persona})
+            raise BrainException(
+                "thinking model refused classification while on troubleshooting",
+                model=persona.thinking,
+            ) from e
+        if "troubleshooting" in meaning_map:
+            memory.impression = "could not classify the moment; forcing self-diagnosis"
+            memory.meaning = "troubleshooting"
+            memory.ability = meaning_names.index("troubleshooting") + 1
+            logger.info("brain.recognize forcing troubleshooting after prose", {"persona": persona})
             return True
-
-    if not impression:
-        logger.info("brain.recognize no impression, skipping escalation", {"persona": persona})
-        struggle = "[no_impression] You could not form a clear impression of what to do. Try again with a clearer reading of the conversation."
-        memory.remember(Message(content=struggle, prompt=Prompt(role="user", content=struggle)))
+        memory.impression = ""
+        memory.ability = 0
+        memory.meaning = None
         return False
 
-    logger.debug("brain.recognize escalating", {"persona": persona, "impression": impression, "meanings_available": meaning_names})
-    meaning_name = await escalate(persona, memory, impression)
-    if meaning_name:
-        if meaning_name not in memory.meanings:
-            learned = meanings.load(persona, meaning_name)
-            if learned is not None:
-                memory.learn(meaning_name, learned)
-        memory.meaning = meaning_name
+    if not isinstance(result, dict):
+        memory.impression = ""
+        memory.ability = 0
+        return False
+
+    memory.impression = str(result.get("impression", "")).strip()
+    raw = result.get("ability", 0)
+    try:
+        idx = int(raw)
+    except (TypeError, ValueError):
+        if isinstance(raw, str):
+            match = raw.strip().lower()
+            for i, name in enumerate(meaning_names, 1):
+                if name == match or name.startswith(match):
+                    memory.ability = i
+                    memory.meaning = name
+                    logger.debug("brain.recognize selected", {"persona": persona, "meaning": memory.meaning})
+                    return True
+        idx = 0
+
+    if 1 <= idx <= len(meaning_names):
+        memory.ability = idx
+        memory.meaning = meaning_names[idx - 1]
+        logger.debug("brain.recognize selected", {"persona": persona, "meaning": memory.meaning})
         return True
 
-    struggle = "[escalation_failed] You tried to understand what this asks of you, and with the abilities you have, you could not. You do not understand this meaning yet."
-    memory.remember(Message(
-        content=struggle,
-        prompt=Prompt(role="user", content=struggle),
-    ))
-    return False
+    memory.ability = 0
+    memory.meaning = None
+    return True

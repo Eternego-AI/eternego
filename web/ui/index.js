@@ -103,9 +103,8 @@ const UI = {
 
     // ── API: persona data ────────────────────────────────────
     async fetchPersona(id) {
-        try {
-            return await this._get(`/api/persona/${id}`);
-        } catch (e) { return null; }
+        if (!this.personas.length) await this.fetchPersonas();
+        return this.personas.find(p => p.id === id) || null;
     },
 
     async fetchConversation(id) {
@@ -115,10 +114,16 @@ const UI = {
         } catch { return []; }
     },
 
-    async fetchMind(id) {
+    async fetchDiagnose(id) {
         try {
-            return await this._get(`/api/persona/${id}/mind`);
+            return await this._get(`/api/persona/${id}/diagnose`);
         } catch { return null; }
+    },
+
+    async updatePersona(id, fields) {
+        try {
+            return await this._post(`/api/persona/${id}/update`, fields);
+        } catch (e) { return { error: e.message }; }
     },
 
     async fetchOversee(id) {
@@ -201,13 +206,6 @@ const UI = {
     },
 
     // ── API: setup ───────────────────────────────────────────
-    async prepareEnvironment(model) {
-        try {
-            const data = await this._post('/api/environment/prepare', { model });
-            return { success: true, message: data.message };
-        } catch (e) { return { success: false, message: e.message }; }
-    },
-
     async createPersona(data) {
         try {
             const result = await this._post('/api/persona/create', data);
@@ -240,7 +238,8 @@ const UI = {
         return {
             fetchPersona: (id) => this.fetchPersona(id),
             fetchConversation: (id) => this.fetchConversation(id),
-            fetchMind: (id) => this.fetchMind(id),
+            fetchDiagnose: (id) => this.fetchDiagnose(id),
+            updatePersona: (id, fields) => this.updatePersona(id, fields),
             fetchOversee: (id) => this.fetchOversee(id),
             hearPersona: (id, msg) => this.hearPersona(id, msg),
             seePersona: (id, file, caption) => this.seePersona(id, file, caption),
@@ -256,7 +255,6 @@ const UI = {
             offChat: (fn) => this.offChat(fn),
             createPersona: (data) => this.createPersona(data),
             migratePersona: (fd) => this.migratePersona(fd),
-            prepareEnvironment: (model) => this.prepareEnvironment(model),
             fetchProviderConfig: () => this.fetchProviderConfig(),
             pairChannel: (code, personaId) => this.pairChannel(code, personaId),
             fetchPersonas: () => this.fetchPersonas(),
@@ -274,13 +272,14 @@ const UI = {
     enterOuterWorld(personaId) {
         this.currentPersonaId = personaId;
         this.currentMode = 'outer';
-        history.pushState(null, '', `/?p=${personaId}`);
+        history.pushState(null, '', `/persona/${personaId}`);
         this._notifyModeChange({ mode: 'outer', personaId });
     },
 
     async enterInnerWorld() {
         if (!this.currentPersonaId) return;
         this.currentMode = 'inner';
+        history.pushState(null, '', `/persona/${this.currentPersonaId}/inner`);
         const [data, persona] = await Promise.all([
             this.fetchOversee(this.currentPersonaId),
             this.fetchPersona(this.currentPersonaId),
@@ -295,38 +294,45 @@ const UI = {
 
     enterSetup() {
         this.currentMode = 'setup';
-        history.pushState(null, '', '/?v=setup');
+        history.pushState(null, '', '/setup');
         this._notifyModeChange({ mode: 'setup' });
     },
 
-    enterConversationalSetup() {
-        this.currentMode = 'conversational';
-        history.pushState(null, '', '/?v=setup-conversational');
-        const speaker = new this._SetupSpeaker();
-        speaker.init({
-            api: this._api(),
-            onCreated: (personaId) => {
-                this.fetchPersonas().then(() => this.enterOuterWorld(personaId));
-            },
-        });
-        this._notifyModeChange({ mode: 'conversational', speaker });
+    enterStatus() {
+        if (!this.currentPersonaId) return;
+        this.currentMode = 'status';
+        history.pushState(null, '', `/persona/${this.currentPersonaId}/status`);
+        this._notifyModeChange({ mode: 'status', personaId: this.currentPersonaId });
+    },
+
+    // Resolve location.pathname to a mode and dispatch.
+    async routeFromPath() {
+        const path = location.pathname || '/';
+        if (path === '/setup' || path === '/setup/') return this.enterSetup();
+        const m = path.match(/^\/persona\/([^/]+)(?:\/(inner|status))?\/?$/);
+        if (m) {
+            const id = m[1];
+            const view = m[2];
+            if (view === 'inner') {
+                this.currentPersonaId = id;
+                return this.enterInnerWorld();
+            }
+            if (view === 'status') {
+                this.currentPersonaId = id;
+                return this.enterStatus();
+            }
+            return this.enterOuterWorld(id);
+        }
+        if (this.personas.length > 0) return this.enterOuterWorld(this.personas[0].id);
+        if (path !== '/setup') return this.enterSetup();
     },
 
     _SetupApp: null,
     registerSetupApp(cls) { this._SetupApp = cls; },
-
-    _SetupSpeaker: null,
-    registerSetupSpeaker(cls) { this._SetupSpeaker = cls; },
 };
 
 window.addEventListener('popstate', () => {
-    const params = new URLSearchParams(location.search);
-    const p = params.get('p');
-    const v = params.get('v');
-    if (p) UI.enterOuterWorld(p);
-    else if (v === 'setup') UI.enterSetup();
-    else if (UI.personas.length > 0) UI.enterOuterWorld(UI.personas[0].id);
-    else UI._notifyModeChange({ mode: 'welcome' });
+    UI.routeFromPath();
 });
 
 export default UI;

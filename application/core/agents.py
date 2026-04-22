@@ -1,6 +1,6 @@
 """Ego — runtime state for a served persona (the persona's current mind)."""
 
-from application.core.brain import character, functions, situation
+from application.core.brain import functions, identities, situation
 from application.core.brain.mind import clock
 from application.core.brain.mind.memory import Memory
 from application.core import paths
@@ -30,12 +30,13 @@ class Ego:
         Names are what tick writes into the worker's event log so health_check knows
         which cognitive step succeeded or faulted."""
         return [
-            ("realize",    lambda: functions.realize(self, self.identity(), self.memory)),
-            ("recognize",  lambda: functions.recognize(self, self.identity(), self.memory)),
-            ("decide",     lambda: functions.decide(self, self.identity(), self.memory)),
-            ("experience", lambda: functions.experience(self, self.identity(), self.memory)),
-            ("transform",  lambda: functions.transform(self, self.identity(), self.memory)),
-            ("reflect",    lambda: functions.reflect(self, self.identity(), self.memory)),
+            ("realize",    lambda: functions.realize(self, self.perspective(), self.memory)),
+            ("recognize",  lambda: functions.recognize(self, self.personality(), self.memory)),
+            ("wondering",  lambda: functions.wondering(self, self.teacher(), self.memory)),
+            ("decide",     lambda: functions.decide(self, self.personality(), self.memory)),
+            ("experience", lambda: functions.experience(self, self.personality(), self.memory)),
+            ("transform",  lambda: functions.transform(self, self.personality(), self.memory)),
+            ("reflect",    lambda: functions.reflect(self, self.personality(), self.memory)),
         ]
 
     def wake(self) -> None:
@@ -43,8 +44,8 @@ class Ego:
         logger.info("Waking", {"persona": self.persona})
         self.current_situation = situation.wake
         self.memory.remember(Message(
-            content=f"Wake up {self.persona.name}",
-            prompt=Prompt(role="user", content=f"Wake up {self.persona.name}"),
+            content="wake up",
+            prompt=Prompt(role="user", content="wake up"),
         ))
         self.worker.run(clock.tick, self.consciousness(), self.worker)
 
@@ -53,8 +54,8 @@ class Ego:
         logger.info("Sleeping", {"persona": self.persona})
         self.current_situation = situation.sleep
         self.memory.remember(Message(
-            content="Go to sleep",
-            prompt=Prompt(role="user", content="Go to sleep"),
+            content="go to sleep",
+            prompt=Prompt(role="user", content="go to sleep"),
         ))
         await self.settle()
         await sleep_spec(self)
@@ -82,52 +83,26 @@ class Ego:
         entry = {
             "role": "person",
             "content": message.content,
-            "channel": message.channel.type if message.channel else "",
+            "channel": {"type": message.channel.type, "name": message.channel.name or ""} if message.channel else None,
             "time": datetimes.iso_8601(datetimes.now()),
         }
         if message.media:
             entry["media"] = {"source": message.media.source, "caption": message.media.caption}
         paths.append_jsonl(paths.conversation(self.persona.id), entry)
         if not message.media:
-            message.prompt = Prompt(role="user", content=f"The person said: {message.content}")
+            message.prompt = Prompt(role="user", content=message.content)
         self.memory.remember(message)
         self.current_situation = situation.normal
         self.worker.nudge()
 
-    def identity(self) -> str:
-        """Return assembled identity text in onion order: character → situation → ego."""
-        sections = [character.shape(self.persona)]
+    def personality(self) -> str:
+        """The persona's own voice — character, situation, person facts, carried context."""
+        return identities.personality(self.persona, self.current_situation, self.memory.context)
 
-        if self.current_situation:
-            situation_text = self.current_situation(self.persona.id)
-            if situation_text:
-                sections.append(situation_text)
+    def perspective(self) -> str:
+        """A neutral observer's voice — reads the persona's conversation from outside."""
+        return identities.perspective(self.persona)
 
-        ego = []
-        person_id = paths.read(paths.person_identity(self.persona.id))
-        if person_id.strip():
-            ego.append("## The Person\n\n" + person_id.strip())
-
-        traits = paths.read(paths.person_traits(self.persona.id))
-        if traits.strip():
-            ego.append("## The Person's Traits\n\n" + traits.strip())
-
-        wishes = paths.read(paths.wishes(self.persona.id))
-        if wishes.strip():
-            ego.append("## What They Wish For\n\n" + wishes.strip())
-
-        struggles = paths.read(paths.struggles(self.persona.id))
-        if struggles.strip():
-            ego.append("## What Stands in Their Way\n\n" + struggles.strip())
-
-        persona_trait = paths.read(paths.persona_trait(self.persona.id))
-        if persona_trait.strip():
-            ego.append("## Your Personality With Them\n\n" + persona_trait.strip())
-
-        if self.memory.context:
-            ego.append("## Recent Context\n\n" + self.memory.context.strip())
-
-        if ego:
-            sections.append("# What You Know\n\n" + "\n\n".join(ego))
-
-        return "\n\n".join(sections)
+    def teacher(self) -> str:
+        """An architect's voice — writes new abilities for the persona."""
+        return identities.teacher(self.persona)

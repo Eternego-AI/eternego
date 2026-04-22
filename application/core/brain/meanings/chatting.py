@@ -21,7 +21,7 @@ class Meaning:
             "- `text` (string): the message to send. An empty string means you stay silent this turn.\n\n"
             "## Output\n\n"
             "```json\n"
-            '{"reason": "<one short sentence>",\n'
+            '{'
             ' "tool": "say",\n'
             ' "text": "<your message, or an empty string for silence>"}\n'
             "```"

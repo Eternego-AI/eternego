@@ -16,7 +16,8 @@ from fastapi.responses import FileResponse
 from application.business import environment, persona as persona_spec
 from application.core import paths
 import manager
-from web.requests import EnvironmentPrepareRequest, PersonaCreateRequest, HearRequest, PersonaControlRequest, PairRequest
+from web import health as health_view
+from web.requests import PersonaCreateRequest, HearRequest, PersonaControlRequest, PairRequest
 
 
 router = APIRouter(prefix="/api")
@@ -38,20 +39,7 @@ async def get_provider_config():
 async def list_personas():
     outcome = await persona_spec.get_list()
     personas_list = outcome.data.personas if outcome.data else []
-    return {"personas": [{"id": p.id, "name": p.name} for p in personas_list]}
-
-
-@router.post("/environment/prepare")
-async def prepare_environment(request: EnvironmentPrepareRequest):
-    outcome = await environment.prepare(
-        url=request.url,
-        model=request.model or None,
-        provider=request.provider,
-        api_key=request.api_key,
-    )
-    if not outcome.success or not outcome.data:
-        raise HTTPException(status_code=400, detail=outcome.message)
-    return outcome.data
+    return {"personas": [_persona_view(p) for p in personas_list]}
 
 
 # ── Create / Migrate ──────────────────────────────────────────────────────────
@@ -92,15 +80,22 @@ async def create_persona(request: PersonaCreateRequest):
             raise HTTPException(status_code=400, detail=outcome.message)
         frontier = outcome.data.model
 
-    try:
-        channel = await manager.validate_channel(request.channel_type, request.channel_credentials)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Channel validation failed: {e}")
+    channels = []
+    if request.telegram_token:
+        try:
+            channels.append(await manager.validate_channel("telegram", {"token": request.telegram_token}))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Telegram validation failed: {e}")
+    if request.discord_token:
+        try:
+            channels.append(await manager.validate_channel("discord", {"token": request.discord_token}))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Discord validation failed: {e}")
 
     outcome = await persona_spec.create(
         name=request.name,
         thinking=thinking,
-        channel=channel,
+        channels=channels,
         vision=vision,
         frontier=frontier,
     )
@@ -131,6 +126,8 @@ async def migrate_persona(
     frontier_provider: str = Form(None),
     frontier_api_key: str = Form(None),
     frontier_url: str = Form(None),
+    telegram_token: str = Form(None),
+    discord_token: str = Form(None),
 ):
     filename = diary.filename or "diary"
     tmp_dir = tempfile.mkdtemp()
@@ -172,12 +169,25 @@ async def migrate_persona(
             raise HTTPException(status_code=400, detail=outcome.message)
         frontier = outcome.data.model
 
+    channels = []
+    if telegram_token:
+        try:
+            channels.append(await manager.validate_channel("telegram", {"token": telegram_token}))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Telegram validation failed: {e}")
+    if discord_token:
+        try:
+            channels.append(await manager.validate_channel("discord", {"token": discord_token}))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Discord validation failed: {e}")
+
     outcome = await persona_spec.migrate(
         diary_path=tmp_path,
         phrase=phrase,
         thinking=thinking,
         vision=vision,
         frontier=frontier,
+        channels=channels,
     )
     if not outcome.success or not outcome.data:
         raise HTTPException(status_code=400, detail=outcome.message)
@@ -192,21 +202,23 @@ async def migrate_persona(
 
 # ── Persona config routes (available whether active or not) ──────────────────
 
-@router.get("/persona/{persona_id}")
-async def get_persona(persona_id: str):
-    find = await persona_spec.find(persona_id)
-    if not find.success or not find.data:
-        raise HTTPException(status_code=404, detail=find.message)
-    p = find.data.persona
-    running = manager.find(persona_id) is not None
+def _model_view(model):
+    if model is None:
+        return None
+    return {"name": model.name, "provider": model.provider, "url": model.url}
+
+
+def _persona_view(p):
     return {
         "id": p.id,
         "name": p.name,
         "base_model": p.base_model,
-        "model": p.thinking.name if p.thinking else "",
         "birthday": p.birthday or "",
-        "running": running,
+        "running": manager.find(p.id) is not None,
         "status": p.status,
+        "thinking": _model_view(p.thinking),
+        "vision": _model_view(p.vision),
+        "frontier": _model_view(p.frontier),
         "channels": [
             {
                 "type": ch.type,
@@ -216,6 +228,80 @@ async def get_persona(persona_id: str):
             for ch in (p.channels or [])
         ],
     }
+
+
+@router.get("/persona/{persona_id}/diagnose")
+async def diagnose_persona(persona_id: str):
+    find = await persona_spec.find(persona_id)
+    if not find.success or not find.data:
+        raise HTTPException(status_code=404, detail=find.message)
+    outcome = await persona_spec.diagnose(find.data.persona)
+    if not outcome.success or not outcome.data:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return {
+        "status": outcome.data.status,
+        "mind": outcome.data.mind,
+        "uptime": health_view.uptime_grid(outcome.data.health),
+    }
+
+
+async def _validate_model(field):
+    if not field:
+        return None
+    prep = await environment.prepare(
+        url=field.get("url"),
+        model=field.get("model"),
+        provider=field.get("provider"),
+        api_key=field.get("api_key"),
+    )
+    if not prep.success or not prep.data:
+        raise HTTPException(status_code=400, detail=prep.message)
+    return prep.data.model
+
+
+@router.post("/persona/{persona_id}/update")
+async def update_persona(persona_id: str, request: dict):
+    find = await persona_spec.find(persona_id)
+    if not find.success or not find.data:
+        raise HTTPException(status_code=404, detail=find.message)
+
+    clear_vision = bool(request.get("clear_vision"))
+    clear_frontier = bool(request.get("clear_frontier"))
+    thinking = await _validate_model(request.get("thinking"))
+    vision = None if clear_vision else await _validate_model(request.get("vision"))
+    frontier = None if clear_frontier else await _validate_model(request.get("frontier"))
+
+    outcome = await persona_spec.update(
+        find.data.persona,
+        status=request.get("status"),
+        thinking=thinking,
+        vision=vision,
+        frontier=frontier,
+        clear_vision=clear_vision,
+        clear_frontier=clear_frontier,
+    )
+    if not outcome.success or not outcome.data:
+        raise HTTPException(status_code=400, detail=outcome.message)
+
+    persona = outcome.data.persona
+    is_running = manager.find(persona_id) is not None
+    models_changed = thinking is not None or vision is not None or frontier is not None or clear_vision or clear_frontier
+
+    try:
+        if persona.status == "active":
+            if is_running:
+                await manager.restart(persona_id)
+            else:
+                await manager.add(persona)
+        elif persona.status in ("hibernate", "sick"):
+            if is_running:
+                await manager.remove(persona_id)
+        elif models_changed and is_running:
+            await manager.restart(persona_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Updated but lifecycle change failed: {e}")
+
+    return {"status": persona.status, "running": manager.find(persona_id) is not None}
 
 
 @router.get("/persona/{persona_id}/oversee")
@@ -269,15 +355,6 @@ def _require_agent(persona_id: str):
     return agent
 
 
-@router.get("/persona/{persona_id}/mind")
-async def get_mind(persona_id: str):
-    agent = _require_agent(persona_id)
-    outcome = await persona_spec.mind(agent.ego)
-    if not outcome.success or not outcome.data:
-        raise HTTPException(status_code=404, detail=outcome.message)
-    return outcome.data
-
-
 @router.post("/persona/{persona_id}/sleep")
 async def sleep_persona(persona_id: str):
     agent = _require_agent(persona_id)
@@ -290,37 +367,25 @@ async def sleep_persona(persona_id: str):
 @router.post("/persona/{persona_id}/hear")
 async def hear_persona(persona_id: str, request: HearRequest):
     agent = _require_agent(persona_id)
-    gw = next((g for g in agent.gateways if g.channel.type == "web"), None)
-    outcome = await persona_spec.hear(agent.ego, content=request.message, gateway=gw)
-    if not outcome.success:
-        raise HTTPException(status_code=500, detail=outcome.message)
+    gw = next((g for g in agent.gateways if g["channel"].type == "web"), None)
+    if gw is None:
+        raise HTTPException(status_code=400, detail="Web channel not connected")
+    gw["connection"].dispatch_message(persona_id, request.message)
     return {"status": "received"}
 
 
 @router.post("/persona/{persona_id}/see")
 async def see_persona(persona_id: str, image: UploadFile = File(...), caption: str = Form("")):
     agent = _require_agent(persona_id)
+    gw = next((g for g in agent.gateways if g["channel"].type == "web"), None)
+    if gw is None:
+        raise HTTPException(status_code=400, detail="Web channel not connected")
     suffix = Path(image.filename or "").suffix or ".jpg"
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    try:
-        tmp.write(await image.read())
-        tmp.close()
-        gw = next((g for g in agent.gateways if g.channel.type == "web"), None)
-        saved = gw.save_media_copy(tmp.name) if gw else tmp.name
-        outcome = await persona_spec.see(
-            agent.ego,
-            source=saved,
-            caption=caption or "",
-            gateway=gw,
-        )
-        if not outcome.success:
-            raise HTTPException(status_code=500, detail=outcome.message)
-        return {"status": "received"}
-    finally:
-        try:
-            Path(tmp.name).unlink(missing_ok=True)
-        except Exception:
-            pass
+    tmp.write(await image.read())
+    tmp.close()
+    gw["connection"].dispatch_media(persona_id, tmp.name, caption or "")
+    return {"status": "received"}
 
 
 @router.post("/persona/{persona_id}/feed")

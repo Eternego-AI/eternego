@@ -24,18 +24,15 @@ async def decide(ego, identity: str, memory: Memory) -> bool:
     try:
         result = await models.chat_json(persona.thinking, identity, memory.prompts, question)
     except ModelError as e:
-        logger.warning("brain.decide invalid JSON, seeding retry", {"persona": persona, "meaning": memory.meaning, "error": str(e)})
-        invalid = "[invalid_json] Your previous response could not be parsed as JSON. Fix the issue or troubleshoot."
-        memory.remember(Message(
-            content=invalid,
-            prompt=Prompt(role="user", content=invalid),
-        ))
-        return False
+        logger.info("brain.decide chose prose, dispatching as say", {"persona": persona, "meaning": memory.meaning, "raw": e.raw})
+        memory.remember(Message(content=e.raw, prompt=Prompt(role="assistant", content=e.raw)))
+        dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
+        return True
 
     if not isinstance(result, dict):
         return False
     memory.plan = result
-    logger.debug("brain.decide plan", {"persona": persona, "plan": result, "reason": result.get("reason")})
+    logger.debug("brain.decide plan", {"persona": persona, "plan": result})
     if result.get("say") or result.get("tool") == "say":
-        dispatch(Command("Persona wants to type", {"persona": persona, "channel_type": "telegram"}))
+        dispatch(Command("Persona wants to type", {"persona": persona}))
     return True

@@ -18,6 +18,5 @@ async def ready() -> Outcome[None]:
         bus.broadcast("Engine readiness check failed", {"error": str(e)})
         return Outcome(
             success=False,
-            message="""Could not start the local inference engine. 
-            Please reinstall following the installation guide at https://eternego.ai""",
+            message=f"Could not start the local inference engine ({e}). Please reinstall following the installation guide at https://eternego.ai",
         )

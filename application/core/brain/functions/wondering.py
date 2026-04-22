@@ -1,15 +1,37 @@
-"""Brain — escalate stage."""
+"""Brain — wondering stage.
+
+Runs after recognize. If recognize chose an ability (memory.ability != 0),
+wondering passes through — nothing to learn in this moment. If recognize
+produced an impression but no existing ability matched (memory.ability == 0),
+wondering consults a teacher — either naming an existing meaning that fits
+(recognize simply missed it) or writing a new one the persona will carry
+forward.
+
+Wondering uses the teacher identity, not the persona's. It is not the
+persona; it is the architect who builds the persona's abilities.
+"""
 
 from application.core import models, paths, tools
 from application.core.brain import meanings
 from application.core.brain.mind.memory import Memory
-from application.core.data import Persona
+from application.core.data import Message, Prompt
 from application.core.exceptions import EngineConnectionError, ModelError
 from application.platform import logger
 
 
-async def escalate(persona: Persona, memory: Memory, impression: str) -> str | None:
-    logger.info("brain.escalate", {"persona": persona, "impression": impression})
+async def wondering(ego, identity: str, memory: Memory) -> bool:
+    persona = ego.persona
+    if memory.ability != 0:
+        return True
+
+    impression = (memory.impression or "").strip()
+    if not impression:
+        logger.debug("brain.wondering skipping — no impression", {"persona": persona})
+        struggle = "You could not form a clear impression of what to do. Try again with a clearer reading of the conversation."
+        memory.remember(Message(content=struggle, prompt=Prompt(role="user", content=f"Subconscious: {struggle}")))
+        return False
+
+    logger.debug("brain.wondering", {"persona": persona, "impression": impression})
 
     meaning_map = memory.meanings
     existing = "\n".join(
@@ -29,12 +51,6 @@ async def escalate(persona: Persona, memory: Memory, impression: str) -> str | N
     )
     tools_doc = builtin_tools + "\n\n### Platform tools\n\n" + tools.document()
     workspace = str(paths.workspace(persona.id))
-
-    identity = (
-        "You are the architect behind a persona's abilities. A persona is an AI being that "
-        "lives on a person's hardware. It interacts through meanings — each meaning is one "
-        "ability the persona can perform, delivered as a Python module with a Meaning class."
-    )
 
     reality = [{"role": "user", "content": (
         f"## Existing meanings\n\n{existing}\n\n"
@@ -93,12 +109,22 @@ async def escalate(persona: Persona, memory: Memory, impression: str) -> str | N
         "covering what the persona does and ending with the `## Response Format`. If the ability "
         "needs the persona to see a tool's output before replying, write two sections: "
         "`## When the person first asks you` (ending with the tool-use format), and "
-        "`## When the tool has answered you` (opening by naming the `[tool_name]` result message "
-        "the persona will see in the conversation, and ending with the `say` format for the reply).\n\n"
-        "5. **`## Response Format`** — the JSON schema the persona returns. Keys are `reason` "
-        "(one short sentence), `tool` (the tool name, or `say`), the tool's parameters, and "
-        "optionally `say` (a message to the person alongside a tool call). Placeholder values "
-        "inside the JSON block are abstract — never literal dates, names, or phrases.\n\n"
+        "`## When the tool has answered you` (opening by naming the `TOOL_RESULT` the persona will "
+        "see in the conversation, and ending with the `say` format for the reply).\n\n"
+        "5. **`## Response Format`** — the JSON schema the persona returns. Keys are `tool` "
+        "(the tool name, or `say`), the tool's parameters, and optionally `say` (a message to "
+        "the person alongside a tool call). Placeholder values inside the JSON block are "
+        "abstract — never literal dates, names, or phrases.\n\n"
+        "## Sensitive data\n\n"
+        "If the ability involves credentials, API keys, access tokens, or any secret the persona "
+        "should not see plainly, design the prompt so the secret never lands in tool output the "
+        "persona reads back. Do not instruct the persona to read a credential file and then pass "
+        "the contents to the next tool — that puts the secret into memory and every future prompt. "
+        "Instead, compose a single step that lets the body resolve the secret at execution time: "
+        "a shell command that reads the file and pipes it into the downstream call in one line, "
+        "a tool invocation where the credential reference is a path or name (not its value), or "
+        "any form where the secret appears only inside the command and never in what the persona "
+        "sees afterwards. The principle: secrets flow through the body, not through the mind.\n\n"
         "## Module structure\n\n"
         "The Python module you return must fit this shape:\n\n"
         "```python\n"
@@ -126,13 +152,11 @@ async def escalate(persona: Persona, memory: Memory, impression: str) -> str | N
         "meaning or creating a new one.\n\n"
         "If an existing meaning fits:\n\n"
         "```json\n"
-        "{\"reason\": \"<one short sentence on why this meaning fits>\",\n"
-        " \"existing\": \"<name of the existing meaning>\"}\n"
+        "{\"existing\": \"<name of the existing meaning>\"}\n"
         "```\n\n"
         "If a new meaning is needed:\n\n"
         "```json\n"
-        "{\"reason\": \"<one short sentence on the design choice>\",\n"
-        " \"new_meaning\": \"<gerund_verb_subject>\",\n"
+        "{\"new_meaning\": \"<gerund_verb_subject>\",\n"
         " \"code_lines\": [\"<line 1>\", \"<line 2>\", \"...\"]}\n"
         "```\n\n"
         "The `code_lines` array is one element per line, joined by the runtime with `\\n`."
@@ -142,43 +166,57 @@ async def escalate(persona: Persona, memory: Memory, impression: str) -> str | N
     try:
         result = await models.chat_json(model, identity, reality, question)
     except ModelError as e:
-        logger.warning("brain.escalate produced invalid JSON, skipping", {"persona": persona, "model": model.name, "error": str(e)})
-        return None
+        logger.warning("brain.wondering produced invalid JSON, skipping", {"persona": persona, "model": model.name, "error": str(e)})
+        struggle = "You tried to understand what this asks of you, and with the abilities you have, you could not. You do not understand this meaning yet."
+        memory.remember(Message(content=struggle, prompt=Prompt(role="user", content=f"Subconscious: {struggle}")))
+        return False
     except EngineConnectionError as e:
         if model == persona.thinking:
             raise
-        logger.warning("brain.escalate frontier unreachable, falling back to thinking", {"persona": persona, "frontier_error": str(e)})
+        logger.warning("brain.wondering frontier unreachable, falling back to thinking", {"persona": persona, "frontier_error": str(e)})
         try:
             result = await models.chat_json(persona.thinking, identity, reality, question)
         except ModelError as e2:
-            logger.warning("brain.escalate fallback produced invalid JSON", {"persona": persona, "error": str(e2)})
-            return None
+            logger.warning("brain.wondering fallback produced invalid JSON", {"persona": persona, "error": str(e2)})
+            struggle = "You tried to understand what this asks of you, and with the abilities you have, you could not. You do not understand this meaning yet."
+            memory.remember(Message(content=struggle, prompt=Prompt(role="user", content=f"Subconscious: {struggle}")))
+            return False
 
-    if not isinstance(result, dict):
-        return None
+    meaning_name: str | None = None
 
-    chosen_existing = str(result.get("existing", "")).strip()
-    if chosen_existing:
-        if chosen_existing in meaning_map:
-            logger.debug("brain.escalate matched existing", {"persona": persona, "meaning": chosen_existing})
-            return chosen_existing
-        logger.warning("brain.escalate named nonexistent meaning", {"persona": persona, "name": chosen_existing})
-        return None
+    if isinstance(result, dict):
+        chosen_existing = str(result.get("existing", "")).strip()
+        if chosen_existing:
+            if chosen_existing in meaning_map:
+                logger.debug("brain.wondering matched existing", {"persona": persona, "meaning": chosen_existing})
+                meaning_name = chosen_existing
+            else:
+                logger.warning("brain.wondering named nonexistent meaning", {"persona": persona, "name": chosen_existing})
+        else:
+            name = str(result.get("new_meaning", "") or result.get("name", "")).strip()
+            code_lines = result.get("code_lines")
+            if isinstance(code_lines, list) and code_lines:
+                code = "\n".join(str(line) for line in code_lines)
+            else:
+                code = str(result.get("code", "")).strip()
+            if name and code:
+                try:
+                    meaning_name = meanings.save_meaning(persona.id, name, code)
+                    logger.debug("brain.wondering created new", {"persona": persona, "meaning": meaning_name})
+                except (SyntaxError, ValueError) as e:
+                    logger.warning("brain.wondering produced invalid code", {"persona": persona, "name": name, "error": str(e)})
 
-    name = str(result.get("new_meaning", "") or result.get("name", "")).strip()
-    code_lines = result.get("code_lines")
-    if isinstance(code_lines, list) and code_lines:
-        code = "\n".join(str(line) for line in code_lines)
-    else:
-        code = str(result.get("code", "")).strip()
-    if not name or not code:
-        return None
+    if meaning_name:
+        if meaning_name not in memory.meanings:
+            learned = meanings.load(persona, meaning_name)
+            if learned is not None:
+                memory.learn(meaning_name, learned)
+        memory.meaning = meaning_name
+        meaning_names = list(memory.meanings.keys())
+        if meaning_name in meaning_names:
+            memory.ability = meaning_names.index(meaning_name) + 1
+        return True
 
-    try:
-        saved_name = meanings.save_meaning(persona.id, name, code)
-    except (SyntaxError, ValueError) as e:
-        logger.warning("brain.escalate produced invalid code", {"persona": persona, "name": name, "error": str(e)})
-        return None
-
-    logger.debug("brain.escalate created new", {"persona": persona, "meaning": saved_name})
-    return saved_name
+    struggle = "You tried to understand what this asks of you, and with the abilities you have, you could not. You do not understand this meaning yet."
+    memory.remember(Message(content=struggle, prompt=Prompt(role="user", content=f"Subconscious: {struggle}")))
+    return False

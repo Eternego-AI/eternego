@@ -11,7 +11,7 @@ class OuterWorld extends Mode {
         outer-world {
             position: fixed;
             inset: 0;
-            padding: 2.5em 3em 3.5em;
+            padding: 1em 3em 1.5em;
             min-height: 0;
             background:
                 radial-gradient(ellipse at 50% 45%, rgba(140,160,255,0.025) 0%, transparent 50%),
@@ -25,6 +25,21 @@ class OuterWorld extends Mode {
             display: flex;
             gap: var(--space-sm);
             z-index: 2;
+        }
+        outer-world .ow-orb-hit {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 180px;
+            height: 180px;
+            border-radius: var(--radius-full);
+            background: transparent;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            z-index: 2;
+            pointer-events: auto;
         }
         outer-world .ow-pair-btn {
             display: flex;
@@ -69,14 +84,21 @@ class OuterWorld extends Mode {
         this._pairTray = document.createElement('div');
         this._pairTray.className = 'ow-pair-tray';
 
+        this._orbHit = document.createElement('button');
+        this._orbHit.className = 'ow-orb-hit';
+        this._orbHit.type = 'button';
+        this._orbHit.setAttribute('aria-label', "Open persona's mind");
+        this._orbHit.addEventListener('click', () => this._enterInner());
+
         this.appendChild(this._mind);
         this.appendChild(this._conversation);
+        this.appendChild(this._orbHit);
         this.appendChild(this._pairTray);
 
         // Chat handler — updates both conversation and mind
         this._chatHandler = (msg) => {
             if (msg.persona_id === this._personaId) {
-                this._conversation.receiveMessage(msg.content);
+                this._conversation.receiveMessage(msg.content, 'web');
                 this._mind.setState('speaking');
                 setTimeout(() => this._mind.setState('idle'), 800);
             }
@@ -99,12 +121,18 @@ class OuterWorld extends Mode {
                 else if (title.includes('answered') || title.includes('queried')) this._mind.setState('idle');
 
                 if (title === 'heard' && details.content && details.channel?.type && details.channel.type !== 'web') {
-                    this._conversation.addMessage('person', details.content);
+                    this._conversation.addMessage('person', details.content, undefined, details.channel.type);
                 }
 
                 if (title === 'seen' && details.source && details.channel?.type && details.channel.type !== 'web') {
                     const url = this._props.api.mediaUrl(this._personaId, details.source);
-                    this._conversation.addMediaMessage('person', url, details.caption || '');
+                    this._conversation.addMediaMessage('person', url, details.caption || '', undefined, details.channel.type);
+                }
+
+                if (title === 'said' && details.content && details.channel?.type && details.channel.type !== 'web') {
+                    this._conversation.receiveMessage(details.content, details.channel.type);
+                    this._mind.setState('speaking');
+                    setTimeout(() => this._mind.setState('idle'), 800);
                 }
 
                 if (title.startsWith('pipeline:') && details.stage) {
@@ -122,19 +150,18 @@ class OuterWorld extends Mode {
             const data = await this._props.api.fetchPersona(personaId);
             this._personaName = data.name;
             this._personaBirthday = data.birthday || null;
-            this._conversation.setPersona(personaId, data.name);
+            this._personaStatus = data.status;
+            this._conversation.setPersona(personaId, data.name, this._personaBirthday);
             this._mind.setPersona(data.name);
             this._renderPairTray(data.channels || []);
 
-            // Check if persona is running
-            try {
-                const mindData = await this._props.api.fetchMind(personaId);
-                this._mind.setState('idle');
-                this._mind.setGraph(mindData);
-            } catch {
-                this._mind.setState('stopped');
-            }
-        } catch {}
+            if (data.running === false) this._mind.setState('stopped');
+            else if (data.status === 'sick') this._mind.setState('stopped');
+            else this._mind.setState('idle');
+        } catch {
+            this._mind.setState('stopped');
+            this._personaStatus = 'hibernate';
+        }
     }
 
     _renderPairTray(channels) {

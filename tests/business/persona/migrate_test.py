@@ -17,7 +17,7 @@ async def test_migrate_restores_persona_from_diary():
         os.environ["ETERNEGO_HOME"] = tmp
 
         def run(url):
-            outcome = asyncio.run(spec.create(name="MigrateMe", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={})))
+            outcome = asyncio.run(spec.create(name="MigrateMe", thinking=Model(name="llama3", url=url), channels=[Channel(type="web", credentials={})]))
             assert outcome.success, outcome.message
             persona_id = outcome.data.persona.id
             phrase = outcome.data.recovery_phrase
@@ -37,7 +37,7 @@ async def test_migrate_restores_persona_from_diary():
             assert outcome.success, outcome.message
 
             # 5. Migrate using diary and recovery phrase
-            outcome = asyncio.run(spec.migrate(str(diary_file), phrase, Model(name="llama3", url=url), None, None))
+            outcome = asyncio.run(spec.migrate(str(diary_file), phrase, Model(name="llama3", url=url), None, None, []))
 
             assert outcome.success, outcome.message
             assert outcome.data.persona.id

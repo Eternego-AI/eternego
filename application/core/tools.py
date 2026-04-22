@@ -3,7 +3,6 @@
 import asyncio
 import inspect
 
-from application.core.data import Message, Prompt
 from application.platform.tool import Tool, registered_tools
 from application.platform import logger
 
@@ -16,7 +15,7 @@ def discover() -> list[Tool]:
 def document() -> str:
     """Return a description of available tools for model prompts.
 
-    Used by escalate() when teaching the frontier what tools exist. The tool
+    Used by wondering() when teaching the frontier what tools exist. The tool
     list is generated from the @tool registry — adding a new platform tool with
     @tool makes it appear here automatically.
     """
@@ -35,20 +34,20 @@ def document() -> str:
     )
 
 
-async def call(tool_name: str, **params) -> Message:
-    """Find a tool by name, call it, and return the result as a Message.
+async def call(tool_name: str, **params) -> tuple[str, str]:
+    """Find a tool by name, call it. Returns (status, result).
 
-    String results become a text Message with a [tool] prompt.
-    Dict results with 'source' become a Media Message.
-    Tuple results (code, output) from shell functions are formatted as text.
-    Exceptions become [tool_error] Messages.
+    status is one of: ok, failed, error.
+    - ok: tool ran and returned a value (or exit 0 for tuple returns).
+    - failed: tool ran but returned a non-zero exit (tuple return with code != 0).
+    - error: tool raised or didn't exist.
+    result is the stringified output.
     """
     logger.debug("tools.call", {"tool": tool_name, "params": params})
     tools = {t.name: t for t in registered_tools()}
     tool = tools.get(tool_name)
     if not tool:
-        content = f"[error] Unknown tool: {tool_name}"
-        return Message(content=content, prompt=Prompt(role="user", content=f"[{tool_name}] {content}"))
+        return ("error", f"unknown tool: {tool_name}")
 
     try:
         if inspect.iscoroutinefunction(tool.fn):
@@ -58,16 +57,10 @@ async def call(tool_name: str, **params) -> Message:
 
         if isinstance(result, tuple) and len(result) == 2:
             code, output = result
-            if code != 0:
-                content = f"[exit code {code}] {output}"
-            else:
-                content = str(output)
-            return Message(content=content, prompt=Prompt(role="user", content=f"[{tool_name}] {content}"))
+            return ("ok" if code == 0 else "failed", str(output))
 
-        content = str(result)
-        return Message(content=content, prompt=Prompt(role="user", content=f"[{tool_name}] {content}"))
+        return ("ok", str(result))
 
     except Exception as e:
         logger.error("tools.call exception", {"tool": tool_name, "error": str(e)})
-        content = f"[tool_error] {e}"
-        return Message(content=content, prompt=Prompt(role="user", content=content))
+        return ("error", str(e))

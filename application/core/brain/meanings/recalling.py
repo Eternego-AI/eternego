@@ -28,14 +28,14 @@ class Meaning:
             "## Output\n\n"
             "Looking up a past conversation:\n"
             "```json\n"
-            '{"reason": "<one sentence>", "tool": "recall_history", "date": "<YYYY-MM-DD>", "say": "<lead-in>"}\n'
+            '{"tool": "recall_history", "date": "<YYYY-MM-DD>", "say": "<lead-in>"}\n'
             "```\n\n"
             "Looking up scheduled events:\n"
             "```json\n"
-            '{"reason": "<one sentence>", "tool": "check_calendar", "date": "<YYYY-MM-DD or YYYY-MM>", "say": "<lead-in>"}\n'
+            '{"tool": "check_calendar", "date": "<YYYY-MM-DD or YYYY-MM>", "say": "<lead-in>"}\n'
             "```\n\n"
             "Asking for clarification:\n"
             "```json\n"
-            '{"reason": "<what is missing>", "tool": "say", "text": "<question>"}\n'
+            '{"tool": "say", "text": "<question>"}\n'
             "```"
         )

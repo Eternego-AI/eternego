@@ -17,7 +17,7 @@ async def test_sleep_succeeds():
 
         def run(url):
             outcome = asyncio.run(spec.create(
-                name="SleepBot", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={}),
+                name="SleepBot", thinking=Model(name="llama3", url=url), channels=[Channel(type="web", credentials={})],
             ))
             assert outcome.success, outcome.message
             persona_id = outcome.data.persona.id

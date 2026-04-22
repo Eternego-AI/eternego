@@ -9,8 +9,10 @@ import os
 import threading
 
 from application.business.outcome import Outcome
+from application.core import bus, paths
 from application.core.agents import Ego
 from application.core.data import Channel, Persona
+from application.platform import datetimes
 from application.platform import discord as discord_platform
 from application.platform import logger
 from application.platform import telegram as telegram_platform
@@ -46,6 +48,7 @@ class Agent:
         self.connections = connections
         self.gateways: list[dict] = []
         self.pairing_codes: dict = {}
+        self.last_channel: Channel | None = None
         self._pending_connects: list = []
         self._subscribers: list = []
 
@@ -73,7 +76,9 @@ class Agent:
             for gw in self.gateways:
                 if gw["channel"].type != channel_type:
                     continue
-                if gw["channel"].name and gw["channel"].name != target:
+                if not gw["channel"].verified_at:
+                    continue
+                if gw["channel"].name != target:
                     continue
                 if token and gw["token"] != token:
                     continue
@@ -140,21 +145,43 @@ class Agent:
             text = command.details.get("text", "")
             if not text:
                 return
-            for gw in list(self.gateways):
+            if self.last_channel:
+                targets = [gw for gw in self.gateways
+                           if gw["channel"].type == self.last_channel.type
+                           and gw["channel"].name == self.last_channel.name]
+                entry_channel = {"type": self.last_channel.type, "name": self.last_channel.name or ""}
+            else:
+                targets = list(self.gateways)
+                entry_channel = None
+            for gw in targets:
                 try:
                     await gw["connection"].send(gw["token"], gw["channel"].name, text)
                 except Exception:
                     pass
+            paths.append_jsonl(paths.conversation(persona.id), {
+                "role": "persona",
+                "content": text,
+                "channel": entry_channel,
+                "time": datetimes.iso_8601(datetimes.now()),
+            })
+            bus.broadcast("Said", {
+                "persona": persona,
+                "content": text,
+                "channel": self.last_channel,
+            })
 
         async def on_typing(command: Command):
             if command.title != "Persona wants to type":
                 return
             if command.details.get("persona") is not persona:
                 return
-            channel_type = command.details.get("channel_type")
-            for gw in list(self.gateways):
-                if channel_type and gw["channel"].type != channel_type:
-                    continue
+            if self.last_channel:
+                targets = [gw for gw in self.gateways
+                           if gw["channel"].type == self.last_channel.type
+                           and gw["channel"].name == self.last_channel.name]
+            else:
+                targets = list(self.gateways)
+            for gw in targets:
                 try:
                     await gw["connection"].typing(gw["token"], gw["channel"].name)
                 except Exception:
@@ -183,6 +210,8 @@ class Agent:
             if gw is None:
                 await try_claim("telegram", token, chat_id)
                 return
+            if gw["channel"].verified_at:
+                self.last_channel = gw["channel"]
             if signal.title == "Telegram message received":
                 await hear(ego, content=signal.details.get("content", ""), channel=gw["channel"])
             else:
@@ -215,6 +244,8 @@ class Agent:
             if gw is None:
                 await try_claim("discord", token, channel_id)
                 return
+            if gw["channel"].verified_at:
+                self.last_channel = gw["channel"]
             attachment_url = signal.details.get("attachment_url", "")
             if attachment_url:
                 filename = signal.details.get("attachment_filename", "")
@@ -233,6 +264,7 @@ class Agent:
             gw = next((g for g in self.gateways if g["channel"].type == "web"), None)
             if gw is None:
                 return
+            self.last_channel = gw["channel"]
             if signal.title == "Web message received":
                 await hear(ego, content=signal.details.get("content", ""), channel=gw["channel"])
             else:

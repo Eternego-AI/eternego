@@ -1,5 +1,8 @@
 import Widget from './widget.js';
-import { cornerDownLeft, image as imageIcon, x as xIcon } from '../icons.js';
+import { cornerDownLeft, image as imageIcon, x as xIcon, send, hash, globe } from '../icons.js';
+
+const CHANNEL_ICONS = { telegram: send, discord: hash, web: globe };
+const CHANNEL_LABELS = { telegram: 'Telegram', discord: 'Discord', web: 'Web' };
 
 class ConversationWidget extends Widget {
     static _css = `
@@ -12,17 +15,86 @@ class ConversationWidget extends Widget {
 
         /* Messages */
         conversation-widget .cw-messages {
-            gap: var(--space-xs);
+            gap: var(--space-sm);
             padding: var(--space-lg) var(--space-lg) var(--space-md);
         }
 
-        /* Speaker labels */
-        conversation-widget .cw-speaker {
-            font-size: var(--text-xs);
+        /* Turn — label column + body column */
+        conversation-widget .cw-turn {
+            display: flex;
+            gap: var(--space-md);
+            align-items: baseline;
+            padding: 2px 0;
+            animation: cw-arrive 0.3s var(--ease);
+        }
+        @keyframes cw-arrive { from { opacity: 0; transform: translateY(3px); } }
+        conversation-widget .cw-label {
+            flex: 0 0 72px;
+            text-align: right;
+            font-size: var(--text-sm);
             color: var(--text-muted);
-            letter-spacing: 1px;
             text-transform: lowercase;
-            padding: var(--space-md) 0 var(--space-xs);
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+        conversation-widget .cw-turn.cw-person .cw-label { color: var(--accent-text); }
+        conversation-widget .cw-turn.cw-persona .cw-label { color: var(--text-secondary); }
+        conversation-widget .cw-body {
+            flex: 1;
+            min-width: 0;
+            line-height: 1.65;
+            word-wrap: break-word;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+        conversation-widget .cw-turn.cw-person .cw-body { color: var(--accent-text); }
+        conversation-widget .cw-turn.cw-persona .cw-body { color: var(--text-body); font-weight: 300; }
+
+        /* Inline meta — time + channel icon at end of message */
+        conversation-widget .cw-meta {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-xs);
+            margin-left: var(--space-sm);
+            color: var(--text-dim);
+            font-size: var(--text-xs);
+            vertical-align: baseline;
+            white-space: nowrap;
+        }
+        conversation-widget .cw-channel {
+            display: inline-flex;
+            align-items: center;
+            color: var(--text-muted);
+            cursor: help;
+        }
+        conversation-widget .cw-channel svg { display: block; }
+
+        /* Inline media */
+        conversation-widget .cw-img {
+            display: block;
+            max-width: 100%;
+            max-height: 320px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-subtle);
+            background: var(--surface-recessed);
+            cursor: zoom-in;
+            margin-bottom: var(--space-xs);
+            object-fit: contain;
+        }
+        conversation-widget .cw-img:hover { border-color: var(--border-hover); }
+
+        /* System card — full-width orientation note */
+        conversation-widget .cw-system {
+            padding: var(--space-md) var(--space-lg);
+            background: var(--surface-recessed);
+            border: 1px solid var(--border-subtle);
+            border-left: 2px solid var(--accent-border);
+            border-radius: var(--radius-md);
+            color: var(--text-secondary);
+            font-size: var(--text-base);
+            line-height: 1.7;
+            white-space: pre-wrap;
+            margin: var(--space-sm) 0;
         }
 
         /* Compose */
@@ -220,10 +292,11 @@ class ConversationWidget extends Widget {
         this._pending.classList.remove('active');
     }
 
-    setPersona(personaId, name) {
+    setPersona(personaId, name, birthday) {
         if (personaId === this._personaId) return;
         this._personaId = personaId;
         this._personaName = name;
+        this._personaBirthday = birthday || null;
         this._lastSpeaker = null;
         this._tail.innerHTML = '';
         this._loadHistory();
@@ -235,36 +308,76 @@ class ConversationWidget extends Widget {
 
     deactivate() {}
 
-    addMessage(role, content, time) {
-        if (role !== 'system' && role !== this._lastSpeaker) {
-            const label = document.createElement('div');
-            label.className = 'cw-speaker';
-            label.textContent = role === 'person' ? 'you' : (this._personaName || 'persona');
-            this._tail.append(label);
-            this._lastSpeaker = role;
+    addMessage(role, content, time, channel) {
+        if (role === 'system') {
+            const card = document.createElement('div');
+            card.className = 'cw-system';
+            card.textContent = content;
+            this._tail.append(card);
+            this._lastSpeaker = null;
+            return;
         }
         const timeStr = time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const el = document.createElement('role-message');
-        el.init({ role, text: content, time: timeStr });
-        this._tail.append(el);
+        const turn = this._buildTurn(role);
+        const body = turn.querySelector('.cw-body');
+        body.appendChild(document.createTextNode(content));
+        body.appendChild(this._buildMeta(timeStr, channel));
+        this._tail.append(turn);
+        this._lastSpeaker = role;
     }
 
-    addMediaMessage(role, source, caption, time) {
-        if (role !== 'system' && role !== this._lastSpeaker) {
-            const label = document.createElement('div');
-            label.className = 'cw-speaker';
-            label.textContent = role === 'person' ? 'you' : (this._personaName || 'persona');
-            this._tail.append(label);
-            this._lastSpeaker = role;
-        }
+    addMediaMessage(role, source, caption, time, channel) {
         const timeStr = time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const el = document.createElement('media-attachment');
-        el.init({ role, source, caption: caption || '', time: timeStr });
-        this._tail.append(el);
+        const turn = this._buildTurn(role);
+        const body = turn.querySelector('.cw-body');
+
+        const img = document.createElement('img');
+        img.className = 'cw-img';
+        img.src = source;
+        img.alt = caption || 'image';
+        img.addEventListener('click', () => window.open(source, '_blank'));
+        body.appendChild(img);
+
+        if (caption) body.appendChild(document.createTextNode(caption));
+        body.appendChild(this._buildMeta(timeStr, channel));
+        this._tail.append(turn);
+        this._lastSpeaker = role;
     }
 
-    receiveMessage(content) {
-        this.addMessage('persona', content);
+    _buildTurn(role) {
+        const turn = document.createElement('div');
+        turn.className = `cw-turn cw-${role}`;
+        const label = document.createElement('span');
+        label.className = 'cw-label';
+        label.textContent = role === 'person' ? 'you' : (this._personaName || 'persona');
+        const body = document.createElement('span');
+        body.className = 'cw-body';
+        turn.appendChild(label);
+        turn.appendChild(body);
+        return turn;
+    }
+
+    _buildMeta(timeStr, channel) {
+        const meta = document.createElement('span');
+        meta.className = 'cw-meta';
+        if (channel && CHANNEL_ICONS[channel]) {
+            const ch = document.createElement('span');
+            ch.className = 'cw-channel';
+            ch.title = `sent on ${CHANNEL_LABELS[channel] || channel}`;
+            ch.innerHTML = CHANNEL_ICONS[channel](12);
+            meta.appendChild(ch);
+        }
+        if (timeStr) {
+            const t = document.createElement('span');
+            t.className = 'cw-time';
+            t.textContent = timeStr;
+            meta.appendChild(t);
+        }
+        return meta;
+    }
+
+    receiveMessage(content, channel) {
+        this.addMessage('persona', content, undefined, channel);
     }
 
     showError(message) {
@@ -277,17 +390,71 @@ class ConversationWidget extends Widget {
             const messages = await this._props.loadHistory(this._personaId);
             this._tail.innerHTML = '';
             this._lastSpeaker = null;
+            if (this._isFirstDay()) {
+                this._showWelcome();
+            }
             for (const msg of messages) {
                 const time = msg.time ? new Date(msg.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
                 const role = msg.role === 'person' ? 'person' : 'persona';
+                const channel = msg.channel?.type || (typeof msg.channel === 'string' ? msg.channel : null) || null;
                 if (msg.media && msg.media.source) {
                     const url = this._props.mediaUrl ? this._props.mediaUrl(msg.media.source) : msg.media.source;
-                    this.addMediaMessage(role, url, msg.media.caption || msg.content || '', time);
+                    this.addMediaMessage(role, url, msg.media.caption || msg.content || '', time, channel);
                 } else {
-                    this.addMessage(role, msg.content, time);
+                    this.addMessage(role, msg.content, time, channel);
                 }
             }
+            this._scrollReveal();
         } catch {}
+    }
+
+    _scrollReveal(duration = 1400) {
+        const tail = this._tail;
+        if (!tail) return;
+        requestAnimationFrame(() => {
+            const target = tail.scrollHeight - tail.clientHeight;
+            if (target <= 8) return;
+            tail.scrollTop = 0;
+            tail._pinned = false;
+            let cancelled = false;
+            const cancel = () => { cancelled = true; };
+            tail.addEventListener('wheel', cancel, { once: true, passive: true });
+            tail.addEventListener('touchstart', cancel, { once: true, passive: true });
+            tail.addEventListener('mousedown', cancel, { once: true });
+            tail.addEventListener('keydown', cancel, { once: true });
+            const start = performance.now();
+            const step = (now) => {
+                if (cancelled) return;
+                const t = Math.min((now - start) / duration, 1);
+                const eased = 1 - Math.pow(1 - t, 3);
+                tail.scrollTop = target * eased;
+                if (t < 1) requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+        });
+    }
+
+    _isFirstDay() {
+        if (!this._personaBirthday) return false;
+        const d = new Date();
+        const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        return this._personaBirthday === today;
+    }
+
+    _showWelcome() {
+        const name = this._personaName || 'your persona';
+        const welcome = [
+            `Welcome. You're in ${name}'s chat.`,
+            ``,
+            `Type below to talk; they'll reply here. Click the paperclip to share an image.`,
+            ``,
+            `The orb behind the conversation is ${name}'s mind — click it to step inside and see what they're holding.`,
+            ``,
+            `If you set up a Telegram or Discord bot during setup, look for the Pair button at the top-right to finish the connection.`,
+            ``,
+            `The tabs at the bottom switch between personas you've created.`,
+        ].join('\n');
+        this.addMessage('system', welcome);
     }
 }
 

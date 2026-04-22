@@ -30,8 +30,14 @@ class ModelError(Exception):
 
     Raised when JSON is malformed, missing expected keys, or otherwise unusable.
     Recoverable by letting the model see the error and try again on the next turn.
+
+    `raw` carries the model's actual text so the caller can feed it back as the
+    assistant turn, honest about what was produced.
     """
-    pass
+
+    def __init__(self, message: str = "", raw: str = ""):
+        super().__init__(message)
+        self.raw = raw
 
 
 class SecretStorageError(Exception):
@@ -80,6 +86,24 @@ class HardwareError(Exception):
 
 class MindError(Exception):
     pass
+
+
+class BrainException(Exception):
+    """The thinking model refused to cooperate even after a recovery attempt.
+
+    Raised from cognitive steps (today: recognize) when the model produces
+    prose instead of the required structured output AND a prior forced-recovery
+    already happened this cycle-chain (e.g., meaning was already set to
+    `troubleshooting` and the model still refused).
+
+    Carries the `model` being used so tick can log a fault attributed to the
+    thinking provider; health_check then marks the persona sick on the next
+    heartbeat.
+    """
+
+    def __init__(self, message: str = "", model=None):
+        super().__init__(message)
+        self.model = model
 
 
 class AgentError(Exception):

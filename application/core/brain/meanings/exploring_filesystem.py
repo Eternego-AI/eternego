@@ -39,7 +39,7 @@ class Meaning:
             "For creating a directory, use `filesystem.create_dir`.\n\n"
             "### Response Format\n\n"
             "```json\n"
-            '{"reason": "<what you are doing>",\n'
+            '{'
             ' "tool": "<tool name>",\n'
             ' "path": "<file or directory path>",\n'
             ' "content": "<text content, only for write and append>",\n'
@@ -51,7 +51,7 @@ class Meaning:
             "or use `say` to tell the person what you found or did.\n\n"
             "### Response Format\n\n"
             "```json\n"
-            '{"reason": "<what you are reporting>",\n'
+            '{'
             ' "tool": "say",\n'
             ' "text": "<your reply>"}\n'
             "```"

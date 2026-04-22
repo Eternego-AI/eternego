@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/">
     <title>Eternego</title>
     <link rel="icon" type="image/svg+xml" href="/assets/eternego-icon.svg">
     <link rel="stylesheet" href="/ui/index.css">
@@ -35,17 +36,15 @@
         import './ui/widgets/mind.js';
         import './ui/widgets/conversation.js';
         import './ui/widgets/setup.js';
-        import './ui/widgets/message-stream.js';
         import './ui/widgets/pair.js';
 
         // Modes — UI, business
         import './ui/modes/outer-world.js';
         import './ui/modes/inner-world.js';
-        import './ui/modes/conversational.js';
+        import './ui/modes/status-world.js';
 
         // Apps — logical, core
         import SetupApp from './ui/apps/setup.js';
-        import SetupSpeaker from './ui/apps/setup-speaker.js';
 
         // Frame — UI, business
         import './ui/frame.js';
@@ -54,18 +53,12 @@
         import UI from './ui/index.js';
 
         UI.registerSetupApp(SetupApp);
-        UI.registerSetupSpeaker(SetupSpeaker);
 
         UI.boot().then(() => {
             const frame = document.createElement('ui-frame');
             frame.init();
             document.body.appendChild(frame);
-
-            if (UI.personas.length > 0) {
-                UI.enterOuterWorld(UI.personas[0].id);
-            } else {
-                UI.enterSetup();
-            }
+            UI.routeFromPath();
         });
     </script>
 </body>
