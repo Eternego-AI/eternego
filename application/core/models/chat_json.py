@@ -24,6 +24,8 @@ async def chat_json(model: Model, identity: str, reality: list[dict], question: 
     try:
         parts = []
         if is_local(model):
+            for msg in messages:
+                msg.pop("cache_point", None)
             gen = ollama.chat_json(model.url, model.name, messages)
         elif model.provider == "anthropic":
             for msg in messages:
@@ -33,6 +35,8 @@ async def chat_json(model: Model, identity: str, reality: list[dict], question: 
                     msg["cache_control"] = "ephemeral"
             gen = anthropic.chat_json(model.url, model.api_key, model.name, messages)
         else:
+            for msg in messages:
+                msg.pop("cache_point", None)
             gen = openai.chat_json(model.url, model.api_key, model.name, messages)
 
         async for chunk in gen:

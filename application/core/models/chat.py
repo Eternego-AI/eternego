@@ -19,6 +19,8 @@ async def chat(model: Model, identity: str, reality: list[dict], question: str) 
     try:
         parts = []
         if is_local(model):
+            for msg in messages:
+                msg.pop("cache_point", None)
             async for chunk in ollama.chat(model.url, model.name, messages):
                 parts.append(chunk)
         elif model.provider == "anthropic":
@@ -30,6 +32,8 @@ async def chat(model: Model, identity: str, reality: list[dict], question: str) 
             async for chunk in anthropic.chat(model.url, model.api_key, model.name, messages):
                 parts.append(chunk)
         else:
+            for msg in messages:
+                msg.pop("cache_point", None)
             async for chunk in openai.chat(model.url, model.api_key, model.name, messages):
                 parts.append(chunk)
         return strings.strip_tag("".join(parts), "think")
