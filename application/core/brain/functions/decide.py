@@ -1,6 +1,7 @@
 """Brain — decide stage."""
 
 from application.core import models
+from application.core.brain import situation
 from application.core.brain.mind.memory import Memory
 from application.core.data import Message, Persona, Prompt
 from application.core.exceptions import EngineConnectionError, ModelError
@@ -18,6 +19,7 @@ async def decide(ego, identity: str, memory: Memory) -> bool:
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"# ▶ YOUR TASK: {memory.meaning.capitalize()}\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{situation.time()}\n\n"
         + meaning.prompt()
     )
 

@@ -1,6 +1,7 @@
 """Brain — recognize stage."""
 
 from application.core import models
+from application.core.brain import situation
 from application.core.brain.mind.memory import Memory
 from application.core.data import Message, Prompt
 from application.core.exceptions import BrainException, ModelError
@@ -23,6 +24,7 @@ async def recognize(ego, identity: str, memory: Memory) -> bool:
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "# ▶ YOUR TASK: Recognize what this moment calls for\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{situation.time()}\n\n"
         "Considering the conversation:\n"
         "- What is your impression from the act that you would need to do?\n"
         "- Having the detected impression, which of the following abilities might resolve that?\n"

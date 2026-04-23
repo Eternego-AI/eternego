@@ -58,7 +58,7 @@ def notes(persona_id: str) -> str:
 
 def normal(persona_id: str) -> str:
     """A moment of living — the person may be present, or the space may be yours."""
-    parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id)]
+    parts = [environment(persona_id), schedule(persona_id), notes(persona_id)]
     body = "\n\n".join(p for p in parts if p)
     closing = (
         "## The Shape of Now\n\n"
@@ -74,7 +74,7 @@ def sleep(persona_id: str) -> str:
 
     Pairs with `wake`: your notes are the bridge between the two.
     """
-    parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id)]
+    parts = [environment(persona_id), schedule(persona_id), notes(persona_id)]
     body = "\n\n".join(p for p in parts if p)
     closing = (
         "## The Shape of Now\n\n"
@@ -90,7 +90,7 @@ def wake(persona_id: str) -> str:
 
     Pairs with `sleep`: your notes and today's plate are what crossed the night.
     """
-    parts = [time(), environment(persona_id), schedule(persona_id), notes(persona_id)]
+    parts = [environment(persona_id), schedule(persona_id), notes(persona_id)]
     body = "\n\n".join(p for p in parts if p)
     closing = (
         "## The Shape of Now\n\n"

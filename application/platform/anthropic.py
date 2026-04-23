@@ -7,7 +7,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import httpx
 
 from application.platform import logger
-from application.platform.observer import send, Message
+from application.platform.observer import send, dispatch, Message
 
 BASE_URL = "https://api.anthropic.com"
 
@@ -25,7 +25,24 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
 
     body = {"model": model, "messages": chat_messages, "max_tokens": 4096, "stream": True}
     if system_parts:
-        body["system"] = "\n".join(system_parts)
+        text = "\n".join(system_parts)
+        cache_type = next((m.get("cache_control") for m in messages if m.get("role") == "system" and m.get("cache_control")), None)
+        if cache_type:
+            body["system"] = [{"type": "text", "text": text, "cache_control": {"type": cache_type}}]
+        else:
+            body["system"] = text
+
+    for msg in chat_messages:
+        cache_type = msg.pop("cache_control", None)
+        if not cache_type:
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            msg["content"] = [
+                {"type": "text", "text": content, "cache_control": {"type": cache_type}},
+            ]
+        elif isinstance(content, list) and content:
+            content[-1]["cache_control"] = {"type": cache_type}
 
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
@@ -44,6 +61,7 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                     })
                     raise OSError(f"Anthropic HTTP {response.status_code}: {body_text}")
                 yielded = False
+                usage = {}
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if not line.startswith("data: "):
@@ -57,6 +75,12 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                         message = err.get("message", "unknown error")
                         logger.warning("Anthropic stream error event", {"model": model, "error": err})
                         raise OSError(f"Anthropic stream error: {message}")
+                    if event.get("type") == "message_start":
+                        msg_usage = event.get("message", {}).get("usage", {})
+                        usage.update(msg_usage)
+                    if event.get("type") == "message_delta":
+                        delta_usage = event.get("usage", {})
+                        usage.update(delta_usage)
                     if event.get("type") == "content_block_delta":
                         text = event.get("delta", {}).get("text", "")
                         if text:
@@ -67,6 +91,14 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                         break
                 if not yielded:
                     raise OSError("Anthropic returned empty response")
+                dispatch(Message("Model usage", {
+                    "provider": "anthropic",
+                    "model": model,
+                    "input_tokens": usage.get("input_tokens", 0),
+                    "output_tokens": usage.get("output_tokens", 0),
+                    "cache_read_tokens": usage.get("cache_read_input_tokens", 0),
+                    "cache_write_tokens": usage.get("cache_creation_input_tokens", 0),
+                }))
     except httpx.RequestError as e:
         logger.warning("Anthropic transport error", {"model": model, "error": str(e)})
         raise ConnectionError(str(e)) from e

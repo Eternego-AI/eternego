@@ -124,7 +124,15 @@ class Memory:
 
     @property
     def prompts(self) -> list[dict]:
-        return [{"role": m.prompt.role, "content": m.prompt.content} for m in self._messages if m.prompt]
+        result = []
+        for m in self._messages:
+            if not m.prompt:
+                continue
+            entry = {"role": m.prompt.role, "content": m.prompt.content}
+            if m.prompt.cache_point:
+                entry["cache_point"] = True
+            result.append(entry)
+        return result
 
     @property
     def impression(self) -> str | None:

@@ -7,7 +7,7 @@ import httpx
 
 from config.inference import OLLAMA_BASE_URL
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from application.platform.observer import send, Message
+from application.platform.observer import send, dispatch, Message
 
 
 class OllamaError(Exception):
@@ -98,7 +98,10 @@ async def chat(base_url: str, model: str, messages: list[dict]):
     """
     body = {"model": model, "messages": messages}
     yielded = False
+    usage = {}
     async for chunk in stream(base_url, "/api/chat", body):
+        if chunk.get("done"):
+            usage = chunk
         content = chunk.get("message", {}).get("content", "")
         if content:
             yielded = True
@@ -106,6 +109,14 @@ async def chat(base_url: str, model: str, messages: list[dict]):
             yield content
     if not yielded:
         raise OllamaError("empty response from ollama (model may have failed to load)")
+    dispatch(Message("Model usage", {
+        "provider": "ollama",
+        "model": model,
+        "input_tokens": usage.get("prompt_eval_count", 0),
+        "output_tokens": usage.get("eval_count", 0),
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+    }))
 
 
 async def chat_json(base_url: str, model: str, messages: list[dict]):
@@ -115,7 +126,10 @@ async def chat_json(base_url: str, model: str, messages: list[dict]):
     """
     body = {"model": model, "messages": messages, "format": "json"}
     yielded = False
+    usage = {}
     async for chunk in stream(base_url, "/api/chat", body):
+        if chunk.get("done"):
+            usage = chunk
         content = chunk.get("message", {}).get("content", "")
         if content:
             yielded = True
@@ -123,6 +137,14 @@ async def chat_json(base_url: str, model: str, messages: list[dict]):
             yield content
     if not yielded:
         raise OllamaError("empty response from ollama (model may have failed to load)")
+    dispatch(Message("Model usage", {
+        "provider": "ollama",
+        "model": model,
+        "input_tokens": usage.get("prompt_eval_count", 0),
+        "output_tokens": usage.get("eval_count", 0),
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+    }))
 
 
 # ── Assertions ───────────────────────────────────────────────────────────────

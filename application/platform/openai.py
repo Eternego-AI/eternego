@@ -7,7 +7,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import httpx
 
 from application.platform import logger
-from application.platform.observer import send, Message
+from application.platform.observer import send, dispatch, Message
 
 BASE_URL = "https://api.openai.com"
 
@@ -21,6 +21,7 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                 "model": model,
                 "messages": messages,
                 "stream": True,
+                "stream_options": {"include_usage": True},
             }, headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}",
@@ -35,6 +36,7 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                     })
                     raise OSError(f"OpenAI HTTP {response.status_code}: {body_text}")
                 yielded = False
+                usage = {}
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if not line.startswith("data: "):
@@ -51,6 +53,8 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                         message = err.get("message", "unknown error") if isinstance(err, dict) else str(err)
                         logger.warning("OpenAI stream error event", {"model": model, "error": err})
                         raise OSError(f"OpenAI stream error: {message}")
+                    if event.get("usage"):
+                        usage = event["usage"]
                     choices = event.get("choices", [])
                     if not choices:
                         continue
@@ -61,6 +65,15 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                         yield content
                 if not yielded:
                     raise OSError("OpenAI returned empty response")
+                cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if usage else 0
+                dispatch(Message("Model usage", {
+                    "provider": "openai",
+                    "model": model,
+                    "input_tokens": usage.get("prompt_tokens", 0),
+                    "output_tokens": usage.get("completion_tokens", 0),
+                    "cache_read_tokens": cached,
+                    "cache_write_tokens": 0,
+                }))
     except httpx.RequestError as e:
         logger.warning("OpenAI transport error", {"model": model, "error": str(e)})
         raise ConnectionError(str(e)) from e
@@ -75,6 +88,7 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
                 "model": model,
                 "messages": messages,
                 "stream": True,
+                "stream_options": {"include_usage": True},
                 "response_format": {"type": "json_object"},
             }, headers={
                 "Content-Type": "application/json",
@@ -90,6 +104,7 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
                     })
                     raise OSError(f"OpenAI HTTP {response.status_code}: {body_text}")
                 yielded = False
+                usage = {}
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if not line.startswith("data: "):
@@ -106,6 +121,8 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
                         message = err.get("message", "unknown error") if isinstance(err, dict) else str(err)
                         logger.warning("OpenAI stream error event", {"model": model, "error": err})
                         raise OSError(f"OpenAI stream error: {message}")
+                    if event.get("usage"):
+                        usage = event["usage"]
                     choices = event.get("choices", [])
                     if not choices:
                         continue
@@ -116,6 +133,15 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
                         yield content
                 if not yielded:
                     raise OSError("OpenAI returned empty response")
+                cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if usage else 0
+                dispatch(Message("Model usage", {
+                    "provider": "openai",
+                    "model": model,
+                    "input_tokens": usage.get("prompt_tokens", 0),
+                    "output_tokens": usage.get("completion_tokens", 0),
+                    "cache_read_tokens": cached,
+                    "cache_write_tokens": 0,
+                }))
     except httpx.RequestError as e:
         logger.warning("OpenAI transport error", {"model": model, "error": str(e)})
         raise ConnectionError(str(e)) from e

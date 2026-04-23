@@ -99,10 +99,10 @@ async def test_text_message_produces_say_via_chatting():
     assert code == 0, error
 
 
-async def test_text_cycle_reflect_moves_messages_to_archive():
-    """Full text cycle: realize → recognize → decide → experience → reflect.
-    When reflect returns no leftover, messages move to archive and active
-    messages are cleared."""
+async def test_text_cycle_reflect_keeps_messages_during_normal():
+    """Full text cycle during normal situation: realize → recognize → decide →
+    experience → reflect. Reflect returns True but messages stay active —
+    distillation only happens on wake."""
     def isolated():
         import os
         import tempfile
@@ -148,10 +148,8 @@ async def test_text_cycle_reflect_moves_messages_to_archive():
 
                 assert await reflect(ego, ego.personality(), memory) is True
 
-                assert len(memory.messages) == 0, "Messages should be cleared after reflect"
-                assert len(memory.archive) == 1, "One batch should be in archive"
-                assert len(memory.archive[0]) == messages_before, "Archived batch should have all messages"
-                assert memory.context is not None and memory.context != ""
+                assert len(memory.messages) == messages_before, "Messages stay during normal"
+                assert len(memory.archive) == 0, "No archive during normal"
 
             ollama.assert_call(
                 run=lambda url: consume(url),
@@ -159,6 +157,59 @@ async def test_text_cycle_reflect_moves_messages_to_archive():
                     [{"message": {"content": '{"impression": "greeting", "ability": 1}'}, "done": True}],
                     [{"message": {"content": '{"tool": "say", "text": "Hello!"}'}, "done": True}],
                     [{"message": {"content": '{"context": "Person said hi, I greeted back.", "leftover": ""}'}, "done": True}],
+                ],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_reflect_on_wake_distills_and_archives():
+    """On wake, reflect distills context, moves messages to archive, and clears."""
+    def isolated():
+        import os
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents, paths
+            from application.core.brain import situation
+            from application.core.brain.functions import reflect
+            from application.core.brain.mind.memory import Memory
+            from application.core.data import Message, Model, Persona, Prompt
+            from application.platform import ollama
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume(url):
+                persona = Persona(
+                    id="wake-test",
+                    name="Pipe",
+                    thinking=Model(name="llama3", url=url),
+                    base_model="llama3",
+                )
+                paths.home(persona.id).mkdir(parents=True, exist_ok=True)
+
+                memory = Memory(persona)
+                memory.remember(Message(
+                    content="wake up",
+                    prompt=Prompt(role="user", content="wake up"),
+                ))
+
+                ego = agents.Ego(persona, FakeWorker())
+                ego.pulse.situation = situation.wake
+
+                assert await reflect(ego, ego.personality(), memory) is True
+
+                assert len(memory.messages) == 0, "Messages cleared on wake"
+                assert len(memory.archive) == 1, "Messages archived on wake"
+                assert memory.context is not None and memory.context != ""
+
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[
+                    [{"message": {"content": '{"context": "New day begins.", "leftover": ""}'}, "done": True}],
                 ],
             )
 

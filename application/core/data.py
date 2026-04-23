@@ -41,6 +41,7 @@ class Persona(Data):
 class Prompt(Data):
     role: str
     content: str | list
+    cache_point: bool = False
 
 
 @dataclass(kw_only=True)

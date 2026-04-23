@@ -22,6 +22,11 @@ async def chat(model: Model, identity: str, reality: list[dict], question: str) 
             async for chunk in ollama.chat(model.url, model.name, messages):
                 parts.append(chunk)
         elif model.provider == "anthropic":
+            for msg in messages:
+                if msg.get("role") == "system":
+                    msg["cache_control"] = "ephemeral"
+                elif msg.pop("cache_point", False):
+                    msg["cache_control"] = "ephemeral"
             async for chunk in anthropic.chat(model.url, model.api_key, model.name, messages):
                 parts.append(chunk)
         else:

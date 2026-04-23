@@ -12,14 +12,12 @@ async def reflect(ego, identity: str, memory: Memory) -> bool:
     persona = ego.persona
     logger.debug("brain.reflect", {"persona": persona, "messages": memory.messages, "context": memory.context})
 
-    if ego.pulse.situation is situation.wake:
-        return True
-
     existing = (memory.context or "").strip() or "(nothing yet)"
     question = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "# ▶ YOUR TASK: Reflect on your reality\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{situation.time()}\n\n"
         "The conversation above is your current reality. What do you want to remember from it? "
         "What did you experience? What would be worth telling yourself later, or keeping "
         "as a lesson learned?\n\n"
@@ -60,8 +58,11 @@ async def reflect(ego, identity: str, memory: Memory) -> bool:
         ))
         return False
 
+    if ego.pulse.situation is not situation.wake:
+        return True
+
     if context:
         memory.context = context
-    memory.archive_messages()
-    memory.forget()
+        memory.archive_messages()
+        memory.forget()
     return True
