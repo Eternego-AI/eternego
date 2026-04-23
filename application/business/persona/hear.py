@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from application.business.outcome import Outcome
 from application.core import bus
+from application.core.brain import situation
 from application.core.data import Message
 from application.core.exceptions import MindError
 
@@ -22,7 +23,7 @@ async def hear(ego, content: str, channel=None) -> Outcome[HearData]:
     message = Message(channel=channel, content=content)
     bus.propose("Hearing", {"persona": persona, "channel": channel})
     try:
-        if ego.is_sleeping():
+        if ego.pulse.situation is situation.sleep:
             bus.broadcast("Heard", {"persona": persona})
             return Outcome(success=True, message="", data=HearData(response=f"{persona.name} is sleeping."))
 

@@ -12,7 +12,7 @@ async def reflect(ego, identity: str, memory: Memory) -> bool:
     persona = ego.persona
     logger.debug("brain.reflect", {"persona": persona, "messages": memory.messages, "context": memory.context})
 
-    if ego.current_situation is situation.wake:
+    if ego.pulse.situation is situation.wake:
         return True
 
     existing = (memory.context or "").strip() or "(nothing yet)"
@@ -51,9 +51,7 @@ async def reflect(ego, identity: str, memory: Memory) -> bool:
 
     context = str(result.get("context", "")).strip()
     leftover = str(result.get("leftover", "")).strip()
-
-    memory.distill(context)
-    logger.debug("brain.reflect result", {"persona": persona, "context": memory.context, "leftover": leftover})
+    logger.debug("brain.reflect result", {"persona": persona, "context": context, "leftover": leftover})
 
     if leftover:
         memory.remember(Message(
@@ -62,4 +60,8 @@ async def reflect(ego, identity: str, memory: Memory) -> bool:
         ))
         return False
 
+    if context:
+        memory.context = context
+    memory.archive_messages()
+    memory.forget()
     return True

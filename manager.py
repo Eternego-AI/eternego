@@ -192,7 +192,7 @@ class Agent:
                 return
             if command.details.get("persona") is not persona:
                 return
-            await ego.stop()
+            await ego.pulse.worker.stop()
 
         async def on_persona_sick(command: Command):
             if command.title != "Persona became sick":
@@ -231,7 +231,7 @@ class Agent:
                 return
             cmd = signal.details.get("command", "")
             if cmd == "stop":
-                await ego.stop()
+                await ego.pulse.worker.stop()
             elif cmd == "restart":
                 asyncio.create_task(restart(persona.id))
 
@@ -300,7 +300,7 @@ class Agent:
                 pass
         self.gateways.clear()
 
-        await self.ego.stop()
+        await self.ego.pulse.worker.stop()
 
     async def heartbeat_tick(self) -> None:
         from application.business.persona import heartbeat

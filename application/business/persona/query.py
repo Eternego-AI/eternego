@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from application.business.outcome import Outcome
 from application.core import bus, models
+from application.core.brain import situation
 from application.core.data import Persona
 from application.core.exceptions import EngineConnectionError, MindError
 
@@ -18,7 +19,7 @@ async def query(ego, messages) -> Outcome[QueryData]:
     persona = ego.persona
     bus.propose("Querying", {"persona": persona, "messages": messages})
     try:
-        if ego.is_sleeping():
+        if ego.pulse.situation is situation.sleep:
             bus.broadcast("Queried", {"persona": persona})
             return Outcome(success=True, message="", data=QueryData(response=f"{persona.name} is sleeping."))
 

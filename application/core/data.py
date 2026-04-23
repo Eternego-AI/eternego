@@ -40,7 +40,7 @@ class Persona(Data):
 @dataclass(kw_only=True)
 class Prompt(Data):
     role: str
-    content: str
+    content: str | list
 
 
 @dataclass(kw_only=True)

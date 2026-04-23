@@ -10,12 +10,13 @@ If the plan contains a `say` alongside another tool, they run as two separate
 calls (two pairs in memory). Say is always delivered first.
 """
 
-import json as _json
+from pathlib import Path
 
-from application.core import paths, tools
+from application.core import models, paths, tools
 from application.core.brain.mind.memory import Memory
-from application.core.data import Media, Message, Prompt
-from application.platform import datetimes, logger
+from application.core.data import Message, Prompt
+from application.platform import logger
+from application.platform.objects import to_string
 from application.platform.observer import Command, dispatch, send as send_signal
 
 
@@ -43,7 +44,7 @@ async def experience(ego, identity: str, memory: Memory) -> bool:
             return True
 
         call_obj = {k: v for k, v in plan.items() if k != "say"}
-        call_json = _json.dumps(call_obj)
+        call_json = to_string(call_obj)
         memory.remember(Message(
             content=call_json,
             prompt=Prompt(role="assistant", content=call_json),
@@ -94,16 +95,14 @@ async def experience(ego, identity: str, memory: Memory) -> bool:
                 ]
                 if live_lines:
                     entries.append("Today's conversation:\n" + "\n".join(live_lines))
-                gallery_file = paths.media(persona.id) / "gallery.json"
-                if gallery_file.exists():
-                    gallery = _json.loads(gallery_file.read_text())
-                    media_lines = []
-                    for source, looks in gallery.items():
-                        for look in looks:
-                            if date in look.get("time", ""):
-                                media_lines.append(f"[{look['time']}] Image: {source} — {look['answer']}")
-                    if media_lines:
-                        entries.append("Media from that date:\n" + "\n".join(media_lines))
+                gallery = paths.read_jsonl(paths.gallery(persona.id))
+                media_lines = [
+                    f"[{entry['time']}] Image: {entry['source']} — {entry['answer']}"
+                    for entry in gallery
+                    if date in entry.get("time", "")
+                ]
+                if media_lines:
+                    entries.append("Media from that date:\n" + "\n".join(media_lines))
                 result = "\n\n".join(entries) if entries else "no conversations found for that date"
 
         elif tool == "remove_meaning":
@@ -124,16 +123,19 @@ async def experience(ego, identity: str, memory: Memory) -> bool:
             result = "memory cleared"
 
         elif tool == "look_at":
-            source = plan.get("source", "")
-            question = plan.get("question", "")
-            if not source:
-                status, result = "error", "source is required"
+            if not persona.vision:
+                status, result = "error", "no vision model configured"
             else:
-                memory.remember(Message(
-                    content=question,
-                    media=Media(source=source, caption=question),
-                ))
-                result = f"queued vision look at {source}"
+                source = plan.get("source", "")
+                question = plan.get("question", "")
+                if not source:
+                    status, result = "error", "source is required"
+                else:
+                    image_path = Path(source)
+                    if not image_path.exists():
+                        status, result = "error", f"image not found at {source}"
+                    else:
+                        result = await models.vision(persona.vision, "", image_path, question or "Describe what you see.")
 
         elif tool == "stop":
             await send_signal(Command("Persona requested stop", {"persona": persona}))

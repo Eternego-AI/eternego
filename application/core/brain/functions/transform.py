@@ -10,9 +10,12 @@ from application.platform import logger
 
 async def transform(ego, identity: str, memory: Memory) -> bool:
     persona = ego.persona
-    logger.debug("brain.transform", {"persona": persona, "messages": memory.messages})
+    logger.debug("brain.transform", {"persona": persona, "archive": memory.archive})
 
-    if ego.current_situation is situation.wake:
+    if ego.pulse.situation is situation.wake:
+        return True
+
+    if not memory.archive:
         return True
 
     existing_identity = paths.read(paths.person_identity(persona.id)).strip() or "(nothing yet)"
@@ -59,8 +62,15 @@ async def transform(ego, identity: str, memory: Memory) -> bool:
         "```"
     )
 
+    archived_prompts = [
+        {"role": m.prompt.role, "content": m.prompt.content}
+        for batch in memory.archive
+        for m in batch
+        if m.prompt
+    ]
+
     try:
-        result = await models.chat_json(persona.thinking, identity, memory.prompts, question)
+        result = await models.chat_json(persona.thinking, identity, archived_prompts, question)
     except ModelError as e:
         logger.warning("brain.transform invalid JSON, skipping", {"persona": persona, "error": str(e)})
         return False

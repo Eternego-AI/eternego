@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from application.business.outcome import Outcome
 from application.core import bus
+from application.core.brain import situation
 from application.core.data import Media, Message
 from application.core.exceptions import MindError
 
@@ -23,7 +24,7 @@ async def see(ego, source: str, caption: str = "", channel=None) -> Outcome[SeeD
     message = Message(channel=channel, content=caption, media=media)
     bus.propose("Seeing", {"persona": persona, "channel": channel})
     try:
-        if ego.is_sleeping():
+        if ego.pulse.situation is situation.sleep:
             bus.broadcast("Seen", {"persona": persona})
             return Outcome(success=True, message="", data=SeeData(response=f"{persona.name} is sleeping."))
 

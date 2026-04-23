@@ -19,17 +19,11 @@ async def test_healthy_tick_writes_health_log_and_nudges():
                 self.idle = True
                 self.error = None
                 self.stopped = False
-                self._events = []
-                self.loop_number = 0
                 self.reset_called = False
                 self.nudged = 0
-                self.cleared = 0
             def run(self, *a): pass
             def nudge(self): self.nudged += 1
             def reset(self): self.reset_called = True; self.error = None
-            @property
-            def events(self): return list(self._events)
-            def clear_events(self): self._events = []; self.cleared += 1
 
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         identity = paths.persona_identity(p.id)
@@ -41,9 +35,8 @@ async def test_healthy_tick_writes_health_log_and_nudges():
         outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
         assert outcome.success, outcome.message
         assert p.status == "active"
-        # Healthy tick with no due entries = no reason to nudge a quiet worker
-        assert ego.worker.nudged == 0
-        assert ego.worker.cleared == 1
+        assert ego.pulse.worker.nudged == 0
+        assert len(ego.pulse.events) == 0
 
         entries = paths.read_jsonl(paths.health_log(p.id))
         assert len(entries) == 1, entries
@@ -61,27 +54,22 @@ async def test_frontier_fault_disables_frontier_and_persists_config():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.mind.pulse import Event
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects
-        from application.platform.asyncio_worker import Event
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
 
         class FakeWorker:
-            def __init__(self, events, loop_number):
+            def __init__(self):
                 self.idle = True
                 self.error = None
                 self.stopped = False
-                self._events = list(events)
-                self.loop_number = loop_number
                 self.nudged = 0
             def run(self, *a): pass
             def nudge(self): self.nudged += 1
             def reset(self): self.error = None
-            @property
-            def events(self): return list(self._events)
-            def clear_events(self): self._events = []
 
         p = Persona(
             id="test-persona",
@@ -96,20 +84,20 @@ async def test_frontier_fault_disables_frontier_and_persists_config():
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
 
-        events = [Event(
+        ego = agents.Ego(p, FakeWorker())
+        ego.pulse._loop_number = 1
+        ego.pulse._events.append(Event(
             kind="fault", function="recognize", loop=1,
             provider="anthropic", url="https://api.anthropic.com",
             model_name="claude-opus-4-6", error="HTTP 429",
-        )]
-        ego = agents.Ego(p, FakeWorker(events, loop_number=1))
+        ))
 
         outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
         assert outcome.success, outcome.message
         assert p.frontier is None
-        assert p.vision is None        # both used anthropic, both disabled
-        assert p.status == "active"    # thinking is ollama, not sick
-        # Disabling a capacity doesn't nudge — the tick reads the updated config inline
-        assert ego.worker.nudged == 0
+        assert p.vision is None
+        assert p.status == "active"
+        assert ego.pulse.worker.nudged == 0
 
         reread = paths.read_json(paths.persona_identity(p.id))
         assert reread["frontier"] is None
@@ -130,27 +118,22 @@ async def test_vision_only_fault_disables_vision_leaves_frontier_alone():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.mind.pulse import Event
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects
-        from application.platform.asyncio_worker import Event
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
 
         class FakeWorker:
-            def __init__(self, events):
+            def __init__(self):
                 self.idle = True
                 self.error = None
                 self.stopped = False
-                self._events = list(events)
-                self.loop_number = 1
                 self.nudged = 0
             def run(self, *a): pass
             def nudge(self): self.nudged += 1
             def reset(self): self.error = None
-            @property
-            def events(self): return list(self._events)
-            def clear_events(self): self._events = []
 
         p = Persona(
             id="test-persona",
@@ -165,13 +148,13 @@ async def test_vision_only_fault_disables_vision_leaves_frontier_alone():
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
 
-        events = [Event(kind="fault", function="realize", loop=1, provider="anthropic", url="...", model_name="claude-haiku-4-5", error="empty")]
-        ego = agents.Ego(p, FakeWorker(events))
+        ego = agents.Ego(p, FakeWorker())
+        ego.pulse._events.append(Event(kind="fault", function="realize", loop=1, provider="anthropic", url="...", model_name="claude-haiku-4-5", error="empty"))
 
         outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
         assert outcome.success
         assert p.vision is None
-        assert p.frontier is not None   # openai didn't fault
+        assert p.frontier is not None
         assert p.status == "active"
 
     code, error = await on_separate_process_async(isolated)
@@ -185,29 +168,23 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.mind.pulse import Event
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects, observer
-        from application.platform.asyncio_worker import Event
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
 
         class FakeWorker:
-            def __init__(self, events):
+            def __init__(self):
                 self.idle = True
                 self.error = None
                 self.stopped = False
-                self._events = list(events)
-                self.loop_number = 1
                 self.nudged = 0
             def run(self, *a): pass
             def nudge(self): self.nudged += 1
             def reset(self): self.error = None
-            @property
-            def events(self): return list(self._events)
-            def clear_events(self): self._events = []
 
-        # Thinking on anthropic — any anthropic fault means thinking is threatened
         p = Persona(
             id="test-persona",
             name="Primus",
@@ -220,8 +197,8 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
 
-        events = [Event(kind="fault", function="realize", loop=1, provider="anthropic", url="...", model_name="claude-haiku-4-5", error="HTTP 401")]
-        ego = agents.Ego(p, FakeWorker(events))
+        ego = agents.Ego(p, FakeWorker())
+        ego.pulse._events.append(Event(kind="fault", function="realize", loop=1, provider="anthropic", url="...", model_name="claude-haiku-4-5", error="HTTP 401"))
 
         commands = []
 
@@ -234,7 +211,7 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
 
         async def run():
             result["outcome"] = await spec.health_check(ego, datetimes.now())
-            await asyncio.sleep(0)  # let the dispatched task run
+            await asyncio.sleep(0)
 
         asyncio.run(run())
 
@@ -246,7 +223,7 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         assert outcome.data.log_entry["fault_providers"] == ["anthropic"]
 
         assert p.status == "sick"
-        assert ego.worker.nudged == 0   # no nudge when going down
+        assert ego.pulse.worker.nudged == 0
 
         reread = paths.read_json(paths.persona_identity(p.id))
         assert reread["status"] == "sick"
@@ -276,16 +253,11 @@ async def test_unexpected_worker_error_recovers_with_apology():
                 self.idle = True
                 self.error = RuntimeError("unexpected bug")
                 self.stopped = False
-                self._events = []
-                self.loop_number = 0
                 self.reset_called = False
                 self.nudged = 0
             def run(self, *a): pass
             def nudge(self): self.nudged += 1
             def reset(self): self.reset_called = True; self.error = None
-            @property
-            def events(self): return list(self._events)
-            def clear_events(self): self._events = []
 
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         identity = paths.persona_identity(p.id)
@@ -296,8 +268,8 @@ async def test_unexpected_worker_error_recovers_with_apology():
 
         outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
         assert outcome.success
-        assert ego.worker.reset_called is True
-        assert ego.worker.nudged >= 1
+        assert ego.pulse.worker.reset_called is True
+        assert ego.pulse.worker.nudged >= 1
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -321,15 +293,10 @@ async def test_due_destiny_entries_are_processed_after_health():
                 self.idle = True
                 self.error = None
                 self.stopped = False
-                self._events = []
-                self.loop_number = 0
                 self.nudged = 0
             def run(self, *a): pass
             def nudge(self): self.nudged += 1
             def reset(self): self.error = None
-            @property
-            def events(self): return list(self._events)
-            def clear_events(self): self._events = []
 
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         identity = paths.persona_identity(p.id)

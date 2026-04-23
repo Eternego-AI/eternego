@@ -1,5 +1,6 @@
 """Filesystem — directory creation, file read/write, archiving."""
 
+import base64
 import io
 import json
 import shutil
@@ -69,6 +70,11 @@ def read(path: str) -> str:
 def read_bytes(path) -> bytes:
     """Read binary data from a file."""
     return Path(path).read_bytes()
+
+
+def read_base64(path) -> str:
+    """Read a file and return its contents as a base64-encoded string."""
+    return base64.b64encode(Path(path).read_bytes()).decode()
 
 
 def read_json(path) -> dict:

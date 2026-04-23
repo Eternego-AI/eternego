@@ -34,19 +34,19 @@ async def health_check(ego, dt) -> Outcome[HealthCheckData]:
     persona = ego.persona
     bus.propose("Health check", {"persona": persona})
 
-    if ego.worker.idle and ego.worker.error:
-        error = ego.worker.error
+    if ego.pulse.worker.idle and ego.pulse.worker.error:
+        error = ego.pulse.worker.error
         logger.info("Recovering ego from unexpected error", {"persona": persona, "error": str(error)})
         text = "Sorry, it seems I got distracted. Let me see what I should be doing."
         ego.memory.remember(Message(content=text, prompt=Prompt(role="assistant", content=text)))
         dispatch(Command("Persona wants to say", {"persona": persona, "text": text}))
-        ego.worker.reset()
-        ego.worker.nudge()
+        ego.pulse.worker.reset()
+        ego.pulse.worker.nudge()
 
-    faults = [e for e in ego.worker.events if e.kind == "fault"]
+    faults = [e for e in ego.pulse.events if e.kind == "fault"]
     log_entry = {
         "time": datetimes.iso_8601(datetimes.now()),
-        "loop_number": ego.worker.loop_number,
+        "loop_number": ego.pulse.loop_number,
         "fault_count": len(faults),
         "fault_providers": sorted({e.provider for e in faults if e.provider}),
     }
@@ -63,7 +63,7 @@ async def health_check(ego, dt) -> Outcome[HealthCheckData]:
             message += f": {sample}"
         message += ". Stepping out for now."
         dispatch(Command("Persona wants to say", {"persona": persona, "text": message}))
-        ego.worker.clear_events()
+        ego.pulse.clear_events()
         bus.order("Persona became sick", {"persona": persona, "log_entry": log_entry})
         return Outcome(
             success=True,
@@ -97,7 +97,7 @@ async def health_check(ego, dt) -> Outcome[HealthCheckData]:
             persona.vision = None
             paths.save_as_json(persona.id, paths.persona_identity(persona.id), persona)
 
-    ego.worker.clear_events()
+    ego.pulse.clear_events()
 
     try:
         due = paths.due_destiny_entries(persona.id, dt)
@@ -109,7 +109,7 @@ async def health_check(ego, dt) -> Outcome[HealthCheckData]:
                 notifications.append(content)
             due_text = "due for:\n" + "\n---\n".join(notifications)
             ego.memory.remember(Message(content=due_text, prompt=Prompt(role="user", content=due_text)))
-            ego.worker.nudge()
+            ego.pulse.worker.nudge()
 
         bus.broadcast("Health checked", {"persona": persona, "log_entry": log_entry})
         return Outcome(

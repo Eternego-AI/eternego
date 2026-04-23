@@ -27,6 +27,7 @@ class Memory:
     def __init__(self, persona):
         self._persona = persona
         self._messages: list[Message] = []
+        self._archive: list[list[Message]] = []
         self._impression: str | None = None
         self._ability: int = 0
         self._meaning: str | None = None
@@ -71,12 +72,47 @@ class Memory:
                     media=media,
                     id=m.get("id", ""),
                 ))
+            for batch in state.get("archive", []):
+                restored_batch = []
+                for m in batch:
+                    channel_data = m.get("channel")
+                    channel = None
+                    if channel_data:
+                        channel = Channel(
+                            type=channel_data.get("type", ""),
+                            name=channel_data.get("name", ""),
+                            credentials=channel_data.get("credentials"),
+                            verified_at=channel_data.get("verified_at"),
+                        )
+                    prompt_data = m.get("prompt")
+                    prompt = None
+                    if prompt_data:
+                        prompt = Prompt(
+                            role=prompt_data.get("role", ""),
+                            content=prompt_data.get("content", ""),
+                        )
+                    media_data = m.get("media")
+                    media = None
+                    if media_data:
+                        media = Media(
+                            source=media_data.get("source", ""),
+                            caption=media_data.get("caption", ""),
+                        )
+                    restored_batch.append(Message(
+                        content=m.get("content", ""),
+                        channel=channel,
+                        prompt=prompt,
+                        media=media,
+                        id=m.get("id", ""),
+                    ))
+                self._archive.append(restored_batch)
             self._context = state.get("context")
 
     def _persist(self) -> None:
         logger.debug("memory._persist", {"persona": self._persona.id})
         state = {
             "messages": [to_json(m) for m in self._messages],
+            "archive": [[to_json(m) for m in batch] for batch in self._archive],
             "context": self._context,
         }
         persistent_memory.clear(self._storage_id)
@@ -162,12 +198,19 @@ class Memory:
         logger.debug("memory.unlearn", {"persona": self._persona.id, "name": name})
         self._meanings.pop(name, None)
 
-    def distill(self, context: str) -> None:
-        """Fold the stream down to its essence: replace messages with a new context.
-        Empty context preserves the old one — a failed reflect still drains memory
-        but doesn't overwrite what the persona already carried forward."""
-        logger.debug("memory.distill", {"persona": self._persona.id, "context": context})
-        if context:
-            self._context = context
-        self._messages = []
+    @property
+    def archive(self) -> list[list[Message]]:
+        return list(self._archive)
+
+    def archive_messages(self) -> None:
+        """Move current messages to archive as a batch."""
+        logger.debug("memory.archive_messages", {"persona": self._persona.id})
+        if self._messages:
+            self._archive.append(list(self._messages))
+            self._persist()
+
+    def clear_archive(self) -> None:
+        """Clear all archived batches. Called by sleep."""
+        logger.debug("memory.clear_archive", {"persona": self._persona.id})
+        self._archive = []
         self._persist()

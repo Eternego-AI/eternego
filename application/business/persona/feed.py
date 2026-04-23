@@ -23,6 +23,7 @@ async def feed(ego, data: str, source: str) -> Outcome[FeedData]:
     class VirtualMemory:
         messages: list
         prompts: list
+        archive: list
 
     try:
         conversations = await models.read_external_history(data, source)
@@ -42,6 +43,7 @@ async def feed(ego, data: str, source: str) -> Outcome[FeedData]:
             feed_memory = VirtualMemory(
                 messages=messages,
                 prompts=[{"role": m.prompt.role, "content": m.prompt.content} for m in messages],
+                archive=[messages],
             )
             await functions.transform(ego, identity, feed_memory)
 

@@ -3,35 +3,14 @@
 Runs a loop function (tick) and dispatches individual jobs within it.
 One job at a time — jobs are cancellable. The loop restarts on nudge
 when idle.
-
-Also keeps a ring-buffered event log the tick writes to (success/fault per
-function call) so health_check can see how the body has been feeling.
 """
 
 import asyncio
-import time
-from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass, field
-
-
-@dataclass
-class Event:
-    kind: str                         # "success" | "fault"
-    function: str                     # e.g. "realize"
-    loop: int
-    provider: str | None = None
-    url: str | None = None
-    model_name: str | None = None
-    error: str | None = None
-    time: float = field(default_factory=time.time)
-
-
-_EVENT_LOG_CAPACITY = 200
 
 
 class Worker:
-    """Serial async executor. One per persona, outlives ego reloads."""
+    """Serial async executor. Reusable across projects."""
 
     def __init__(self):
         self._tick_fn: Callable | None = None
@@ -40,8 +19,6 @@ class Worker:
         self._job: asyncio.Task | None = None
         self._error: Exception | None = None
         self._stopped: bool = False
-        self._events: deque[Event] = deque(maxlen=_EVENT_LOG_CAPACITY)
-        self._loop_number: int = 0
 
     # ── Main loop ─────────────────────────────────────────────────────────
 
@@ -133,41 +110,3 @@ class Worker:
     def reset(self) -> None:
         """Clear error state so the worker can accept new work."""
         self._error = None
-
-    # ── Event log ─────────────────────────────────────────────────────────
-
-    @property
-    def events(self) -> list[Event]:
-        return list(self._events)
-
-    @property
-    def loop_number(self) -> int:
-        return self._loop_number
-
-    def next_loop(self) -> None:
-        """Bump the loop counter. Tick calls this at the top of each while iteration."""
-        self._loop_number += 1
-
-    def log_success(self, function: str) -> None:
-        self._events.append(Event(kind="success", function=function, loop=self._loop_number))
-
-    def log_fault(
-        self,
-        function: str,
-        provider: str | None = None,
-        url: str | None = None,
-        model_name: str | None = None,
-        error: str | None = None,
-    ) -> None:
-        self._events.append(Event(
-            kind="fault",
-            function=function,
-            loop=self._loop_number,
-            provider=provider,
-            url=url,
-            model_name=model_name,
-            error=error,
-        ))
-
-    def clear_events(self) -> None:
-        self._events.clear()

@@ -109,6 +109,11 @@ def media(persona_id: str) -> Path:
     return home(persona_id) / "media"
 
 
+def gallery(persona_id: str) -> Path:
+    """Path to the gallery.jsonl file for that persona."""
+    return media(persona_id) / "gallery.jsonl"
+
+
 def notes(persona_id: str) -> Path:
     """Path to the notes.md file for that persona."""
     return home(persona_id) / "notes.md"
