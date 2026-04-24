@@ -49,13 +49,11 @@ class Ego:
         ]
 
     def wake(self) -> None:
-        """Set situation to wake, remember the wake message, start the clock."""
+        """Set the situation to wake and start the clock. The situation
+        prompt carries the 'newly awake' context — no fake user message
+        is seeded. Start is not a conversational turn."""
         logger.info("Waking", {"persona": self.persona})
         self.pulse.situation = situation.wake
-        self.memory.remember(Message(
-            content="wake up",
-            prompt=Prompt(role="user", content="wake up"),
-        ))
         self.pulse.worker.run(clock.tick, self.consciousness(), self.subconsciousness(), self.pulse)
 
     async def sleep_cycle(self, sleep_spec) -> None:

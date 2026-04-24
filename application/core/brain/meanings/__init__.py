@@ -10,8 +10,11 @@ Any persona context a meaning needs — files, paths, name — is reached via
 import importlib
 import importlib.util
 import pkgutil
+import re
+import types
 
 from application.core import paths
+from application.core.data import Model, Persona
 from application.platform import logger
 
 _discovered_modules = {}
@@ -59,11 +62,33 @@ def _load_file(persona, f):
 
 
 def save_meaning(persona_id, name, code):
-    import re
     name = re.sub(r"[^\w-]", "", name.lower().replace(" ", "-"))[:60]
     if not name:
         raise ValueError("meaning name is empty after sanitization")
-    compile(code, f"{name}.py", "exec")
+
+    code_object = compile(code, f"{name}.py", "exec")
+    sandbox = types.ModuleType(f"_validate_{name}")
+    try:
+        exec(code_object, sandbox.__dict__)
+        if not hasattr(sandbox, "Meaning"):
+            raise ValueError("module has no Meaning class")
+        test_persona = Persona(
+            id=persona_id,
+            name="validation",
+            thinking=Model(name="", url=""),
+        )
+        instance = sandbox.Meaning(test_persona)
+        intention_value = instance.intention()
+        if not isinstance(intention_value, str):
+            raise ValueError(f"Meaning.intention() returned {type(intention_value).__name__}, not str")
+        prompt_value = instance.prompt()
+        if not isinstance(prompt_value, str):
+            raise ValueError(f"Meaning.prompt() returned {type(prompt_value).__name__}, not str")
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"{type(e).__name__} during validation: {e}") from e
+
     directory = paths.meanings(persona_id)
     directory.mkdir(parents=True, exist_ok=True)
     (directory / f"{name}.py").write_text(code)

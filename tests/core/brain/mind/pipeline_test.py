@@ -217,9 +217,11 @@ async def test_reflect_on_wake_distills_and_archives():
     assert code == 0, error
 
 
-async def test_reflect_leftover_keeps_messages_and_restarts():
-    """When reflect returns a leftover, messages stay in active memory,
-    context is unchanged, and reflect returns False."""
+async def test_reflect_leftover_restarts_without_polluting_memory():
+    """A leftover is a signal to restart the tick, not a conversation turn. If
+    it were written to memory as an assistant message, next cycle's recognize
+    would read it as the persona's prior voice and drive another say —
+    chatter loop. Reflect returns False, memory stays untouched."""
     def isolated():
         import os
         import tempfile
@@ -257,9 +259,9 @@ async def test_reflect_leftover_keeps_messages_and_restarts():
 
                 result = await reflect(ego, ego.personality(), memory)
                 assert result is False, "Reflect should return False when there is leftover"
-                assert len(memory.messages) == 2, "Original message + leftover should be in memory"
-                assert memory.messages[-1].prompt.role == "assistant"
-                assert memory.messages[-1].prompt.content == "I need to finish this task"
+                assert len(memory.messages) == 1, "Leftover must not be written to memory"
+                assert memory.messages[-1].prompt.role == "user"
+                assert memory.messages[-1].prompt.content == "Do something"
                 assert len(memory.archive) == 0, "No archive when leftover"
                 assert memory.context == original_context, "Context unchanged on leftover"
 

@@ -93,6 +93,9 @@ async def realize(ego, identity: str, memory: Memory) -> bool:
 
 
     if memory.messages:
+        for m in memory.messages:
+            if m.prompt:
+                m.prompt.cache_point = False
         for m in reversed(memory.messages):
             if m.prompt:
                 m.prompt.cache_point = True

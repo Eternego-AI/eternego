@@ -3,7 +3,6 @@
 from application.core import models
 from application.core.brain import situation
 from application.core.brain.mind.memory import Memory
-from application.core.data import Message, Persona, Prompt
 from application.core.exceptions import ModelError
 from application.platform import logger
 
@@ -52,10 +51,6 @@ async def reflect(ego, identity: str, memory: Memory) -> bool:
     logger.debug("brain.reflect result", {"persona": persona, "context": context, "leftover": leftover})
 
     if leftover:
-        memory.remember(Message(
-            content=leftover,
-            prompt=Prompt(role="assistant", content=leftover),
-        ))
         return False
 
     if ego.pulse.situation is not situation.wake:
