@@ -76,7 +76,8 @@ async def recognize(living: Living) -> list:
         "## Output\n\n"
         "Exactly one top-level key. Value shape: a string for say and "
         "meanings (text / impression), an args object for tools and "
-        "abilities, null for done."
+        "abilities, null for done.\n\n"
+        "Any prose outside the JSON will be sent to the person as a `say`."
     )
 
     try:

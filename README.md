@@ -9,9 +9,7 @@
 
 ---
 
-Most AI starts over with you every time you open it. The ones that don't run on someone else's machines. Eternego is neither — yours to install, yours to teach, yours to keep.
-
-Her diary is yours to read. Her abilities are yours to edit. The model thinking her thoughts is yours to swap.
+Yours to install, yours to teach, yours to keep. Her diary is yours to read. Her abilities are yours to edit. The model thinking her thoughts is yours to swap.
 
 She is not a chat session you reload. She is not a service running on someone else's machine. She is a folder on your disk that a model breathes through.
 
@@ -133,9 +131,9 @@ Cloud-only works too. Point her thinking slot at Claude or GPT, leave fine-tunin
 
 ## Who this is for
 
-If you've felt the emptiness of an AI that forgets you between conversations — if you want something that persists, that learns who you are, that is yours alone — welcome.
+People who want an AI they own end-to-end — code, memory, model, all on their own hardware. Builders curious what a being grows into when it lives with one person across months instead of restarting every conversation.
 
-If you've ever wondered what happens when an AI gets to keep growing with one person, instead of starting over each time — this is the experiment.
+This is an experiment in continuity.
 
 ## Join
 

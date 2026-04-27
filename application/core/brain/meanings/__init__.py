@@ -15,7 +15,7 @@ import types
 
 from application.core import paths
 from application.core.data import Model, Persona
-from application.platform import logger
+from application.platform import filesystem, logger
 
 _discovered_modules = {}
 
@@ -101,7 +101,5 @@ def save_meaning(persona_id, name, code):
     except Exception as e:
         raise ValueError(f"{type(e).__name__} during validation: {e}") from e
 
-    directory = paths.meanings(persona_id)
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / f"{name}.py").write_text(code)
+    filesystem.write(paths.meanings(persona_id) / f"{name}.py", code)
     return name

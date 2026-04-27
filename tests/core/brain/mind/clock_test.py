@@ -1,8 +1,12 @@
-"""Clock — single-pass cycle runner with executor.
+"""Clock — cycle runner with executor and consequence-driven loop.
 
 Each test constructs a real Living with a controlled cycle (mocked async
 steps), runs `clock.run(living)`, and asserts on what dispatched, what was
 recorded in memory, and which steps ran.
+
+Clock loops the cycle until a pass produces no consequences (settled).
+Tests that emit consequences must settle on a subsequent pass or hit the
+iteration cap.
 """
 
 from application.platform.processes import on_separate_process_async
@@ -159,8 +163,12 @@ async def test_executor_runs_ability_consequence_and_records():
             from application.platform import observer
             from application.platform.asyncio_worker import Worker
 
+            calls = [0]
             async def step():
-                return [{"abilities.save_notes": {"content": "remember this"}}]
+                calls[0] += 1
+                if calls[0] == 1:
+                    return [{"abilities.save_notes": {"content": "remember this"}}]
+                return []  # settle on second pass
 
             persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
             ego = agents.Ego(persona)
@@ -212,9 +220,13 @@ async def test_executor_records_error_when_ability_raises():
             from application.platform import observer
             from application.platform.asyncio_worker import Worker
 
+            calls = [0]
             async def step():
-                # save_notes raises ValueError when content is empty
-                return [{"abilities.save_notes": {"content": ""}}]
+                calls[0] += 1
+                if calls[0] == 1:
+                    # save_notes raises ValueError when content is empty
+                    return [{"abilities.save_notes": {"content": ""}}]
+                return []  # settle on second pass
 
             persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
             ego = agents.Ego(persona)
@@ -258,8 +270,12 @@ async def test_executor_runs_tool_consequence_and_records():
             from application.platform import observer
             from application.platform.asyncio_worker import Worker
 
+            calls = [0]
             async def step():
-                return [{"tools.OS.execute_on_sub_process": {"command": "echo hello-clock"}}]
+                calls[0] += 1
+                if calls[0] == 1:
+                    return [{"tools.OS.execute_on_sub_process": {"command": "echo hello-clock"}}]
+                return []  # settle on second pass
 
             persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
             ego = agents.Ego(persona)
@@ -284,6 +300,90 @@ async def test_executor_runs_tool_consequence_and_records():
             assert len(runs) == 1
             assert runs[0].title == "tools.OS.execute_on_sub_process"
             assert runs[0].details["status"] == "ok"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_run_re_loops_when_consequences_executed():
+    """When a step emits a consequence, clock re-runs the cycle so the next
+    pass can read the TOOL_RESULT and act on it. Without this, a fetched
+    page (or any tool output) lands in memory but the persona never
+    consumes it."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import clock
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Model, Persona
+            from application.platform.asyncio_worker import Worker
+
+            calls = [0]
+            async def step():
+                calls[0] += 1
+                if calls[0] == 1:
+                    return [{"abilities.save_notes": {"content": "first pass"}}]
+                return []  # settle on second pass
+
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living.cycle = [("decide", lambda: step())]
+
+            asyncio.run(clock.run(living))
+
+            assert calls[0] == 2, f"expected 2 passes (one with consequence, one settling), got {calls[0]}"
+            # Memory now has the call+result pair from the first pass.
+            assert len(ego.memory.messages) == 2
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_run_dispatches_brain_fault_when_iteration_cap_hit():
+    """A step that always emits consequences would loop forever — clock
+    bounds it at MAX_ITERATIONS and dispatches a clock_loop_cap BrainFault
+    so health_check sees something is wrong."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import clock
+            from application.core.brain.pulse import Pulse
+            from application.core.brain.signals import BrainFault
+            from application.core.data import Model, Persona
+            from application.platform import observer
+            from application.platform.asyncio_worker import Worker
+
+            async def step():
+                return [{"abilities.save_notes": {"content": "loop"}}]
+
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living.cycle = [("decide", lambda: step())]
+
+            faults = []
+            def capture(signal: BrainFault):
+                faults.append(signal)
+            observer.subscribe(capture)
+
+            asyncio.run(clock.run(living))
+
+            assert len(faults) == 1
+            f = faults[0]
+            assert f.title == "clock_loop_cap"
+            assert f.details["persona"] is persona
+            assert "iteration cap" in f.details["error"]
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

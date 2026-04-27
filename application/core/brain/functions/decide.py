@@ -60,7 +60,8 @@ async def decide(living: Living) -> list:
         "- `{\"tools.<name>\": { ...args }}` — run a platform tool.\n"
         "- `{\"abilities.<name>\": { ...args }}` — run an ability.\n\n"
         "Done:\n"
-        "- `{\"done\": null}` — this cycle is finished."
+        "- `{\"done\": null}` — this cycle is finished.\n\n"
+        "Any prose outside the JSON will be sent to the person as a `say`."
     )
 
     try:

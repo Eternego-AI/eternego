@@ -21,18 +21,18 @@ def ensure_dir(path) -> None:
 
 
 @tool("Write text content to a file. Creates parent directories if needed. Overwrites if the file exists.")
-def write(path: str, content: str) -> str:
+def write(path: str, content: str, encoding: str = "utf-8") -> str:
     p = Path(path)
     ensure_dir(p.parent)
-    p.write_text(content)
+    p.write_text(content, encoding=encoding)
     return f"Written to {path}"
 
 
-def write_json(path, data: object) -> None:
+def write_json(path, data: object, encoding: str = "utf-8") -> None:
     """Write JSON data to a file."""
     p = Path(path)
     ensure_dir(p.parent)
-    p.write_text(json.dumps(data, indent=2))
+    p.write_text(json.dumps(data, indent=2), encoding=encoding)
 
 
 def write_bytes(path, data: bytes) -> None:
@@ -54,17 +54,17 @@ def zip(source) -> bytes:
 
 
 @tool("Append text content to the end of a file. Creates the file if it does not exist.")
-def append(path: str, content: str) -> str:
+def append(path: str, content: str, encoding: str = "utf-8") -> str:
     p = Path(path)
     ensure_dir(p.parent)
-    with open(p, "a") as f:
+    with open(p, "a", encoding=encoding) as f:
         f.write(content)
     return f"Appended to {path}"
 
 
 @tool("Read text content from a file.")
-def read(path: str) -> str:
-    return Path(path).read_text()
+def read(path: str, encoding: str = "utf-8") -> str:
+    return Path(path).read_text(encoding=encoding)
 
 
 def read_bytes(path) -> bytes:
@@ -77,9 +77,9 @@ def read_base64(path) -> str:
     return base64.b64encode(Path(path).read_bytes()).decode()
 
 
-def read_json(path) -> dict:
+def read_json(path, encoding: str = "utf-8") -> dict:
     """Read JSON data from a file."""
-    return json.loads(Path(path).read_text())
+    return json.loads(Path(path).read_text(encoding=encoding))
 
 
 def unzip(data: bytes, destination) -> None:

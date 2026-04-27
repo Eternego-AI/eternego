@@ -1,16 +1,21 @@
 """Clock — the persona's sense of time. Each run, life manifests.
 
-Clock.run loops the cognitive cycle. Each function returns a list of
-capabilities (tool/ability invocations the function declared but did not
-execute). Clock's inner executor runs each item, dispatches an Event for
-the capability with args/status/result as payload, and persists the
-call+result pair to memory.
+Clock.run loops the cognitive cycle until it settles. A pass that emits no
+capabilities is settled — the persona has either spoken, said done, or had
+nothing to do. A pass that runs at least one capability re-loops, so the
+TOOL_RESULT just written to memory gets read by the next pass's realize and
+the persona can act on what came back.
 
-No restart on True/False. Each beat is one full pass through the cycle.
-Tool results land in memory and are picked up on the next beat's realize.
+Bounded by MAX_ITERATIONS to prevent runaway loops; if the cap is hit, a
+BrainFault is dispatched naming `clock_loop_cap`.
 
-On EngineConnectionError or BrainException from any step, run logs and
-exits cleanly — health_check decides what to do.
+Each function returns a list of capabilities (tool/ability invocations the
+function declared but did not execute). Clock's inner executor runs each
+item, persists the call+result pair to memory via add_tool_result, and
+dispatches a CapabilityRun event.
+
+On EngineConnectionError or BrainException from any step, run dispatches a
+BrainFault and exits. Health_check decides what to do.
 """
 
 from application.core import abilities, tools
@@ -18,6 +23,9 @@ from application.core.brain.signals import BrainFault, CapabilityRun
 from application.core.exceptions import BrainException, EngineConnectionError
 from application.platform import logger
 from application.platform.observer import dispatch
+
+
+MAX_ITERATIONS = 16
 
 
 async def run(living) -> None:
@@ -55,25 +63,41 @@ async def run(living) -> None:
     if worker.stopped:
         return
 
-    for name, step in living.cycle:
-        try:
-            consequences = await worker.dispatch(step)
-        except (EngineConnectionError, BrainException) as e:
-            model = e.model
-            dispatch(BrainFault(name, {
-                "persona": persona,
-                "provider": (model.provider or "ollama") if model else None,
-                "url": model.url if model else None,
-                "model_name": model.name if model else None,
-                "error": str(e),
-            }))
-            logger.warning("Run fault", {"function": name, "error": str(e)})
-            return
-        if worker.stopped:
-            return
-        if not isinstance(consequences, list):
-            continue
-        for item in consequences:
-            await execute(item)
+    for iteration in range(MAX_ITERATIONS):
+        executed_any = False
+
+        for name, step in living.cycle:
+            try:
+                consequences = await worker.dispatch(step)
+            except (EngineConnectionError, BrainException) as e:
+                model = e.model
+                dispatch(BrainFault(name, {
+                    "persona": persona,
+                    "provider": (model.provider or "ollama") if model else None,
+                    "url": model.url if model else None,
+                    "model_name": model.name if model else None,
+                    "error": str(e),
+                }))
+                logger.warning("Run fault", {"function": name, "error": str(e)})
+                return
             if worker.stopped:
                 return
+            if not isinstance(consequences, list):
+                continue
+            for item in consequences:
+                await execute(item)
+                executed_any = True
+                if worker.stopped:
+                    return
+
+        if not executed_any:
+            return
+
+    logger.warning("clock.run hit iteration cap", {"persona": persona, "max": MAX_ITERATIONS})
+    dispatch(BrainFault("clock_loop_cap", {
+        "persona": persona,
+        "provider": None,
+        "url": None,
+        "model_name": None,
+        "error": f"clock.run hit iteration cap ({MAX_ITERATIONS})",
+    }))
