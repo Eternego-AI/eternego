@@ -8,6 +8,8 @@ async def test_healthy_tick_writes_health_log_and_nudges():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
+        from application.core.brain.signals import BrainFault
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects
 
@@ -30,13 +32,18 @@ async def test_healthy_tick_writes_health_log_and_nudges():
         identity.parent.mkdir(parents=True, exist_ok=True)
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
-        ego = agents.Ego(p, FakeWorker())
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
 
-        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
         assert outcome.success, outcome.message
         assert p.status == "active"
-        assert ego.pulse.worker.nudged == 0
-        assert len(ego.pulse.events) == 0
+        assert living.pulse.worker.nudged == 0
+        assert not [s for s in living.signals if isinstance(s, BrainFault)]
 
         entries = paths.read_jsonl(paths.health_log(p.id))
         assert len(entries) == 1, entries
@@ -54,7 +61,8 @@ async def test_frontier_fault_disables_frontier_and_persists_config():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
-        from application.core.brain.mind.pulse import Event
+        from application.core.brain.pulse import Pulse
+        from application.core.brain.signals import BrainFault
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects
 
@@ -84,20 +92,20 @@ async def test_frontier_fault_disables_frontier_and_persists_config():
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
 
-        ego = agents.Ego(p, FakeWorker())
-        ego.pulse._loop_number = 1
-        ego.pulse._events.append(Event(
-            kind="fault", function="recognize", loop=1,
-            provider="anthropic", url="https://api.anthropic.com",
-            model_name="claude-opus-4-6", error="HTTP 429",
-        ))
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living.signals.append(BrainFault("recognize", {"persona": p, "provider": "anthropic", "url": "https://api.anthropic.com", "model_name": "claude-opus-4-6", "error": "HTTP 429"}))
 
-        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
         assert outcome.success, outcome.message
         assert p.frontier is None
         assert p.vision is None
         assert p.status == "active"
-        assert ego.pulse.worker.nudged == 0
+        assert living.pulse.worker.nudged == 0
 
         reread = paths.read_json(paths.persona_identity(p.id))
         assert reread["frontier"] is None
@@ -118,7 +126,8 @@ async def test_vision_only_fault_disables_vision_leaves_frontier_alone():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
-        from application.core.brain.mind.pulse import Event
+        from application.core.brain.pulse import Pulse
+        from application.core.brain.signals import BrainFault
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects
 
@@ -148,10 +157,15 @@ async def test_vision_only_fault_disables_vision_leaves_frontier_alone():
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
 
-        ego = agents.Ego(p, FakeWorker())
-        ego.pulse._events.append(Event(kind="fault", function="realize", loop=1, provider="anthropic", url="...", model_name="claude-haiku-4-5", error="empty"))
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living.signals.append(BrainFault("realize", {"persona": p, "provider": "anthropic", "url": "...", "model_name": "claude-haiku-4-5", "error": "empty"}))
 
-        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
         assert outcome.success
         assert p.vision is None
         assert p.frontier is not None
@@ -168,7 +182,8 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
-        from application.core.brain.mind.pulse import Event
+        from application.core.brain.pulse import Pulse
+        from application.core.brain.signals import BrainFault
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects, observer
 
@@ -197,8 +212,13 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
 
-        ego = agents.Ego(p, FakeWorker())
-        ego.pulse._events.append(Event(kind="fault", function="realize", loop=1, provider="anthropic", url="...", model_name="claude-haiku-4-5", error="HTTP 401"))
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living.signals.append(BrainFault("realize", {"persona": p, "provider": "anthropic", "url": "...", "model_name": "claude-haiku-4-5", "error": "HTTP 401"}))
 
         commands = []
 
@@ -210,7 +230,7 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         result = {}
 
         async def run():
-            result["outcome"] = await spec.health_check(ego, datetimes.now())
+            result["outcome"] = await spec.health_check(ego, living, datetimes.now())
             await asyncio.sleep(0)
 
         asyncio.run(run())
@@ -223,7 +243,7 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         assert outcome.data.log_entry["fault_providers"] == ["anthropic"]
 
         assert p.status == "sick"
-        assert ego.pulse.worker.nudged == 0
+        assert living.pulse.worker.nudged == 0
 
         reread = paths.read_json(paths.persona_identity(p.id))
         assert reread["status"] == "sick"
@@ -242,6 +262,7 @@ async def test_unexpected_worker_error_recovers_with_apology():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects
 
@@ -264,12 +285,17 @@ async def test_unexpected_worker_error_recovers_with_apology():
         identity.parent.mkdir(parents=True, exist_ok=True)
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
-        ego = agents.Ego(p, FakeWorker())
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
 
-        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
         assert outcome.success
-        assert ego.pulse.worker.reset_called is True
-        assert ego.pulse.worker.nudged >= 1
+        assert living.pulse.worker.reset_called is True
+        assert living.pulse.worker.nudged >= 1
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -282,6 +308,7 @@ async def test_due_destiny_entries_are_processed_after_health():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects
 
@@ -303,13 +330,18 @@ async def test_due_destiny_entries_are_processed_after_health():
         identity.parent.mkdir(parents=True, exist_ok=True)
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
-        ego = agents.Ego(p, FakeWorker())
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
 
         past = datetimes.now().replace(microsecond=0)
         trigger = past.strftime("%Y-%m-%d %H:%M")
         paths.save_destiny_entry(p.id, "reminder", trigger, "drink water")
 
-        outcome = asyncio.run(spec.health_check(ego, datetimes.now()))
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
         assert outcome.success
 
         remaining = list(paths.destiny(p.id).glob("*.md"))

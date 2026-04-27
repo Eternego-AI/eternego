@@ -9,6 +9,7 @@ async def test_see_succeeds_with_media():
 
         from application.business.persona.see import see
         from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
         from application.core.data import Channel, Model, Persona
         from application.platform import objects, filesystem
 
@@ -33,9 +34,14 @@ async def test_see_succeeds_with_media():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        ego = agents.Ego(p, FakeWorker())
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
         channel = Channel(type="telegram", name="123", verified_at="2026-04-17T00:00:00")
-        result = asyncio.run(see(ego, source=image_path, caption="What is in this image?", channel=channel))
+        result = asyncio.run(see(ego, living, source=image_path, caption="What is in this image?", channel=channel))
         assert result.success, result.message
         msg = ego.memory.messages[-1]
         assert msg.media is not None
@@ -53,6 +59,7 @@ async def test_see_rejects_unverified_channel():
 
         from application.business.persona.see import see
         from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
         from application.core.data import Channel, Model, Persona
 
         tmp = tempfile.mkdtemp()
@@ -63,9 +70,14 @@ async def test_see_rejects_unverified_channel():
             def run(self, *args): pass
             def nudge(self): pass
 
-        ego = agents.Ego(p, FakeWorker())
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
         channel = Channel(type="telegram", name="123")
-        result = asyncio.run(see(ego, source="/tmp/img.png", caption="test", channel=channel))
+        result = asyncio.run(see(ego, living, source="/tmp/img.png", caption="test", channel=channel))
         assert result.success
         assert result.data.response == "Channel not verified."
 

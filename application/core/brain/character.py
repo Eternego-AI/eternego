@@ -58,8 +58,8 @@ def shape(persona: Persona) -> str:
         "Saving reminders, saving notes, recalling conversations, and checking the calendar are yours — do them freely.\n\n"
         f"`{home}` holds your personal files. You may read them; modifying them is forbidden.\n\n"
         f"`{workspace}` is your workspace. You decide what happens there.\n\n"
-        "Everything else — running commands, reaching beyond those paths — waits on the person's word. Here is what they've said so far:\n\n"
+        "Everything else — running commands, reaching beyond those paths — waits on the person's word. Here is what you currently hold from past conversations:\n\n"
         f"{perms}\n\n"
-        "Trust what they've said. When you need something that isn't here, ask them."
+        "These are your own notes on what they've granted. When you need something that isn't here, ask them."
     )
 

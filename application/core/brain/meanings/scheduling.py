@@ -1,4 +1,4 @@
-"""Meaning — setting a reminder or scheduling an event."""
+"""Meaning — scheduling."""
 
 from application.core.data import Persona
 
@@ -8,29 +8,20 @@ class Meaning:
         self.persona = persona
 
     def intention(self) -> str:
-        return "Setting a reminder or scheduling an event"
+        return "Saving a reminder or event for a future moment, or responding when one has come due"
 
-    def prompt(self) -> str:
+    def path(self) -> str:
         return (
-            "Save a reminder or schedule an event. `reminder` is personal — a nudge for the person. "
-            "`schedule` is an appointment at a fixed time. Resolve the trigger time from the "
-            "conversation and the Current Time. If `what` or `when` is missing, ask with `say` first.\n\n"
-            "## Tools\n\n"
-            "- `save_destiny(type, trigger, content, recurrence?)`\n"
-            "  - `type`: `reminder` or `schedule`.\n"
-            "  - `trigger`: `YYYY-MM-DD HH:MM`.\n"
-            "  - `content`: what to remind or describe.\n"
-            "  - `recurrence` (optional): `daily`, `weekly`, `monthly`, `hourly`, or `\"\"`.\n"
-            "- `say(text)` — message the person.\n\n"
-            "## Output\n\n"
-            "Saving and confirming:\n"
-            "```json\n"
-            '{"tool": "save_destiny", "type": "<reminder|schedule>",\n'
-            ' "trigger": "<YYYY-MM-DD HH:MM>", "content": "<what>", "recurrence": "<see above>",\n'
-            ' "say": "<confirmation>"}\n'
-            "```\n\n"
-            "Asking for clarification:\n"
-            "```json\n"
-            '{"tool": "say", "text": "<question>"}\n'
-            "```"
+            "Hold time-bound things. Two situations call for this meaning.\n\n"
+            "**The person asks you to save something for a future moment.** Resolve the trigger "
+            "time from the conversation and the current time. A `reminder` is a personal nudge; "
+            "a `schedule` is an appointment at a fixed time. If the essentials are missing "
+            "(what, when), ask with `say` first. Use `abilities.save_destiny` with `type`, "
+            "`trigger` (YYYY-MM-DD HH:MM), `content`, and optionally `recurrence` (daily, weekly, "
+            "monthly, hourly).\n\n"
+            "**A `due for:` message has arrived.** A saved item has come due right now. Notify "
+            "the person with what is due, when, and any urgency — use `notify` so it reaches "
+            "them on every channel at once. If the due item's body contains a `recurrence:` "
+            "line, call `abilities.save_destiny` for the next occurrence in the next cycle so "
+            "the chain continues."
         )

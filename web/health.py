@@ -108,9 +108,11 @@ def lenses(entries, days_count=7, hours_count=24, minutes_count=60):
 def uptime_grid(entries, rows_count=24, cols_count=60):
     """24-hour minute-by-minute grid, latest first.
 
-    Returns `{"rows": [{from, to, cells: [{at, tick, fault, providers}, …]}, …]}`.
+    Returns `{"rows": [{from, to, cells: [{at, tick, fault, providers, signals}, …]}, …]}`.
     Row 0 is the most recent block of `cols_count` minutes; within each row,
-    the leftmost cell is the latest minute in that block.
+    the leftmost cell is the latest minute in that block. `signals` is the
+    list of signals captured during that minute's health-check window —
+    used by the UI to surface a per-cell timeline on click.
     """
     now = dt.now()
     now_minute = now.replace(second=0, microsecond=0)
@@ -125,10 +127,11 @@ def uptime_grid(entries, rows_count=24, cols_count=60):
         if m < cutoff or m > now_minute:
             continue
         key = m.isoformat()
-        slot = minute_bins.setdefault(key, {"fault": False, "providers": set()})
+        slot = minute_bins.setdefault(key, {"fault": False, "providers": set(), "signals": []})
         if entry.get("fault_count", 0) > 0:
             slot["fault"] = True
             slot["providers"].update(entry.get("fault_providers", []) or [])
+        slot["signals"].extend(entry.get("signals", []) or [])
 
     rows = []
     for row_idx in range(rows_count):
@@ -143,6 +146,7 @@ def uptime_grid(entries, rows_count=24, cols_count=60):
                     "tick": True,
                     "fault": slot["fault"],
                     "providers": sorted(slot["providers"]),
+                    "signals": slot["signals"],
                 })
             else:
                 cells.append({
@@ -150,6 +154,7 @@ def uptime_grid(entries, rows_count=24, cols_count=60):
                     "tick": False,
                     "fault": False,
                     "providers": [],
+                    "signals": [],
                 })
         rows.append({
             "from": cells[-1]["at"],

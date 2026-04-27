@@ -5,7 +5,6 @@ from .conversation import conversation
 from .create import create
 from .delete import delete
 from .diagnose import diagnose
-from .export import export
 from .feed import feed
 from .find import find
 from .get_list import get_list
@@ -18,4 +17,5 @@ from .oversee import oversee
 from .query import query
 from .sleep import sleep
 from .update import update
+from .wake import wake
 from .write_diary import write_diary

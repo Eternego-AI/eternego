@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from application.platform import logger, objects
 from application.platform.observer import Event, Plan, Signal, subscribe
-from config.application import log_file, signal_log_file
+from config.application import log_file, persona_log_file, signal_log_file
 from config.web import HOST as DEFAULT_HOST, PORT as DEFAULT_PORT
 
 
@@ -33,10 +33,20 @@ def bootstrap(args) -> Config:
     levels = list(logger.Level)
     info_index = levels.index(logger.Level.INFO)
 
+    def persona_id_from(context):
+        if not isinstance(context, dict):
+            return None
+        p = context.get("persona")
+        return getattr(p, "id", None) if p is not None else None
+
     def log_media(message):
         if not config.debug and message.level == logger.Level.DEBUG:
             return
         logger.file_media(log_file)(message)
+        if config.debug:
+            pid = persona_id_from(message.context)
+            if pid:
+                logger.file_media(lambda: persona_log_file(pid))(message)
         if config.verbosity >= 3 or (config.verbosity >= 2 and levels.index(message.level) <= info_index):
             print(f"[{message.level.value}] {message.title}", objects.safe(message.context))
 
@@ -44,6 +54,9 @@ def bootstrap(args) -> Config:
         def signal_log_media(message):
             if config.debug:
                 logger.file_media(signal_log_file)(message)
+                pid = persona_id_from(message.context)
+                if pid:
+                    logger.file_media(lambda: persona_log_file(pid))(message)
         logger.info(signal.title, {"_type": signal.__class__.__name__, **signal.details}, signal_log_media)
         if config.verbosity >= 2 or (config.verbosity >= 1 and isinstance(signal, (Plan, Event))):
             print(f"[{signal.__class__.__name__}] {signal.title}", objects.safe(signal.details))

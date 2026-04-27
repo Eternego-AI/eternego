@@ -15,7 +15,7 @@ def discover() -> list[Tool]:
 def document() -> str:
     """Return a description of available tools for model prompts.
 
-    Used by wondering() when teaching the frontier what tools exist. The tool
+    Used by learn() when teaching the frontier what tools exist. The tool
     list is generated from the @tool registry — adding a new platform tool with
     @tool makes it appear here automatically.
     """
@@ -27,9 +27,9 @@ def document() -> str:
         for t in available
     )
     return (
-        "Tools are platform functions the persona can call from a meaning's prompt.\n"
-        "A meaning asks its model for JSON like {\"tool\": \"<name>\", ...params}; the\n"
-        "experience stage dispatches that to the matching tool below.\n\n"
+        "Tools are platform functions the persona can call from a meaning's path.\n"
+        "A meaning asks its model for JSON like {\"tools.<name>\": { ...args }}; decide\n"
+        "dispatches that to the matching tool below.\n\n"
         f"{tool_list}"
     )
 

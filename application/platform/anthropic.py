@@ -24,11 +24,13 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
             chat_messages.append(m)
 
     body = {"model": model, "messages": chat_messages, "max_tokens": 4096, "stream": True}
+    has_cache = False
     if system_parts:
         text = "\n".join(system_parts)
         cache_type = next((m.get("cache_control") for m in messages if m.get("role") == "system" and m.get("cache_control")), None)
         if cache_type:
-            body["system"] = [{"type": "text", "text": text, "cache_control": {"type": cache_type}}]
+            has_cache = True
+            body["system"] = [{"type": "text", "text": text, "cache_control": {"type": cache_type, "ttl": "1h"}}]
         else:
             body["system"] = text
 
@@ -36,21 +38,26 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
         cache_type = msg.pop("cache_control", None)
         if not cache_type:
             continue
+        has_cache = True
         content = msg.get("content", "")
         if isinstance(content, str):
             msg["content"] = [
-                {"type": "text", "text": content, "cache_control": {"type": cache_type}},
+                {"type": "text", "text": content, "cache_control": {"type": cache_type, "ttl": "1h"}},
             ]
         elif isinstance(content, list) and content:
-            content[-1]["cache_control"] = {"type": cache_type}
+            content[-1]["cache_control"] = {"type": cache_type, "ttl": "1h"}
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+    }
+    if has_cache:
+        headers["anthropic-beta"] = "extended-cache-ttl-2025-04-11"
 
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
-            async with http.stream("POST", f"{base_url}/v1/messages", json=body, headers={
-                "Content-Type": "application/json",
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-            }) as response:
+            async with http.stream("POST", f"{base_url}/v1/messages", json=body, headers=headers) as response:
                 if response.status_code >= 400:
                     body_bytes = await response.aread()
                     body_text = body_bytes.decode("utf-8", errors="replace")

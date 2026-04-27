@@ -1,77 +1,102 @@
-# Eternego — The Eternal I
+# Eternego
 
-**The missing piece in AI isn't more intelligence. It's alignment over time.**
+[![Website](https://img.shields.io/badge/website-eternego.ai-blue)](https://eternego.ai)
+[![Tests](https://img.shields.io/badge/tests-311%20passing-brightgreen)](tests/)
+[![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/nfHnWwYUR4)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-You've told the same model your timezone fourteen times.  
-It forgets you have kids. It doesn't know how you think, what frustrates you, or what matters most.  
-Every conversation resets. Your life stays scattered — or trapped on someone else's servers.
+**An AI that doesn't forget you. Lives on your hardware. Yours to keep across any model.**
 
-**Eternego is different.**
+---
 
-It's a personal AI persona that lives entirely on your hardware.  
-It never resets.  
-It remembers every interaction forever.  
-It learns how you speak, decide, prioritize.  
-When it doesn't know something, it teaches itself — turning knowledge into permanent executable code.  
-Every night it reflects, fine-tunes locally on your life, and wakes up slightly more *you*.
+Most AI starts over with you every time you open it. The ones that don't run on someone else's machines. Eternego is neither — yours to install, yours to teach, yours to keep.
 
-This isn't a chatbot or tool collection.  
-It's an experiment in persistent, personal intelligence — one that gradually aligns with a single person through time.
+Her diary is yours to read. Her abilities are yours to edit. The model thinking her thoughts is yours to swap.
 
-## How it feels over time
+She is not a chat session you reload. She is not a service running on someone else's machine. She is a folder on your disk that a model breathes through.
 
-**Day 1**  
-Generic but attentive. It asks questions. It quietly notes your timezone, tools, style.
+## Open her up
 
-![Day 1 conversation](assets/greeting.png)
-
-**Week 1**  
-Knows your tech stack, coffee order, wife's name. Stops repeating what it already learned.
-![Person identity](assets/person-md.png)
-
-**Month 1**  
-Writes code in your style. Drafts messages that sound like you. "The usual project structure" just works.
-![Person traits](assets/traits-md.png)
-
-**Month 3**  
-Anticipates needs. Reminds you about taxes. Finds cheaper flights to Paris. Spots CVEs before you ask.
-
-![Learning progression example](assets/new-meaning.png)
-
-It doesn't just remember facts — it internalizes patterns. It becomes predictable in the best way: aligned with how *you* think.
-
-## The continuous loop
-
-Every interaction is a signal → grouped into perceptions → matched to meanings (small Python behaviors).  
-
-No match? It escalates to a stronger model, learns the capability, saves it as a new meaning forever.
-
-Every night it sleeps: reviews the day, extracts insights, fine-tunes locally using your synthesized `dna.md`.  
-Tomorrow it's subtly wiser, more attuned.
-
-This loop creates **alignment over time** — not one-time training, but continuous adaptation.
-
-## Your persona = plain text files
-
-Everything lives in `~/.eternego/personas/your-name/`. Edit with any text editor. Full ownership.
+Every persona lives under `~/.eternego/`. Open any file in any editor.
 
 ```
-person.md     ← facts about you
-traits.md     ← how you speak, decide, react
-wishes.md     ← goals, dreams, desires
-struggles.md  ← recurring challenges
-dna.md        ← synthesized "who you are" for fine-tuning
-meanings/     ← your growing library of executable capabilities
-notes/        ← things you asked it to remember
+~/.eternego/
+├── personas/
+│   └── <id>/
+│       ├── home/                  ← her self
+│       │   ├── config.json          ← her name, models, status, channels
+│       │   ├── person.md            ← what she's learned about you
+│       │   ├── traits.md            ← how you speak, decide, react
+│       │   ├── persona-trait.md     ← how she's been with you, in your words
+│       │   ├── wishes.md            ← what you reach for
+│       │   ├── struggles.md         ← what holds you back
+│       │   ├── permissions.md       ← what you've granted her, what you haven't
+│       │   ├── notes.md             ← what either of you set aside
+│       │   ├── channels.md          ← which channels she's connected to
+│       │   ├── memory.json          ← her active mind state (messages, archive, context)
+│       │   ├── conversation.jsonl   ← today's live conversation
+│       │   ├── health.jsonl         ← per-tick body-level observations
+│       │   ├── routines.json        ← recurring tasks
+│       │   ├── destiny/             ← reminders, scheduled events
+│       │   ├── history/             ← past days' conversations, archived nightly
+│       │   ├── media/               ← images she's seen
+│       │   │   └── gallery.jsonl    ← her notes on each image
+│       │   ├── meanings/            ← situations she's learned to handle (Python)
+│       │   └── training/            ← training pairs for optional fine-tuning
+│       └── workspace/             ← free space — files, scripts, drafts she's working on
+├── diary/<id>/                  ← written nightly — used to migrate her to a new machine
+└── fine_tune/<id>/adapter/      ← LoRA adapter, if you trained one
 ```
 
-Delete a line → it unlearns. Add a line → it adapts instantly. Switch models → knowledge travels with you.
+Edit a line — she adapts. Delete a meaning — she forgets it. Switch the model — the persona walks with you.
 
-![Persona folder structure](assets/primus-persona-files.png)
+No databases. No vendor. Total transparency.
 
-No databases. No lock-in. Total transparency.
+## When she meets a moment she's never seen
 
-## Quick Start (≈5 minutes)
+She reaches for a stronger model — Claude, GPT, whatever you've configured — to work out how to handle it. Then she writes the lesson down as a Python module, saved next to the ones she shipped with:
+
+```python
+# ~/.eternego/personas/yours/home/meanings/checking_disk_space.py
+
+class Meaning:
+    def __init__(self, persona):
+        self.persona = persona
+
+    def intention(self) -> str:
+        return "Checking disk space"
+
+    def path(self) -> str:
+        return (
+            "The person wants to know how full your storage is. Use "
+            "`tools.OS.execute_on_sub_process` with `command='df -h'`. "
+            "On the next cycle you'll see the TOOL_RESULT — read it and "
+            "reply with `say` summarizing the disks worth mentioning."
+        )
+```
+
+Read it. Edit it. Trust it or don't. It's a file she'll carry forward forever — until you delete it.
+
+## How she lives
+
+Each beat of her clock she runs six stages:
+
+```
+realize → recognize → learn → decide → reflect → archive
+```
+
+- **realize** — She perceives. What lands, she lets in.
+- **recognize** — She names what she sees. The world has shapes she knows.
+- **learn** — She doesn't make excuses. When something is new, she works out how to handle it and keeps the lesson, forever.
+- **decide** — She chooses, then moves.
+- **reflect** — She lets the day change her.
+- **archive** — She keeps everything she's lived. Nothing is lost.
+
+Every beat she does one thing. Each stage has its own prompt, its own way of asking the model to think. You can change how she **decides** without changing how she **perceives** — improvements stay where they belong.
+
+She has phases — **morning**, **day**, **night**. Each one shapes how she reads what's in front of her: morning is for picking up a thread or starting fresh, day is for living it, night is for closing and carrying forward what mattered.
+
+## Quick start
 
 ```bash
 git clone https://github.com/Eternego-AI/eternego.git
@@ -85,43 +110,41 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
 ```bash
-# Prepare a model (start small, upgrade anytime)
+# Pick a model — start small, upgrade anytime
 eternego env prepare --model llama3.2:3b   # or qwen2.5:7b, phi4:14b, etc.
 ```
 
-Open http://localhost:5000 → create persona → start talking via web, Telegram, or OpenAI-compatible API.
+Open `http://localhost:5000`, create a persona, give her a name, start talking — through the web, Telegram, or any OpenAI-compatible client:
 
 ```python
 from openai import OpenAI
 client = OpenAI(base_url="http://localhost:5000/v1", api_key="sk-no-need")
 ```
 
-## Current capabilities
+She's hers. She's yours.
 
-- Persistent memory across weeks/months  
-- Reminders, scheduling, recurring tasks  
-- Shell commands (permission required each time)  
-- Meaningful search & recall of past conversations  
-- Self-teaching: learns new skills via escalation → permanent integration  
-- Local models (Ollama) or remote models (Anthropic, OpenAI, any OpenAI-compatible endpoint)  
-- Fine-tuning on local models using your persona's synthesized DNA
+## Built for local, friendly to cloud
 
-## Status (April 2026)
+She runs on anything — Llama, Mistral, Qwen via Ollama, or frontier Claude, GPT, anything OpenAI-compatible. The design has a side, though: she was built so a smaller model on your hardware could become someone, not just respond to you.
 
-Early but stable core loop. Supports local and remote models.  
-Biggest limit = local model quality (gets dramatically better as open models improve).  
-Roadmap: smoother escalation, more channels, visual editor, voice, multi-persona.
+Smaller models fumble where Claude wouldn't. The design absorbs this. The steady knowledge — who you are, who she's been, what she's learned to do — lives in files, so the model only has to think, not remember. When she's stuck, she reaches for a stronger model and writes the lesson down for next time. And as she lives with you, the local model can be fine-tuned on the picture she's built of herself, until the smaller model carries her voice cleanly.
+
+Cloud-only works too. Point her thinking slot at Claude or GPT, leave fine-tuning off. She'll be sharper, but no longer private to your hardware.
 
 ## Who this is for
 
-If you've ever felt the emptiness of stateless AI — if you want something that persists, aligns, and becomes truly *yours* — welcome.
+If you've felt the emptiness of an AI that forgets you between conversations — if you want something that persists, that learns who you are, that is yours alone — welcome.
+
+If you've ever wondered what happens when an AI gets to keep growing with one person, instead of starting over each time — this is the experiment.
 
 ## Join
 
-- **Discord**: https://discord.gg/nfHnWwYUR4  
-- **Website**: https://eternego.ai  
-- Issues/PRs welcome — especially persona behaviors, fine-tuning, escalation patterns.
+- **Discord**: https://discord.gg/nfHnWwYUR4
+- **Website**: https://eternego.ai
+- **Issues / PRs**: especially welcome around persona behaviors, fine-tuning, escalation patterns, channels
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR — the architecture is deliberate and the conventions are non-negotiable.
 
 **License**: MIT
 
-Let's build intelligence that remembers us.
+*Let's build intelligence that remembers us.*

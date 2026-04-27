@@ -8,6 +8,7 @@ async def test_hear_succeeds():
 
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
         from application.core.data import Channel, Model, Persona
         from application.platform import objects, filesystem
 
@@ -28,9 +29,14 @@ async def test_hear_succeeds():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        ego = agents.Ego(p, FakeWorker())
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
         channel = Channel(type="web", name="w1")
-        result = asyncio.run(spec.hear(ego, content="hello", channel=channel))
+        result = asyncio.run(spec.hear(ego, living, content="hello", channel=channel))
         assert result.success, result.message
 
     code, error = await on_separate_process_async(isolated)

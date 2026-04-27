@@ -2,7 +2,7 @@
 
 import json
 
-from application.core.data import Model
+from application.core.data import Model, Prompt
 from application.core.exceptions import ModelError, EngineConnectionError
 from application.platform import logger
 
@@ -12,7 +12,7 @@ from .chat_json import chat_json
 async def generate_training_set(model: Model, character: str, traits: str) -> list[dict]:
     """Generate fine-tuning training pairs from persona character and behavioral traits."""
     logger.info("models.generate_training_set", {"model": model.name})
-    identity = (
+    identity_text = (
         "You are a training data generator for fine-tuning language models.\n\n"
         "Your role is to produce high-quality conversational training pairs that teach a model "
         "to be a specific person's personal AI — to converse, reason, and respond in the way "
@@ -65,7 +65,7 @@ async def generate_training_set(model: Model, character: str, traits: str) -> li
     )
 
     try:
-        result = await chat_json(model, identity, [], question)
+        result = await chat_json(model, [Prompt(role="system", content=identity_text)], question)
         return result.get("training_pairs", [])
     except (ModelError, EngineConnectionError):
         return []

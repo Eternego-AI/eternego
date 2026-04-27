@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from application.business.outcome import Outcome
 from application.core import bus, models
-from application.core.brain import situation
+from application.core.brain.pulse import Phase
 from application.core.data import Persona
 from application.core.exceptions import EngineConnectionError, MindError
 
@@ -14,16 +14,17 @@ class QueryData:
     response: str
 
 
-async def query(ego, messages) -> Outcome[QueryData]:
+async def query(ego, living, messages) -> Outcome[QueryData]:
     """Answer a direct query using the local model — no pipeline, no memory."""
     persona = ego.persona
     bus.propose("Querying", {"persona": persona, "messages": messages})
     try:
-        if ego.pulse.situation is situation.sleep:
+        if living.pulse.phase == Phase.NIGHT:
             bus.broadcast("Queried", {"persona": persona})
             return Outcome(success=True, message="", data=QueryData(response=f"{persona.name} is sleeping."))
 
-        response = await models.chat(persona.thinking, ego.personality(), [], messages)
+        question = messages.get("content", "") if isinstance(messages, dict) else str(messages)
+        response = await models.chat(ego.model, ego.identity + living.pulse.hint(), question)
 
         bus.broadcast("Queried", {"persona": persona})
         return Outcome(success=True, message="", data=QueryData(response=response))

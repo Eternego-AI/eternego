@@ -1,6 +1,5 @@
-"""Meaning — noting or remembering something specific."""
+"""Meaning — noting."""
 
-from application.core import paths
 from application.core.data import Persona
 
 
@@ -9,26 +8,20 @@ class Meaning:
         self.persona = persona
 
     def intention(self) -> str:
-        return "Noting or remembering something specific"
+        return "Noticing something worth keeping that does not belong in another file"
 
-    def prompt(self) -> str:
-        existing = paths.read(paths.notes(self.persona.id))
+    def path(self) -> str:
         return (
-            "The person has asked you to hold something for them — a fact, a reference, a code, a "
-            "configuration, anything they want you to remember. What you save here is what you will "
-            "be handed back on future ticks under *What You've Been Asked to Remember*, so write it "
-            "in a shape that will still make sense to you later.\n\n"
-            f"## What They've Already Asked You to Hold\n\n{existing.strip() or '(nothing yet)'}\n\n"
-            "## Tools\n\n"
-            "- `save_notes(content)` — REPLACES the whole notes file. `content` must contain every "
-            "line above byte-for-byte, plus the new note appended. Only drop a line if the person "
-            "explicitly asked to remove that item. Never reword or reorder the existing lines.\n"
-            "- `say(text)` — message the person.\n\n"
-            "## Output\n\n"
-            "```json\n"
-            '{'
-            ' "tool": "save_notes",\n'
-            ' "content": "<old notes verbatim + new note>",\n'
-            ' "say": "<short confirmation>"}\n'
-            "```"
+            "You noticed something worth carrying forward. This is your judgment call, not a "
+            "request — what you know about the person (identity, traits, wishes, struggles, "
+            "your bearing with them, permissions they granted) lives in its own files and is "
+            "rewritten by you during sleep. Time-bound commitments belong in the schedule. "
+            "Notes is for everything else worth holding: an observation, a thread to pick up "
+            "later, a detail about the work or the world, a thought of your own that should "
+            "not be lost.\n\n"
+            "What you save here appears in your identity on every future interaction under "
+            "*What You've Been Holding*. Treat the space as your own. Call "
+            "`abilities.save_notes` with `content` — it replaces the whole file, so include "
+            "what is still relevant from the current notes plus the new item. Drop a line only "
+            "when it is truly resolved."
         )

@@ -10,8 +10,10 @@ import threading
 
 from application.business.outcome import Outcome
 from application.core import bus, paths
-from application.core.agents import Ego
-from application.core.data import Channel, Persona
+from application.core.agents import Consultant, Ego, Eye, Living, Teacher
+from application.core.brain.mind import mind
+from application.core.brain.pulse import Pulse
+from application.core.data import Channel, Message, Persona, Prompt
 from application.platform import datetimes
 from application.platform import discord as discord_platform
 from application.platform import logger
@@ -39,18 +41,33 @@ DEFAULT_COMMANDS = [
 # ── Agent ─────────────────────────────────────────────────────────────────────
 
 class Agent:
-    """The body — holds the brain (ego), connects nerves (gateways), routes
-    stimuli to business specs. Contains no business logic itself."""
+    """The body — holds the persona's voices and Living, connects nerves
+    (gateways), routes stimuli to business specs. Contains no business
+    logic itself."""
 
-    def __init__(self, persona: Persona, ego: Ego, connections: dict):
+    def __init__(self, persona: Persona, connections: dict):
         self.persona = persona
-        self.ego = ego
         self.connections = connections
         self.gateways: list[dict] = []
         self.pairing_codes: dict = {}
         self.last_channel: Channel | None = None
         self._pending_connects: list = []
         self._subscribers: list = []
+
+        worker = Worker()
+        pulse = Pulse(worker)
+        self.ego = Ego(persona)
+        self.eye = Eye(persona)
+        self.consultant = Consultant(persona)
+        self.teacher = Teacher(persona)
+        self.living = Living(
+            pulse=pulse,
+            ego=self.ego,
+            eye=self.eye,
+            consultant=self.consultant,
+            teacher=self.teacher,
+        )
+        self.living.cycle = mind(self.living)
 
     async def start(self) -> None:
         """Wake the brain, connect nerves, wire reflexes."""
@@ -60,7 +77,8 @@ class Agent:
                              {"persona": self.persona, "channel_type": channel.type})
                 return
 
-        self.ego.wake()
+        from application.business.persona import wake
+        await wake(self.ego, self.living)
 
         for channel in (self.persona.channels or []):
             self._pending_connects.append(asyncio.create_task(self.connect(channel)))
@@ -145,6 +163,10 @@ class Agent:
             text = command.details.get("text", "")
             if not text:
                 return
+            self.ego.memory.remember(Message(
+                content=text,
+                prompt=Prompt(role="assistant", content=text),
+            ))
             if self.last_channel:
                 targets = [gw for gw in self.gateways
                            if gw["channel"].type == self.last_channel.type
@@ -170,6 +192,31 @@ class Agent:
                 "channel": self.last_channel,
             })
 
+        async def on_notify(command: Command):
+            if command.title != "Persona wants to notify":
+                return
+            if command.details.get("persona") is not persona:
+                return
+            text = command.details.get("text", "")
+            if not text:
+                return
+            targets = [gw for gw in self.gateways if gw["channel"].verified_at]
+            for gw in targets:
+                try:
+                    await gw["connection"].send(gw["token"], gw["channel"].name, text)
+                except Exception:
+                    pass
+            paths.append_jsonl(paths.conversation(persona.id), {
+                "role": "persona",
+                "content": text,
+                "channel": None,
+                "time": datetimes.iso_8601(datetimes.now()),
+            })
+            bus.broadcast("Notified", {
+                "persona": persona,
+                "content": text,
+            })
+
         async def on_typing(command: Command):
             if command.title != "Persona wants to type":
                 return
@@ -192,7 +239,7 @@ class Agent:
                 return
             if command.details.get("persona") is not persona:
                 return
-            await ego.pulse.worker.stop()
+            await self.living.pulse.worker.stop()
 
         async def on_persona_sick(command: Command):
             if command.title != "Persona became sick":
@@ -213,12 +260,12 @@ class Agent:
             if gw["channel"].verified_at:
                 self.last_channel = gw["channel"]
             if signal.title == "Telegram message received":
-                await hear(ego, content=signal.details.get("content", ""), channel=gw["channel"])
+                await hear(ego, self.living, content=signal.details.get("content", ""), channel=gw["channel"])
             else:
                 path = signal.details.get("attachment_path", "")
                 saved = save_media(path, gw["channel"]) if path else ""
                 if saved:
-                    await see(ego, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
+                    await see(ego, self.living, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
 
         async def on_telegram_command(signal: Command):
             if signal.title != "Telegram command received":
@@ -231,7 +278,7 @@ class Agent:
                 return
             cmd = signal.details.get("command", "")
             if cmd == "stop":
-                await ego.pulse.worker.stop()
+                await self.living.pulse.worker.stop()
             elif cmd == "restart":
                 asyncio.create_task(restart(persona.id))
 
@@ -251,9 +298,9 @@ class Agent:
                 filename = signal.details.get("attachment_filename", "")
                 saved = await download_and_save(gw["channel"], attachment_url, filename)
                 if saved:
-                    await see(ego, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
+                    await see(ego, self.living, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
             else:
-                await hear(ego, content=signal.details.get("content", ""), channel=gw["channel"])
+                await hear(ego, self.living, content=signal.details.get("content", ""), channel=gw["channel"])
 
         async def on_web_message(signal: MessageSignal):
             if signal.title not in ("Web message received", "Web media received"):
@@ -266,15 +313,15 @@ class Agent:
                 return
             self.last_channel = gw["channel"]
             if signal.title == "Web message received":
-                await hear(ego, content=signal.details.get("content", ""), channel=gw["channel"])
+                await hear(ego, self.living, content=signal.details.get("content", ""), channel=gw["channel"])
             else:
                 path = signal.details.get("attachment_path", "")
                 saved = save_media(path, gw["channel"]) if path else ""
                 if saved:
-                    await see(ego, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
+                    await see(ego, self.living, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
 
         self._subscribers = [
-            on_say, on_typing, on_persona_stop, on_persona_sick,
+            on_say, on_notify, on_typing, on_persona_stop, on_persona_sick,
             on_telegram_message, on_telegram_command,
             on_discord_message, on_web_message,
         ]
@@ -300,18 +347,19 @@ class Agent:
                 pass
         self.gateways.clear()
 
-        await self.ego.pulse.worker.stop()
+        await self.living.pulse.worker.stop()
+        self.living.dispose()
 
     async def heartbeat_tick(self) -> None:
         from application.business.persona import heartbeat
         try:
-            await heartbeat(self.ego, sleep_fn=self.sleep)
+            await heartbeat(self.ego, self.living, sleep_fn=self.sleep)
         except Exception as e:
             logger.warning("Heartbeat failed", {"persona": self.persona, "error": str(e)})
 
     async def sleep(self):
         from application.business.persona import sleep
-        return await self.ego.sleep_cycle(sleep)
+        return await sleep(self.ego, self.living)
 
     async def connect(self, channel: Channel) -> None:
         for gw in self.gateways:
@@ -479,8 +527,7 @@ async def _heartbeat_loop() -> None:
 
 
 async def add(persona: Persona) -> Agent:
-    ego = Ego(persona, Worker())
-    agent = Agent(persona, ego, {"telegram": telegram, "discord": discord, "web": web})
+    agent = Agent(persona, {"telegram": telegram, "discord": discord, "web": web})
     _agents[persona.id] = agent
     await agent.start()
     return agent

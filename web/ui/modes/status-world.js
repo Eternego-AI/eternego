@@ -157,10 +157,11 @@ class StatusWorld extends Mode {
             border-radius: 1px;
             background: var(--text-ghost);
             opacity: 0.4;
-            cursor: help;
+            cursor: pointer;
             transition: opacity 0.1s, transform 0.1s;
             min-width: 0;
         }
+        status-world .sw-cell.has-signals { cursor: zoom-in; }
         status-world .sw-cell:hover { opacity: 1; transform: scaleY(1.4); }
         status-world .sw-cell.well { background: var(--accent); opacity: 0.7; }
         status-world .sw-cell.trouble { background: var(--destructive-text); opacity: 0.85; }
@@ -177,6 +178,82 @@ class StatusWorld extends Mode {
             color: var(--text-dim);
             font-size: 12px;
             padding: 60px 0;
+        }
+
+        /* Signals modal — per-cell timeline */
+        status-world .sw-sig {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 0;
+        }
+        status-world .sw-sig-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--warm-text);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        status-world .sw-sig-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        status-world .sw-sig-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        status-world .sw-sig-row {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 8px 10px;
+            background: var(--surface-recessed);
+            border: 1px solid var(--border-subtle);
+            border-left: 2px solid var(--accent-border);
+            border-radius: var(--radius-sm);
+        }
+        status-world .sw-sig-row.fault { border-left-color: var(--destructive-border); }
+        status-world .sw-sig-row.tool { border-left-color: var(--warm-border); }
+        status-world .sw-sig-head {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font-size: 12px;
+        }
+        status-world .sw-sig-type {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        status-world .sw-sig-row.fault .sw-sig-type { color: var(--destructive-text); }
+        status-world .sw-sig-row.tool .sw-sig-type { color: var(--warm-text); }
+        status-world .sw-sig-row-title {
+            color: var(--text-body);
+            font-family: var(--font);
+        }
+        status-world .sw-sig-time {
+            margin-left: auto;
+            color: var(--text-dim);
+            font-size: 10px;
+            font-variant-numeric: tabular-nums;
+        }
+        status-world .sw-sig-details {
+            font-family: var(--font);
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: rgba(0,0,0,0.25);
+            border-radius: var(--radius-sm);
+            padding: 6px 8px;
+        }
+        status-world .sw-sig-empty {
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 12px;
+            padding: 24px 0;
         }
     `;
 
@@ -347,16 +424,102 @@ class StatusWorld extends Mode {
             const c = document.createElement('div');
             c.className = 'sw-cell';
             if (cell.tick) c.classList.add(cell.fault ? 'trouble' : 'well');
+            if (cell.signals && cell.signals.length) c.classList.add('has-signals');
             const time = this._fmt(cell.at);
             const parts = [time];
             if (!cell.tick) parts.push('not running');
             else if (cell.fault) parts.push(`fault — ${(cell.providers || []).join(', ') || 'unknown'}`);
             else parts.push('well');
+            if (cell.signals && cell.signals.length) parts.push(`${cell.signals.length} signal${cell.signals.length === 1 ? '' : 's'} (click)`);
             c.title = parts.join(' — ');
+            c.addEventListener('click', () => this._openSignals(cell));
             cells.appendChild(c);
         }
         el.appendChild(cells);
         return el;
+    }
+
+    _openSignals(cell) {
+        const modal = document.createElement('modal-layout');
+        modal.init({});
+        document.body.appendChild(modal);
+
+        const wrap = document.createElement('div');
+        wrap.className = 'sw-sig';
+
+        const title = document.createElement('div');
+        title.className = 'sw-sig-title';
+        title.textContent = `Signals · ${this._fmt(cell.at)}`;
+        wrap.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'sw-sig-meta';
+        if (!cell.tick) {
+            meta.textContent = 'No heartbeat in this minute — the persona was not running.';
+        } else if (cell.fault) {
+            meta.textContent = `Fault detected — ${(cell.providers || []).join(', ') || 'unknown provider'}.`;
+        } else {
+            meta.textContent = 'Heartbeat captured. No faults.';
+        }
+        wrap.appendChild(meta);
+
+        const list = document.createElement('div');
+        list.className = 'sw-sig-list';
+        const signals = cell.signals || [];
+        if (!signals.length) {
+            const empty = document.createElement('div');
+            empty.className = 'sw-sig-empty';
+            empty.textContent = 'No signals captured in this window.';
+            list.appendChild(empty);
+        } else {
+            for (const s of signals) list.appendChild(this._buildSignalRow(s));
+        }
+        wrap.appendChild(list);
+
+        modal.setContent(wrap);
+    }
+
+    _buildSignalRow(s) {
+        const row = document.createElement('div');
+        row.className = 'sw-sig-row';
+        if (s.type === 'BrainFault') row.classList.add('fault');
+        else if (s.type === 'CapabilityRun') row.classList.add('tool');
+
+        const head = document.createElement('div');
+        head.className = 'sw-sig-head';
+        const type = document.createElement('span');
+        type.className = 'sw-sig-type';
+        type.textContent = s.type;
+        const ti = document.createElement('span');
+        ti.className = 'sw-sig-row-title';
+        ti.textContent = s.title || '';
+        const time = document.createElement('span');
+        time.className = 'sw-sig-time';
+        time.textContent = this._fmtNs(s.time);
+        head.appendChild(type);
+        head.appendChild(ti);
+        head.appendChild(time);
+        row.appendChild(head);
+
+        const details = s.details && Object.keys(s.details).length ? s.details : null;
+        if (details) {
+            const body = document.createElement('div');
+            body.className = 'sw-sig-details';
+            try {
+                body.textContent = JSON.stringify(details, null, 2);
+            } catch {
+                body.textContent = String(details);
+            }
+            row.appendChild(body);
+        }
+
+        return row;
+    }
+
+    _fmtNs(ns) {
+        if (typeof ns !== 'number') return '';
+        const d = new Date(Math.floor(ns / 1_000_000));
+        return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
 
     _fmt(iso) {

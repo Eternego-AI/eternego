@@ -1068,6 +1068,7 @@ class InnerWorld extends Mode {
             { id: 'sleep',   icon: moon(13),       label: 'Sleep' },
             { id: 'stop',    icon: square(13),      label: 'Stop' },
             { id: 'restart', icon: refreshCw(13),   label: 'Restart' },
+            { id: 'export',  icon: download(13),    label: 'Export' },
             { id: 'delete',  icon: trash2(13),      label: 'Delete', danger: true },
         ];
 
@@ -1082,7 +1083,15 @@ class InnerWorld extends Mode {
             const btn = document.createElement('button');
             btn.className = 'iw-action' + (def.danger ? ' iw-danger' : '');
             btn.innerHTML = `<span class="iw-action-icon">${def.icon}</span>${def.label}`;
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
+                if (def.id === 'export') {
+                    btn.disabled = true;
+                    btn.textContent = 'Exporting...';
+                    await this._props.api.exportPersona(this._personaId);
+                    btn.disabled = false;
+                    btn.innerHTML = `<span class="iw-action-icon">${def.icon}</span>${def.label}`;
+                    return;
+                }
                 if (confirm(confirmMessages[def.id])) {
                     this._props.api.actionPersona(this._personaId, def.id);
                 }

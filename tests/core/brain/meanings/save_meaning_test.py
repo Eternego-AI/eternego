@@ -1,8 +1,8 @@
 from application.platform.processes import on_separate_process_async
 
 
-async def test_rejects_prompt_returning_tuple():
-    """A trailing-comma bug turns prompt() into a tuple. compile() accepts it;
+async def test_rejects_path_returning_tuple():
+    """A trailing-comma bug turns path() into a tuple. compile() accepts it;
     validation must catch it before the file lands on disk — otherwise decide
     crashes on 'str + tuple' three days later."""
     def isolated():
@@ -20,16 +20,16 @@ async def test_rejects_prompt_returning_tuple():
                 '        self.persona = persona',
                 '    def intention(self) -> str:',
                 '        return "ending_conversation"',
-                '    def prompt(self) -> str:',
+                '    def path(self) -> str:',
                 '        return "first section",',
                 '        "second section"',
             ])
             try:
                 save_meaning("test-persona", "ending_conversation", code)
-                assert False, "Expected ValueError for tuple-returning prompt()"
+                assert False, "Expected ValueError for tuple-returning path()"
             except ValueError as e:
                 message = str(e)
-                assert "prompt" in message and "tuple" in message, f"Unexpected message: {message}"
+                assert "path" in message and "tuple" in message, f"Unexpected message: {message}"
             meaning_file = tmp + "/personas/test-persona/home/meanings/ending_conversation.py"
             assert not os.path.exists(meaning_file), "Broken meaning should not be written to disk"
 
@@ -78,7 +78,7 @@ async def test_rejects_syntax_error():
 
 async def test_rejects_runtime_errors_during_validation():
     """If exec, instantiation, or a method call raises anything, the meaning is
-    rejected as a ValueError — wondering catches (SyntaxError, ValueError), so
+    rejected as a ValueError — learn catches (SyntaxError, ValueError), so
     execution failures must land in the ValueError channel or they'd escape."""
     def isolated():
         import os
@@ -94,7 +94,7 @@ async def test_rejects_runtime_errors_during_validation():
                 '        self.persona = persona',
                 '    def intention(self) -> str:',
                 '        return undefined_name',
-                '    def prompt(self) -> str:',
+                '    def path(self) -> str:',
                 '        return "ok"',
             ])
             try:
@@ -124,7 +124,7 @@ async def test_accepts_valid_meaning():
                 '        self.persona = persona',
                 '    def intention(self) -> str:',
                 '        return "reading_aloud"',
-                '    def prompt(self) -> str:',
+                '    def path(self) -> str:',
                 '        return "speak the content aloud"',
             ])
             name = save_meaning("test-persona", "reading_aloud", code)

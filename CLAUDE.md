@@ -23,32 +23,48 @@ Business imports core. Core imports platform. Never upward, never sideways. The 
 
 ## Mind and body
 
-The mind (`application/core/brain/`) thinks. The body (`application/platform/` + `manager.py`'s Agent) carries the mind's words into the world and brings signals back. Messages follow the standard chat convention: `role=user` for anything from outside the persona (person's words, tool results, body signals), `role=assistant` for what the persona itself produced. Two prefixes layer on top:
+The mind (`application/core/brain/`) thinks. The body (`application/platform/` + `manager.py`'s Agent) carries the mind's words into the world and brings signals back. Messages follow the standard chat convention: `role=user` for anything from outside the persona (person's words, tool results, body signals), `role=assistant` for what the persona itself produced.
 
-- `TOOL_RESULT` — user-role messages following an assistant-role tool call, naming tool/status/result
-- `Subconscious:` — user-role messages the body flags as the persona's own internal noise (today: wondering reporting it couldn't form a meaning)
+`TOOL_RESULT` is the prefix on user-role messages that follow an assistant-role tool/ability call — naming tool, status, and result. The convention is enforced in one place: `memory.add_tool_result(selector, value, status, result)` writes the standard pair (assistant call + user TOOL_RESULT).
 
-The persona reads this shape because its identity tells it to. See CONTRIBUTING.md "Message convention" for the full rules.
+## Four alive voices
 
-## Three identities
+Each cognitive stage uses one of four "alive" voices. All four live in `application/core/agents.py`:
 
-Each cognitive stage takes one of three identity strings as its system prompt. All three live in `application/core/brain/identities.py`:
-
-- **personality** — the persona's own voice (character + situation + person facts + carried context). Used by recognize, decide, experience, transform, reflect
-- **perspective** — a neutral observer reading the conversation from outside. Used by realize to formulate vision questions without slipping into the persona's voice
-- **teacher** — an architect who writes new abilities for the persona. Used by wondering when recognize left `ability=0`
+- **Ego** — the persona's own voice. Identity is rebuilt every read from character, situation, person facts, and carried context. Speaks through `persona.thinking`. Used by recognize, decide, reflect, archive.
+- **Consultant** — a neutral observer. Reads the conversation from outside without slipping into the persona's voice. Reuses `persona.thinking` with a different framing. Used by realize to formulate vision questions.
+- **Eye** — the persona's sight. Looks at images, reports what it sees. Uses `persona.vision` (optional).
+- **Teacher** — an architect who writes new meanings for the persona. Uses `persona.frontier`. Called by learn.
 
 ## The cognitive cycle
 
-Seven stages in `application/core/brain/functions/`, run by `clock.tick`:
+Six stages in `application/core/brain/functions/`, run once per beat by `clock.run(living)`:
 
 ```
-realize → recognize → wondering → decide → experience → transform → reflect
+realize → recognize → learn → decide → reflect → archive
 ```
 
-Each stage is testable independently. Each returns True to advance, False to restart the tick from the top. Two exceptions exit the tick cleanly: `EngineConnectionError` (infra fault — provider unreachable/empty) and `BrainException` (recognize refused classification again while already on the troubleshooting meaning — the built-in recovery didn't save it).
+Each stage takes only `living: Living` and returns `list[Consequence]` — a declaration of mechanics for clock's executor to run. No restart-on-False. One pass through the cycle per beat. Each stage is testable independently.
 
-When decide or recognize receive prose instead of JSON, they dispatch the prose as a say (assistant-role) rather than raising. Recognize also forces `memory.meaning = "troubleshooting"` on first refusal so the next tick runs the self-diagnostic. Only a second refusal while on troubleshooting escalates to `BrainException`.
+Two exceptions exit the cycle cleanly: `EngineConnectionError` (provider unreachable/empty) and `BrainException` (recognize refused classification again while already on the troubleshooting meaning). Both dispatch a `BrainFault` signal that health_check reads on the next heartbeat.
+
+When recognize or decide receive prose instead of JSON, they dispatch the prose as a say (assistant-role) rather than raising. Recognize forces `memory.meaning = "troubleshooting"` on first refusal so the next tick runs the self-diagnostic. Only a second refusal while on troubleshooting escalates to `BrainException`.
+
+## Phase
+
+Pulse holds `phase: Phase | None` (Enum: `MORNING` / `DAY` / `NIGHT`). Phase transitions: wake → MORNING; hear/see → DAY; sleep → NIGHT.
+
+`Pulse.hint()` returns one phase-specific system prompt appended after Ego's identity on each model call — the persona reads where she is on the day's arc every tick. Phase changes are rare and immediately trigger persona activity, so cache invalidation isn't a concern.
+
+## Three entities — tools, abilities, meanings
+
+Layered by what state they see.
+
+- **Tools** (`application/platform/*.py`, `@tool`) — platform primitives. `tools.call(name, **args) → (status, result)`. Catches its own exceptions.
+- **Abilities** (`application/core/abilities/*.py`, `@ability("desc", requires=...)`) — one-shot named verbs. `abilities.call(persona, name, **args)`. The optional `requires=lambda persona: bool` predicate gates per-persona availability (e.g., `look_at` requires a vision model).
+- **Meanings** (`application/core/brain/meanings/*.py`) — situations the persona knows how to be in. `Meaning` class with `intention()` and `path()` methods. Built-ins ship; custom meanings written by learn live in the persona's home dir and load via `memory.learn`.
+
+Selectors in consequences: `tools.<module>.<function>`, `abilities.<name>`, `meanings.<name>`.
 
 ## Business layer conventions
 
@@ -63,7 +79,7 @@ When decide or recognize receive prose instead of JSON, they dispatch the prose 
 
 - Starts with `logger.debug` or `logger.info`
 - Raises domain exceptions from `application/core/exceptions.py`
-- Never sends bus signals (no `bus.*` calls)
+- Cognitive functions dispatch `Tick` (Plan) on entry and `Tock` (Event) on exit; no `bus.propose`/`bus.broadcast` (those are business-side)
 - Never returns `Outcome` — returns data or raises
 - Uses platform modules for all infrastructure — never imports external libraries directly
 
@@ -73,13 +89,13 @@ When decide or recognize receive prose instead of JSON, they dispatch the prose 
 - No project-specific logic, no Eternego assumptions
 - Portable across projects
 - `OS.py` is the single system-agnostic module for all OS operations (no per-OS modules)
-- Conscious functions receive capabilities as callbacks from Ego, never import channels/gateways directly
 
 ## Code style
 
 - **Naming**: gerund intents (`saying`, `doing`, `recognizing`, `chatting`). The vocabulary mirrors human cognition deliberately — treat it as load-bearing
 - **Paths**: every path comes from `application/core/paths.py`. Don't hardcode filenames or compute paths inline
 - **Memory**: per-persona via `Memory(persona)` or `ego.memory`. No global memory state
+- **Tool results**: every tool/ability/special invocation goes through `memory.add_tool_result` — the convention lives in one place
 - **Signals**: `bus.propose` at start, `bus.broadcast` at end, every business function
 - **Exceptions**: domain-specific, defined in `exceptions.py`, caught at the business layer
 - **No helpers**: prefer explicit repetition over premature abstraction. No `_*` helper functions that exist to dedupe a few lines — write them twice

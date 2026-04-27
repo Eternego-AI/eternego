@@ -79,9 +79,10 @@ async def test_chat_extracts_system_message():
 
         def validate(r):
             assert r["body"]["system"] == [
-                {"type": "text", "text": "You are helpful", "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": "You are helpful", "cache_control": {"type": "ephemeral", "ttl": "1h"}},
             ], r["body"]
             assert r["body"]["messages"] == [{"role": "user", "content": "hi"}], r["body"]["messages"]
+            assert r["headers"].get("anthropic-beta") == "extended-cache-ttl-2025-04-11", r["headers"]
 
         anthropic.assert_chat(
             run=lambda url: consume(url),
@@ -106,8 +107,9 @@ async def test_chat_joins_multiple_system_messages():
 
         def validate(r):
             assert r["body"]["system"] == [
-                {"type": "text", "text": "First.\nSecond.", "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": "First.\nSecond.", "cache_control": {"type": "ephemeral", "ttl": "1h"}},
             ], r["body"]
+            assert r["headers"].get("anthropic-beta") == "extended-cache-ttl-2025-04-11", r["headers"]
 
         anthropic.assert_chat(
             run=lambda url: consume(url),
@@ -128,6 +130,7 @@ async def test_chat_omits_system_key_when_no_system_messages():
 
         def validate(r):
             assert "system" not in r["body"], r["body"]
+            assert "anthropic-beta" not in r["headers"], r["headers"]
 
         anthropic.assert_chat(
             run=lambda url: consume(url),

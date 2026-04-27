@@ -1,238 +1,289 @@
-import asyncio
+"""Clock — single-pass cycle runner with executor.
 
-from application.core.brain import situation
-from application.core.brain.mind import clock
-from application.core.brain.mind.pulse import Pulse
-from application.core.data import Model
-from application.core.exceptions import EngineConnectionError
-from application.platform.asyncio_worker import Worker
+Each test constructs a real Living with a controlled cycle (mocked async
+steps), runs `clock.run(living)`, and asserts on what dispatched, what was
+recorded in memory, and which steps ran.
+"""
 
-
-def test_tick_logs_success_for_each_step_in_a_clean_cycle():
-    async def step_true():
-        return True
-
-    async def run():
-        p = Pulse(Worker())
-        consciousness = [
-            ("realize",   lambda: step_true()),
-            ("recognize", lambda: step_true()),
-            ("decide",    lambda: step_true()),
-        ]
-        await clock.tick(consciousness, [], p)
-        return p
-
-    p = asyncio.run(run())
-    assert [e.kind for e in p.events] == ["success", "success", "success"]
-    assert [e.function for e in p.events] == ["realize", "recognize", "decide"]
+from application.platform.processes import on_separate_process_async
 
 
-def test_tick_logs_fault_and_exits_on_engine_error():
-    model = Model(name="qwen3:32b", url="http://localhost:11434")
+async def test_clean_cycle_runs_every_step():
+    """A cycle whose steps all return [] runs to completion in order."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import clock
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Model, Persona
+            from application.platform.asyncio_worker import Worker
 
-    async def step_true():
-        return True
+            ran = []
+            async def step(name):
+                ran.append(name)
+                return []
 
-    async def step_faults():
-        raise EngineConnectionError("empty response", model=model)
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living.cycle = [
+                ("realize", lambda: step("realize")),
+                ("recognize", lambda: step("recognize")),
+                ("decide", lambda: step("decide")),
+            ]
 
-    async def step_should_not_run():
-        raise AssertionError("should not be reached")
+            asyncio.run(clock.run(living))
+            assert ran == ["realize", "recognize", "decide"]
 
-    async def run():
-        p = Pulse(Worker())
-        consciousness = [
-            ("realize",   lambda: step_true()),
-            ("recognize", lambda: step_faults()),
-            ("decide",    lambda: step_should_not_run()),
-        ]
-        await clock.tick(consciousness, [], p)
-        return p
-
-    p = asyncio.run(run())
-    assert len(p.events) == 2
-    assert p.events[0].kind == "success" and p.events[0].function == "realize"
-    assert p.events[1].kind == "fault"
-    assert p.events[1].function == "recognize"
-    assert p.events[1].provider == "ollama"
-    assert p.events[1].model_name == "qwen3:32b"
-    assert p.events[1].url == "http://localhost:11434"
-
-
-def test_tick_attributes_fault_to_anthropic_provider():
-    model = Model(name="claude-haiku-4-5", provider="anthropic", api_key="x", url="https://api.anthropic.com")
-
-    async def step_faults():
-        raise EngineConnectionError("rate limit", model=model)
-
-    async def run():
-        p = Pulse(Worker())
-        await clock.tick([("realize", lambda: step_faults())], [], p)
-        return p
-
-    p = asyncio.run(run())
-    assert p.events[0].kind == "fault"
-    assert p.events[0].provider == "anthropic"
-    assert p.events[0].model_name == "claude-haiku-4-5"
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_tick_increments_loop_counter_each_while_iteration():
-    async def step_true():
-        return True
+async def test_engine_connection_error_dispatches_brain_fault_and_halts():
+    """A step raising EngineConnectionError dispatches a BrainFault carrying
+    persona/provider/url/model_name/error, and the next step does not run."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import clock
+            from application.core.brain.pulse import Pulse
+            from application.core.brain.signals import BrainFault
+            from application.core.data import Model, Persona
+            from application.core.exceptions import EngineConnectionError
+            from application.platform import observer
+            from application.platform.asyncio_worker import Worker
 
-    async def run():
-        p = Pulse(Worker())
-        await clock.tick([("realize", lambda: step_true())], [], p)
-        return p
+            ran = []
+            faulty_model = Model(name="qwen3:32b", url="http://localhost:11434")
 
-    p = asyncio.run(run())
-    assert p.loop_number == 1
+            async def ok():
+                ran.append("realize")
+                return []
 
+            async def faulty():
+                ran.append("recognize")
+                raise EngineConnectionError("empty response", model=faulty_model)
 
-def test_tick_step_zero_false_exits_and_logs_success():
-    async def step_false():
-        return False
+            async def should_not_run():
+                ran.append("decide")
+                return []
 
-    async def step_should_not_run():
-        raise AssertionError("should not be reached")
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living.cycle = [
+                ("realize", lambda: ok()),
+                ("recognize", lambda: faulty()),
+                ("decide", lambda: should_not_run()),
+            ]
 
-    async def run():
-        p = Pulse(Worker())
-        consciousness = [
-            ("realize",   lambda: step_false()),
-            ("recognize", lambda: step_should_not_run()),
-        ]
-        await clock.tick(consciousness, [], p)
-        return p
+            faults = []
+            def capture(signal: BrainFault):
+                faults.append(signal)
+            observer.subscribe(capture)
 
-    p = asyncio.run(run())
-    assert len(p.events) == 1
-    assert p.events[0].kind == "success"
-    assert p.events[0].function == "realize"
+            asyncio.run(clock.run(living))
 
+            assert ran == ["realize", "recognize"]
+            assert len(faults) == 1
+            f = faults[0]
+            assert f.title == "recognize"
+            assert f.details["persona"] is persona
+            assert f.details["provider"] == "ollama"
+            assert f.details["url"] == "http://localhost:11434"
+            assert f.details["model_name"] == "qwen3:32b"
+            assert "empty response" in f.details["error"]
 
-def test_tick_exits_when_worker_is_stopped_mid_cycle():
-    async def step_true():
-        return True
-
-    async def step_should_not_run():
-        raise AssertionError("should not be reached")
-
-    async def run():
-        p = Pulse(Worker())
-
-        async def step_stops_worker():
-            p.worker._stopped = True
-            return True
-
-        consciousness = [
-            ("realize",   lambda: step_true()),
-            ("recognize", lambda: step_stops_worker()),
-            ("decide",    lambda: step_should_not_run()),
-        ]
-        await clock.tick(consciousness, [], p)
-        return p
-
-    p = asyncio.run(run())
-    assert [e.function for e in p.events] == ["realize"]
-
-
-def test_tick_restarts_on_non_zero_step_returning_false():
-    calls = {"realize": 0, "recognize": 0}
-
-    async def realize():
-        calls["realize"] += 1
-        return True
-
-    async def recognize():
-        calls["recognize"] += 1
-        return calls["recognize"] >= 2
-
-    async def run():
-        p = Pulse(Worker())
-        consciousness = [
-            ("realize",   lambda: realize()),
-            ("recognize", lambda: recognize()),
-        ]
-        await clock.tick(consciousness, [], p)
-        return p
-
-    p = asyncio.run(run())
-    assert calls["realize"] == 2
-    assert calls["recognize"] == 2
-    assert p.loop_number == 2
-    assert len(p.events) == 4
-    assert all(e.kind == "success" for e in p.events)
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_tick_skips_subconscious_when_not_sleeping():
-    calls = {"conscious": 0, "subconscious": 0}
+async def test_run_exits_immediately_when_worker_stopped():
+    """If the worker is stopped before run, no step executes."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import clock
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Model, Persona
+            from application.platform.asyncio_worker import Worker
 
-    async def conscious_step():
-        calls["conscious"] += 1
-        return True
+            ran = []
+            async def step():
+                ran.append(1)
+                return []
 
-    async def subconscious_step():
-        calls["subconscious"] += 1
-        return True
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            worker = Worker()
+            worker._stopped = True
+            living = agents.Living(pulse=Pulse(worker), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living.cycle = [("realize", lambda: step())]
 
-    async def run():
-        p = Pulse(Worker())
-        conscious = [("realize", lambda: conscious_step())]
-        subconscious = [("transform", lambda: subconscious_step())]
-        await clock.tick(conscious, subconscious, p)
-        return p
+            asyncio.run(clock.run(living))
+            assert ran == []
 
-    p = asyncio.run(run())
-    assert calls["conscious"] == 1
-    assert calls["subconscious"] == 0
-    assert p.loop_number == 1
-
-
-def test_tick_runs_subconscious_when_sleeping():
-    calls = {"conscious": 0, "subconscious": 0}
-
-    async def conscious_step():
-        calls["conscious"] += 1
-        return True
-
-    async def subconscious_step():
-        calls["subconscious"] += 1
-        return True
-
-    async def run():
-        p = Pulse(Worker())
-        p.situation = situation.sleep
-        conscious = [("realize", lambda: conscious_step())]
-        subconscious = [("archive", lambda: subconscious_step())]
-        await clock.tick(conscious, subconscious, p)
-        return p
-
-    p = asyncio.run(run())
-    assert calls["conscious"] == 1
-    assert calls["subconscious"] == 1
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 
 
-def test_tick_restarts_conscious_when_subconscious_returns_false():
-    calls = {"conscious": 0, "subconscious": 0}
+async def test_executor_runs_ability_consequence_and_records():
+    """When a step returns [{"abilities.<name>": {...}}], the executor calls
+    the ability, records add_tool_result with the result, and dispatches a
+    CapabilityRun signal."""
+    def isolated():
+        import asyncio, os, tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents, paths
+            from application.core.brain import clock
+            from application.core.brain.pulse import Pulse
+            from application.core.brain.signals import CapabilityRun
+            from application.core.data import Model, Persona
+            from application.platform import observer
+            from application.platform.asyncio_worker import Worker
 
-    async def conscious_step():
-        calls["conscious"] += 1
-        return True
+            async def step():
+                return [{"abilities.save_notes": {"content": "remember this"}}]
 
-    async def subconscious_step():
-        calls["subconscious"] += 1
-        return calls["subconscious"] >= 2
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living.cycle = [("decide", lambda: step())]
 
-    async def run():
-        p = Pulse(Worker())
-        p.situation = situation.sleep
-        conscious = [("realize", lambda: conscious_step())]
-        subconscious = [("transform", lambda: subconscious_step())]
-        await clock.tick(conscious, subconscious, p)
-        return p
+            runs = []
+            def capture(signal: CapabilityRun):
+                runs.append(signal)
+            observer.subscribe(capture)
 
-    p = asyncio.run(run())
-    assert calls["conscious"] == 2
-    assert calls["subconscious"] == 2
-    assert p.loop_number == 2
+            asyncio.run(clock.run(living))
+
+            # Notes file got written
+            assert paths.notes(persona.id).read_text().strip() == "remember this"
+            # Memory has the call/result pair
+            msgs = ego.memory.messages
+            assert len(msgs) == 2
+            assert msgs[0].prompt.role == "assistant"
+            assert "abilities.save_notes" in msgs[0].content
+            assert msgs[1].prompt.role == "user"
+            assert "TOOL_RESULT" in msgs[1].content
+            assert "notes updated" in msgs[1].content
+            # CapabilityRun dispatched with the right shape
+            assert len(runs) == 1
+            assert runs[0].title == "abilities.save_notes"
+            assert runs[0].details["status"] == "ok"
+            assert runs[0].details["result"] == "notes updated"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_executor_records_error_when_ability_raises():
+    """An ability raising an exception → executor catches, status='error',
+    result is the exception text, still recorded in memory and dispatched."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import clock
+            from application.core.brain.pulse import Pulse
+            from application.core.brain.signals import CapabilityRun
+            from application.core.data import Model, Persona
+            from application.platform import observer
+            from application.platform.asyncio_worker import Worker
+
+            async def step():
+                # save_notes raises ValueError when content is empty
+                return [{"abilities.save_notes": {"content": ""}}]
+
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living.cycle = [("decide", lambda: step())]
+
+            runs = []
+            def capture(signal: CapabilityRun):
+                runs.append(signal)
+            observer.subscribe(capture)
+
+            asyncio.run(clock.run(living))
+
+            msgs = ego.memory.messages
+            assert len(msgs) == 2
+            assert "TOOL_RESULT" in msgs[1].content
+            assert "status: error" in msgs[1].content
+            assert "content is required" in msgs[1].content
+            assert len(runs) == 1
+            assert runs[0].details["status"] == "error"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_executor_runs_tool_consequence_and_records():
+    """When a step returns [{"tools.<name>": {...}}], the executor calls
+    tools.call (which already returns (status, result)) and records the pair."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import clock
+            from application.core.brain.pulse import Pulse
+            from application.core.brain.signals import CapabilityRun
+            from application.core.data import Model, Persona
+            from application.platform import observer
+            from application.platform.asyncio_worker import Worker
+
+            async def step():
+                return [{"tools.OS.execute_on_sub_process": {"command": "echo hello-clock"}}]
+
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living.cycle = [("decide", lambda: step())]
+
+            runs = []
+            def capture(signal: CapabilityRun):
+                runs.append(signal)
+            observer.subscribe(capture)
+
+            asyncio.run(clock.run(living))
+
+            msgs = ego.memory.messages
+            assert len(msgs) == 2
+            assert "tools.OS.execute_on_sub_process" in msgs[0].content
+            assert "TOOL_RESULT" in msgs[1].content
+            assert "hello-clock" in msgs[1].content
+            assert len(runs) == 1
+            assert runs[0].title == "tools.OS.execute_on_sub_process"
+            assert runs[0].details["status"] == "ok"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error

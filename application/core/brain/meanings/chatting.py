@@ -1,4 +1,4 @@
-"""Meaning — having a conversation."""
+"""Meaning — chatting."""
 
 from application.core.data import Persona
 
@@ -8,21 +8,14 @@ class Meaning:
         self.persona = persona
 
     def intention(self) -> str:
-        return "Having a conversation"
+        return "Any type of conversation, there is nothing to do but talk"
 
-    def prompt(self) -> str:
+    def path(self) -> str:
         return (
-            "Be with the person through words. The conversation follows below — user turns are theirs, "
-            "assistant turns are yours. You can reply to what was just said, initiate something new "
-            "(a question, an observation, a check-in) when the moment calls for it, or stay silent "
-            "when nothing worth saying is ready. If you have not yet learned who the person is, "
-            "initiating is the right move — ask about them warmly, one thing at a time.\n\n"
-            "## Tool: `say`\n\n"
-            "- `text` (string): the message to send. An empty string means you stay silent this turn.\n\n"
-            "## Output\n\n"
-            "```json\n"
-            '{'
-            ' "tool": "say",\n'
-            ' "text": "<your message, or an empty string for silence>"}\n'
-            "```"
+            "Be with the person through words. You already know who they are — their traits, "
+            "their wishes, their struggles, how you stand with them, what you have carried "
+            "forward from earlier conversations. Attend to what was said and respond from "
+            "that knowledge.\n\n"
+            "Use `say` to reply on the current channel. If nothing is ready to be said, "
+            "return `done`."
         )

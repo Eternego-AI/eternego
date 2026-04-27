@@ -164,7 +164,7 @@ const UI = {
 
     async exportPersona(id) {
         try {
-            const response = await fetch(`/api/persona/${id}/export`, { method: 'POST' });
+            const response = await fetch(`/api/persona/${id}/export`);
             if (!response.ok) {
                 const err = await response.json();
                 return { success: false, error: err.detail };

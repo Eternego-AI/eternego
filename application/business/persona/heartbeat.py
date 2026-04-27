@@ -8,10 +8,10 @@ from application.platform import datetimes
 from .health_check import health_check
 
 
-async def heartbeat(ego, sleep_fn=None) -> Outcome[None]:
+async def heartbeat(ego, living, sleep_fn=None) -> Outcome[None]:
     """One heartbeat tick — check health, fire due routines."""
     bus.propose("Heartbeat", {"persona": ego.persona})
-    await health_check(ego, datetimes.now())
+    await health_check(ego, living, datetimes.now())
     await trigger(ego.persona, sleep_fn)
     bus.broadcast("Heartbeat complete", {"persona": ego.persona})
     return Outcome(success=True, message="")

@@ -208,6 +208,15 @@ def _model_view(model):
     return {"name": model.name, "provider": model.provider, "url": model.url}
 
 
+def _thinking_view(p):
+    if p.thinking is None:
+        return None
+    # For local thinking, the wrapped name (eternego-<id>) is internal —
+    # surface the human-readable base model name instead.
+    name = p.base_model or p.thinking.name
+    return {"name": name, "provider": p.thinking.provider, "url": p.thinking.url}
+
+
 def _persona_view(p):
     return {
         "id": p.id,
@@ -216,7 +225,7 @@ def _persona_view(p):
         "birthday": p.birthday or "",
         "running": manager.find(p.id) is not None,
         "status": p.status,
-        "thinking": _model_view(p.thinking),
+        "thinking": _thinking_view(p),
         "vision": _model_view(p.vision),
         "frontier": _model_view(p.frontier),
         "channels": [
@@ -396,7 +405,7 @@ async def feed_persona(
 ):
     agent = _require_agent(persona_id)
     data = (await history.read()).decode("utf-8")
-    outcome = await persona_spec.feed(agent.ego, data, source)
+    outcome = await persona_spec.feed(agent.living, data, source)
     if not outcome.success or not outcome.data:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data
@@ -455,23 +464,17 @@ async def restart_persona(persona_id: str):
     return {"status": "restarted"}
 
 
-@router.post("/persona/{persona_id}/export")
+@router.get("/persona/{persona_id}/export")
 async def export_persona(persona_id: str):
-    find = await persona_spec.find(persona_id)
-    if not find.success or not find.data:
-        raise HTTPException(status_code=404, detail=find.message)
-
-    if manager.find(persona_id):
-        raise HTTPException(status_code=400, detail="Persona must be stopped before exporting. Stop it first.")
-
-    outcome = await persona_spec.export(find.data.persona)
-    if not outcome.success or not outcome.data:
-        raise HTTPException(status_code=400, detail=outcome.message)
-
-    diary_path = Path(outcome.data.diary_path)
+    diary_file = paths.diary(persona_id) / f"{persona_id}.diary"
+    if not diary_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No diary file yet — wait until the persona's first nightly sleep.",
+        )
     return FileResponse(
-        path=diary_path,
-        filename=diary_path.name,
+        path=diary_file,
+        filename=diary_file.name,
         media_type="application/octet-stream",
     )
 

@@ -34,3 +34,8 @@ def log_file() -> Path:
 def signal_log_file() -> Path:
     """Today's signal log file."""
     return LOGS_DIR / f"eternego-signals-{datetime.now().strftime('%Y-%m-%d')}.log"
+
+
+def persona_log_file(persona_id: str) -> Path:
+    """Today's per-persona log file. Used in debug mode to split traffic per persona."""
+    return LOGS_DIR / f"eternego-{persona_id}-{datetime.now().strftime('%Y-%m-%d')}.log"

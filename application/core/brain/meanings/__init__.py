@@ -2,7 +2,7 @@
 
 Each meaning is a module that exposes a `Meaning` class. `Meaning(persona)` is
 instantiated per-call; its `.intention()` returns a task-centered label (used
-for matching), its `.prompt()` returns the text the persona reads while acting.
+for matching), its `.path()` returns the text the persona reads while acting.
 Any persona context a meaning needs — files, paths, name — is reached via
 `self.persona`, never as a method argument.
 """
@@ -23,13 +23,20 @@ for _, _name, _ in pkgutil.iter_modules(__path__):
     _discovered_modules[_name] = importlib.import_module(f".{_name}", __name__)
 
 
-def available(persona):
+def builtin(persona):
+    """Built-in meanings, discovered from this package at import time."""
     result = {}
     for name, module in _discovered_modules.items():
         if hasattr(module, "Meaning"):
             result[name] = module.Meaning(persona)
         else:
             logger.warning("Built-in meaning missing Meaning class", {"name": name})
+    return result
+
+
+def custom(persona):
+    """Persona-specific meanings loaded from its meanings directory."""
+    result = {}
     persona_dir = paths.meanings(persona.id)
     if persona_dir.exists():
         for f in sorted(persona_dir.glob("*.py")):
@@ -37,6 +44,11 @@ def available(persona):
             if instance is not None:
                 result[f.stem] = instance
     return result
+
+
+def available(persona):
+    """Every meaning the persona knows — built-in plus custom, merged."""
+    return {**builtin(persona), **custom(persona)}
 
 
 def load(persona, name):
@@ -81,9 +93,9 @@ def save_meaning(persona_id, name, code):
         intention_value = instance.intention()
         if not isinstance(intention_value, str):
             raise ValueError(f"Meaning.intention() returned {type(intention_value).__name__}, not str")
-        prompt_value = instance.prompt()
-        if not isinstance(prompt_value, str):
-            raise ValueError(f"Meaning.prompt() returned {type(prompt_value).__name__}, not str")
+        path_value = instance.path()
+        if not isinstance(path_value, str):
+            raise ValueError(f"Meaning.path() returned {type(path_value).__name__}, not str")
     except ValueError:
         raise
     except Exception as e:
