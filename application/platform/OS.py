@@ -209,6 +209,30 @@ async def install(program: str) -> None:
     raise NotImplementedError("Unsupported OS")
 
 
+@tool("Take a screenshot of the screen or a specific region. "
+      "Captures the full screen by default. Pass left, top, width, height to zoom into a specific area. "
+      "path: where to save the image.")
+def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 0, path: str = "") -> str:
+    """Capture a screenshot and return the file path."""
+    import mss
+    import os
+    import tempfile
+
+    if not path:
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+
+    with mss.mss() as sct:
+        if left == 0 and top == 0 and width == 0 and height == 0:
+            region = sct.monitors[0]
+        else:
+            region = {"left": left, "top": top, "width": width, "height": height}
+        img = sct.grab(region)
+        mss.tools.to_png(img.rgb, img.size, output=path)
+
+    return f"Screenshot saved to {path}"
+
+
 @tool("Execute a shell command on the person's system. Use for any OS operation, "
       "running code, installing packages, checking status, file operations. "
       "If multiple commands are needed, wrap them in one call (e.g. cmd1 && cmd2).")

@@ -17,7 +17,7 @@ async def test_write_diary_succeeds():
 
         def run(url):
             outcome = asyncio.run(spec.create(
-                name="DiaryBot", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={}),
+                name="DiaryBot", thinking=Model(name="llama3", url=url), channels=[Channel(type="web", credentials={})],
             ))
             assert outcome.success, outcome.message
             persona_id = outcome.data.persona.id

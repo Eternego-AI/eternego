@@ -69,16 +69,6 @@ def permissions(persona_id: str) -> Path:
     return home(persona_id) / "permissions.md"
 
 
-def memory(persona_id: str) -> Path:
-    """Path to the memory.json file for that persona."""
-    return home(persona_id) / "memory.json"
-
-
-def memory_state(persona_id: str) -> Path:
-    """Path to the single cognitive memory state file for that persona."""
-    return home(persona_id) / "memory" / "state.json"
-
-
 def channels(persona_id: str) -> Path:
     """Path to the channels.md file for that persona."""
     return home(persona_id) / "channels.md"
@@ -99,9 +89,14 @@ def history_briefing(persona_id: str) -> Path:
     return home(persona_id) / "history" / "briefing.md"
 
 
-def mind(persona_id: str) -> Path:
-    """Path to the mind.json file — persisted signals for that persona."""
+def memory(persona_id: str) -> Path:
+    """Path to the memory.json file — the persona's persisted mind state."""
     return home(persona_id) / "memory.json"
+
+
+def health_log(persona_id: str) -> Path:
+    """Path to the health.jsonl file — one line per health_check tick."""
+    return home(persona_id) / "health.jsonl"
 
 
 def training_set(persona_id: str) -> Path:
@@ -109,14 +104,19 @@ def training_set(persona_id: str) -> Path:
     return home(persona_id) / "training"
 
 
+def media(persona_id: str) -> Path:
+    """Path to the media directory for that persona."""
+    return home(persona_id) / "media"
+
+
+def gallery(persona_id: str) -> Path:
+    """Path to the gallery.jsonl file for that persona."""
+    return media(persona_id) / "gallery.jsonl"
+
+
 def notes(persona_id: str) -> Path:
     """Path to the notes.md file for that persona."""
     return home(persona_id) / "notes.md"
-
-
-def dna(persona_id: str) -> Path:
-    """Path to the dna.md file for that persona."""
-    return home(persona_id) / "dna.md"
 
 
 def lora_adapter(persona_id: str) -> Path:
@@ -208,34 +208,8 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 def meanings(persona_id: str) -> Path:
-    """Directory where persona-specific meaning JSON files are stored."""
+    """Directory where persona-specific meaning modules (.py) are stored."""
     return home(persona_id) / "meanings"
-
-
-def save_persona_meaning(persona_id: str, meaning) -> None:
-    """Save a persona-specific meaning as a JSON file (overwrites existing)."""
-    import json
-    import re
-    safe_name = re.sub(r"[^\w\s-]", "", meaning.name.lower()).strip().replace(" ", "-")[:60]
-    file = meanings(persona_id) / f"{safe_name}.json"
-    file.parent.mkdir(parents=True, exist_ok=True)
-    raw_path = getattr(meaning, "path", None)
-    serialized_path = None
-    if isinstance(raw_path, list):
-        serialized_path = [
-            {"tool": ps.tool, "params": ps.params, "section": getattr(ps, "section", 1)}
-            for ps in raw_path
-        ]
-    data = {
-        "name": meaning.name,
-        "definition": meaning.definition,
-        "purpose": meaning.purpose,
-        "reply": getattr(meaning, "reply", None),
-        "skills": meaning.skills,
-        "path": serialized_path,
-        "origin": getattr(meaning, "origin", "user"),
-    }
-    filesystem.write(file, json.dumps(data, indent=2))
 
 
 def commit_diary(persona_id: str, diary_path: Path) -> None:
@@ -408,6 +382,91 @@ def save_destiny_entry(persona_id: str, event: str, trigger: str, content: str) 
         destiny(persona_id) / f"{event}-{dt.strftime('%Y-%m-%d-%H-%M')}-{created}.md",
         content,
     )
+
+
+def destinies_in(persona_id: str, date_str: str) -> list[str]:
+    """Return formatted scheduled events for a date (YYYY-MM-DD) or month (YYYY-MM).
+
+    Projects recurring entries forward across the requested range, so a daily
+    task scheduled with a single next-file still shows on every day of a week
+    query, each flagged with its recurrence.
+    """
+    import calendar as _cal
+    import re
+    from datetime import datetime, timedelta
+    logger.info("Reading scheduled events", {"persona_id": persona_id, "date": date_str})
+    dest = destiny(persona_id)
+    if not dest.exists():
+        return []
+
+    parts = date_str.split("-")
+    try:
+        if len(parts) == 3:
+            start = datetime(int(parts[0]), int(parts[1]), int(parts[2]))
+            end = start + timedelta(days=1)
+        elif len(parts) == 2:
+            y, m = int(parts[0]), int(parts[1])
+            start = datetime(y, m, 1)
+            end = datetime(y + 1, 1, 1) if m == 12 else datetime(y, m + 1, 1)
+        else:
+            return []
+    except (ValueError, IndexError):
+        return []
+
+    trigger_re = re.compile(r"(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})")
+    events = []
+
+    for f in sorted(dest.glob("*.md")):
+        match = trigger_re.search(f.stem)
+        if not match:
+            continue
+        try:
+            trigger = datetime(
+                int(match.group(1)), int(match.group(2)), int(match.group(3)),
+                int(match.group(4)), int(match.group(5)),
+            )
+        except (ValueError, IndexError):
+            continue
+        content = read(f)
+        if not content:
+            continue
+
+        recurrence = None
+        body_lines = []
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.lower().startswith("recurrence:"):
+                recurrence = stripped.split(":", 1)[1].strip().lower() or None
+            else:
+                body_lines.append(line)
+        body = "\n".join(body_lines).strip()
+
+        if start <= trigger < end:
+            events.append((trigger, body, recurrence))
+
+        if recurrence in ("hourly", "daily", "weekly"):
+            step = {"hourly": timedelta(hours=1), "daily": timedelta(days=1), "weekly": timedelta(weeks=1)}[recurrence]
+            nxt = trigger + step
+            while nxt < end:
+                if nxt >= start:
+                    events.append((nxt, body, recurrence))
+                nxt += step
+        elif recurrence == "monthly":
+            nxt = trigger
+            while True:
+                y, mo = (nxt.year + 1, 1) if nxt.month == 12 else (nxt.year, nxt.month + 1)
+                day = min(trigger.day, _cal.monthrange(y, mo)[1])
+                nxt = datetime(y, mo, day, trigger.hour, trigger.minute)
+                if nxt >= end:
+                    break
+                if nxt >= start:
+                    events.append((nxt, body, recurrence))
+
+    events.sort(key=lambda e: e[0])
+    return [
+        f"- {t.strftime('%Y-%m-%d %H:%M')} — {b}" + (f" [recurring: {r}]" if r else "")
+        for t, b, r in events
+    ]
 
 
 def due_destiny_entries(persona_id: str, before: "datetime") -> list[tuple[Path, str]]:

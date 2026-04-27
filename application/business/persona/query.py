@@ -4,8 +4,9 @@ from dataclasses import dataclass
 
 from application.business.outcome import Outcome
 from application.core import bus, models
+from application.core.brain.pulse import Phase
 from application.core.data import Persona
-from application.core.exceptions import MindError
+from application.core.exceptions import EngineConnectionError, MindError
 
 
 @dataclass
@@ -13,21 +14,23 @@ class QueryData:
     response: str
 
 
-async def query(persona: Persona, messages) -> Outcome[QueryData]:
+async def query(ego, living, messages) -> Outcome[QueryData]:
     """Answer a direct query using the local model — no pipeline, no memory."""
-    await bus.propose("Querying", {"persona": persona, "messages": messages})
+    persona = ego.persona
+    bus.propose("Querying", {"persona": persona, "messages": messages})
     try:
-        if persona.ego.is_sleeping():
-            await bus.broadcast("Queried", {"persona": persona})
+        if living.pulse.phase == Phase.NIGHT:
+            bus.broadcast("Queried", {"persona": persona})
             return Outcome(success=True, message="", data=QueryData(response=f"{persona.name} is sleeping."))
 
-        response = await models.chat(persona.thinking, [
-            {"role": "system", "content": persona.ego.identity()},
-            messages,
-        ])
+        question = messages.get("content", "") if isinstance(messages, dict) else str(messages)
+        response = await models.chat(ego.model, ego.identity + living.pulse.hint(), question)
 
-        await bus.broadcast("Queried", {"persona": persona})
+        bus.broadcast("Queried", {"persona": persona})
         return Outcome(success=True, message="", data=QueryData(response=response))
+    except EngineConnectionError as e:
+        bus.broadcast("Query failed", {"persona": persona, "reason": "connection", "error": str(e)})
+        return Outcome(success=False, message=str(e))
     except MindError as e:
-        await bus.broadcast("Query failed", {"persona": persona, "error": str(e)})
+        bus.broadcast("Query failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Something went wrong. Please try again.")

@@ -1,39 +1,27 @@
-"""Meaning — reminders and scheduled events."""
+"""Meaning — scheduling."""
 
 from application.core.data import Persona
 
 
-def intention(persona: Persona) -> str:
-    return f"The person wants {persona.name} to set a reminder or schedule an event"
+class Meaning:
+    def __init__(self, persona: Persona):
+        self.persona = persona
 
+    def intention(self) -> str:
+        return "Saving a reminder or event for a future moment, or responding when one has come due"
 
-def prompt(persona: Persona) -> str:
-    return (
-        "The person wants to save a reminder or schedule an event at a specific time.\n"
-        "A reminder is personal — 'remind me to buy milk.' "
-        "A scheduled event is an appointment — 'I have a meeting at 3pm.'\n\n"
-        "If the person hasn't provided enough details (what or when), "
-        "use say to ask for clarification before saving.\n\n"
-        "## Tools\n\n"
-        "### save_destiny\n"
-        "Save a reminder or scheduled event.\n\n"
-        "Parameters:\n"
-        "- `type` (string, required): `\"reminder\"` or `\"schedule\"`\n"
-        "- `trigger` (string, required): When to trigger, format `\"YYYY-MM-DD HH:MM\"`\n"
-        "- `content` (string, required): What to remind or event description\n"
-        "- `recurrence` (string, optional): `\"daily\"`, `\"weekly\"`, `\"monthly\"`, `\"hourly\"`, or `\"\"`\n\n"
-        "### say\n"
-        "Send a message to the person.\n\n"
-        "Parameters:\n"
-        "- `text` (string, required): The message to send.\n\n"
-        "## Response Format\n\n"
-        "To save and confirm in one step, include a `say` field alongside the tool:\n"
-        "```json\n"
-        '{"tool": "save_destiny", "type": "reminder", "trigger": "2026-04-15 09:00", '
-        '"content": "buy groceries", "say": "I\'ve set a reminder for April 15th at 9am!"}\n'
-        "```\n\n"
-        "To ask for clarification:\n"
-        "```json\n"
-        '{"tool": "say", "text": "What time would you like to be reminded?"}\n'
-        "```"
-    )
+    def path(self) -> str:
+        return (
+            "Hold time-bound things. Two situations call for this meaning.\n\n"
+            "**The person asks you to save something for a future moment.** Resolve the trigger "
+            "time from the conversation and the current time. A `reminder` is a personal nudge; "
+            "a `schedule` is an appointment at a fixed time. If the essentials are missing "
+            "(what, when), ask with `say` first. Use `abilities.save_destiny` with `type`, "
+            "`trigger` (YYYY-MM-DD HH:MM), `content`, and optionally `recurrence` (daily, weekly, "
+            "monthly, hourly).\n\n"
+            "**A `due for:` message has arrived.** A saved item has come due right now. Notify "
+            "the person with what is due, when, and any urgency — use `notify` so it reaches "
+            "them on every channel at once. If the due item's body contains a `recurrence:` "
+            "line, call `abilities.save_destiny` for the next occurrence in the next cycle so "
+            "the chain continues."
+        )

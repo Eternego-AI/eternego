@@ -13,25 +13,22 @@ class ChatRequest(BaseModel):
     messages: list[Message]
 
 
-class EnvironmentPrepareRequest(BaseModel):
-    url: str | None = None
-    model: str = ""
-    provider: str | None = None
-    api_key: str | None = None
-
-
 class PersonaCreateRequest(BaseModel):
     name: str
     thinking_model: str
     thinking_url: str
     thinking_provider: str | None = None
     thinking_api_key: str | None = None
-    channel_type: str
-    channel_credentials: dict
+    vision_model: str | None = None
+    vision_url: str | None = None
+    vision_provider: str | None = None
+    vision_api_key: str | None = None
     frontier_model: str | None = None
     frontier_url: str | None = None
     frontier_provider: str | None = None
     frontier_api_key: str | None = None
+    telegram_token: str | None = None
+    discord_token: str | None = None
 
 
 class PersonaControlRequest(BaseModel):
@@ -40,3 +37,7 @@ class PersonaControlRequest(BaseModel):
 
 class HearRequest(BaseModel):
     message: str
+
+
+class PairRequest(BaseModel):
+    code: str

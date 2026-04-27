@@ -15,10 +15,9 @@ def discover() -> list[Tool]:
 def document() -> str:
     """Return a description of available tools for model prompts.
 
-    WARNING: This document is used in escalation prompts to teach models what
-    tools are available. If you change how tools are dispatched (the JSON schema
-    expected by Meaning.run()), update this document to match. The tool list is
-    generated from the registry so it stays in sync automatically.
+    Used by learn() when teaching the frontier what tools exist. The tool
+    list is generated from the @tool registry — adding a new platform tool with
+    @tool makes it appear here automatically.
     """
     available = registered_tools()
     if not available:
@@ -28,23 +27,27 @@ def document() -> str:
         for t in available
     )
     return (
-        "Tools are platform functions the persona can use via the decide step.\n"
-        "When path() returns JSON with {\"tool\": \"tool_name\", ...params},\n"
-        "the default run() dispatches the call automatically.\n\n"
+        "Tools are platform functions the persona can call from a meaning's path.\n"
+        "A meaning asks its model for JSON like {\"tools.<name>\": { ...args }}; decide\n"
+        "dispatches that to the matching tool below.\n\n"
         f"{tool_list}"
     )
 
 
-async def call(tool_name: str, **params) -> str:
-    """Find a tool by name, call it, and return the result as a string.
+async def call(tool_name: str, **params) -> tuple[str, str]:
+    """Find a tool by name, call it. Returns (status, result).
 
-    Never raises — on exception, returns the error message as the result.
-    Handles tuple returns (code, output) from shell functions.
+    status is one of: ok, failed, error.
+    - ok: tool ran and returned a value (or exit 0 for tuple returns).
+    - failed: tool ran but returned a non-zero exit (tuple return with code != 0).
+    - error: tool raised or didn't exist.
+    result is the stringified output.
     """
+    logger.debug("tools.call", {"tool": tool_name, "params": params})
     tools = {t.name: t for t in registered_tools()}
     tool = tools.get(tool_name)
     if not tool:
-        return f"[error] Unknown tool: {tool_name}"
+        return ("error", f"unknown tool: {tool_name}")
 
     try:
         if inspect.iscoroutinefunction(tool.fn):
@@ -52,14 +55,12 @@ async def call(tool_name: str, **params) -> str:
         else:
             result = await asyncio.to_thread(tool.fn, **params)
 
-        # Handle tuple returns (return_code, output) from shell functions
         if isinstance(result, tuple) and len(result) == 2:
             code, output = result
-            if code != 0:
-                return f"[exit code {code}] {output}"
-            return str(output)
+            return ("ok" if code == 0 else "failed", str(output))
 
-        return str(result)
+        return ("ok", str(result))
+
     except Exception as e:
-        logger.error("tools.call: exception", {"tool": tool_name, "error": str(e)})
-        return f"[error] {e}"
+        logger.error("tools.call exception", {"tool": tool_name, "error": str(e)})
+        return ("error", str(e))

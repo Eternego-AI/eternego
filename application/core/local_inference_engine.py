@@ -52,7 +52,7 @@ async def pull(url: str, model: str) -> None:
     logger.info("Pulling model", {"url": url, "model": model})
     try:
         async for chunk in ollama.stream(url, "/api/pull", {"name": model}):
-            await bus.share("Model pull progress", {"model": model, "status": chunk.get("status", ""), "total": chunk.get("total"), "completed": chunk.get("completed")})
+            bus.share("Model pull progress", {"model": model, "status": chunk.get("status", ""), "total": chunk.get("total"), "completed": chunk.get("completed")})
     except ollama.OllamaError as e:
         raise ModelError(f"Failed to pull model '{model}': {e}") from e
     except ConnectionError as e:
@@ -64,7 +64,7 @@ async def register(url: str, model_name: str, base_model: str) -> None:
     logger.info("Registering model", {"url": url, "model_name": model_name, "base_model": base_model})
     try:
         async for chunk in ollama.stream(url, "/api/create", {"model": model_name, "from": base_model}):
-            await bus.share("Model create progress", {"model": model_name, "status": chunk.get("status", "")})
+            bus.share("Model create progress", {"model": model_name, "status": chunk.get("status", "")})
     except ollama.OllamaError as e:
         raise ModelError(f"Failed to register model '{model_name}': {e}") from e
     except ConnectionError as e:

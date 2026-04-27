@@ -18,10 +18,9 @@ class Model(Data):
 @dataclass(kw_only=True)
 class Channel(Data):
     type: str
-    name: str = ""          # chat_id for telegram, uuid for web; empty for network-level channels
+    name: str = ""          # chat_id for telegram, channel_id for discord, persona_id for web
     credentials: dict | None = sensitive()
     verified_at: str | None = None
-    bus: object | None = hidden()
 
 
 @dataclass(kw_only=True)
@@ -32,6 +31,8 @@ class Persona(Data):
     version: str = "v1"
     base_model: str = ""
     birthday: str = field(default_factory=lambda: str(date.today()))
+    status: str = "active"
+    vision: Model | None = None
     frontier: Model | None = None
     channels: list[Channel] | None = None
 
@@ -39,7 +40,14 @@ class Persona(Data):
 @dataclass(kw_only=True)
 class Prompt(Data):
     role: str
-    content: str
+    content: str | list
+    cache_point: bool = False
+
+
+@dataclass(kw_only=True)
+class Media(Data):
+    source: str
+    caption: str
 
 
 @dataclass(kw_only=True)
@@ -47,6 +55,7 @@ class Message(Data):
     content: str
     channel: Channel | None = None
     prompt: Prompt | None = None
+    media: Media | None = None
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 

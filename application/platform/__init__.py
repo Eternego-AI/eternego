@@ -12,6 +12,7 @@ from . import logger
 from . import observer
 from . import ollama
 from . import openai
+from . import http
 from . import OS
 from . import persistent_memory
 from . import processes

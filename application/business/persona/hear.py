@@ -1,11 +1,13 @@
-"""Persona — receiving a message and triggering the mind."""
+"""Persona — receiving a text message and triggering the mind."""
 
 from dataclasses import dataclass
 
 from application.business.outcome import Outcome
-from application.core import bus
-from application.core.data import Message, Persona
+from application.core import bus, paths
+from application.core.brain.pulse import Phase
+from application.core.data import Message, Prompt
 from application.core.exceptions import MindError
+from application.platform import datetimes
 
 
 @dataclass
@@ -13,22 +15,41 @@ class HearData:
     response: str
 
 
-async def hear(persona: Persona, message: Message) -> Outcome[HearData]:
-    """Receive a message — persona handles it through its ego."""
-    await bus.propose("Hearing", {"persona": persona, "channel": message.channel})
+async def hear(ego, living, content: str, channel=None) -> Outcome[HearData]:
+    """Receive a text message — log to conversation, write to memory, flip to day, nudge."""
+    if channel and channel.type != "web" and not channel.verified_at:
+        return Outcome(success=True, message="", data=HearData(response="Channel not verified."))
+
+    persona = ego.persona
+    bus.propose("Hearing", {"persona": persona, "channel": channel})
     try:
-        if persona.ego.is_sleeping():
-            await bus.broadcast("Heard", {"persona": persona})
+        if living.pulse.phase == Phase.NIGHT:
+            bus.broadcast("Heard", {"persona": persona})
             return Outcome(success=True, message="", data=HearData(response=f"{persona.name} is sleeping."))
 
-        persona.ego.receive(message)
+        entry = {
+            "role": "person",
+            "content": content,
+            "channel": {"type": channel.type, "name": channel.name or ""} if channel else None,
+            "time": datetimes.iso_8601(datetimes.now()),
+        }
+        paths.append_jsonl(paths.conversation(persona.id), entry)
 
-        await bus.broadcast("Heard", {
+        message = Message(
+            channel=channel,
+            content=content,
+            prompt=Prompt(role="user", content=content),
+        )
+        ego.memory.remember(message)
+        living.pulse.phase = Phase.DAY
+        living.pulse.worker.nudge()
+
+        bus.broadcast("Heard", {
             "persona": persona,
-            "content": message.content,
-            "channel_type": message.channel.type if message.channel else "",
+            "content": content,
+            "channel": channel,
         })
         return Outcome(success=True, message="")
     except MindError as e:
-        await bus.broadcast("Hearing failed", {"persona": persona, "error": str(e)})
+        bus.broadcast("Hearing failed", {"persona": persona, "error": str(e)})
         return Outcome(success=False, message="Something went wrong. Please try again.")

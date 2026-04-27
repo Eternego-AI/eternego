@@ -8,6 +8,7 @@ async def test_query_returns_response():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
         from application.core.data import Model, Persona
         from application.platform import ollama
 
@@ -28,11 +29,16 @@ async def test_query_returns_response():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        p.ego = agents.Ego(p, FakeWorker())
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
         result = {}
         async def run(url):
             p.thinking = Model(url=url, name="anything")
-            result["value"] = await spec.query(p, {"role": "user", "content": "hi"})
+            result["value"] = await spec.query(ego, living, {"role": "user", "content": "hi"})
         ollama.assert_call(
             run=run,
             response={"message": {"content": "Hello from the model"}},

@@ -1,78 +1,355 @@
 from application.platform.processes import on_separate_process_async
 
 
-async def test_health_check_succeeds_with_no_error_and_no_due():
+async def test_healthy_tick_writes_health_log_and_nudges():
     def isolated():
         import asyncio
         import os
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
+        from application.core.brain.signals import BrainFault
         from application.core.data import Model, Persona
-        from application.platform import datetimes, objects, filesystem
+        from application.platform import datetimes, filesystem, objects
 
         tmp = tempfile.mkdtemp()
         os.environ["ETERNEGO_HOME"] = tmp
-        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
-        identity = paths.persona_identity(p.id)
-        identity.parent.mkdir(parents=True, exist_ok=True)
-        filesystem.write_json(identity, objects.json(p))
-        paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
 
         class FakeWorker:
             def __init__(self):
                 self.idle = True
                 self.error = None
+                self.stopped = False
                 self.reset_called = False
                 self.nudged = 0
             def run(self, *a): pass
             def nudge(self): self.nudged += 1
-            def reset(self): self.reset_called = True
+            def reset(self): self.reset_called = True; self.error = None
 
-        p.ego = agents.Ego(p, FakeWorker())
-
-        outcome = asyncio.run(spec.health_check(p, datetimes.now()))
-        assert outcome.success, outcome.message
-        assert p.ego.worker.reset_called is False
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
-async def test_health_check_recovers_when_worker_errored():
-    def isolated():
-        import asyncio
-        import os
-        import tempfile
-        from application.business import persona as spec
-        from application.core import agents, channels, paths
-        from application.core.data import Model, Persona
-        from application.platform import datetimes, objects, filesystem
-
-        tmp = tempfile.mkdtemp()
-        os.environ["ETERNEGO_HOME"] = tmp
         p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
         identity = paths.persona_identity(p.id)
         identity.parent.mkdir(parents=True, exist_ok=True)
         filesystem.write_json(identity, objects.json(p))
         paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
+        assert outcome.success, outcome.message
+        assert p.status == "active"
+        assert living.pulse.worker.nudged == 0
+        assert not [s for s in living.signals if isinstance(s, BrainFault)]
+
+        entries = paths.read_jsonl(paths.health_log(p.id))
+        assert len(entries) == 1, entries
+        assert entries[0]["fault_count"] == 0
+        assert entries[0]["fault_providers"] == []
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_frontier_fault_disables_frontier_and_persists_config():
+    def isolated():
+        import asyncio
+        import os
+        import tempfile
+        from application.business import persona as spec
+        from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
+        from application.core.brain.signals import BrainFault
+        from application.core.data import Model, Persona
+        from application.platform import datetimes, filesystem, objects
+
+        tmp = tempfile.mkdtemp()
+        os.environ["ETERNEGO_HOME"] = tmp
 
         class FakeWorker:
             def __init__(self):
                 self.idle = True
-                self.error = RuntimeError("boom")
+                self.error = None
+                self.stopped = False
+                self.nudged = 0
+            def run(self, *a): pass
+            def nudge(self): self.nudged += 1
+            def reset(self): self.error = None
+
+        p = Persona(
+            id="test-persona",
+            name="Primus",
+            thinking=Model(name="llama3", url="not required"),
+            base_model="llama3",
+            frontier=Model(name="claude-opus-4-6", provider="anthropic", api_key="x", url="https://api.anthropic.com"),
+            vision=Model(name="claude-haiku-4-5", provider="anthropic", api_key="x", url="https://api.anthropic.com"),
+        )
+        identity = paths.persona_identity(p.id)
+        identity.parent.mkdir(parents=True, exist_ok=True)
+        filesystem.write_json(identity, objects.json(p))
+        paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
+
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living.signals.append(BrainFault("recognize", {"persona": p, "provider": "anthropic", "url": "https://api.anthropic.com", "model_name": "claude-opus-4-6", "error": "HTTP 429"}))
+
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
+        assert outcome.success, outcome.message
+        assert p.frontier is None
+        assert p.vision is None
+        assert p.status == "active"
+        assert living.pulse.worker.nudged == 0
+
+        reread = paths.read_json(paths.persona_identity(p.id))
+        assert reread["frontier"] is None
+        assert reread["vision"] is None
+
+        entries = paths.read_jsonl(paths.health_log(p.id))
+        assert entries[0]["fault_count"] == 1
+        assert "anthropic" in entries[0]["fault_providers"]
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_vision_only_fault_disables_vision_leaves_frontier_alone():
+    def isolated():
+        import asyncio
+        import os
+        import tempfile
+        from application.business import persona as spec
+        from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
+        from application.core.brain.signals import BrainFault
+        from application.core.data import Model, Persona
+        from application.platform import datetimes, filesystem, objects
+
+        tmp = tempfile.mkdtemp()
+        os.environ["ETERNEGO_HOME"] = tmp
+
+        class FakeWorker:
+            def __init__(self):
+                self.idle = True
+                self.error = None
+                self.stopped = False
+                self.nudged = 0
+            def run(self, *a): pass
+            def nudge(self): self.nudged += 1
+            def reset(self): self.error = None
+
+        p = Persona(
+            id="test-persona",
+            name="Primus",
+            thinking=Model(name="llama3", url="not required"),
+            base_model="llama3",
+            frontier=Model(name="gpt-4", provider="openai", api_key="x", url="https://api.openai.com"),
+            vision=Model(name="claude-haiku-4-5", provider="anthropic", api_key="x", url="https://api.anthropic.com"),
+        )
+        identity = paths.persona_identity(p.id)
+        identity.parent.mkdir(parents=True, exist_ok=True)
+        filesystem.write_json(identity, objects.json(p))
+        paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
+
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living.signals.append(BrainFault("realize", {"persona": p, "provider": "anthropic", "url": "...", "model_name": "claude-haiku-4-5", "error": "empty"}))
+
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
+        assert outcome.success
+        assert p.vision is None
+        assert p.frontier is not None
+        assert p.status == "active"
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
+    def isolated():
+        import asyncio
+        import os
+        import tempfile
+        from application.business import persona as spec
+        from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
+        from application.core.brain.signals import BrainFault
+        from application.core.data import Model, Persona
+        from application.platform import datetimes, filesystem, objects, observer
+
+        tmp = tempfile.mkdtemp()
+        os.environ["ETERNEGO_HOME"] = tmp
+
+        class FakeWorker:
+            def __init__(self):
+                self.idle = True
+                self.error = None
+                self.stopped = False
+                self.nudged = 0
+            def run(self, *a): pass
+            def nudge(self): self.nudged += 1
+            def reset(self): self.error = None
+
+        p = Persona(
+            id="test-persona",
+            name="Primus",
+            thinking=Model(name="claude-sonnet-4-6", provider="anthropic", api_key="x", url="https://api.anthropic.com"),
+            base_model="",
+            vision=Model(name="claude-haiku-4-5", provider="anthropic", api_key="x", url="https://api.anthropic.com"),
+        )
+        identity = paths.persona_identity(p.id)
+        identity.parent.mkdir(parents=True, exist_ok=True)
+        filesystem.write_json(identity, objects.json(p))
+        paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
+
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living.signals.append(BrainFault("realize", {"persona": p, "provider": "anthropic", "url": "...", "model_name": "claude-haiku-4-5", "error": "HTTP 401"}))
+
+        commands = []
+
+        async def capture(command: observer.Command):
+            commands.append((command.title, command.details))
+
+        observer.subscribe(capture)
+
+        result = {}
+
+        async def run():
+            result["outcome"] = await spec.health_check(ego, living, datetimes.now())
+            await asyncio.sleep(0)
+
+        asyncio.run(run())
+
+        outcome = result["outcome"]
+        assert outcome.success is True, outcome
+        assert "sick" in outcome.message.lower()
+        assert outcome.data is not None
+        assert outcome.data.persona is p
+        assert outcome.data.log_entry["fault_providers"] == ["anthropic"]
+
+        assert p.status == "sick"
+        assert living.pulse.worker.nudged == 0
+
+        reread = paths.read_json(paths.persona_identity(p.id))
+        assert reread["status"] == "sick"
+
+        titles = [t for t, _ in commands]
+        assert "Persona became sick" in titles
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_unexpected_worker_error_recovers_with_apology():
+    def isolated():
+        import asyncio
+        import os
+        import tempfile
+        from application.business import persona as spec
+        from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
+        from application.core.data import Model, Persona
+        from application.platform import datetimes, filesystem, objects
+
+        tmp = tempfile.mkdtemp()
+        os.environ["ETERNEGO_HOME"] = tmp
+
+        class FakeWorker:
+            def __init__(self):
+                self.idle = True
+                self.error = RuntimeError("unexpected bug")
+                self.stopped = False
                 self.reset_called = False
                 self.nudged = 0
             def run(self, *a): pass
             def nudge(self): self.nudged += 1
-            def reset(self): self.reset_called = True
+            def reset(self): self.reset_called = True; self.error = None
 
-        p.ego = agents.Ego(p, FakeWorker())
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
+        identity = paths.persona_identity(p.id)
+        identity.parent.mkdir(parents=True, exist_ok=True)
+        filesystem.write_json(identity, objects.json(p))
+        paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
 
-        outcome = asyncio.run(spec.health_check(p, datetimes.now()))
-        assert outcome.success, outcome.message
-        assert p.ego.worker.reset_called is True
-        assert p.ego.worker.nudged >= 1
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
+        assert outcome.success
+        assert living.pulse.worker.reset_called is True
+        assert living.pulse.worker.nudged >= 1
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_due_destiny_entries_are_processed_after_health():
+    def isolated():
+        import asyncio
+        import os
+        import tempfile
+        from application.business import persona as spec
+        from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
+        from application.core.data import Model, Persona
+        from application.platform import datetimes, filesystem, objects
+
+        tmp = tempfile.mkdtemp()
+        os.environ["ETERNEGO_HOME"] = tmp
+
+        class FakeWorker:
+            def __init__(self):
+                self.idle = True
+                self.error = None
+                self.stopped = False
+                self.nudged = 0
+            def run(self, *a): pass
+            def nudge(self): self.nudged += 1
+            def reset(self): self.error = None
+
+        p = Persona(id="test-persona", name="Primus", thinking=Model(name="llama3", url="not required"), base_model="llama3")
+        identity = paths.persona_identity(p.id)
+        identity.parent.mkdir(parents=True, exist_ok=True)
+        filesystem.write_json(identity, objects.json(p))
+        paths.destiny(p.id).mkdir(parents=True, exist_ok=True)
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+
+        past = datetimes.now().replace(microsecond=0)
+        trigger = past.strftime("%Y-%m-%d %H:%M")
+        paths.save_destiny_entry(p.id, "reminder", trigger, "drink water")
+
+        outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
+        assert outcome.success
+
+        remaining = list(paths.destiny(p.id).glob("*.md"))
+        assert remaining == []
+        history_files = list(paths.history(p.id).glob("*.md"))
+        assert len(history_files) == 1
+
+        assert any("drink water" in (m.content or "") for m in ego.memory.messages)
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

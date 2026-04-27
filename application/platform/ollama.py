@@ -7,7 +7,7 @@ import httpx
 
 from config.inference import OLLAMA_BASE_URL
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from application.platform.observer import send, Message
+from application.platform.observer import send, dispatch, Message
 
 
 class OllamaError(Exception):
@@ -65,41 +65,86 @@ async def delete(base_url: str, path: str, data: dict) -> dict:
 
 
 async def stream(base_url: str, path: str, data: dict):
-    """Send a POST request and yield JSON chunks as they arrive."""
+    """Send a POST request and yield JSON chunks as they arrive.
+
+    Raises OllamaError if the server responds with an HTTP error or emits an
+    `error` field in any chunk (e.g. model load failure). Raises ConnectionError
+    on transport-level failures (cannot connect, read timeout, protocol error).
+    """
     try:
         async with httpx.AsyncClient(base_url=base_url, timeout=httpx.Timeout(None, connect=10.0)) as http:
             async with http.stream("POST", path, json=data) as response:
+                if response.status_code >= 400:
+                    body_bytes = await response.aread()
+                    body_text = body_bytes.decode("utf-8", errors="replace")
+                    raise OllamaError(f"HTTP {response.status_code}: {body_text}")
                 async for line in response.aiter_lines():
-                    if line.strip():
-                        yield json.loads(line)
-    except httpx.ConnectError as e:
+                    if not line.strip():
+                        continue
+                    chunk = json.loads(line)
+                    if chunk.get("error"):
+                        raise OllamaError(str(chunk["error"]))
+                    yield chunk
+    except httpx.RequestError as e:
         raise ConnectionError(str(e)) from e
 
 
 async def chat(base_url: str, model: str, messages: list[dict]):
-    """Stream chat response, yielding content chunks."""
+    """Stream chat response, yielding content chunks.
+
+    Raises OllamaError if the stream ends without yielding any content
+    (happens when ollama accepts the request but fails to load the model,
+    e.g. out-of-memory — the API returns an empty stream).
+    """
     body = {"model": model, "messages": messages}
-    try:
-        async for chunk in stream(base_url, "/api/chat", body):
-            content = chunk.get("message", {}).get("content", "")
-            if content:
-                await send(Message("Ollama stream chunk received", {"chunk": content}))
-                yield content
-    except OllamaError as e:
-        raise OllamaError(str(e)) from e
+    yielded = False
+    usage = {}
+    async for chunk in stream(base_url, "/api/chat", body):
+        if chunk.get("done"):
+            usage = chunk
+        content = chunk.get("message", {}).get("content", "")
+        if content:
+            yielded = True
+            await send(Message("Ollama stream chunk received", {"chunk": content}))
+            yield content
+    if not yielded:
+        raise OllamaError("empty response from ollama (model may have failed to load)")
+    dispatch(Message("Model usage", {
+        "provider": "ollama",
+        "model": model,
+        "input_tokens": usage.get("prompt_eval_count", 0),
+        "output_tokens": usage.get("eval_count", 0),
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+    }))
 
 
 async def chat_json(base_url: str, model: str, messages: list[dict]):
-    """Stream JSON chat response, yielding content chunks. Uses format:json constraint."""
+    """Stream JSON chat response, yielding content chunks. Uses format:json constraint.
+
+    Raises OllamaError on empty streams — see chat() for why.
+    """
     body = {"model": model, "messages": messages, "format": "json"}
-    try:
-        async for chunk in stream(base_url, "/api/chat", body):
-            content = chunk.get("message", {}).get("content", "")
-            if content:
-                await send(Message("Ollama stream chunk received", {"chunk": content}))
-                yield content
-    except OllamaError as e:
-        raise OllamaError(str(e)) from e
+    yielded = False
+    usage = {}
+    async for chunk in stream(base_url, "/api/chat", body):
+        if chunk.get("done"):
+            usage = chunk
+        content = chunk.get("message", {}).get("content", "")
+        if content:
+            yielded = True
+            await send(Message("Ollama stream chunk received", {"chunk": content}))
+            yield content
+    if not yielded:
+        raise OllamaError("empty response from ollama (model may have failed to load)")
+    dispatch(Message("Model usage", {
+        "provider": "ollama",
+        "model": model,
+        "input_tokens": usage.get("prompt_eval_count", 0),
+        "output_tokens": usage.get("eval_count", 0),
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+    }))
 
 
 # ── Assertions ───────────────────────────────────────────────────────────────

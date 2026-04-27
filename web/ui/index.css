@@ -13,43 +13,52 @@
 :root {
     --font: 'JetBrains Mono', monospace;
 
-    --bg: #050508;
+    --bg: #0b0b14;
 
     --glass-bg: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.01) 100%);
     --glass-border: rgba(255, 255, 255, 0.12);
     --glass-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.08);
 
-    --accent: rgba(140, 160, 255, 0.9);
-    --accent-soft: rgba(140, 160, 255, 0.06);
-    --accent-bg: rgba(140, 160, 255, 0.10);
-    --accent-border: rgba(140, 160, 255, 0.25);
-    --accent-text: rgba(180, 195, 255, 0.85);
-    --accent-hover-bg: rgba(140, 160, 255, 0.18);
-    --accent-hover-border: rgba(140, 160, 255, 0.4);
+    --accent: rgba(150, 180, 255, 1);
+    --accent-soft: rgba(150, 180, 255, 0.08);
+    --accent-bg: rgba(150, 180, 255, 0.14);
+    --accent-border: rgba(150, 180, 255, 0.4);
+    --accent-text: rgba(190, 210, 255, 0.95);
+    --accent-hover-bg: rgba(150, 180, 255, 0.22);
+    --accent-hover-border: rgba(150, 180, 255, 0.55);
 
-    --destructive-bg: rgba(255, 80, 80, 0.08);
-    --destructive-border: rgba(255, 80, 80, 0.2);
-    --destructive-text: rgba(255, 120, 120, 0.85);
+    --warm: rgba(255, 200, 130, 1);
+    --warm-bg: rgba(255, 200, 130, 0.14);
+    --warm-border: rgba(255, 200, 130, 0.4);
+    --warm-text: rgba(255, 215, 160, 0.95);
+
+    --vital-bg: rgba(80, 220, 140, 0.15);
+    --vital-border: rgba(80, 220, 140, 0.4);
+    --vital-text: rgba(130, 235, 175, 1);
+
+    --destructive-bg: rgba(255, 110, 110, 0.14);
+    --destructive-border: rgba(255, 110, 110, 0.4);
+    --destructive-text: rgba(255, 140, 140, 1);
 
     --success: #4ade80;
 
-    --text-primary: rgba(255, 255, 255, 0.92);
-    --text-body: rgba(255, 255, 255, 0.78);
-    --text-secondary: rgba(255, 255, 255, 0.6);
-    --text-muted: rgba(255, 255, 255, 0.4);
-    --text-dim: rgba(255, 255, 255, 0.25);
-    --text-faint: rgba(255, 255, 255, 0.15);
-    --text-ghost: rgba(255, 255, 255, 0.08);
+    --text-primary: rgba(255, 255, 255, 0.96);
+    --text-body: rgba(255, 255, 255, 0.85);
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --text-muted: rgba(255, 255, 255, 0.5);
+    --text-dim: rgba(255, 255, 255, 0.32);
+    --text-faint: rgba(255, 255, 255, 0.18);
+    --text-ghost: rgba(255, 255, 255, 0.10);
 
-    --surface-overlay: rgba(0, 0, 0, 0.5);
-    --surface-recessed: rgba(0, 0, 0, 0.3);
-    --surface-hover: rgba(255, 255, 255, 0.04);
-    --surface-active: rgba(255, 255, 255, 0.07);
+    --surface-overlay: rgba(20, 20, 28, 0.92);
+    --surface-recessed: rgba(255, 255, 255, 0.03);
+    --surface-hover: rgba(255, 255, 255, 0.06);
+    --surface-active: rgba(255, 255, 255, 0.10);
 
-    --border-subtle: rgba(255, 255, 255, 0.06);
-    --border-default: rgba(255, 255, 255, 0.10);
-    --border-hover: rgba(255, 255, 255, 0.2);
-    --border-focus: rgba(255, 255, 255, 0.3);
+    --border-subtle: rgba(255, 255, 255, 0.10);
+    --border-default: rgba(255, 255, 255, 0.18);
+    --border-hover: rgba(255, 255, 255, 0.32);
+    --border-focus: rgba(255, 255, 255, 0.45);
 
     --radius-sm: 4px;
     --radius-md: 8px;

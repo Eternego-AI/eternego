@@ -17,12 +17,12 @@ class GetListData:
 
 async def get_list() -> Outcome[GetListData]:
     """Return all personas."""
-    await bus.propose("Listing personas", {})
+    bus.propose("Listing personas", {})
 
     try:
         root = paths.personas_home()
         if not root.exists():
-            await bus.broadcast("No personas found", {})
+            bus.broadcast("No personas found", {})
             return Outcome(success=False, message="No personas found. Create one to get started.", data=GetListData(personas=[]))
         try:
             persona_ids = [d.name for d in root.iterdir() if d.is_dir() and (d / "home" / "config.json").exists()]
@@ -37,8 +37,8 @@ async def get_list() -> Outcome[GetListData]:
             except (IdentityError, OSError):
                 continue
 
-        await bus.broadcast("Personas listed", {"count": len(personas)})
+        bus.broadcast("Personas list", {"personas": personas})
         return Outcome(success=True, message="", data=GetListData(personas=personas))
     except IdentityError as e:
-        await bus.broadcast("List personas failed", {"reason": "identity", "error": str(e)})
+        bus.broadcast("List personas failed", {"reason": "identity", "error": str(e)})
         return Outcome(success=False, message="Could not list personas. Please check the persona data.")

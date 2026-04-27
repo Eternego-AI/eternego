@@ -8,6 +8,7 @@ async def test_heartbeat_calls_health_check():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.pulse import Pulse
         from application.core.data import Model, Persona
         from application.platform import objects, filesystem
 
@@ -23,13 +24,24 @@ async def test_heartbeat_calls_health_check():
             def __init__(self):
                 self.idle = True
                 self.error = None
+                self.stopped = False
+                self.loop_number = 0
+                self._events = []
             def run(self, *a): pass
             def nudge(self): pass
             def reset(self): pass
+            @property
+            def events(self): return list(self._events)
+            def clear_events(self): self._events = []
 
-        p.ego = agents.Ego(p, FakeWorker())
+        pulse = Pulse(FakeWorker())
+        ego = agents.Ego(p)
+        eye = agents.Eye(p)
+        consultant = agents.Consultant(p)
+        teacher = agents.Teacher(p)
+        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
 
-        outcome = asyncio.run(spec.heartbeat(p))
+        outcome = asyncio.run(spec.heartbeat(ego, living, sleep_fn=lambda: None))
         assert outcome.success, outcome.message
 
     code, error = await on_separate_process_async(isolated)

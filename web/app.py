@@ -17,9 +17,9 @@ app.mount("/assets", StaticFiles(directory=Path(__file__).parent.parent / "asset
 app.mount("/ui", StaticFiles(directory=Path(__file__).parent / "ui", html=True), name="ui")
 
 app.include_router(openai.router)
-app.include_router(pages.router)
 app.include_router(api.router)
 app.include_router(websocket.router)
+app.include_router(pages.router)
 
 
 @app.exception_handler(Exception)

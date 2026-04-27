@@ -11,13 +11,51 @@ class OuterWorld extends Mode {
         outer-world {
             position: fixed;
             inset: 0;
-            padding: 2.5em 3em 3.5em;
+            padding: 1em 3em 1.5em;
             min-height: 0;
             background:
                 radial-gradient(ellipse at 50% 45%, rgba(140,160,255,0.025) 0%, transparent 50%),
                 var(--bg);
             transition: opacity 0.4s var(--ease);
         }
+        outer-world .ow-pair-tray {
+            position: absolute;
+            top: var(--space-lg);
+            right: var(--space-lg);
+            display: flex;
+            gap: var(--space-sm);
+            z-index: 2;
+        }
+        outer-world .ow-orb-hit {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 180px;
+            height: 180px;
+            border-radius: var(--radius-full);
+            background: transparent;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            z-index: 2;
+            pointer-events: auto;
+        }
+        outer-world .ow-pair-btn {
+            display: flex;
+            align-items: center;
+            gap: var(--space-xs);
+            padding: var(--space-xs) var(--space-md);
+            background: var(--destructive-bg);
+            border: 1px solid var(--destructive-border);
+            border-radius: var(--radius-md);
+            color: var(--destructive-text);
+            font-family: var(--font);
+            font-size: var(--text-sm);
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        outer-world .ow-pair-btn:hover { background: rgba(255, 80, 80, 0.14); border-color: rgba(255, 120, 120, 0.4); }
     `;
 
     // init({ api, signals, onEnterInner() })
@@ -37,17 +75,30 @@ class OuterWorld extends Mode {
         this._conversation = document.createElement('conversation-widget');
         this._conversation.init({
             onSend: (text) => this._send(text),
+            onSendImage: (file, caption) => this._sendImage(file, caption),
+            mediaUrl: (source) => this._props.api.mediaUrl(this._personaId, source),
             loadHistory: (id) => this._loadHistory(id),
         });
         this._conversation.style.cssText = 'position:relative;z-index:1;display:flex;flex-direction:column;flex:1;min-height:0;';
 
+        this._pairTray = document.createElement('div');
+        this._pairTray.className = 'ow-pair-tray';
+
+        this._orbHit = document.createElement('button');
+        this._orbHit.className = 'ow-orb-hit';
+        this._orbHit.type = 'button';
+        this._orbHit.setAttribute('aria-label', "Open persona's mind");
+        this._orbHit.addEventListener('click', () => this._enterInner());
+
         this.appendChild(this._mind);
         this.appendChild(this._conversation);
+        this.appendChild(this._orbHit);
+        this.appendChild(this._pairTray);
 
         // Chat handler — updates both conversation and mind
         this._chatHandler = (msg) => {
             if (msg.persona_id === this._personaId) {
-                this._conversation.receiveMessage(msg.content);
+                this._conversation.receiveMessage(msg.content, 'web');
                 this._mind.setState('speaking');
                 setTimeout(() => this._mind.setState('idle'), 800);
             }
@@ -69,8 +120,19 @@ class OuterWorld extends Mode {
                 else if (title.includes('hearing') || title.includes('heard')) this._mind.setState('thinking');
                 else if (title.includes('answered') || title.includes('queried')) this._mind.setState('idle');
 
-                if (title === 'heard' && details.content && details.channel_type && details.channel_type !== 'web') {
-                    this._conversation.addMessage('person', details.content);
+                if (title === 'heard' && details.content && details.channel?.type && details.channel.type !== 'web') {
+                    this._conversation.addMessage('person', details.content, undefined, details.channel.type);
+                }
+
+                if (title === 'seen' && details.source && details.channel?.type && details.channel.type !== 'web') {
+                    const url = this._props.api.mediaUrl(this._personaId, details.source);
+                    this._conversation.addMediaMessage('person', url, details.caption || '', undefined, details.channel.type);
+                }
+
+                if (title === 'said' && details.content && details.channel?.type && details.channel.type !== 'web') {
+                    this._conversation.receiveMessage(details.content, details.channel.type);
+                    this._mind.setState('speaking');
+                    setTimeout(() => this._mind.setState('idle'), 800);
                 }
 
                 if (title.startsWith('pipeline:') && details.stage) {
@@ -88,18 +150,54 @@ class OuterWorld extends Mode {
             const data = await this._props.api.fetchPersona(personaId);
             this._personaName = data.name;
             this._personaBirthday = data.birthday || null;
-            this._conversation.setPersona(personaId, data.name);
+            this._personaStatus = data.status;
+            this._conversation.setPersona(personaId, data.name, this._personaBirthday);
             this._mind.setPersona(data.name);
+            this._renderPairTray(data.channels || []);
 
-            // Check if persona is running
-            try {
-                const mindData = await this._props.api.fetchMind(personaId);
-                this._mind.setState('idle');
-                this._mind.setGraph(mindData);
-            } catch {
-                this._mind.setState('stopped');
-            }
-        } catch {}
+            if (data.running === false) this._mind.setState('stopped');
+            else if (data.status === 'sick') this._mind.setState('stopped');
+            else this._mind.setState('idle');
+        } catch {
+            this._mind.setState('stopped');
+            this._personaStatus = 'hibernate';
+        }
+    }
+
+    _renderPairTray(channels) {
+        this._pairTray.innerHTML = '';
+        for (const ch of channels) {
+            if (ch.verified) continue;
+            if (ch.type !== 'telegram' && ch.type !== 'discord') continue;
+            const btn = document.createElement('button');
+            btn.className = 'ow-pair-btn';
+            btn.type = 'button';
+            btn.textContent = `Pair ${ch.type}`;
+            btn.addEventListener('click', () => this._openPair(ch.type));
+            this._pairTray.appendChild(btn);
+        }
+    }
+
+    _openPair(channelType) {
+        const modal = document.createElement('modal-layout');
+        modal.init({});
+        document.body.appendChild(modal);
+
+        const widget = document.createElement('pair-widget');
+        widget.init({
+            api: this._props.api,
+            personaId: this._personaId,
+            channelType,
+            onDone: async () => {
+                modal.remove();
+                try {
+                    const data = await this._props.api.fetchPersona(this._personaId);
+                    this._renderPairTray(data.channels || []);
+                } catch {}
+            },
+            onCancel: () => modal.remove(),
+        });
+        modal.setContent(widget);
     }
 
     activate() {
@@ -128,6 +226,20 @@ class OuterWorld extends Mode {
             await this._props.api.hearPersona(this._personaId, text);
         } catch (err) {
             this._conversation.showError(err.message || 'Network error');
+            this._mind.setState('idle');
+        }
+    }
+
+    async _sendImage(file, caption) {
+        this._mind.setState('thinking');
+        try {
+            const result = await this._props.api.seePersona(this._personaId, file, caption);
+            if (!result.success) {
+                this._conversation.showError(result.error || 'Upload failed');
+                this._mind.setState('idle');
+            }
+        } catch (err) {
+            this._conversation.showError(err.message || 'Upload failed');
             this._mind.setState('idle');
         }
     }

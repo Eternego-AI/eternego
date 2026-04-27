@@ -28,11 +28,11 @@ async def prepare(
     api_key: str | None = None,
 ) -> Outcome[PrepareData]:
     """It makes it easy to set up and prepare an environment for your persona to grow."""
-    await bus.propose("Preparing environment", {"model": model, "provider": provider})
+    bus.propose("Preparing environment", {"model": model, "provider": provider})
 
     try:
         if provider and not model:
-            await bus.broadcast(
+            bus.broadcast(
                 "Environment preparation failed", {"reason": "no_model"}
             )
             return Outcome(
@@ -45,7 +45,7 @@ async def prepare(
             model = await local_inference_engine.get_default_model(config.OLLAMA_BASE_URL)
 
         if not model:
-            await bus.broadcast(
+            bus.broadcast(
                 "Environment preparation failed", {"reason": "no_model"}
             )
             return Outcome(
@@ -72,17 +72,17 @@ async def prepare(
         outcome = await check_model(model_obj)
 
         if not outcome.success:
-            await bus.broadcast("Environment preparation failed", {"model": model})
-            return Outcome(success=False, message="Environment preparation failed")
+            bus.broadcast("Environment preparation failed", {"model": model})
+            return Outcome(success=False, message=f"Environment preparation failed: {outcome.message}")
 
-        await bus.broadcast("Environment ready", {"model": model, "provider": provider})
+        bus.broadcast("Environment ready", {"model": model, "provider": provider})
 
         return Outcome(
             success=True, message="Environment is ready", data=PrepareData(model=model_obj)
         )
 
     except UnsupportedOS as e:
-        await bus.broadcast(
+        bus.broadcast(
             "Environment preparation failed",
             {
                 "reason": "unsupported_os",
@@ -95,7 +95,7 @@ async def prepare(
         )
 
     except InstallationError as e:
-        await bus.broadcast(
+        bus.broadcast(
             "Environment preparation failed",
             {
                 "reason": "installation",
@@ -105,7 +105,7 @@ async def prepare(
         return Outcome(success=False, message=str(e))
 
     except ModelError as e:
-        await bus.broadcast(
+        bus.broadcast(
             "Environment preparation failed",
             {
                 "reason": "model",
@@ -116,7 +116,7 @@ async def prepare(
         return Outcome(success=False, message=str(e))
 
     except EngineConnectionError as e:
-        await bus.broadcast(
+        bus.broadcast(
             "Environment preparation failed",
             {
                 "reason": "connection",
@@ -126,5 +126,5 @@ async def prepare(
         )
         return Outcome(
             success=False,
-            message="Could not connect to the local inference engine. Please make sure it is running.",
+            message=f"Could not connect to the local inference engine. Please make sure it is running. ({e})",
         )

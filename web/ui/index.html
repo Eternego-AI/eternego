@@ -3,57 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/">
     <title>Eternego</title>
     <link rel="icon" type="image/svg+xml" href="/assets/eternego-icon.svg">
     <link rel="stylesheet" href="/ui/index.css">
 </head>
 <body>
     <script type="module">
-        // Elements (UI — platform)
+        // Elements — UI, platform
         import './ui/elements/log-line.js';
         import './ui/elements/role-message.js';
         import './ui/elements/text-input.js';
         import './ui/elements/action-button.js';
         import './ui/elements/step-panel.js';
         import './ui/elements/info-card.js';
+        import './ui/elements/media-attachment.js';
+        import './ui/elements/block-text.js';
+        import './ui/elements/block-markdown.js';
+        import './ui/elements/input-text.js';
+        import './ui/elements/input-options.js';
+        import './ui/elements/input-dropzone.js';
+        import './ui/elements/input-composite.js';
 
-        // Layouts (logical — platform)
+        // Layouts — logical, platform
         import './ui/layouts/tail-layout.js';
         import './ui/layouts/card-layout.js';
         import './ui/layouts/step-layout.js';
+        import './ui/layouts/conversation-layout.js';
+        import './ui/layouts/modal-layout.js';
 
-        // Widgets (UI — core)
+        // Widgets — UI, core
         import './ui/widgets/mind.js';
         import './ui/widgets/conversation.js';
         import './ui/widgets/setup.js';
+        import './ui/widgets/pair.js';
 
-        // Modes (UI — business)
+        // Modes — UI, business
         import './ui/modes/outer-world.js';
         import './ui/modes/inner-world.js';
+        import './ui/modes/status-world.js';
 
-        // Apps (logical — core)
+        // Apps — logical, core
         import SetupApp from './ui/apps/setup.js';
 
-        // Frame (UI — business)
+        // Frame — UI, business
         import './ui/frame.js';
 
-        // UI (logical — business)
+        // UI — logical, business
         import UI from './ui/index.js';
 
-        // Register SetupApp so UI can create it without circular imports
         UI.registerSetupApp(SetupApp);
 
-        // Boot
         UI.boot().then(() => {
             const frame = document.createElement('ui-frame');
             frame.init();
             document.body.appendChild(frame);
-
-            if (UI.personas.length > 0) {
-                UI.enterOuterWorld(UI.personas[0].id);
-            } else {
-                UI.enterSetup();
-            }
+            UI.routeFromPath();
         });
     </script>
 </body>

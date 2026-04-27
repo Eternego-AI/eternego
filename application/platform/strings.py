@@ -17,31 +17,38 @@ def strip_tag(text: str, tag: str) -> str:
     return re.sub(rf"<{tag}>.*?</{tag}>", "", text, flags=re.DOTALL).strip()
 
 
-def extract_json(text: str) -> dict:
-    """Extract and parse the first JSON object from text, handling code fences and surrounding prose."""
-    start = text.find("{")
-    if start == -1:
-        raise json.JSONDecodeError("No JSON object found", text, 0)
-    depth = 0
-    in_string = False
-    escape = False
-    for i in range(start, len(text)):
-        c = text[i]
-        if escape:
-            escape = False
-            continue
-        if c == "\\":
-            escape = True
-            continue
-        if c == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                return json.loads(text[start:i + 1])
-    raise json.JSONDecodeError("No complete JSON object found", text, 0)
+def extract_braces(text: str, start: int = 0) -> str | None:
+    """Find the first balanced {...} block starting from `start`, recursively.
+
+    Returns the balanced text including outer braces, or None if not found.
+    """
+    opening = text.find("{", start)
+    if opening == -1:
+        return None
+
+    result = "{"
+    cursor = opening + 1
+
+    while cursor < len(text):
+        next_open = text.find("{", cursor)
+        next_close = text.find("}", cursor)
+
+        if next_close == -1:
+            return None
+
+        if next_open == -1 or next_close < next_open:
+            result += text[cursor:next_close + 1]
+            return result
+
+        result += text[cursor:next_open]
+        inner = extract_braces(text, next_open)
+        if inner is None:
+            return None
+        result += inner
+        cursor = next_open + len(inner)
+
+    return None
+
+
+
+

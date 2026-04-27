@@ -1,7 +1,8 @@
-"""Eternego daemon — the business owner that starts the building.
+"""Eternego daemon — opens the event loop, hands off to manager, waits.
 
-Gives the manager its job description: for each customer, assign an agent.
-Runs heartbeat rounds. Shuts down gracefully.
+Manager owns everything persona-shaped: connections, heartbeat, schedule,
+agent registry, persona loading. Daemon's job is just orchestration of boot
+and shutdown plus the HTTP server.
 """
 
 import asyncio
@@ -10,8 +11,8 @@ import sys
 
 import uvicorn
 
-from application.business import environment, persona
-from application.platform.observer import subscribe
+from application.business import environment
+from application.platform.observer import set_loop, subscribe
 import manager
 from web.app import app as web_app
 from web.socket import on_signal
@@ -20,7 +21,6 @@ _web_server: uvicorn.Server | None = None
 
 
 async def start_web(host: str, port: int) -> None:
-    """Run the FastAPI web server inside the existing event loop."""
     global _web_server
     config = uvicorn.Config(web_app, host=host, port=port, log_level="error")
     _web_server = uvicorn.Server(config)
@@ -29,13 +29,16 @@ async def start_web(host: str, port: int) -> None:
 
 
 async def run(config):
-    """Run the daemon — start manager, load personas, start web server, heartbeat."""
-
-    subscribe(on_signal)
-    manager.start(web_app)
+    """Run the daemon — register observer loop, start manager, start web, wait."""
+    set_loop(asyncio.get_running_loop())
 
     loop = asyncio.get_running_loop()
     shutdown = asyncio.Event()
+
+    subscribe(on_signal)
+    manager.on_fatal = shutdown.set   # vital loop dies → shutdown fires
+    await manager.start()
+
     if sys.platform == "win32":
         signal.signal(signal.SIGTERM, lambda *_: shutdown.set())
         signal.signal(signal.SIGINT, lambda *_: shutdown.set())
@@ -43,35 +46,19 @@ async def run(config):
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, shutdown.set)
 
-    # Ensure inference engine is running
     outcome = await environment.ready()
     if not outcome.success:
         print(f"Warning: {outcome.message}")
 
-    # For each customer, assign an agent
-    outcome = await persona.get_list()
-    if not outcome.success:
-        print(f"No personas yet: {outcome.message}")
-
-    personas = outcome.data.personas if outcome.data else []
-    for p in personas:
-        try:
-            manager.serve(p)
-        except Exception as e:
-            print(f"Failed to serve {p.name}: {e}")
-
-    # Open the door
     web_task = asyncio.create_task(start_web(config.host, config.port))
     web_task.add_done_callback(
         lambda t: print(f"Web server stopped: {t.exception()}") if not t.cancelled() and t.exception() else None
     )
 
-    # Wait for shutdown — each agent runs its own heartbeat
     await shutdown.wait()
 
-    # Graceful shutdown
     print("Shutting down...")
-    await manager.release_all()
+    await manager.stop()
 
     if _web_server:
         _web_server.should_exit = True

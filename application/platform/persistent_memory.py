@@ -25,7 +25,7 @@ def load(storage_id: str, path: Path) -> str:
     if storage_id in _cache and read(storage_id):
         return _hash(storage_id)
     path = Path(path)
-    content = json.loads(path.read_text()) if path.exists() else []
+    content = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
     if not isinstance(content, list):
         content = []
     _cache[storage_id] = Storage(path, content)
@@ -64,4 +64,4 @@ def verify(storage_id: str, confirm_hash: str) -> bool:
 
 
 def save(storage_id: str) -> None:
-    _cache[storage_id].store["path"].write_text(json.dumps(_cache[storage_id].store["content"], indent=2))
+    _cache[storage_id].store["path"].write_text(json.dumps(_cache[storage_id].store["content"], indent=2), encoding="utf-8")

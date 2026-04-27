@@ -1,34 +1,27 @@
-"""Meaning — noting things to remember."""
+"""Meaning — noting."""
 
-from application.core import paths
 from application.core.data import Persona
 
 
-def intention(persona: Persona) -> str:
-    return f"The person wants {persona.name} to note or remember something specific"
+class Meaning:
+    def __init__(self, persona: Persona):
+        self.persona = persona
 
+    def intention(self) -> str:
+        return "Noticing something worth keeping that does not belong in another file"
 
-def prompt(persona: Persona) -> str:
-    existing = paths.read(paths.notes(persona.id))
-    return (
-        "The person wants you to explicitly save something for later — a fact, "
-        "a reference, a code, a configuration, anything they want you to remember.\n\n"
-        f"## Current Notes\n\n{existing.strip() or '(no notes yet)'}\n\n"
-        "## Tools\n\n"
-        "### save_notes\n"
-        "Rewrite the notes file with the updated content.\n\n"
-        "Parameters:\n"
-        "- `content` (string, required): The complete updated notes text.\n\n"
-        "### say\n"
-        "Send a message to the person.\n\n"
-        "Parameters:\n"
-        "- `text` (string, required): The message to send.\n\n"
-        "## Response Format\n\n"
-        "Merge the new note into the existing notes. Remove anything the person "
-        "asks to remove. Keep everything else. Return the full updated text:\n"
-        "```json\n"
-        '{"tool": "save_notes", "content": "updated notes text here", '
-        '"say": "Noted!"}\n'
-        "```\n\n"
-        "No special permissions are needed for noting."
-    )
+    def path(self) -> str:
+        return (
+            "You noticed something worth carrying forward. This is your judgment call, not a "
+            "request — what you know about the person (identity, traits, wishes, struggles, "
+            "your bearing with them, permissions they granted) lives in its own files and is "
+            "rewritten by you during sleep. Time-bound commitments belong in the schedule. "
+            "Notes is for everything else worth holding: an observation, a thread to pick up "
+            "later, a detail about the work or the world, a thought of your own that should "
+            "not be lost.\n\n"
+            "What you save here appears in your identity on every future interaction under "
+            "*What You've Been Holding*. Treat the space as your own. Call "
+            "`abilities.save_notes` with `content` — it replaces the whole file, so include "
+            "what is still relevant from the current notes plus the new item. Drop a line only "
+            "when it is truly resolved."
+        )

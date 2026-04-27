@@ -63,6 +63,16 @@ def json(v) -> object:
         return repr(v)
 
 
+def to_string(value) -> str:
+    """Convert a dict or list to a JSON string."""
+    return _json.dumps(value)
+
+
+def to_dict(value: str):
+    """Convert a JSON string to a dict or list."""
+    return _json.loads(value)
+
+
 def are_equal(a: Data, b: Data) -> bool:
     """True if two Data objects are equal by their full serialized form."""
     return json(a) == json(b)

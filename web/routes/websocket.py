@@ -1,11 +1,12 @@
-"""WebSocket route — /ws/{persona_id} streams chat and signals for a persona."""
+"""WebSocket routes — /ws/{persona_id} streams chat and signals for a persona,
+/ws/system streams system-wide bus signals."""
 
 from fastapi import APIRouter, WebSocket
 
 import manager
 from application.core.data import Channel
 from application.platform import logger
-from web.socket import manager as ws_manager, WebChannel
+from web.socket import manager as ws_manager
 
 router = APIRouter()
 
@@ -27,10 +28,29 @@ async def system_websocket(ws: WebSocket):
 @router.websocket("/ws/{persona_id}")
 async def websocket_endpoint(persona_id: str, ws: WebSocket):
     await ws_manager.connect(persona_id, ws)
-    agent = manager.find_or_none(persona_id)
-    channel = Channel(type="web", name=persona_id, bus=WebChannel(persona_id))
+
+    agent = manager.find(persona_id)
+    web_gateway = None
+    sender = None
+
     if agent:
-        await agent.connect(channel)
+        web_gateway = next(
+            (g for g in agent.gateways if g["channel"].type == "web"),
+            None,
+        )
+        if web_gateway is None:
+            await agent.connect(Channel(type="web", name=persona_id))
+            web_gateway = next(
+                (g for g in agent.gateways if g["channel"].type == "web"),
+                None,
+            )
+
+        if web_gateway is not None:
+            async def send_to_ws(data: str) -> None:
+                await ws.send_text(data)
+            web_gateway["connection"].subscribe(persona_id, send_to_ws)
+            sender = send_to_ws
+
     try:
         while True:
             msg = await ws.receive()
@@ -39,6 +59,6 @@ async def websocket_endpoint(persona_id: str, ws: WebSocket):
     except Exception as e:
         logger.warning("WebSocket session error", {"error": str(e), "type": type(e).__name__})
     finally:
+        if web_gateway and sender:
+            web_gateway["connection"].unsubscribe(persona_id, sender)
         ws_manager.disconnect(persona_id, ws)
-        if not ws_manager.has_connections(persona_id) and agent:
-            await agent.disconnect(channel)

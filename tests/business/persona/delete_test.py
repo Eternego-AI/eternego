@@ -18,7 +18,7 @@ async def test_delete_succeeds():
 
         def run(url):
             outcome = asyncio.run(spec.create(
-                name="DeleteMe", thinking=Model(name="llama3", url=url), channel=Channel(type="web", credentials={}),
+                name="DeleteMe", thinking=Model(name="llama3", url=url), channels=[Channel(type="web", credentials={})],
             ))
             assert outcome.success, outcome.message
             outcome = asyncio.run(spec.find(outcome.data.persona.id))
