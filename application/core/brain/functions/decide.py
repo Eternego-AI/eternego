@@ -61,7 +61,8 @@ async def decide(living: Living) -> list:
         "- `{\"abilities.<name>\": { ...args }}` — run an ability.\n\n"
         "Done:\n"
         "- `{\"done\": null}` — this cycle is finished.\n\n"
-        "Any prose outside the JSON will be sent to the person as a `say`."
+        "Prefer `say` for speaking. Prose around the JSON is also sent to the person — "
+        "using both means the same message reaches them twice."
     )
 
     try:
