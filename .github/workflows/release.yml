@@ -335,12 +335,14 @@ jobs:
         with: { python-version: '3.13' }
 
       - name: Install Ollama
+        timeout-minutes: 5
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://ollama.com/download/OllamaSetup.exe" -OutFile "$env:TEMP\OllamaSetup.exe"
-          Start-Process -FilePath "$env:TEMP\OllamaSetup.exe" -ArgumentList "/SILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
-          $ollamaDir = "$env:LOCALAPPDATA\Programs\Ollama"
-          echo $ollamaDir | Out-File -FilePath $env:GITHUB_PATH -Append
+          # Use the standalone zip — OllamaSetup.exe registers a Windows
+          # service and hangs forever on GHA runners on the SCM call.
+          Invoke-WebRequest -Uri "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip" -OutFile "$env:RUNNER_TEMP\ollama.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\ollama.zip" -DestinationPath "$env:RUNNER_TEMP\ollama-bin"
+          echo "$env:RUNNER_TEMP\ollama-bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Start Ollama and wait
         shell: pwsh
