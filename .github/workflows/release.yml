@@ -214,7 +214,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OLLAMA_MODEL: qwen2.5:0.5b
-      ETERNEGO_HOME: ${{ runner.temp }}/eternego
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -258,7 +257,6 @@ jobs:
         run: |
           BIN="dist/eternego-${{ github.ref_name }}-linux-x86_64"
           chmod +x "$BIN"
-          mkdir -p "$ETERNEGO_HOME"
           nohup "$BIN" daemon >/tmp/daemon.log 2>&1 &
 
       - name: Run smoke test
@@ -277,7 +275,6 @@ jobs:
     runs-on: macos-latest
     env:
       OLLAMA_MODEL: qwen2.5:0.5b
-      ETERNEGO_HOME: ${{ runner.temp }}/eternego
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -314,7 +311,6 @@ jobs:
           # Gatekeeper still checks code signatures on macos-latest. Disable it
           # for this runner so the binary can launch.
           sudo spctl --master-disable || true
-          mkdir -p "$ETERNEGO_HOME"
           nohup "$BIN" daemon >/tmp/daemon.log 2>&1 &
 
       - name: Run smoke test
@@ -333,7 +329,6 @@ jobs:
     runs-on: windows-latest
     env:
       OLLAMA_MODEL: qwen2.5:0.5b
-      ETERNEGO_HOME: ${{ runner.temp }}\eternego
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -376,7 +371,6 @@ jobs:
         shell: pwsh
         run: |
           $bin = "dist\eternego-${{ github.ref_name }}-windows-x86_64.exe"
-          New-Item -ItemType Directory -Force -Path $env:ETERNEGO_HOME | Out-Null
           Start-Process -FilePath $bin -ArgumentList "daemon" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\daemon.log" -RedirectStandardError "$env:RUNNER_TEMP\daemon.err.log"
 
       - name: Run smoke test
