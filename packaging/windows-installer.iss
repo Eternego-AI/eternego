@@ -13,14 +13,14 @@ AppPublisherURL=https://eternego.ai
 DefaultDirName={autopf}\Eternego
 DefaultGroupName=Eternego
 DisableProgramGroupPage=yes
-OutputDir=dist
+OutputDir=..\dist
 OutputBaseFilename=Eternego-{#AppVersion}-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
-SetupIconFile=build\icon\eternego.ico
+SetupIconFile=..\build\icon\eternego.ico
 UninstallDisplayIcon={app}\eternego.exe
 
 [Languages]
@@ -30,7 +30,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
 [Files]
-Source: "dist\eternego.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\eternego.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Eternego"; Filename: "{app}\eternego.exe"; Parameters: "launch"; IconFilename: "{app}\eternego.exe"
