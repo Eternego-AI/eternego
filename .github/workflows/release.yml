@@ -208,6 +208,189 @@ jobs:
             dist/eternego-${{ github.ref_name }}-windows-x86_64.exe
             dist/Eternego-${{ github.ref_name }}-setup.exe
 
+  smoke-linux:
+    name: Smoke (Linux)
+    needs: linux
+    runs-on: ubuntu-latest
+    env:
+      OLLAMA_MODEL: qwen2.5:0.5b
+      ETERNEGO_HOME: ${{ runner.temp }}/eternego
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama and wait
+        run: |
+          nohup ollama serve >/tmp/ollama.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1; then
+              echo "ollama up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Ollama did not start"; cat /tmp/ollama.log; exit 1
+
+      - name: Pull tiny model
+        timeout-minutes: 10
+        run: ollama pull "$OLLAMA_MODEL"
+
+      - name: Install keyring stack (diary encryption needs libsecret)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libsecret-tools gnome-keyring dbus-x11
+
+      - name: Start keyring daemon
+        run: |
+          eval $(dbus-launch --sh-syntax)
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> $GITHUB_ENV
+          echo -n "test" | gnome-keyring-daemon --unlock --components=secrets
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: binary-linux
+          path: dist
+
+      - name: Start daemon
+        run: |
+          BIN="dist/eternego-${{ github.ref_name }}-linux-x86_64"
+          chmod +x "$BIN"
+          mkdir -p "$ETERNEGO_HOME"
+          nohup "$BIN" daemon >/tmp/daemon.log 2>&1 &
+
+      - name: Run smoke test
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: python installation/smoke.py
+
+      - name: Daemon log on failure
+        if: failure()
+        run: cat /tmp/daemon.log || true
+
+  smoke-macos:
+    name: Smoke (macOS)
+    needs: macos
+    runs-on: macos-latest
+    env:
+      OLLAMA_MODEL: qwen2.5:0.5b
+      ETERNEGO_HOME: ${{ runner.temp }}/eternego
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+
+      - name: Install Ollama
+        run: brew install ollama
+
+      - name: Start Ollama and wait
+        run: |
+          nohup ollama serve >/tmp/ollama.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1; then
+              echo "ollama up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Ollama did not start"; cat /tmp/ollama.log; exit 1
+
+      - name: Pull tiny model
+        timeout-minutes: 10
+        run: ollama pull "$OLLAMA_MODEL"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: binary-macos
+          path: dist
+
+      - name: Start daemon
+        run: |
+          BIN="dist/eternego-${{ github.ref_name }}-macos-arm64"
+          chmod +x "$BIN"
+          # Unsigned binary downloaded via artifact has no quarantine flag, but
+          # Gatekeeper still checks code signatures on macos-latest. Disable it
+          # for this runner so the binary can launch.
+          sudo spctl --master-disable || true
+          mkdir -p "$ETERNEGO_HOME"
+          nohup "$BIN" daemon >/tmp/daemon.log 2>&1 &
+
+      - name: Run smoke test
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: python installation/smoke.py
+
+      - name: Daemon log on failure
+        if: failure()
+        run: cat /tmp/daemon.log || true
+
+  smoke-windows:
+    name: Smoke (Windows)
+    needs: windows
+    runs-on: windows-latest
+    env:
+      OLLAMA_MODEL: qwen2.5:0.5b
+      ETERNEGO_HOME: ${{ runner.temp }}\eternego
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+
+      - name: Install Ollama
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://ollama.com/download/OllamaSetup.exe" -OutFile "$env:TEMP\OllamaSetup.exe"
+          Start-Process -FilePath "$env:TEMP\OllamaSetup.exe" -ArgumentList "/SILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+          $ollamaDir = "$env:LOCALAPPDATA\Programs\Ollama"
+          echo $ollamaDir | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Start Ollama and wait
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\ollama.log" -RedirectStandardError "$env:RUNNER_TEMP\ollama.err.log"
+          for ($i=1; $i -le 120; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 5
+              if ($r.StatusCode -eq 200) { Write-Host "ollama up after ${i}s"; exit 0 }
+            } catch {}
+            Start-Sleep -Seconds 1
+          }
+          Write-Error "Ollama did not start"
+          Get-Content "$env:RUNNER_TEMP\ollama.log","$env:RUNNER_TEMP\ollama.err.log" -ErrorAction SilentlyContinue
+          exit 1
+
+      - name: Pull tiny model
+        timeout-minutes: 10
+        shell: pwsh
+        run: ollama pull $env:OLLAMA_MODEL
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: binary-windows
+          path: dist
+
+      - name: Start daemon
+        shell: pwsh
+        run: |
+          $bin = "dist\eternego-${{ github.ref_name }}-windows-x86_64.exe"
+          New-Item -ItemType Directory -Force -Path $env:ETERNEGO_HOME | Out-Null
+          Start-Process -FilePath $bin -ArgumentList "daemon" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\daemon.log" -RedirectStandardError "$env:RUNNER_TEMP\daemon.err.log"
+
+      - name: Run smoke test
+        shell: pwsh
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: python installation/smoke.py
+
+      - name: Daemon log on failure
+        if: failure()
+        shell: pwsh
+        run: Get-Content "$env:RUNNER_TEMP\daemon.log","$env:RUNNER_TEMP\daemon.err.log" -ErrorAction SilentlyContinue
+
   release:
     name: Publish GitHub Release
     needs:
@@ -217,6 +400,9 @@ jobs:
       - linux
       - macos
       - windows
+      - smoke-linux
+      - smoke-macos
+      - smoke-windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
