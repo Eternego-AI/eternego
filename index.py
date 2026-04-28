@@ -6,6 +6,13 @@ import os
 import sys
 from dataclasses import dataclass
 
+# PyInstaller-bundled Python doesn't pick up the host system's CA store, so
+# urllib calls (telegram getMe, discord polling) fail TLS verification with
+# "self-signed certificate in certificate chain". Point ssl at certifi
+# explicitly — does no harm in dev (env var only takes effect if unset).
+import certifi as _certifi
+os.environ.setdefault("SSL_CERT_FILE", _certifi.where())
+
 from application.platform import logger, objects
 from application.platform.observer import Event, Plan, Signal, subscribe
 from config.application import log_file, persona_log_file, signal_log_file
