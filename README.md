@@ -96,19 +96,51 @@ She has phases — **morning**, **day**, **night**. Each one shapes how she read
 
 ## Quick start
 
+Latest release: **[v0.1.0-rc1](https://github.com/Eternego-AI/eternego/releases/tag/v0.1.0-rc1)** (prerelease — pin the version below)
+
+### Windows
+
+Open PowerShell and run:
+
+```powershell
+$env:ETERNEGO_VERSION="v0.1.0-rc1"
+iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/install.ps1 | iex
+```
+
+The installer downloads the source, sets up a Python venv, installs Eternego, and registers a Scheduled Task so she keeps running across reboots. You'll need Python 3.13+ on PATH — install from [python.org](https://www.python.org/downloads/) if you don't have it.
+
+### Linux / macOS
+
+```bash
+ETERNEGO_VERSION=v0.1.0-rc1 \
+  curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/install.sh | bash
+```
+
+Linux uses systemd, macOS uses launchd. Add `-s -- --full` at the end if you want training extras (adds ~5 GB of CUDA wheels).
+
+### Docker
+
+```bash
+docker run -d --name eternego -p 5000:5000 -v eternego-data:/data \
+  ghcr.io/eternego-ai/eternego:v0.1.0-rc1
+```
+
+Use `:v0.1.0-rc1-full` for the training-equipped image.
+
+### From source (contributors)
+
 ```bash
 git clone https://github.com/Eternego-AI/eternego.git
 cd eternego
-
-# Linux/macOS
-bash install.sh
-
-# Windows
-powershell -ExecutionPolicy Bypass -File install.ps1
+bash install.sh           # Linux/macOS
+pwsh install.ps1          # Windows
 ```
 
+---
+
+After install, pick a model and open the dashboard:
+
 ```bash
-# Pick a model — start small, upgrade anytime
 eternego env prepare --model llama3.2:3b   # or qwen2.5:7b, phi4:14b, etc.
 ```
 
