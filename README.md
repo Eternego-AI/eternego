@@ -139,7 +139,7 @@ docker run -d --name eternego --network=host \
 For an everything-in-containers setup with Ollama as a sibling service, grab the compose file:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/installation/docker/docker-compose.yml > eternego.compose.yml
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/installation/docker/docker-compose.yml > eternego.compose.yml
 # edit ports, GPU access, etc. inline; comments explain each line
 docker compose -f eternego.compose.yml up -d
 ```
@@ -152,12 +152,12 @@ The installers above launch Eternego when you open them. If you want her to regi
 
 ```bash
 # Linux (systemd) / macOS (launchd) — auto-installs Python and Ollama via apt/dnf/pacman/brew
-curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/installation/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/installation/install.sh | bash
 ```
 
 ```powershell
 # Windows (Scheduled Task) — auto-installs Python via winget
-iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/installation/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/installation/install.ps1 | iex
 ```
 
 Both scripts also accept `--full` (or `-Full` on Windows) to install training extras.
