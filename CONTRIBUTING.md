@@ -23,7 +23,7 @@ pip install -e .[training]          # only if you want grow / fine-tuning
 python index.py --debug daemon
 ```
 
-This runs the daemon from your live source tree (not the installed copy). `--debug` prints debug logs to the terminal. Open `http://localhost:5000` for the web UI.
+This runs the daemon from your live source tree (not the installed copy). `--debug` prints debug logs to the terminal. Open `http://localhost:4747` for the web UI.
 
 If you want to run the installed copy instead: `eternego service start`.
 

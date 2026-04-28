@@ -53,6 +53,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('web/ui', 'web/ui'),
+        ('assets', 'assets'),
         ('config', 'config'),
         ('shells', 'shells'),
     ],
