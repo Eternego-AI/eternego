@@ -75,31 +75,37 @@ elif sys.platform == 'win32' and os.path.exists('build/icon/eternego.ico'):
     icon_path = 'build/icon/eternego.ico'
 
 # Two build modes selected via ETERNEGO_BUILD_TARGET:
-#   - "cli" (default)  → console binary, no .app — for Linux/Windows release + macOS CLI artifact
-#   - "app"            → windowed binary wrapped in macOS .app bundle (no console window on launch)
+#   - "cli" (default)  → onefile console binary — Linux/Windows release + macOS CLI artifact
+#   - "app"            → onedir windowed binary wrapped in macOS .app bundle. PyInstaller 6+
+#                        silently drops data files in onefile + .app combos, so .app must be onedir.
 build_target = os.environ.get('ETERNEGO_BUILD_TARGET', 'cli')
 is_app = build_target == 'app'
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name='eternego',
-    debug=False,
-    strip=False,
-    upx=False,
-    runtime_tmpdir=None,
-    console=not is_app,
-    disable_windowed_traceback=False,
-    icon=icon_path,
-)
-
 if is_app and sys.platform == 'darwin':
-    app = BUNDLE(
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name='eternego',
+        debug=False,
+        strip=False,
+        upx=False,
+        console=False,
+        disable_windowed_traceback=False,
+        icon=icon_path,
+    )
+    coll = COLLECT(
         exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=False,
+        upx=False,
+        name='eternego',
+    )
+    app = BUNDLE(
+        coll,
         name='Eternego.app',
         icon=icon_path,
         bundle_identifier='ai.eternego.eternego',
@@ -113,4 +119,21 @@ if is_app and sys.platform == 'darwin':
             'LSUIElement': False,
             'LSEnvironment': {'ETERNEGO_LAUNCH_FROM_BUNDLE': '1'},
         },
+    )
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name='eternego',
+        debug=False,
+        strip=False,
+        upx=False,
+        runtime_tmpdir=None,
+        console=True,
+        disable_windowed_traceback=False,
+        icon=icon_path,
     )
