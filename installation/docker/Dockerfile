@@ -1,5 +1,9 @@
-# Eternego — slim image by default. Set INSTALL_TRAINING=true at build time
-# for the full variant (torch / transformers / peft / bitsandbytes etc.).
+# Eternego — slim image with X11 substrate so the persona has her own desktop.
+# Browser, editor, anything else — she installs herself, the way a person does.
+#
+# Build args:
+#   INSTALL_TRAINING=true   include torch / transformers / peft / etc.
+#   START_DESKTOP=false     (env var at run time) skip the X stack — channels-only deploys.
 FROM python:3.13-slim
 
 ARG INSTALL_TRAINING=false
@@ -8,6 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         git \
+        xvfb \
+        x11vnc \
+        fluxbox \
+        novnc \
+        websockify \
+        tini \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -18,8 +28,20 @@ RUN pip install --no-cache-dir . \
          pip install --no-cache-dir ".[training]"; \
        fi
 
-ENV ETERNEGO_HOME=/data
-VOLUME ["/data"]
-EXPOSE 5000
+# Defaults that make `docker run --network=host eternego:latest` just work:
+# Ollama on the host is reachable as localhost when host networking is shared.
+# Mac/Windows users without --network=host can override OLLAMA_HOST at run time.
+ENV ETERNEGO_HOME=/data \
+    OLLAMA_HOST=http://localhost:11434 \
+    DISPLAY=:99 \
+    XVFB_RESOLUTION=1280x720x24 \
+    START_DESKTOP=true
 
-CMD ["python", "index.py", "daemon"]
+VOLUME ["/data"]
+EXPOSE 5000 6080
+
+COPY installation/docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# tini reaps zombies from the X-stack background processes.
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

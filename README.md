@@ -126,12 +126,25 @@ A single self-contained binary. No system Python needed.
 
 ### Docker
 
+The image ships with the persona's own desktop baked in (Xvfb + fluxbox + noVNC). She lives in there; she'll install Firefox or anything else she needs herself when you ask. You can peek at what she's doing at `http://localhost:6080/vnc.html`.
+
 ```bash
-docker run -d --name eternego -p 5000:5000 -v eternego-data:/data \
-  ghcr.io/eternego-ai/eternego:v0.1.0-rc1
+docker run -d --name eternego --network=host \
+  -v eternego-data:/data \
+  ghcr.io/eternego-ai/eternego:latest
 ```
 
-Use the `:v0.1.0-rc1-full` tag for the training-equipped image (~5.5 GB extra — includes torch, transformers, peft for LoRA fine-tuning).
+`--network=host` lets the container reach Ollama running natively on your machine (`localhost:11434`). Without it, set `-e OLLAMA_HOST=http://host.docker.internal:11434` and add `-p 5000:5000 -p 6080:6080`.
+
+For an everything-in-containers setup with Ollama as a sibling service, grab the compose file:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/installation/docker/docker-compose.yml > eternego.compose.yml
+# edit ports, GPU access, etc. inline; comments explain each line
+docker compose -f eternego.compose.yml up -d
+```
+
+Use the `:full` tag (or `image: ghcr.io/eternego-ai/eternego:full` in the compose file) for the training-equipped image — adds ~5.5 GB of CUDA wheels for LoRA fine-tuning.
 
 ### Background service install (CLI, auto-start on boot)
 
