@@ -46,6 +46,13 @@ hiddenimports += [
     'application.platform.ollama',
 ]
 
+# Tray icon (macOS .app + Windows .exe only). Linux AppImage and Docker
+# don't ship pystray and never import cli/desktop.py — see index.py.
+if sys.platform == 'darwin':
+    hiddenimports += ['pystray._darwin']
+elif sys.platform == 'win32':
+    hiddenimports += ['pystray._win32']
+
 
 a = Analysis(
     ['index.py'],
@@ -63,7 +70,11 @@ a = Analysis(
     excludes=[
         'torch', 'transformers', 'peft', 'trl', 'datasets', 'accelerate',
         'bitsandbytes', 'gguf', 'numpy', 'sentencepiece', 'protobuf',
-    ],
+    ] + (
+        # Tray launcher is darwin/win32 only — keep its imports out of the
+        # Linux AppImage so PyInstaller doesn't fail trying to resolve pystray.
+        ['desktop', 'pystray', 'PIL'] if sys.platform not in ('darwin', 'win32') else []
+    ),
 )
 
 pyz = PYZ(a.pure, a.zipped_data)

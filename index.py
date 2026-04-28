@@ -128,8 +128,15 @@ def main():
 
     elif args.command == "launch":
         config = bootstrap(args)
-        from cli.launch import run as launch_run
-        asyncio.run(launch_run(config))
+        # Frozen .app (macOS) and .exe (Windows) get the tray-icon launcher so the
+        # user has a persistent affordance to reopen the dashboard. Linux .AppImage
+        # and the dev/source path keep the simpler browser-only launcher.
+        if getattr(sys, "frozen", False) and sys.platform in ("darwin", "win32"):
+            from desktop import run as desktop_run
+            desktop_run(config)
+        else:
+            from cli.launch import run as launch_run
+            asyncio.run(launch_run(config))
 
     elif args.command == "service":
         from cli.service import dispatch
