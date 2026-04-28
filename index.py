@@ -132,7 +132,7 @@ def main():
         # user has a persistent affordance to reopen the dashboard. Linux .AppImage
         # and the dev/source path keep the simpler browser-only launcher.
         if getattr(sys, "frozen", False) and sys.platform in ("darwin", "win32"):
-            from desktop import run as desktop_run
+            from installation.desktop import run as desktop_run
             desktop_run(config)
         else:
             from cli.launch import run as launch_run

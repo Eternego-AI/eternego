@@ -3,18 +3,22 @@
 # Supports Linux (systemd) and macOS (launchd).
 #
 # Run from a clone:
-#     bash install.sh           # light install (no fine-tuning deps)
-#     bash install.sh --full    # full install (includes training extras)
+#     bash installation/install.sh           # light install (no fine-tuning deps)
+#     bash installation/install.sh --full    # full install (includes training extras)
 #
 # Run remotely (curl pipe):
 #     curl -fsSL https://eternego.ai/install.sh | bash
 #     curl -fsSL https://eternego.ai/install.sh | bash -s -- --full
 #
 # Override the version (default: latest GitHub release):
-#     ETERNEGO_VERSION=v0.1.0-rc1 bash install.sh
+#     ETERNEGO_VERSION=v0.1.0-rc1 bash installation/install.sh
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || pwd)"
+# HERE = directory of install.sh (always the installation/ dir).
+# SCRIPT_DIR = repo source root (parent of installation/). The shells/ helpers
+# treat it as "where the project lives" — venv, .env, package, service, etc.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || pwd)"
+SCRIPT_DIR="$(cd "$HERE/.." 2>/dev/null && pwd || pwd)"
 OS_TYPE="$(uname -s)"
 LOG_FILE="/tmp/eternego-install.log"
 
@@ -29,7 +33,7 @@ export INSTALL_FULL
 
 # If the install script was downloaded standalone (no shells/ next to it),
 # fetch the source tarball from GitHub and continue from the extracted copy.
-if [ ! -d "$SCRIPT_DIR/shells" ]; then
+if [ ! -d "$HERE/shells" ]; then
     echo "Downloading Eternego..."
     VERSION="${ETERNEGO_VERSION:-}"
     if [ -z "$VERSION" ]; then
@@ -50,10 +54,11 @@ if [ ! -d "$SCRIPT_DIR/shells" ]; then
     curl -fsSL "https://github.com/Eternego-AI/eternego/archive/refs/tags/${VERSION}.tar.gz" \
         | tar -xz -C "$TMP_DIR" --strip-components=1
     SCRIPT_DIR="$TMP_DIR"
+    HERE="$TMP_DIR/installation"
     echo "Eternego $VERSION downloaded to $SCRIPT_DIR"
 fi
 
-. "$SCRIPT_DIR/shells/lib.sh"
+. "$HERE/shells/lib.sh"
 
 on_exit() {
     local code=$?
@@ -64,15 +69,16 @@ on_exit() {
 }
 trap on_exit EXIT
 
-. "$SCRIPT_DIR/shells/banner.sh"
-. "$SCRIPT_DIR/shells/copy.sh"
+. "$HERE/shells/banner.sh"
+. "$HERE/shells/copy.sh"
 # From here on, operate on the installed copy
 SCRIPT_DIR="$ETERNEGO_INSTALL_DIR"
-. "$SCRIPT_DIR/shells/python.sh"
-. "$SCRIPT_DIR/shells/packages.sh"
-. "$SCRIPT_DIR/shells/gguf.sh"
-. "$SCRIPT_DIR/shells/env.sh"
-. "$SCRIPT_DIR/shells/service.sh"
-. "$SCRIPT_DIR/shells/start.sh"
+HERE="$SCRIPT_DIR/installation"
+. "$HERE/shells/python.sh"
+. "$HERE/shells/packages.sh"
+. "$HERE/shells/gguf.sh"
+. "$HERE/shells/env.sh"
+. "$HERE/shells/service.sh"
+. "$HERE/shells/start.sh"
 
 print "Dashboard is accessible at http://$WEB_HOST:$WEB_PORT"

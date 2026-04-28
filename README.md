@@ -139,12 +139,12 @@ The installers above launch Eternego when you open them. If you want her to regi
 
 ```bash
 # Linux (systemd) / macOS (launchd) — auto-installs Python and Ollama via apt/dnf/pacman/brew
-curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/installation/install.sh | bash
 ```
 
 ```powershell
 # Windows (Scheduled Task) — auto-installs Python via winget
-iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/installation/install.ps1 | iex
 ```
 
 Both scripts also accept `--full` (or `-Full` on Windows) to install training extras.
@@ -154,8 +154,8 @@ Both scripts also accept `--full` (or `-Full` on Windows) to install training ex
 ```bash
 git clone https://github.com/Eternego-AI/eternego.git
 cd eternego
-bash install.sh           # Linux/macOS
-pwsh install.ps1          # Windows
+bash installation/install.sh        # Linux/macOS
+pwsh installation/install.ps1       # Windows
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before sending a PR.

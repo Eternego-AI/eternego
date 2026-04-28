@@ -40,6 +40,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          file: installation/docker/Dockerfile
           push: true
           tags: |
             ghcr.io/eternego-ai/eternego:${{ github.ref_name }}
@@ -61,6 +62,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          file: installation/docker/Dockerfile
           push: true
           tags: |
             ghcr.io/eternego-ai/eternego:${{ github.ref_name }}-full
@@ -87,14 +89,14 @@ jobs:
         run: |
           pip install -e .
           pip install pyinstaller
-          pyinstaller eternego.spec
+          pyinstaller installation/native/pyinstaller.spec
       - name: Stage AppDir
         run: |
           mkdir -p AppDir/usr/bin
           cp dist/eternego AppDir/usr/bin/eternego
-          cp packaging/eternego.desktop AppDir/eternego.desktop
+          cp installation/native/eternego.desktop AppDir/eternego.desktop
           cp build/icon/eternego.png AppDir/eternego.png
-          cp packaging/AppRun AppDir/AppRun
+          cp installation/native/AppRun AppDir/AppRun
           chmod +x AppDir/AppRun
       - name: Build AppImage
         run: |
@@ -143,11 +145,11 @@ jobs:
       - name: Build CLI binary (console mode)
         env:
           ETERNEGO_BUILD_TARGET: cli
-        run: pyinstaller --noconfirm --workpath build-cli --distpath dist-cli eternego.spec
+        run: pyinstaller --noconfirm --workpath build-cli --distpath dist-cli installation/native/pyinstaller.spec
       - name: Build .app bundle (windowed mode)
         env:
           ETERNEGO_BUILD_TARGET: app
-        run: pyinstaller --noconfirm --workpath build-app --distpath dist-app eternego.spec
+        run: pyinstaller --noconfirm --workpath build-app --distpath dist-app installation/native/pyinstaller.spec
       - name: Build .dmg
         run: |
           mkdir -p dist
@@ -189,11 +191,11 @@ jobs:
         run: |
           pip install -e ".[bundle]"
           pip install pyinstaller
-          pyinstaller eternego.spec
+          pyinstaller installation/native/pyinstaller.spec
         shell: pwsh
       - name: Build Inno Setup installer
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" /DAppVersion=${{ github.ref_name }} packaging\windows-installer.iss
+          & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" /DAppVersion=${{ github.ref_name }} installation\native\windows-installer.iss
         shell: pwsh
       - name: Rename CLI binary
         run: |

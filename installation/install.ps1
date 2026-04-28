@@ -1,27 +1,31 @@
 # Eternego installer for Windows — sets up the CLI and a persistent scheduled task.
 #
 # Run from a clone:
-#     pwsh install.ps1            # light install (no fine-tuning deps)
-#     pwsh install.ps1 -Full      # full install (includes training extras)
+#     pwsh installation\install.ps1            # light install (no fine-tuning deps)
+#     pwsh installation\install.ps1 -Full      # full install (includes training extras)
 #
 # Run remotely (Invoke-WebRequest pipe):
 #     iwr -useb https://eternego.ai/install.ps1 | iex
 #     $env:INSTALL_FULL=1; iwr -useb https://eternego.ai/install.ps1 | iex
 #
 # Override the version (default: latest GitHub release):
-#     $env:ETERNEGO_VERSION="v0.1.0-rc1"; pwsh install.ps1
+#     $env:ETERNEGO_VERSION="v0.1.0-rc1"; pwsh installation\install.ps1
 param([switch]$Full)
 
 $ErrorActionPreference = "Stop"
 
 if ($Full) { $env:INSTALL_FULL = "1" }
 
-$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
+# $Here = directory of install.ps1 (always the installation\ dir).
+# $ScriptDir = repo source root (parent of installation\). Shells use it as
+# "where the project lives" — venv, .env, package, service, etc.
+$Here = if ($PSScriptRoot) { $PSScriptRoot } else { Get-Location }
+$ScriptDir = (Resolve-Path "$Here\..").Path
 $LogFile   = "$env:TEMP\eternego-install.log"
 
 # If the install script was downloaded standalone (no shells\ next to it),
 # fetch the source tarball from GitHub and continue from the extracted copy.
-if (-not (Test-Path "$ScriptDir\shells")) {
+if (-not (Test-Path "$Here\shells")) {
     Write-Host "Downloading Eternego..."
     $Version = $env:ETERNEGO_VERSION
     if (-not $Version) {
@@ -47,22 +51,24 @@ if (-not (Test-Path "$ScriptDir\shells")) {
     tar -xzf $TarPath -C $TmpDir --strip-components=1
     Remove-Item $TarPath
     $ScriptDir = $TmpDir.FullName
+    $Here = Join-Path $ScriptDir "installation"
     Write-Host "Eternego $Version downloaded to $ScriptDir"
 }
 
-. "$ScriptDir\shells\lib.ps1"
+. "$Here\shells\lib.ps1"
 
 try {
-    . "$ScriptDir\shells\banner.ps1"
-    . "$ScriptDir\shells\copy.ps1"
+    . "$Here\shells\banner.ps1"
+    . "$Here\shells\copy.ps1"
     # From here on, operate on the installed copy
     $ScriptDir = $EternegoInstallDir
-    . "$ScriptDir\shells\python.ps1"
-    . "$ScriptDir\shells\packages.ps1"
-    . "$ScriptDir\shells\gguf.ps1"
-    . "$ScriptDir\shells\env.ps1"
-    . "$ScriptDir\shells\service.ps1"
-    . "$ScriptDir\shells\start.ps1"
+    $Here = Join-Path $ScriptDir "installation"
+    . "$Here\shells\python.ps1"
+    . "$Here\shells\packages.ps1"
+    . "$Here\shells\gguf.ps1"
+    . "$Here\shells\env.ps1"
+    . "$Here\shells\service.ps1"
+    . "$Here\shells\start.ps1"
 } catch {
     Write-Host ""
     Write-Host "Installation failed or was interrupted. Log: $LogFile"

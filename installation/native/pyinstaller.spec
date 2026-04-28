@@ -4,7 +4,7 @@
 # abilities, business specs. PyInstaller's static analysis can't see those, so
 # we enumerate them explicitly here as hiddenimports.
 #
-# Run: pyinstaller eternego.spec
+# Run from repo root: pyinstaller installation/native/pyinstaller.spec
 # Output:
 #   - Linux:   dist/eternego                 (single binary)
 #   - Windows: dist/eternego.exe             (single binary)
@@ -62,7 +62,7 @@ a = Analysis(
         ('web/ui', 'web/ui'),
         ('assets', 'assets'),
         ('config', 'config'),
-        ('shells', 'shells'),
+        ('installation/shells', 'shells'),
     ],
     hiddenimports=hiddenimports,
     hookspath=[],
