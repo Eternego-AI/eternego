@@ -33,7 +33,13 @@ if [ ! -d "$SCRIPT_DIR/shells" ]; then
     echo "Downloading Eternego..."
     VERSION="${ETERNEGO_VERSION:-}"
     if [ -z "$VERSION" ]; then
-        VERSION="$(curl -fsSL https://api.github.com/repos/Eternego-AI/eternego/releases/latest \
+        # Prefer stable; /releases/latest skips prereleases and 404s when only prereleases exist.
+        VERSION="$(curl -fsSL https://api.github.com/repos/Eternego-AI/eternego/releases/latest 2>/dev/null \
+            | grep '"tag_name"' | head -1 | cut -d '"' -f 4)"
+    fi
+    if [ -z "$VERSION" ]; then
+        # Fall back to the most recent release of any kind (covers prerelease-only state).
+        VERSION="$(curl -fsSL https://api.github.com/repos/Eternego-AI/eternego/releases \
             | grep '"tag_name"' | head -1 | cut -d '"' -f 4)"
     fi
     if [ -z "$VERSION" ]; then

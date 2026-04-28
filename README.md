@@ -96,27 +96,25 @@ She has phases — **morning**, **day**, **night**. Each one shapes how she read
 
 ## Quick start
 
-Latest release: **[v0.1.0-rc1](https://github.com/Eternego-AI/eternego/releases/tag/v0.1.0-rc1)** (prerelease — pin the version below)
+Latest release: **[v0.1.0-rc1](https://github.com/Eternego-AI/eternego/releases/tag/v0.1.0-rc1)** (prerelease)
+
+The installer takes care of Python — installs it via `winget` on Windows, `apt`/`dnf`/`pacman`/`zypper` on Linux, `brew` on macOS — sets up a venv, and registers Eternego as a background service (Scheduled Task / systemd / launchd) so she keeps running across reboots.
 
 ### Windows
 
 Open PowerShell and run:
 
 ```powershell
-$env:ETERNEGO_VERSION="v0.1.0-rc1"
-iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/install.ps1 | iex
 ```
-
-The installer downloads the source, sets up a Python venv, installs Eternego, and registers a Scheduled Task so she keeps running across reboots. You'll need Python 3.13+ on PATH — install from [python.org](https://www.python.org/downloads/) if you don't have it.
 
 ### Linux / macOS
 
 ```bash
-ETERNEGO_VERSION=v0.1.0-rc1 \
-  curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/install.sh | bash
 ```
 
-Linux uses systemd, macOS uses launchd. Add `-s -- --full` at the end if you want training extras (adds ~5 GB of CUDA wheels).
+Add `-s -- --full` at the end if you want training extras (adds ~5 GB of CUDA wheels).
 
 ### Docker
 

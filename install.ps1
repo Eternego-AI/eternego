@@ -25,8 +25,16 @@ if (-not (Test-Path "$ScriptDir\shells")) {
     Write-Host "Downloading Eternego..."
     $Version = $env:ETERNEGO_VERSION
     if (-not $Version) {
-        $latest = Invoke-RestMethod "https://api.github.com/repos/Eternego-AI/eternego/releases/latest"
-        $Version = $latest.tag_name
+        # Prefer stable; /releases/latest skips prereleases and 404s when only prereleases exist.
+        try {
+            $latest = Invoke-RestMethod "https://api.github.com/repos/Eternego-AI/eternego/releases/latest"
+            $Version = $latest.tag_name
+        } catch {}
+    }
+    if (-not $Version) {
+        # Fall back to the most recent release of any kind (covers prerelease-only state).
+        $releases = Invoke-RestMethod "https://api.github.com/repos/Eternego-AI/eternego/releases"
+        if ($releases -and $releases.Count -gt 0) { $Version = $releases[0].tag_name }
     }
     if (-not $Version) {
         Write-Host "Could not determine Eternego version. Set ETERNEGO_VERSION explicitly."
