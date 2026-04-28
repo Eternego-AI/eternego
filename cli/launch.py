@@ -5,10 +5,16 @@ import threading
 import time
 import webbrowser
 
+from application.platform import OS
 from daemon import run as daemon_run
 
 
 async def run(config):
+    requested_port = config.port
+    config.port = OS.find_free_port(config.host, config.port)
+    if config.port != requested_port:
+        print(f"Port {requested_port} was in use; using {config.port} instead.")
+
     url = f"http://{config.host}:{config.port}"
 
     def open_after_ready():

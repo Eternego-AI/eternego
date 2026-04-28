@@ -3,6 +3,7 @@
 import asyncio
 import platform
 import shutil
+import socket
 
 from application.platform.tool import tool
 
@@ -115,6 +116,18 @@ def cpu_name() -> str:
 def os_name() -> str:
     """Operating system name and version."""
     return f"{platform.system()} {platform.release()}".strip()
+
+
+def find_free_port(host: str, start: int, attempts: int = 20) -> int:
+    """First port in [start, start+attempts) that we can bind on `host`."""
+    for port in range(start, start + attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((host, port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError(f"No free port in {start}..{start + attempts - 1} on {host}")
 
 
 async def is_installed(program: str) -> bool:

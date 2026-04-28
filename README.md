@@ -127,7 +127,7 @@ A single self-contained binary. No system Python needed.
 ### Docker
 
 ```bash
-docker run -d --name eternego -p 4747:4747 -v eternego-data:/data \
+docker run -d --name eternego -p 5000:5000 -v eternego-data:/data \
   ghcr.io/eternego-ai/eternego:v0.1.0-rc1
 ```
 
@@ -162,7 +162,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before sending a PR.
 
 ---
 
-After install, your browser opens to **http://localhost:4747**. The setup form asks for:
+After install, your browser opens to **http://localhost:5000**. The setup form asks for:
 
 - **A name** for your persona.
 - **A thinking model** — pick **Cloud (Claude / GPT)** and paste an API key for the easiest path, or **Local (Ollama)** if you want everything to stay on your machine. The local path needs Ollama installed; the installer scripts above install it for you, the .dmg/.exe/.AppImage do not — grab it from [ollama.com](https://ollama.com) first if you're going local.
@@ -172,7 +172,7 @@ Then she comes online. From any tool that speaks OpenAI:
 
 ```python
 from openai import OpenAI
-client = OpenAI(base_url="http://localhost:4747/v1", api_key="sk-no-need")
+client = OpenAI(base_url="http://localhost:5000/v1", api_key="sk-no-need")
 ```
 
 She's hers. She's yours.

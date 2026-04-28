@@ -20,6 +20,6 @@ RUN pip install --no-cache-dir . \
 
 ENV ETERNEGO_HOME=/data
 VOLUME ["/data"]
-EXPOSE 4747
+EXPOSE 5000
 
 CMD ["python", "index.py", "daemon"]

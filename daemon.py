@@ -12,6 +12,7 @@ import sys
 import uvicorn
 
 from application.business import environment
+from application.platform import OS
 from application.platform.observer import set_loop, subscribe
 import manager
 from web.app import app as web_app
@@ -31,6 +32,11 @@ async def start_web(host: str, port: int) -> None:
 async def run(config):
     """Run the daemon — register observer loop, start manager, start web, wait."""
     set_loop(asyncio.get_running_loop())
+
+    requested_port = config.port
+    config.port = OS.find_free_port(config.host, config.port)
+    if config.port != requested_port:
+        print(f"Port {requested_port} was in use; using {config.port} instead.")
 
     loop = asyncio.get_running_loop()
     shutdown = asyncio.Event()
