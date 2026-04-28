@@ -9,10 +9,6 @@ import config  # ensures .env is loaded
 
 _PROJECT_ROOT = Path(__file__).parent.parent
 
-# When running from a PyInstaller bundle, _PROJECT_ROOT points inside the
-# read-only bundle, so writable defaults must live in the user's home dir.
-_FROZEN = getattr(sys, "frozen", False)
-
 # Path to convert_hf_to_gguf.py from llama.cpp — downloaded by install.sh into tools/.
 # Override with GGUF_CONVERT_SCRIPT env var if the script lives elsewhere.
 GGUF_CONVERT_SCRIPT: str = os.environ.get(
@@ -27,9 +23,14 @@ LORA_CONVERT_SCRIPT: str = os.environ.get(
 )
 
 # Log directory — daily log files live here.
-# Installed version uses ~/.eternego/logs (set via .env); dev defaults to ./logs.
-_DEFAULT_LOGS = (Path.home() / ".eternego" / "logs") if _FROZEN else (_PROJECT_ROOT / "logs")
-LOGS_DIR: Path = Path(os.environ.get("LOGS_DIR") or str(_DEFAULT_LOGS))
+# Bundle (.dmg/.exe/.AppImage) always logs to ~/.eternego/logs since the bundle
+# is read-only and dev never runs there. Source installs honour .env's LOGS_DIR
+# (the installer scripts set it to ~/.eternego/logs); a bare clone falls back
+# to ./logs.
+if getattr(sys, "frozen", False):
+    LOGS_DIR: Path = Path.home() / ".eternego" / "logs"
+else:
+    LOGS_DIR: Path = Path(os.environ.get("LOGS_DIR") or str(_PROJECT_ROOT / "logs"))
 
 
 def log_file() -> Path:
