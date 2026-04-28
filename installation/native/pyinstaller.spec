@@ -137,7 +137,12 @@ if is_app and sys.platform == 'darwin':
             'NSHighResolutionCapable': True,
             'LSBackgroundOnly': False,
             'LSUIElement': False,
-            'LSEnvironment': {'ETERNEGO_LAUNCH_FROM_BUNDLE': '1'},
+            # launchd hands GUI apps a sparse PATH (/usr/bin:/bin:/usr/sbin:/sbin)
+            # — extend it so subprocess calls find brew, ollama, git, etc.
+            'LSEnvironment': {
+                'ETERNEGO_LAUNCH_FROM_BUNDLE': '1',
+                'PATH': '/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
+            },
         },
     )
 else:
