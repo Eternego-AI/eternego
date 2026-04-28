@@ -1,7 +1,8 @@
 # Eternego
 
+[![Release](https://img.shields.io/github/v/release/Eternego-AI/eternego?include_prereleases&sort=semver)](https://github.com/Eternego-AI/eternego/releases)
 [![Website](https://img.shields.io/badge/website-eternego.ai-blue)](https://eternego.ai)
-[![Tests](https://img.shields.io/badge/tests-311%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-313%20passing-brightgreen)](tests/)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/nfHnWwYUR4)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -94,27 +95,34 @@ Every beat she does one thing. Each stage has its own prompt, its own way of ask
 
 She has phases — **morning**, **day**, **night**. Each one shapes how she reads what's in front of her: morning is for picking up a thread or starting fresh, day is for living it, night is for closing and carrying forward what mattered.
 
-## Quick start
+## Install
 
 Latest release: **[v0.1.0-rc1](https://github.com/Eternego-AI/eternego/releases/tag/v0.1.0-rc1)** (prerelease)
 
-The installer takes care of Python — installs it via `winget` on Windows, `apt`/`dnf`/`pacman`/`zypper` on Linux, `brew` on macOS — sets up a venv, and registers Eternego as a background service (Scheduled Task / systemd / launchd) so she keeps running across reboots.
+Pick the installer for your machine. Builds aren't code-signed yet, so each OS will warn the first time — instructions for getting past the warning are inline below.
 
-### Windows
+### macOS (.dmg)
 
-Open PowerShell and run:
+Download **[Eternego-v0.1.0-rc1.dmg](https://github.com/Eternego-AI/eternego/releases/download/v0.1.0-rc1/Eternego-v0.1.0-rc1.dmg)**. Open it, drag **Eternego** to **Applications**, then double-click Eternego from Applications.
 
-```powershell
-iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/install.ps1 | iex
-```
+The first launch shows: *"Eternego.app cannot be opened because the developer cannot be verified."*  Right-click (or Control-click) the app, choose **Open**, then **Open** again in the dialog. macOS remembers the choice — subsequent launches are normal.
 
-### Linux / macOS
+### Windows (.exe installer)
+
+Download **[Eternego-v0.1.0-rc1-setup.exe](https://github.com/Eternego-AI/eternego/releases/download/v0.1.0-rc1/Eternego-v0.1.0-rc1-setup.exe)**. Double-click it, walk through the wizard (Next → Install → Finish). Eternego launches automatically and adds Start Menu and Desktop shortcuts.
+
+The wizard's first dialog is *"Windows protected your PC"* (SmartScreen). Click **More info**, then **Run anyway**. SmartScreen remembers this app afterwards.
+
+### Linux (.AppImage)
+
+Download **[Eternego-v0.1.0-rc1-x86_64.AppImage](https://github.com/Eternego-AI/eternego/releases/download/v0.1.0-rc1/Eternego-v0.1.0-rc1-x86_64.AppImage)**, make it executable, run it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/install.sh | bash
+chmod +x Eternego-v0.1.0-rc1-x86_64.AppImage
+./Eternego-v0.1.0-rc1-x86_64.AppImage
 ```
 
-Add `-s -- --full` at the end if you want training extras (adds ~5 GB of CUDA wheels).
+A single self-contained binary. No system Python needed.
 
 ### Docker
 
@@ -123,7 +131,23 @@ docker run -d --name eternego -p 5000:5000 -v eternego-data:/data \
   ghcr.io/eternego-ai/eternego:v0.1.0-rc1
 ```
 
-Use `:v0.1.0-rc1-full` for the training-equipped image.
+Use the `:v0.1.0-rc1-full` tag for the training-equipped image (~5.5 GB extra — includes torch, transformers, peft for LoRA fine-tuning).
+
+### Background service install (CLI, auto-start on boot)
+
+The installers above launch Eternego when you open them. If you want her to register as a system service so she keeps running across reboots, run this from a terminal instead:
+
+```bash
+# Linux (systemd) / macOS (launchd) — auto-installs Python and Ollama via apt/dnf/pacman/brew
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/install.sh | bash
+```
+
+```powershell
+# Windows (Scheduled Task) — auto-installs Python via winget
+iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/install-strategies/install.ps1 | iex
+```
+
+Both scripts also accept `--full` (or `-Full` on Windows) to install training extras.
 
 ### From source (contributors)
 
@@ -134,9 +158,17 @@ bash install.sh           # Linux/macOS
 pwsh install.ps1          # Windows
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) before sending a PR.
+
 ---
 
-After install, open `http://localhost:5000`. The setup form asks for her name and which model should think for her — local (Ollama: `llama3.2:3b`, `qwen2.5:7b`, `phi4:14b`, …) or remote (Claude, GPT, anything OpenAI-compatible). The backend pulls the model, registers it, and brings her online; from then on she's reachable through the web, Telegram, or any OpenAI-compatible client:
+After install, your browser opens to **http://localhost:5000**. The setup form asks for:
+
+- **A name** for your persona.
+- **A thinking model** — pick **Cloud (Claude / GPT)** and paste an API key for the easiest path, or **Local (Ollama)** if you want everything to stay on your machine. The local path needs Ollama installed; the installer scripts above install it for you, the .dmg/.exe/.AppImage do not — grab it from [ollama.com](https://ollama.com) first if you're going local.
+- **Channels** (optional) — Telegram or Discord tokens to talk to her there too.
+
+Then she comes online. From any tool that speaks OpenAI:
 
 ```python
 from openai import OpenAI
