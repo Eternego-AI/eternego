@@ -6,6 +6,17 @@ import os
 import sys
 from dataclasses import dataclass
 
+# launchd hands GUI .apps a sparse PATH (/usr/bin:/bin:/usr/sbin:/sbin) and
+# silently ignores Info.plist LSEnvironment.PATH (other LSEnvironment keys
+# work; PATH specifically is overridden). Augment os.environ here so every
+# subprocess (brew/ollama/git checks, telegram polling, etc.) inherits a
+# usable PATH on macOS.
+if sys.platform == "darwin":
+    _existing = os.environ.get("PATH", "")
+    _extras = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin"
+    if "/opt/homebrew/bin" not in _existing:
+        os.environ["PATH"] = f"{_extras}:{_existing}" if _existing else _extras
+
 # PyInstaller-bundled Python doesn't pick up the host system's CA store, so
 # urllib calls (telegram getMe, discord polling) fail TLS verification with
 # "self-signed certificate in certificate chain". Point ssl at certifi
