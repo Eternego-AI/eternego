@@ -15,11 +15,18 @@ import os
 import glob
 import sys
 
+# PyInstaller resolves spec-relative paths (scripts, datas, icons) from the
+# spec file's directory, not the working directory. The spec lives in
+# installation/native/, so anchor everything off the repo root.
+SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
+REPO_ROOT = os.path.abspath(os.path.join(SPEC_DIR, '..', '..'))
 
-def collect_modules(directory: str, package: str) -> list[str]:
-    """Return import paths for every .py module under `directory`, excluding __init__."""
+
+def collect_modules(rel_directory: str, package: str) -> list[str]:
+    """Return import paths for every .py module under `rel_directory` (relative to repo root)."""
+    abs_directory = os.path.join(REPO_ROOT, rel_directory)
     out = []
-    for path in sorted(glob.glob(os.path.join(directory, '*.py'))):
+    for path in sorted(glob.glob(os.path.join(abs_directory, '*.py'))):
         name = os.path.splitext(os.path.basename(path))[0]
         if name == '__init__':
             continue
@@ -55,14 +62,14 @@ elif sys.platform == 'win32':
 
 
 a = Analysis(
-    ['index.py'],
-    pathex=['.'],
+    [os.path.join(REPO_ROOT, 'index.py')],
+    pathex=[REPO_ROOT],
     binaries=[],
     datas=[
-        ('web/ui', 'web/ui'),
-        ('assets', 'assets'),
-        ('config', 'config'),
-        ('installation/shells', 'shells'),
+        (os.path.join(REPO_ROOT, 'web/ui'), 'web/ui'),
+        (os.path.join(REPO_ROOT, 'assets'), 'assets'),
+        (os.path.join(REPO_ROOT, 'config'), 'config'),
+        (os.path.join(REPO_ROOT, 'installation/shells'), 'shells'),
     ],
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -80,10 +87,12 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data)
 
 icon_path = None
-if sys.platform == 'darwin' and os.path.exists('build/icon/eternego.icns'):
-    icon_path = 'build/icon/eternego.icns'
-elif sys.platform == 'win32' and os.path.exists('build/icon/eternego.ico'):
-    icon_path = 'build/icon/eternego.ico'
+darwin_icon = os.path.join(REPO_ROOT, 'build/icon/eternego.icns')
+windows_icon = os.path.join(REPO_ROOT, 'build/icon/eternego.ico')
+if sys.platform == 'darwin' and os.path.exists(darwin_icon):
+    icon_path = darwin_icon
+elif sys.platform == 'win32' and os.path.exists(windows_icon):
+    icon_path = windows_icon
 
 # Two build modes selected via ETERNEGO_BUILD_TARGET:
 #   - "cli" (default)  → onefile console binary — Linux/Windows release + macOS CLI artifact
