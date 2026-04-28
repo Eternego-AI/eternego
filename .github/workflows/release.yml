@@ -42,8 +42,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/eternego:${{ github.ref_name }}
-            ghcr.io/${{ github.repository_owner }}/eternego:latest
+            ghcr.io/eternego-ai/eternego:${{ github.ref_name }}
+            ghcr.io/eternego-ai/eternego:latest
           build-args: |
             INSTALL_TRAINING=false
 
@@ -63,8 +63,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/eternego:${{ github.ref_name }}-full
-            ghcr.io/${{ github.repository_owner }}/eternego:full
+            ghcr.io/eternego-ai/eternego:${{ github.ref_name }}-full
+            ghcr.io/eternego-ai/eternego:full
           build-args: |
             INSTALL_TRAINING=true
 
