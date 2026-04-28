@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import os
 import sys
 from dataclasses import dataclass
 
@@ -79,6 +80,9 @@ def main():
 
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
+    # launch — entry point for the desktop app wrappers (.app / installer.exe / .AppImage)
+    sub.add_parser("launch", help="Start the daemon and open the dashboard in the default browser")
+
     # daemon — internal, called by systemd or developer
     sub.add_parser("daemon", help="Run the daemon process (used by OS service manager or for development)")
 
@@ -110,12 +114,22 @@ def main():
     env_prepare = env_sub.add_parser("prepare", help="Install dependencies and pull a model")
     env_prepare.add_argument("--model", default="", help="Model to pull (uses Ollama default if omitted)")
 
+    # When the macOS .app bundle launches from Finder/Dock, no argv is passed
+    # but LSEnvironment in Info.plist sets this flag. Treat it as `launch`.
+    if len(sys.argv) == 1 and os.environ.get("ETERNEGO_LAUNCH_FROM_BUNDLE") == "1":
+        sys.argv.append("launch")
+
     args = parser.parse_args()
 
     if args.command == "daemon":
         config = bootstrap(args)
         from daemon import run
         asyncio.run(run(config))
+
+    elif args.command == "launch":
+        config = bootstrap(args)
+        from cli.launch import run as launch_run
+        asyncio.run(launch_run(config))
 
     elif args.command == "service":
         from cli.service import dispatch

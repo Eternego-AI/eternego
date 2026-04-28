@@ -136,13 +136,7 @@ pwsh install.ps1          # Windows
 
 ---
 
-After install, pick a model and open the dashboard:
-
-```bash
-eternego env prepare --model llama3.2:3b   # or qwen2.5:7b, phi4:14b, etc.
-```
-
-Open `http://localhost:5000`, create a persona, give her a name, start talking — through the web, Telegram, or any OpenAI-compatible client:
+After install, open `http://localhost:5000`. The setup form asks for her name and which model should think for her — local (Ollama: `llama3.2:3b`, `qwen2.5:7b`, `phi4:14b`, …) or remote (Claude, GPT, anything OpenAI-compatible). The backend pulls the model, registers it, and brings her online; from then on she's reachable through the web, Telegram, or any OpenAI-compatible client:
 
 ```python
 from openai import OpenAI

@@ -5,10 +5,15 @@
 # we enumerate them explicitly here as hiddenimports.
 #
 # Run: pyinstaller eternego.spec
-# Output: dist/eternego (single binary on Linux, .app on macOS, .exe on Windows)
+# Output:
+#   - Linux:   dist/eternego                 (single binary)
+#   - Windows: dist/eternego.exe             (single binary)
+#   - macOS:   dist/eternego                 (CLI binary)
+#              dist/Eternego.app             (app bundle, double-click target)
 
 import os
 import glob
+import sys
 
 
 def collect_modules(directory: str, package: str) -> list[str]:
@@ -62,6 +67,18 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data)
 
+icon_path = None
+if sys.platform == 'darwin' and os.path.exists('build/icon/eternego.icns'):
+    icon_path = 'build/icon/eternego.icns'
+elif sys.platform == 'win32' and os.path.exists('build/icon/eternego.ico'):
+    icon_path = 'build/icon/eternego.ico'
+
+# Two build modes selected via ETERNEGO_BUILD_TARGET:
+#   - "cli" (default)  → console binary, no .app — for Linux/Windows release + macOS CLI artifact
+#   - "app"            → windowed binary wrapped in macOS .app bundle (no console window on launch)
+build_target = os.environ.get('ETERNEGO_BUILD_TARGET', 'cli')
+is_app = build_target == 'app'
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -74,6 +91,25 @@ exe = EXE(
     strip=False,
     upx=False,
     runtime_tmpdir=None,
-    console=True,
+    console=not is_app,
     disable_windowed_traceback=False,
+    icon=icon_path,
 )
+
+if is_app and sys.platform == 'darwin':
+    app = BUNDLE(
+        exe,
+        name='Eternego.app',
+        icon=icon_path,
+        bundle_identifier='ai.eternego.eternego',
+        version='0.1.0',
+        info_plist={
+            'CFBundleName': 'Eternego',
+            'CFBundleDisplayName': 'Eternego',
+            'CFBundleShortVersionString': '0.1.0',
+            'NSHighResolutionCapable': True,
+            'LSBackgroundOnly': False,
+            'LSUIElement': False,
+            'LSEnvironment': {'ETERNEGO_LAUNCH_FROM_BUNDLE': '1'},
+        },
+    )

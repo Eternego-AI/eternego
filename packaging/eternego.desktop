@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Eternego
+GenericName=AI Persona
+Comment=An AI that doesn't forget you
+Exec=eternego launch
+Icon=eternego
+Categories=Network;Office;
+Terminal=false
+StartupNotify=false
