@@ -15,8 +15,13 @@ $PythonBin = "$VenvDir\Scripts\python.exe"
 Print "Upgrading pip..."
 Run $PythonBin -m pip install --upgrade pip $PipIndex
 
-Print "Installing eternego... estimation 3-5 minutes"
+Print "Installing eternego..."
 Run $PythonBin -m pip install -e $ScriptDir $PipIndex
+
+if ($env:INSTALL_FULL -eq "1") {
+    Print "Installing training dependencies... estimation 3-5 minutes"
+    Run $PythonBin -m pip install -e "$ScriptDir[training]" $PipIndex
+}
 
 # Make 'eternego' available system-wide
 $VenvScripts = "$VenvDir\Scripts"

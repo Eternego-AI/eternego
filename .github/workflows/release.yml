@@ -1,0 +1,146 @@
+name: Release
+
+# Tag-driven release. Tags with a dash (`v0.1.0-rc1`, `v0.1.0-beta`) ship as
+# prereleases. Clean tags (`v0.1.0`, `v1.2.3`) ship as the latest release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  source:
+    name: Source artifacts (sdist + wheel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+      - run: |
+          pip install build
+          python -m build --sdist --wheel --outdir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source
+          path: dist/*
+
+  docker-light:
+    name: Docker (light)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/eternego:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/eternego:latest
+          build-args: |
+            INSTALL_TRAINING=false
+
+  docker-full:
+    name: Docker (full)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/eternego:${{ github.ref_name }}-full
+            ghcr.io/${{ github.repository_owner }}/eternego:full
+          build-args: |
+            INSTALL_TRAINING=true
+
+  binary-linux:
+    name: Linux binary (light)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+      - run: |
+          pip install -e .
+          pip install pyinstaller
+      - run: pyinstaller eternego.spec
+      - run: |
+          mv dist/eternego dist/eternego-${{ github.ref_name }}-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-linux
+          path: dist/eternego-${{ github.ref_name }}-linux-x86_64
+
+  binary-macos:
+    name: macOS binary (light)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+      - run: |
+          pip install -e .
+          pip install pyinstaller
+      - run: pyinstaller eternego.spec
+      - run: |
+          mv dist/eternego dist/eternego-${{ github.ref_name }}-macos-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-macos
+          path: dist/eternego-${{ github.ref_name }}-macos-arm64
+
+  binary-windows:
+    name: Windows binary (light)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+      - run: |
+          pip install -e .
+          pip install pyinstaller
+      - run: pyinstaller eternego.spec
+      - run: |
+          Move-Item dist/eternego.exe dist/eternego-${{ github.ref_name }}-windows-x86_64.exe
+        shell: pwsh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-windows
+          path: dist/eternego-${{ github.ref_name }}-windows-x86_64.exe
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - source
+      - docker-light
+      - docker-full
+      - binary-linux
+      - binary-macos
+      - binary-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          draft: false
+          generate_release_notes: true
