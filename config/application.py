@@ -1,12 +1,17 @@
 """Application config — core application settings."""
 
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
 
 import config  # ensures .env is loaded
 
 _PROJECT_ROOT = Path(__file__).parent.parent
+
+# When running from a PyInstaller bundle, _PROJECT_ROOT points inside the
+# read-only bundle, so writable defaults must live in the user's home dir.
+_FROZEN = getattr(sys, "frozen", False)
 
 # Path to convert_hf_to_gguf.py from llama.cpp — downloaded by install.sh into tools/.
 # Override with GGUF_CONVERT_SCRIPT env var if the script lives elsewhere.
@@ -23,7 +28,8 @@ LORA_CONVERT_SCRIPT: str = os.environ.get(
 
 # Log directory — daily log files live here.
 # Installed version uses ~/.eternego/logs (set via .env); dev defaults to ./logs.
-LOGS_DIR: Path = Path(os.environ.get("LOGS_DIR") or str(_PROJECT_ROOT / "logs"))
+_DEFAULT_LOGS = (Path.home() / ".eternego" / "logs") if _FROZEN else (_PROJECT_ROOT / "logs")
+LOGS_DIR: Path = Path(os.environ.get("LOGS_DIR") or str(_DEFAULT_LOGS))
 
 
 def log_file() -> Path:
