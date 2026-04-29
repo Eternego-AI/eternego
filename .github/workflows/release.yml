@@ -362,6 +362,8 @@ jobs:
       - name: Pull tiny model
         timeout-minutes: 10
         shell: pwsh
+        env:
+          OLLAMA_HOST: http://127.0.0.1:11434
         run: ollama pull $env:OLLAMA_MODEL
 
       - uses: actions/download-artifact@v4
