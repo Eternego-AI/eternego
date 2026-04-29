@@ -34,7 +34,7 @@ Each cognitive stage uses one of four "alive" voices. All four live in `applicat
 - **Ego** — the persona's own voice. Identity is rebuilt every read from character, situation, person facts, and carried context. Speaks through `persona.thinking`. Used by recognize, decide, reflect, archive.
 - **Consultant** — a neutral observer. Reads the conversation from outside without slipping into the persona's voice. Reuses `persona.thinking` with a different framing. Used by realize to formulate vision questions.
 - **Eye** — the persona's sight. Looks at images, reports what it sees. Uses `persona.vision` (optional).
-- **Teacher** — an architect who writes new meanings for the persona. Uses `persona.frontier`. Called by learn.
+- **Teacher** — a frontier mind that, on a moment the persona doesn't yet know, either dispatches a tool/ability call, routes to an existing meaning, or teaches a new lesson (the principle behind this kind of moment). Uses `persona.frontier`. When the Teacher teaches a lesson, the persona's own thinking model then translates it into the meaning prose she'll read herself next time. Called by learn.
 
 ## The cognitive cycle
 
@@ -62,7 +62,7 @@ Layered by what state they see.
 
 - **Tools** (`application/platform/*.py`, `@tool`) — platform primitives. `tools.call(name, **args) → (status, result)`. Catches its own exceptions.
 - **Abilities** (`application/core/abilities/*.py`, `@ability("desc", requires=...)`) — one-shot named verbs. `abilities.call(persona, name, **args)`. The optional `requires=lambda persona: bool` predicate gates per-persona availability (e.g., `look_at` requires a vision model).
-- **Meanings** (`application/core/brain/meanings/*.py`) — situations the persona knows how to be in. `Meaning` class with `intention()` and `path()` methods. Built-ins ship; custom meanings written by learn live in the persona's home dir and load via `memory.learn`.
+- **Meanings** (`application/core/brain/meanings/*.md`) — situations the persona knows how to be in. Markdown files: first H1 is the intention, body is the path prose. Built-ins ship; custom meanings live in the persona's home `meanings/` dir alongside the originating `lessons/` file (the frontier-authored principle the persona translated into her own voice). `meanings.builtin(persona)` and `meanings.custom(persona)` load both layers.
 
 Selectors in consequences: `tools.<module>.<function>`, `abilities.<name>`, `meanings.<name>`.
 

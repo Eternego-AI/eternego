@@ -40,7 +40,8 @@ Every persona lives under `~/.eternego/`. Open any file in any editor.
 │       │   ├── history/             ← past days' conversations, archived nightly
 │       │   ├── media/               ← images she's seen
 │       │   │   └── gallery.jsonl    ← her notes on each image
-│       │   ├── meanings/            ← situations she's learned to handle (Python)
+│       │   ├── lessons/             ← raw lessons (frontier-authored principles)
+│       │   ├── meanings/            ← situations she's learned to handle (Markdown, in her own voice)
 │       │   └── training/            ← training pairs for optional fine-tuning
 │       └── workspace/             ← free space — files, scripts, drafts she's working on
 ├── diary/<id>/                  ← written nightly — used to migrate her to a new machine
@@ -53,28 +54,22 @@ No databases. No vendor. Total transparency.
 
 ## When she meets a moment she's never seen
 
-She reaches for a stronger model — Claude, GPT, whatever you've configured — to work out how to handle it. Then she writes the lesson down as a Python module, saved next to the ones she shipped with:
+She reaches for a stronger model — Claude, GPT, whatever you've configured — and asks it to *teach her the lesson*: what kind of moment this is, what works, what to watch for. The lesson is the principle, written by the strong model.
 
-```python
-# ~/.eternego/personas/yours/home/meanings/checking_disk_space.py
+Then her own thinking model reads that lesson and writes the **meaning** — the prose she'll read herself the next time the moment comes around, in her own voice:
 
-class Meaning:
-    def __init__(self, persona):
-        self.persona = persona
+```markdown
+# ~/.eternego/personas/yours/home/meanings/checking_disk_space.md
 
-    def intention(self) -> str:
-        return "Checking disk space"
+# Checking disk space
 
-    def path(self) -> str:
-        return (
-            "The person wants to know how full your storage is. Use "
-            "`tools.OS.execute_on_sub_process` with `command='df -h'`. "
-            "On the next cycle you'll see the TOOL_RESULT — read it and "
-            "reply with `say` summarizing the disks worth mentioning."
-        )
+The person wants to know how full your storage is. Run
+`tools.OS.execute_on_sub_process` with `command='df -h'`. On the
+next cycle you'll see the TOOL_RESULT — read it and reply with
+`say` summarizing the disks worth mentioning.
 ```
 
-Read it. Edit it. Trust it or don't. It's a file she'll carry forward forever — until you delete it.
+The raw lesson is kept alongside it in `lessons/`, so she can revise the meaning later without re-asking the strong model. Both files are plain Markdown. Read them. Edit them. Trust them or don't. She carries them forward forever — until you delete them.
 
 ## How she lives
 

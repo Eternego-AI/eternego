@@ -79,7 +79,7 @@ Dependencies flow down only: business imports core, core imports platform. Never
 | A business spec (one use case) | `application/business/<area>/<name>.py` — one function per file, async, returns `Outcome[T]`, name matches filename |
 | A platform tool (callable by the persona from a meaning) | New `@tool("description")` function in `application/platform/<module>.py` |
 | An ability (one-shot named operation) | `application/core/abilities/<name>.py` with `@ability("description", requires=...)`. Use `requires=lambda persona: ...` if it depends on a persona capability (vision, frontier model) |
-| A meaning (situation the persona handles) | `application/core/brain/meanings/<name>.py` with a `Meaning` class exposing `intention()` and `path()` |
+| A meaning (situation the persona handles) | `application/core/brain/meanings/<name>.md` — first H1 is the intention, body is the path prose. Add to `BASIC` in `meanings/__init__.py` if it's a state the persona is *in* (loaded full into Ego's identity); otherwise it's orchestrating (listed by intention only, body injected at decide). |
 | A channel (Telegram-like) | New `application/platform/<channel>.py` matching the Connection interface (`open_gateway`, `close_gateway`, `send`, `typing`, `stop`). Add a subscriber in `manager.Agent.start` |
 | An LLM provider | OpenAI-compatible: just set `base_url` in the persona config. New wire protocol: `application/platform/<name>.py` and route in `application/core/models/chat.py` and `chat_json.py` |
 | A cognitive stage | `application/core/brain/functions/<stage>.py`, signature `async def <stage>(living: Living) -> list`, append to the cycle in `application/core/brain/mind.py` |
