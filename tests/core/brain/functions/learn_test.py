@@ -174,16 +174,17 @@ async def test_learn_existing_meaning_sets_state():
     assert code == 0, error
 
 
-async def test_learn_creates_new_meaning():
-    """Teacher returns {"new_meaning": {"name", "intention", "path"}} —
-    learn writes the .md to disk, loads it, and sets memory.meaning + ability
-    so decide takes over next."""
+async def test_learn_creates_new_meaning_from_lesson():
+    """Teacher returns {"lesson": {"intention", "path"}} — learn saves the
+    lesson, asks the persona's thinking model to translate it into a meaning
+    in her own voice, writes the meaning, and links the two in learned.json
+    so revise_meaning can find the lesson later."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
-            from application.core.brain import functions
+            from application.core.brain import functions, meanings
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
             from application.platform import ollama
@@ -212,20 +213,29 @@ async def test_learn_creates_new_meaning():
                 assert consequences == []
                 assert ego.memory.meaning == "checking_disk_space"
                 assert ego.memory.ability != 0
+
+                lesson_file = paths.lessons(persona.id) / "checking_disk_space.md"
+                assert lesson_file.exists(), f"lesson should be saved at {lesson_file}"
                 meaning_file = paths.meanings(persona.id) / "checking_disk_space.md"
                 assert meaning_file.exists(), f"meaning should be saved at {meaning_file}"
                 assert "checking_disk_space" in ego.memory.custom_meanings
+                assert "df -h" in meaning_file.read_text()
+
+                assert paths.read_json(paths.learned(persona.id)) == {"checking_disk_space": "checking_disk_space"}
 
             teacher_response = json.dumps({
-                "new_meaning": {
-                    "name": "checking_disk_space",
+                "lesson": {
                     "intention": "Checking disk space",
-                    "path": "Run `df -h` via tools.OS.execute_on_sub_process and reply with what's left.",
+                    "path": "Disk space sits behind the operating system's disk-free utility — `df` on Unix-like systems, `Get-PSDrive` on Windows. The mechanism reports filesystem capacity, used space, and what is available; the answer the person wants is how much is left.",
                 }
             })
+            translation_response = "When the person asks how much disk space is free, run df -h on this machine and tell them what is left in plain language."
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": teacher_response}, "done": True}]],
+                responses=[
+                    [{"message": {"content": teacher_response}, "done": True}],
+                    [{"message": {"content": translation_response}, "done": True}],
+                ],
             )
 
     code, error = await on_separate_process_async(isolated)
