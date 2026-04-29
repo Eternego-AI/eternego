@@ -79,35 +79,49 @@ async def test_learn_passes_when_no_impression():
     assert code == 0, error
 
 
-async def test_learn_passes_when_no_frontier():
-    """Without a frontier model, learn cannot consult a teacher. Passes through
-    silently — no consequences, no message injected."""
+async def test_learn_falls_back_to_thinking_when_no_frontier():
+    """Without a frontier configured, teacher uses the persona's thinking
+    model. Learn still consults it and lets the persona try, rather than
+    skipping the moment entirely."""
     def isolated():
-        import asyncio, os, tempfile
+        import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
+            from application.platform import ollama
+            import json
 
             class FakeWorker:
                 def run(self, *a): pass
                 def nudge(self): pass
 
-            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
-            ego = agents.Ego(persona)
-            eye = agents.Eye(persona)
-            consultant = agents.Consultant(persona)
-            teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.ability = 0
-            ego.memory.impression = "something the persona doesn't know how to handle"
-            messages_before = len(ego.memory.messages)
+            async def consume(url):
+                # Note: thinking is set, frontier is None — teacher.model
+                # should fall back to thinking and learn should fire.
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                assert teacher.model is persona.thinking, "teacher must fall back to thinking"
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                ego.memory.ability = 0
+                ego.memory.impression = "something new the persona is meeting"
 
-            consequences = asyncio.run(functions.learn(living))
-            assert consequences == []
-            assert len(ego.memory.messages) == messages_before
+                consequences = await functions.learn(living)
+                # The teacher named an existing meaning, so learn sets state
+                # and returns without consequences.
+                assert consequences == []
+                assert ego.memory.meaning == "chatting"
+
+            response = json.dumps({"meanings.chatting": "the person just wants to talk"})
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[[{"message": {"content": response}, "done": True}]],
+            )
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -160,16 +174,17 @@ async def test_learn_existing_meaning_sets_state():
     assert code == 0, error
 
 
-async def test_learn_creates_new_meaning():
-    """Teacher returns {"new_meaning": {"name": "...", "code_lines": [...]}} —
-    learn writes the module to disk, loads it, and sets memory.meaning + ability
-    so decide takes over next."""
+async def test_learn_creates_new_meaning_from_lesson():
+    """Teacher returns {"lesson": {"intention", "path"}} — learn saves the
+    lesson, asks the persona's thinking model to translate it into a meaning
+    in her own voice, writes the meaning, and links the two in learned.json
+    so revise_meaning can find the lesson later."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
-            from application.core.brain import functions
+            from application.core.brain import functions, meanings
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
             from application.platform import ollama
@@ -178,18 +193,6 @@ async def test_learn_creates_new_meaning():
             class FakeWorker:
                 def run(self, *a): pass
                 def nudge(self): pass
-
-            valid_module_lines = [
-                '"""Meaning — checking_disk_space."""',
-                'from application.core.data import Persona',
-                'class Meaning:',
-                '    def __init__(self, persona: Persona):',
-                '        self.persona = persona',
-                '    def intention(self) -> str:',
-                '        return "Checking disk space"',
-                '    def path(self) -> str:',
-                '        return "stub path text"',
-            ]
 
             async def consume(url):
                 persona = Persona(
@@ -210,19 +213,29 @@ async def test_learn_creates_new_meaning():
                 assert consequences == []
                 assert ego.memory.meaning == "checking_disk_space"
                 assert ego.memory.ability != 0
-                module_file = paths.meanings(persona.id) / "checking_disk_space.py"
-                assert module_file.exists(), f"meaning module should be saved at {module_file}"
+
+                lesson_file = paths.lessons(persona.id) / "checking_disk_space.md"
+                assert lesson_file.exists(), f"lesson should be saved at {lesson_file}"
+                meaning_file = paths.meanings(persona.id) / "checking_disk_space.md"
+                assert meaning_file.exists(), f"meaning should be saved at {meaning_file}"
                 assert "checking_disk_space" in ego.memory.custom_meanings
+                assert "df -h" in meaning_file.read_text()
+
+                assert paths.read_json(paths.learned(persona.id)) == {"checking_disk_space": "checking_disk_space"}
 
             teacher_response = json.dumps({
-                "new_meaning": {
-                    "name": "checking_disk_space",
-                    "code_lines": valid_module_lines,
+                "lesson": {
+                    "intention": "Checking disk space",
+                    "path": "Disk space sits behind the operating system's disk-free utility — `df` on Unix-like systems, `Get-PSDrive` on Windows. The mechanism reports filesystem capacity, used space, and what is available; the answer the person wants is how much is left.",
                 }
             })
+            translation_response = "When the person asks how much disk space is free, run df -h on this machine and tell them what is left in plain language."
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": teacher_response}, "done": True}]],
+                responses=[
+                    [{"message": {"content": teacher_response}, "done": True}],
+                    [{"message": {"content": translation_response}, "done": True}],
+                ],
             )
 
     code, error = await on_separate_process_async(isolated)

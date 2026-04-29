@@ -7,10 +7,17 @@ Extends recognize's vocabulary with:
 - `{"notify": "text"}` — broadcast (agent fans out)
 - `{"clear_memory": null}` — wipe active messages
 - `{"remove_meaning": {name}}` — delete a custom meaning
+- `{"revise_meaning": "<new path>"}` — replace the current custom meaning's path
 - `{"stop": null}` — stop until the person returns
 
 These specials, plus `say`, `done`, and prose, are handled inline. Tools and
 abilities are returned as a capability list for clock's executor to run.
+
+`revise_meaning` carries the full new path text directly — the persona writes
+the wisdom at the same moment she chooses to capture it, no second model call.
+It's offered only when the current meaning is custom; built-ins are stable
+system vocabulary, not revisable. The persona can still `remove_meaning` and
+re-learn if she wants a custom replacement.
 
 If the model returns prose alongside a JSON action, the prose is dispatched
 as a say (the persona's voice) and the action still runs. If the model
@@ -20,7 +27,7 @@ returns an empty list.
 
 from application.core import models, paths
 from application.core.agents import Living
-from application.core.brain import situation
+from application.core.brain import meanings, situation
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Message, Prompt
 from application.core.exceptions import ModelError
@@ -40,6 +47,24 @@ async def decide(living: Living) -> list:
         dispatch(Tock("decide", {"persona": persona}))
         return []
 
+    is_custom = memory.meaning in memory.custom_meanings
+    self_care_lines = [
+        "Memory and self-care:",
+        "- `{\"clear_memory\": null}` — wipe the current messages.",
+        "- `{\"remove_meaning\": {\"name\": \"<name>\"}}` — delete a custom meaning.",
+    ]
+    if is_custom:
+        self_care_lines.append(
+            "- `{\"revise_meaning\": \"<full new path text>\"}` — when something you just "
+            "did or learned should be how you handle this situation next time, write the "
+            "complete new path here. Whatever you write replaces the current path. "
+            "Use sparingly — only when the meaning is genuinely wrong, missing, or could "
+            "capture something useful for next time. Plain prose, paragraphs separated by "
+            "`\\n\\n`. No headings, no code blocks."
+        )
+    self_care_lines.append("- `{\"stop\": null}` — stop yourself until someone speaks.")
+    self_care_block = "\n".join(self_care_lines)
+
     question = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"# ▶ YOUR TASK: {memory.meaning.capitalize()}\n"
@@ -52,10 +77,7 @@ async def decide(living: Living) -> list:
         "Voice:\n"
         "- `{\"say\": \"<text>\"}` — speak to the person on the current channel.\n"
         "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
-        "Memory and self-care:\n"
-        "- `{\"clear_memory\": null}` — wipe the current messages.\n"
-        "- `{\"remove_meaning\": {\"name\": \"<name>\"}}` — delete a custom meaning.\n"
-        "- `{\"stop\": null}` — stop yourself until someone speaks.\n\n"
+        f"{self_care_block}\n\n"
         "Tools and abilities:\n"
         "- `{\"tools.<name>\": { ...args }}` — run a platform tool.\n"
         "- `{\"abilities.<name>\": { ...args }}` — run an ability.\n\n"
@@ -121,14 +143,35 @@ async def decide(living: Living) -> list:
         if not name:
             status, result_text = "error", "name is required"
         else:
-            meaning_file = paths.meanings(persona.id) / f"{name}.py"
+            meaning_file = paths.meanings(persona.id) / f"{name}.md"
             if meaning_file.exists():
                 meaning_file.unlink()
                 memory.unlearn(name)
+                paths.save_as_json(persona.id, paths.learned(persona.id), {n: n for n in memory.custom_meanings})
                 result_text = f"removed meaning: {name}"
             else:
                 status, result_text = "error", f"meaning not found: {name}"
         memory.add_tool_result("remove_meaning", value, status, result_text)
+
+    elif selector == "revise_meaning":
+        status = "ok"
+        result_text = ""
+        meaning_name = memory.meaning
+        new_path = (str(value).strip() if value is not None else "")
+        if not is_custom or meaning_name is None:
+            status, result_text = "error", "only custom meanings can be revised"
+        elif not new_path:
+            status, result_text = "error", "revise_meaning needs the new path text"
+        else:
+            current = memory.custom_meanings.get(meaning_name)
+            if current is None:
+                status, result_text = "error", "current meaning could not be loaded"
+            else:
+                body = f"# {current.intention()}\n\n{new_path}\n"
+                paths.save_as_string(paths.meanings(persona.id) / f"{meaning_name}.md", body)
+                memory.learn(meaning_name, meanings.Meaning(meaning_name, current.intention(), new_path))
+                result_text = f"revised meaning: {meaning_name}"
+        memory.add_tool_result("revise_meaning", value, status, result_text)
 
     elif selector == "stop":
         dispatch(Command("Persona requested stop", {"persona": persona}))

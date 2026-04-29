@@ -3,20 +3,29 @@
 Runs after recognize. If recognize chose a meaning (memory.ability != 0),
 learn passes through — nothing to acquire in this moment. If recognize
 produced an impression but no existing meaning matched (memory.ability == 0),
-learn consults a teacher — either naming an existing meaning that fits
-(recognize simply missed it) or writing a new one the persona will carry
-forward.
+learn consults a teacher.
 
-Learn uses living.teacher's identity, not the persona's. Teacher is not the
-persona; it is the architect who builds the persona's meanings.
+Teacher's response is one of four shapes:
 
-Learn requires living.teacher.model (the frontier). If absent or the
-teacher cannot produce a usable response, learn passes through silently —
-no message is injected into living.ego.memory. The next recognize will read
-the same moment and decide again.
+- a tool or ability call — declared as a consequence; clock's executor runs it.
+- an existing meaning pointer — recognize simply missed it; learn sets state.
+- a lesson — the frontier wrote a first draft. Learn writes it to the
+  persona's lessons directory, asks the persona's thinking model to translate
+  it into a meaning in her own voice, writes the meaning, and links the two
+  in `learned.json`.
+
+Learn uses living.teacher's identity for the lesson decision and the
+persona's own Ego for the translation. Teacher's model is the persona's
+frontier when configured, otherwise her thinking model — the persona tries
+her best with what she has rather than skipping moments she doesn't know
+how to handle.
+
+If the teacher cannot produce a usable response, learn passes through
+silently — no message is injected into living.ego.memory. The next
+recognize will read the same moment and decide again.
 """
 
-from application.core import models
+from application.core import models, paths
 from application.core.agents import Living
 from application.core.brain import meanings
 from application.core.brain.signals import Tick, Tock
@@ -42,11 +51,6 @@ async def learn(living: Living) -> list:
     if not impression:
         # Recognize concluded the turn cleanly (say or done) — nothing to escalate.
         logger.debug("brain.learn skipping — no impression", {"persona": persona})
-        dispatch(Tock("learn", {"persona": persona}))
-        return []
-
-    if not teacher.model:
-        logger.debug("brain.learn skipping — no frontier", {"persona": persona})
         dispatch(Tock("learn", {"persona": persona}))
         return []
 
@@ -111,27 +115,60 @@ async def learn(living: Living) -> list:
         else:
             logger.warning("brain.learn named nonexistent meaning", {"persona": persona, "name": name})
 
-    # New meaning — save the module and set state.
-    elif selector == "new_meaning":
+    # New lesson — frontier wrote a first draft. Save it, ask the persona to
+    # translate into her own meaning, link them in learned.json.
+    elif selector == "lesson":
         spec = value if isinstance(value, dict) else {}
-        name = str(spec.get("name", "")).strip()
-        code_lines = spec.get("code_lines")
-        if isinstance(code_lines, list) and code_lines:
-            code = "\n".join(str(line) for line in code_lines)
+        intention = str(spec.get("intention", "")).strip()
+        lesson_path_text = str(spec.get("path", "")).strip()
+        if not intention or not lesson_path_text:
+            logger.warning("brain.learn lesson missing fields", {"persona": persona, "intention": intention})
         else:
-            code = ""
-        if name and code:
             try:
-                meaning_name = meanings.save_meaning(persona.id, name, code)
-                learned = meanings.load(persona, meaning_name)
-                if learned is not None:
-                    memory.learn(meaning_name, learned)
+                lesson_id = meanings.save_lesson(persona.id, intention, lesson_path_text)
+            except ValueError as e:
+                logger.warning("brain.learn produced invalid lesson", {"persona": persona, "intention": intention, "error": str(e)})
+                lesson_id = None
+
+            if lesson_id is not None:
+                translation_question = (
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "# ▶ YOUR TASK: Learn the lesson\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "Your teacher just taught you a lesson about the kind of moment you are "
+                    "in. Learn it. Find your own path through this moment — what to do, what "
+                    "to use, what to watch for, what to say — then write the prompt future-you "
+                    "will read the next time this kind of moment comes up.\n\n"
+                    "## The lesson\n\n"
+                    f"{lesson_path_text}\n\n"
+                    "The lesson is the principle. Your prompt is how the principle works "
+                    "through you — your tools, your abilities, your credentials, your notes, "
+                    "the way you already do things, the person you live with. Where the lesson "
+                    "names an input, name how you will get it. Where it names a mechanism, "
+                    "name the specific move you will make. Where it names an outcome, name how "
+                    "you will recognize it and what you will say when you reach it.\n\n"
+                    "If something the lesson assumes is not yet available — credentials you do "
+                    "not have, files you have not made, an account not yet linked — write that "
+                    "into the prompt explicitly, so future-you knows to ask, find, or work "
+                    "around it before acting.\n\n"
+                    "Address yourself in second person, plain prose, paragraphs separated by "
+                    "`\\n\\n`. No headings, no code blocks, no JSON — return only the prompt "
+                    "text."
+                )
+                translated = await models.chat(living.ego.model, living.ego.identity, translation_question)
+                translated = (translated or "").strip() or lesson_path_text
+
+                meaning_name = lesson_id
+                body = f"# {intention}\n\n{translated}\n"
+                paths.save_as_string(paths.meanings(persona.id) / f"{meaning_name}.md", body)
+
+                memory.learn(meaning_name, meanings.Meaning(meaning_name, intention, translated))
                 memory.meaning = meaning_name
                 meaning_names = list(memory.meanings.keys())
                 memory.ability = meaning_names.index(meaning_name) + 1
-                logger.debug("brain.learn created new meaning", {"persona": persona, "meaning": meaning_name})
-            except (SyntaxError, ValueError) as e:
-                logger.warning("brain.learn produced invalid code", {"persona": persona, "name": name, "error": str(e)})
+
+                paths.save_as_json(persona.id, paths.learned(persona.id), {n: n for n in memory.custom_meanings})
+                logger.debug("brain.learn created new meaning from lesson", {"persona": persona, "lesson_id": lesson_id, "meaning": meaning_name})
 
     # Tool / Ability — declare as a consequence; clock's executor runs it.
     elif selector.startswith("tools.") or selector.startswith("abilities."):

@@ -251,36 +251,23 @@ async def test_decide_remove_meaning_unlearns_existing():
                 def run(self, *a): pass
                 def nudge(self): pass
 
-            valid_module = (
-                '"""Meaning — temp_meaning."""\n'
-                'from application.core.data import Persona\n'
-                'class Meaning:\n'
-                '    def __init__(self, persona: Persona):\n'
-                '        self.persona = persona\n'
-                '    def intention(self) -> str:\n'
-                '        return "Temp"\n'
-                '    def path(self) -> str:\n'
-                '        return "stub"\n'
-            )
-
             async def consume(url):
                 persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
-                meanings.save_meaning(persona.id, "temp_meaning", valid_module)
+                paths.save_as_string(paths.meanings(persona.id) / "temp_meaning.md", "# Temp\n\nstub\n")
                 ego = agents.Ego(persona)
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                instance = meanings.load(persona, "temp_meaning")
-                ego.memory.learn("temp_meaning", instance)
+                ego.memory.learn("temp_meaning", meanings.Meaning("temp_meaning", "Temp", "stub"))
                 ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
                 ego.memory.meaning = "chatting"
                 ego.memory.ability = 1
 
                 consequences = await functions.decide(living)
                 assert consequences == []
-                meaning_file = paths.meanings(persona.id) / "temp_meaning.py"
-                assert not meaning_file.exists(), "module file should be deleted"
+                meaning_file = paths.meanings(persona.id) / "temp_meaning.md"
+                assert not meaning_file.exists(), "meaning file should be deleted"
                 assert "temp_meaning" not in ego.memory.custom_meanings
                 last = ego.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content
@@ -438,4 +425,195 @@ async def test_decide_prose_dispatches_as_say_and_clears_state():
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
+
+async def test_decide_remove_meaning_clears_learned_entry():
+    """remove_meaning also drops the lesson_id mapping in learned.json so the
+    map doesn't keep stale entries for deleted meanings."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import functions, meanings
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Message, Model, Persona, Prompt
+            from application.platform import ollama
+            from application.core import paths
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume(url):
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
+                paths.save_as_string(paths.meanings(persona.id) / "temp_meaning.md", "# Temp\n\nstub\n")
+                paths.save_as_json(persona.id, paths.learned(persona.id), {"temp_meaning": "temp_meaning"})
+
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                ego.memory.learn("temp_meaning", meanings.Meaning("temp_meaning", "Temp", "stub"))
+                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                ego.memory.meaning = "chatting"
+                ego.memory.ability = 1
+
+                consequences = await functions.decide(living)
+                assert consequences == []
+                assert paths.read_json(paths.learned(persona.id)) == {}
+
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[[{"message": {"content": '{"remove_meaning": {"name": "temp_meaning"}}'}, "done": True}]],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_decide_revise_meaning_writes_submitted_path():
+    """revise_meaning carries the new path text directly — body validates and
+    writes it. One model call (decide); no second round-trip to re-derive."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents, paths
+            from application.core.brain import functions, meanings
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Message, Model, Persona, Prompt
+            from application.platform import ollama
+            import json
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume(url):
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
+                paths.save_as_string(paths.meanings(persona.id) / "posting_on_x.md", "# Posting on X\n\nFirst-pass meaning, vague.\n")
+
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                ego.memory.learn("posting_on_x", meanings.Meaning("posting_on_x", "Posting on X", "First-pass meaning, vague."))
+                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                ego.memory.meaning = "posting_on_x"
+                ego.memory.ability = list(ego.memory.meanings.keys()).index("posting_on_x") + 1
+
+                consequences = await functions.decide(living)
+                assert consequences == []
+
+                new_path = "Open the X API. Post the message. Add a User-Agent header."
+                meaning_file = paths.meanings(persona.id) / "posting_on_x.md"
+                text = meaning_file.read_text()
+                assert new_path in text
+                assert "First-pass meaning" not in text
+                assert ego.memory.custom_meanings["posting_on_x"].path() == new_path
+                last = ego.memory.messages[-1]
+                assert "TOOL_RESULT" in last.content
+                assert "revised meaning: posting_on_x" in last.content
+
+            payload = json.dumps({"revise_meaning": "Open the X API. Post the message. Add a User-Agent header."})
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[[{"message": {"content": payload}, "done": True}]],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_decide_revise_meaning_empty_path_returns_error():
+    """Persona returns revise_meaning with an empty/missing path — body
+    refuses rather than wiping the meaning. Error TOOL_RESULT, no file change."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents, paths
+            from application.core.brain import functions, meanings
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Message, Model, Persona, Prompt
+            from application.platform import ollama
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume(url):
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
+                paths.save_as_string(paths.meanings(persona.id) / "posting_on_x.md", "# Posting on X\n\nOriginal path text.\n")
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                ego.memory.learn("posting_on_x", meanings.Meaning("posting_on_x", "Posting on X", "Original path text."))
+                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                ego.memory.meaning = "posting_on_x"
+                ego.memory.ability = list(ego.memory.meanings.keys()).index("posting_on_x") + 1
+
+                consequences = await functions.decide(living)
+                assert consequences == []
+
+                meaning_file = paths.meanings(persona.id) / "posting_on_x.md"
+                assert "Original path text" in meaning_file.read_text()
+                last = ego.memory.messages[-1]
+                assert "TOOL_RESULT" in last.content
+                assert "needs the new path text" in last.content
+
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[[{"message": {"content": '{"revise_meaning": ""}'}, "done": True}]],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_decide_revise_meaning_on_builtin_returns_error():
+    """Built-in meanings can't be revised — gated at the prompt level by not
+    being listed, but the inline branch also rejects defensively."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import functions
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Message, Model, Persona, Prompt
+            from application.platform import ollama
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume(url):
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                ego.memory.meaning = "chatting"
+                ego.memory.ability = 1
+
+                consequences = await functions.decide(living)
+                assert consequences == []
+                last = ego.memory.messages[-1]
+                assert "TOOL_RESULT" in last.content
+                assert "only custom meanings can be revised" in last.content
+
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[[{"message": {"content": '{"revise_meaning": null}'}, "done": True}]],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
 

@@ -208,8 +208,18 @@ def read_jsonl(path: Path) -> list[dict]:
 
 
 def meanings(persona_id: str) -> Path:
-    """Directory where persona-specific meaning modules (.py) are stored."""
+    """Directory where persona-specific meanings (.md) are stored."""
     return home(persona_id) / "meanings"
+
+
+def lessons(persona_id: str) -> Path:
+    """Directory where the lessons frontier wrote for this persona live."""
+    return home(persona_id) / "lessons"
+
+
+def learned(persona_id: str) -> Path:
+    """Map file linking lesson_id to the meaning name derived from it."""
+    return home(persona_id) / "meanings" / "learned.json"
 
 
 def commit_diary(persona_id: str, diary_path: Path) -> None:
@@ -269,6 +279,30 @@ def read_json(path: Path) -> dict | None:
         logger.warning("File not found", {"path": str(path)})
         return None
     return filesystem.read_json(path)
+
+
+def md_dict(path: Path) -> dict[str, str]:
+    """Parse a markdown file by `# ` headers; returns {header: body} per section.
+
+    Lines before the first `# ` header are dropped. Empty file or missing file
+    returns an empty dict.
+    """
+    if not path.exists():
+        return {}
+    sections: dict[str, str] = {}
+    current_header: str | None = None
+    current_body: list[str] = []
+    for line in filesystem.read(path).splitlines():
+        if line.startswith("# "):
+            if current_header is not None:
+                sections[current_header] = "\n".join(current_body).strip()
+            current_header = line[2:].strip()
+            current_body = []
+        elif current_header is not None:
+            current_body.append(line)
+    if current_header is not None:
+        sections[current_header] = "\n".join(current_body).strip()
+    return sections
 
 
 def md_list(path: Path, section: str) -> list[str]:

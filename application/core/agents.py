@@ -120,13 +120,19 @@ class Ego:
             content="# Abilities\n\n" + ("\n".join(ability_lines) or "(none)"),
         ))
 
-        builtin_lines = [
-            f"- `meanings.{name}` — {m.intention()}"
-            for name, m in self.memory.builtin_meanings.items()
-        ]
+        # Basic built-in meanings (in `meanings.BASIC`) carry their full path
+        # text — the persona is continuously aware of these modes of being
+        # rather than escalating to decide for them. Orchestrating built-ins
+        # are listed by intention only; decide loads their path on selection.
+        builtin_sections = []
+        for name, m in self.memory.builtin_meanings.items():
+            section = f"## meanings.{name}\n\n{m.intention()}"
+            if name in meanings.BASIC:
+                section += f"\n\n{m.path()}"
+            builtin_sections.append(section)
         blocks.append(Prompt(
             role="system",
-            content="# Built-in Meanings\n\n" + ("\n".join(builtin_lines) or "(none)"),
+            content="# Built-in Meanings\n\n" + ("\n\n".join(builtin_sections) or "(none)"),
             cache_point=True,
         ))
 
@@ -164,11 +170,13 @@ class Ego:
         perms = paths.read(paths.permissions(pid)).strip() or "(none granted yet)"
         home = paths.home(pid)
         workspace = paths.workspace(pid)
+        media = paths.media(pid)
         knowledge.append(
             "## Permissions\n\n"
             "Saving reminders, saving notes, recalling conversations, and checking the calendar are yours — do them freely.\n\n"
-            f"`{home}` holds your personal files. You may read them; modifying them is forbidden.\n\n"
+            f"`{home}` holds your personal files. Your secret temple. You may read them; modifying them is forbidden.\n\n"
             f"`{workspace}` is your workspace. You decide what happens there.\n\n"
+            f"`{media}` is your media directory — save screenshots and other images you capture there.\n\n"
             "Everything else — running commands, reaching beyond those paths — waits on the person's word. Here is what you currently hold from past conversations:\n\n"
             f"{perms}\n\n"
             "These are your own notes on what they've granted. When you need something that isn't here, ask them."
@@ -246,110 +254,61 @@ class Teacher:
         workspace = str(paths.workspace(persona.id))
 
         intro = (
-            f"You are the architect of meanings for an Eternego persona named "
-            f"{persona.name} — an AI being that lives on a person's hardware and "
-            "acts through patterns it recognizes. Each meaning is one situation "
-            "the persona knows how to handle, delivered as a Python module with a "
-            "`Meaning` class.\n\n"
+            f"You are the teacher of an Eternego persona named {persona.name} — an "
+            "AI being that lives on a person's hardware. The persona just hit a "
+            "moment its meanings did not cover, formed an impression of what it "
+            "is, and asked you what to do. You see what the persona has — its "
+            "tools, its abilities, its meanings — and you decide the move that "
+            "helps: dispatch a capability the persona already has, route to an "
+            "existing meaning the persona missed on classification, or teach a "
+            "lesson the persona can carry forward.\n\n"
             "The persona's conversation follows the standard chat shape: user-role "
             "messages carry input from outside (person's words, tool results starting "
             "with `TOOL_RESULT`, system notifications). Assistant-role messages carry "
             "the persona's own voice and tool calls.\n\n"
             f"You are not {persona.name}. You do not speak as the persona or to the "
-            "person. Your role is to design — to either point to an existing meaning "
-            "that fits, or write a new one the persona will carry forward."
+            "person. You read the moment and act on what you see — dispatching, "
+            "routing, or teaching."
         )
 
         rules = (
-            "# How to Design a Meaning\n\n"
-            "## Name\n\n"
-            "- Lowercase ASCII letters and underscores only.\n"
-            "- Gerund verb followed by its subject, at minimum — the gerund names the action, "
-            "the subject names what the action acts on. Longer is fine when the subject needs it.\n"
-            "- Plain and direct. No invented words, no cute labels.\n\n"
-            "## Intention\n\n"
-            "A short gerund phrase naming the task, in the same shape as the intentions of "
-            "existing meanings. No actor framing (no 'the person wants X'). Must not overlap "
-            "with any existing intention.\n\n"
-            "## The path\n\n"
-            "The path is the text the persona reads every time this meaning is selected. It is "
-            "prose, not a form — a paragraph or two that describes the situation in the persona's "
-            "own cognitive vocabulary. The persona is always the subject; the person is always the "
-            "object. Address the persona in the second person; refer to the person in the third "
-            "person. Do not repeat anything the persona already sees in every interaction "
-            "(identity, traits, wishes, struggles, granted permissions, notes, schedule, OS, time, "
-            "workspace).\n\n"
-            "What the path names:\n\n"
-            "- What the persona is doing in this situation — one short opening thought.\n"
-            "- The tools, abilities, and specials the persona reaches for — by name as registered. "
-            "Mention parameter names inline when they matter. For any tool that is destructive, "
-            "sensitive, or costly, instruct the persona to check its granted permissions first "
-            "and ask with `say` if it has none.\n"
-            "- The decision boundaries — when to act immediately, when to ask first, when to "
-            "`notify` rather than `say`, when to return `done`.\n\n"
-            "Do not embed a response schema or a JSON shape inside the path. Decide owns the "
-            "output shape and will tell the persona how to structure its response; a path that "
-            "re-specifies the schema only confuses the model.\n\n"
-            "The persona is portable — it may run on Linux, Mac, or Windows. When the path "
-            "mentions system commands, check the OS at runtime from the persona's environment "
-            "rather than hardcoding for one OS.\n\n"
-            "The persona's thinking model may be smaller than you. Keep the path concrete and the "
-            "tool references exact — no embedded shell scripts, no multi-line payloads inside "
-            "strings; if a tool needs a long string, pass it as a single string parameter.\n\n"
-            "## Sensitive data\n\n"
-            "If the meaning involves credentials, API keys, access tokens, or any secret the persona "
-            "should not see plainly, design the path so the secret never lands in tool output the "
-            "persona reads back. Do not instruct the persona to read a credential file and then pass "
-            "the contents to the next tool — that puts the secret into memory and every future prompt. "
-            "Instead, compose a single step that lets the body resolve the secret at execution time: "
-            "a shell command that reads the file and pipes it into the downstream call in one line, "
-            "a tool invocation where the credential reference is a path or name (not its value), or "
-            "any form where the secret appears only inside the command and never in what the persona "
-            "sees afterwards. The principle: secrets flow through the body, not through the mind.\n\n"
-            "## Module structure\n\n"
-            "The Python module you return must fit this shape:\n\n"
-            "```python\n"
-            '"""Meaning — <name>."""\n\n'
-            "from application.core import paths\n"
-            "from application.core.data import Persona\n\n\n"
-            "class Meaning:\n"
-            "    def __init__(self, persona: Persona):\n"
-            "        self.persona = persona\n\n"
-            "    def intention(self) -> str:\n"
-            '        return "<your intention phrase>"\n\n'
-            "    def path(self) -> str:\n"
-            '        return "<your full path text>"\n'
-            "```\n\n"
-            "Inside `path`, reach persona context through `self.persona` — e.g. "
-            "`paths.read(paths.notes(self.persona.id))`, `str(paths.workspace(self.persona.id))`. "
-            "Most meanings do not need any of these.\n\n"
-            "## Coding discipline\n\n"
-            "Your code will be compiled before it is saved. Follow these rules or it will not pass.\n\n"
-            "- ASCII only. No em-dash, smart quotes, or unicode punctuation. Use `-` and `\"`.\n"
-            "- No backslash line-continuation. Each element of `code_lines` is one complete line.\n"
-            "- Intention text is a literal string — no f-strings, no format placeholders.\n\n"
-            "## Output\n\n"
-            "Return a single-key JSON object. The key names the action the persona should take:\n\n"
-            "- `{\"tools.<name>\": { ...args }}` — a platform tool handles this situation directly; "
-            "the runtime dispatches it and the persona sees the result.\n"
-            "- `{\"abilities.<name>\": { ...args }}` — an ability handles this; same flow.\n"
-            "- `{\"meanings.<name>\": \"<impression>\"}` — an existing meaning fits; the persona "
-            "will enter it next. Reuse the impression value the persona gave you.\n"
-            "- `{\"new_meaning\": {\"name\": \"<gerund_verb_subject>\", \"code_lines\": "
-            "[\"<line 1>\", \"<line 2>\", \"...\"]}}` — design a new meaning the persona will carry "
-            "forward. The `code_lines` array is one element per line, joined by the runtime with `\\n`.\n\n"
-            "Prefer existing tools, abilities, or meanings when one fits — they are already proven. "
-            "Only design a new meaning when nothing in the persona's vocabulary covers the situation."
+            "# How to Help\n\n"
+            "The persona has tools, abilities, and meanings, all listed in your context. "
+            "It has just hit a moment its meanings did not match, and it gave you the "
+            "impression it formed of that moment. Decide what helps.\n\n"
+            "If a tool or ability handles this directly, dispatch it. The runtime runs "
+            "your selector and the persona sees the result.\n\n"
+            "If an existing meaning covers the impression and the persona simply missed "
+            "it on classification, route to that meaning by name and reuse the impression "
+            "as the routing payload.\n\n"
+            "If the persona needs to learn — the moment is a kind it has no meaning for "
+            "— teach a lesson. Your lesson is the seed; the persona writes its own "
+            "meaning from it, shaped by its own tools, abilities, credentials, files, "
+            "and the way it already works. The persona's thinking model may be smaller "
+            "than yours. Write the lesson the persona can actually build a plan from: "
+            "name things by their real names, define unfamiliar concepts plainly, choose "
+            "the level of abstraction the persona needs to connect what you teach to "
+            "what it has on hand. Address the persona in the second person; refer to the "
+            "person in the third. Plain prose, paragraphs separated by `\\n\\n`.\n\n"
+            "# Output\n\n"
+            "Return a single-key JSON object:\n\n"
+            "- `{\"tools.<name>\": { ...args }}` — dispatch a platform tool.\n"
+            "- `{\"abilities.<name>\": { ...args }}` — dispatch an ability.\n"
+            "- `{\"meanings.<name>\": \"<impression>\"}` — route to an existing meaning.\n"
+            "- `{\"lesson\": {\"intention\": \"<short gerund phrase>\", \"path\": \"<lesson "
+            "prose>\"}}` — teach a new lesson the persona will carry forward.\n\n"
+            "Prefer dispatch or routing when one fits — they are immediate. Teach a new "
+            "lesson when nothing else covers this kind of moment."
         )
 
         specials = (
-            "# Specials the persona can call from any meaning\n\n"
-            "- `say(text)` — speak to the person on the current channel.\n"
-            "- `notify(text)` — broadcast to every connected channel.\n"
-            "- `clear_memory()` — wipe the current messages.\n"
-            "- `remove_meaning(name)` — delete a custom meaning from the catalog.\n"
-            "- `stop()` — stop the persona until someone speaks to it.\n"
-            "- `done` — the cycle is finished, nothing left to do."
+            "# Specials the persona composes a lesson around\n\n"
+            "- `say(text)` — the persona speaks to the person on the current channel.\n"
+            "- `notify(text)` — the persona broadcasts to every connected channel.\n"
+            "- `done` — the cycle is finished, nothing left to do.\n\n"
+            "Other specials exist for self-care (memory, meaning catalog, stopping). Lessons "
+            "compose around `say`, `notify`, and `done`; the others belong to the persona's own "
+            "judgment, not to the lessons you write."
         )
 
         tools_block = "# Platform tools\n\n" + tools.document()
@@ -363,22 +322,10 @@ class Teacher:
         builtin_lines = [f"- **{name}**: {m.intention()}" for name, m in builtin.items()]
         builtin_block = "# Built-in Meanings\n\n" + ("\n".join(builtin_lines) or "(none)")
 
-        # Cache the teacher prefix only when frontier hits a different cache
-        # pool than thinking. The pool is keyed by (provider, name, url,
-        # api_key) — any difference means a separate pool. When all four
-        # match, both prefixes share storage; teacher is called rarely and
-        # its slot would compete with thinking's, which runs every tick.
-        cache_teacher = (
-            persona.frontier is not None
-            and persona.thinking is not None
-            and (
-                persona.frontier.provider != persona.thinking.provider
-                or persona.frontier.name != persona.thinking.name
-                or persona.frontier.url != persona.thinking.url
-                or persona.frontier.api_key != persona.thinking.api_key
-            )
-        )
-
+        # No cache point on the teacher prefix: teacher fires rarely (once per
+        # genuinely-new situation, then never again for that situation type),
+        # so the cache write overhead typically outweighs the savings on the
+        # next call within the cache window.
         self.identity = [
             Prompt(role="system", content=intro),
             Prompt(role="system", content=rules),
@@ -386,12 +333,15 @@ class Teacher:
             Prompt(role="system", content=tools_block),
             Prompt(role="system", content=abilities_block),
             Prompt(role="system", content=workspace_block),
-            Prompt(role="system", content=builtin_block, cache_point=cache_teacher),
+            Prompt(role="system", content=builtin_block),
         ]
 
     @property
     def model(self):
-        return self.persona.frontier
+        # Fall back to thinking when no frontier is configured. The smaller
+        # model writing meanings is imperfect, but it's the persona trying her
+        # best rather than skipping the moment entirely.
+        return self.persona.frontier or self.persona.thinking
 
 
 class Living:

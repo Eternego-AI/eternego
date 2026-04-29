@@ -1,105 +1,98 @@
-"""Brain meanings — recognized abilities of the persona.
+"""Brain meanings — recognized situations the persona knows how to handle.
 
-Each meaning is a module that exposes a `Meaning` class. `Meaning(persona)` is
-instantiated per-call; its `.intention()` returns a task-centered label (used
-for matching), its `.path()` returns the text the persona reads while acting.
-Any persona context a meaning needs — files, paths, name — is reached via
-`self.persona`, never as a method argument.
+Each meaning is one situation, expressed as a markdown file:
+
+    # {intention}
+
+    {path text — the prose the persona reads while acting}
+
+The meaning's `name` is the file's stem (lowercase ASCII + underscore).
+`intention` is one short gerund phrase. `path` is the multi-paragraph
+prose that addresses the persona in second person and tells her how to
+handle the situation.
+
+Two layers:
+
+- `builtin(persona)` — meanings that ship with Eternego, read from
+  `application/core/brain/meanings/*.md`.
+- `custom(persona)` — persona-specific meanings written by `learn`,
+  read from the persona's own `meanings/` directory.
+
+Both are listed by intention in Ego's identity prompt; the path text
+is injected by `decide` only when a meaning is selected.
 """
 
-import importlib
-import importlib.util
-import pkgutil
 import re
-import types
+from pathlib import Path
 
 from application.core import paths
-from application.core.data import Model, Persona
-from application.platform import filesystem, logger
-
-_discovered_modules = {}
-
-for _, _name, _ in pkgutil.iter_modules(__path__):
-    _discovered_modules[_name] = importlib.import_module(f".{_name}", __name__)
 
 
-def builtin(persona):
-    """Built-in meanings, discovered from this package at import time."""
-    result = {}
-    for name, module in _discovered_modules.items():
-        if hasattr(module, "Meaning"):
-            result[name] = module.Meaning(persona)
-        else:
-            logger.warning("Built-in meaning missing Meaning class", {"name": name})
-    return result
+_BUILTIN_DIR = Path(__file__).parent
 
 
-def custom(persona):
-    """Persona-specific meanings loaded from its meanings directory."""
-    result = {}
+# Basic meanings: states the persona is in (single ability + a say), not
+# procedures she runs. Loaded with full path text into Ego's identity so
+# she's continuously aware of her modes of being-with-the-person. The rest
+# of the built-ins are orchestrating — listed by intention only and have
+# their path injected by decide on selection.
+BASIC = ["asking", "chatting", "noting", "recalling", "scheduling"]
+
+
+class Meaning:
+    """A recognized situation. Holds intention text and path prose."""
+
+    def __init__(self, name: str, intention: str, path: str):
+        self.name = name
+        self._intention = intention
+        self._path = path
+
+    def intention(self) -> str:
+        return self._intention
+
+    def path(self) -> str:
+        return self._path
+
+
+def builtin(persona) -> dict[str, Meaning]:
+    """Every built-in meaning, read from this package's directory."""
+    out: dict[str, Meaning] = {}
+    for f in sorted(_BUILTIN_DIR.glob("*.md")):
+        sections = paths.md_dict(f)
+        if sections:
+            intention, body = next(iter(sections.items()))
+            out[f.stem] = Meaning(f.stem, intention, body)
+    return out
+
+
+def custom(persona) -> dict[str, Meaning]:
+    """Persona-specific meanings written to disk by learn."""
+    out: dict[str, Meaning] = {}
     persona_dir = paths.meanings(persona.id)
-    if persona_dir.exists():
-        for f in sorted(persona_dir.glob("*.py")):
-            instance = _load_file(persona, f)
-            if instance is not None:
-                result[f.stem] = instance
-    return result
+    if not persona_dir.exists():
+        return out
+    for f in sorted(persona_dir.glob("*.md")):
+        sections = paths.md_dict(f)
+        if sections:
+            intention, body = next(iter(sections.items()))
+            out[f.stem] = Meaning(f.stem, intention, body)
+    return out
 
 
-def available(persona):
-    """Every meaning the persona knows — built-in plus custom, merged."""
-    return {**builtin(persona), **custom(persona)}
+def save_lesson(persona_id: str, intention: str, path: str) -> str:
+    """Write a frontier-authored lesson to disk; return its slugified id."""
+    intention = (intention or "").strip()
+    path = (path or "").strip()
+    if not intention:
+        raise ValueError("lesson intention is empty")
+    if not path:
+        raise ValueError("lesson path is empty")
+    lesson_id = re.sub(r"[^\w-]", "", intention.lower().replace(" ", "_"))[:60]
+    lesson_id = lesson_id.strip("_-")
+    if not lesson_id:
+        raise ValueError("lesson id is empty after sanitization")
+    body = f"# {intention}\n\n{path}\n"
+    paths.save_as_string(paths.lessons(persona_id) / f"{lesson_id}.md", body)
+    return lesson_id
 
 
-def load(persona, name):
-    """Load one persona-specific meaning by name — used after save_meaning to
-    bring a freshly-created meaning into memory without rescanning the dir."""
-    f = paths.meanings(persona.id) / f"{name}.py"
-    if not f.exists():
-        return None
-    return _load_file(persona, f)
-
-
-def _load_file(persona, f):
-    try:
-        spec = importlib.util.spec_from_file_location(f.stem, f)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        if hasattr(module, "Meaning"):
-            return module.Meaning(persona)
-        logger.warning("Meaning file missing Meaning class", {"file": str(f)})
-    except Exception as e:
-        logger.warning("Meaning file failed to load", {"file": str(f), "error": str(e)})
-    return None
-
-
-def save_meaning(persona_id, name, code):
-    name = re.sub(r"[^\w-]", "", name.lower().replace(" ", "-"))[:60]
-    if not name:
-        raise ValueError("meaning name is empty after sanitization")
-
-    code_object = compile(code, f"{name}.py", "exec")
-    sandbox = types.ModuleType(f"_validate_{name}")
-    try:
-        exec(code_object, sandbox.__dict__)
-        if not hasattr(sandbox, "Meaning"):
-            raise ValueError("module has no Meaning class")
-        test_persona = Persona(
-            id=persona_id,
-            name="validation",
-            thinking=Model(name="", url=""),
-        )
-        instance = sandbox.Meaning(test_persona)
-        intention_value = instance.intention()
-        if not isinstance(intention_value, str):
-            raise ValueError(f"Meaning.intention() returned {type(intention_value).__name__}, not str")
-        path_value = instance.path()
-        if not isinstance(path_value, str):
-            raise ValueError(f"Meaning.path() returned {type(path_value).__name__}, not str")
-    except ValueError:
-        raise
-    except Exception as e:
-        raise ValueError(f"{type(e).__name__} during validation: {e}") from e
-
-    filesystem.write(paths.meanings(persona_id) / f"{name}.py", code)
-    return name
