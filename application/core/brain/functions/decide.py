@@ -121,7 +121,7 @@ async def decide(living: Living) -> list:
         if not name:
             status, result_text = "error", "name is required"
         else:
-            meaning_file = paths.meanings(persona.id) / f"{name}.py"
+            meaning_file = paths.meanings(persona.id) / f"{name}.md"
             if meaning_file.exists():
                 meaning_file.unlink()
                 memory.unlearn(name)

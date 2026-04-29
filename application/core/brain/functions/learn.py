@@ -8,12 +8,14 @@ learn consults a teacher — either naming an existing meaning that fits
 forward.
 
 Learn uses living.teacher's identity, not the persona's. Teacher is not the
-persona; it is the architect who builds the persona's meanings.
+persona; it is the architect who builds the persona's meanings. Teacher's
+model is the persona's frontier when configured, otherwise her thinking
+model — the persona tries her best with what she has rather than skipping
+moments she doesn't know how to handle.
 
-Learn requires living.teacher.model (the frontier). If absent or the
-teacher cannot produce a usable response, learn passes through silently —
-no message is injected into living.ego.memory. The next recognize will read
-the same moment and decide again.
+If the teacher cannot produce a usable response, learn passes through
+silently — no message is injected into living.ego.memory. The next
+recognize will read the same moment and decide again.
 """
 
 from application.core import models
@@ -42,11 +44,6 @@ async def learn(living: Living) -> list:
     if not impression:
         # Recognize concluded the turn cleanly (say or done) — nothing to escalate.
         logger.debug("brain.learn skipping — no impression", {"persona": persona})
-        dispatch(Tock("learn", {"persona": persona}))
-        return []
-
-    if not teacher.model:
-        logger.debug("brain.learn skipping — no frontier", {"persona": persona})
         dispatch(Tock("learn", {"persona": persona}))
         return []
 
@@ -111,18 +108,15 @@ async def learn(living: Living) -> list:
         else:
             logger.warning("brain.learn named nonexistent meaning", {"persona": persona, "name": name})
 
-    # New meaning — save the module and set state.
+    # New meaning — save the markdown file and set state.
     elif selector == "new_meaning":
         spec = value if isinstance(value, dict) else {}
         name = str(spec.get("name", "")).strip()
-        code_lines = spec.get("code_lines")
-        if isinstance(code_lines, list) and code_lines:
-            code = "\n".join(str(line) for line in code_lines)
-        else:
-            code = ""
-        if name and code:
+        intention = str(spec.get("intention", "")).strip()
+        path_text = str(spec.get("path", "")).strip()
+        if name and intention and path_text:
             try:
-                meaning_name = meanings.save_meaning(persona.id, name, code)
+                meaning_name = meanings.save_meaning(persona.id, name, intention, path_text)
                 learned = meanings.load(persona, meaning_name)
                 if learned is not None:
                     memory.learn(meaning_name, learned)
@@ -130,8 +124,8 @@ async def learn(living: Living) -> list:
                 meaning_names = list(memory.meanings.keys())
                 memory.ability = meaning_names.index(meaning_name) + 1
                 logger.debug("brain.learn created new meaning", {"persona": persona, "meaning": meaning_name})
-            except (SyntaxError, ValueError) as e:
-                logger.warning("brain.learn produced invalid code", {"persona": persona, "name": name, "error": str(e)})
+            except ValueError as e:
+                logger.warning("brain.learn produced invalid meaning", {"persona": persona, "name": name, "error": str(e)})
 
     # Tool / Ability — declare as a consequence; clock's executor runs it.
     elif selector.startswith("tools.") or selector.startswith("abilities."):

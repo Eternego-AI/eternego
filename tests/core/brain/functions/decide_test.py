@@ -251,21 +251,9 @@ async def test_decide_remove_meaning_unlearns_existing():
                 def run(self, *a): pass
                 def nudge(self): pass
 
-            valid_module = (
-                '"""Meaning — temp_meaning."""\n'
-                'from application.core.data import Persona\n'
-                'class Meaning:\n'
-                '    def __init__(self, persona: Persona):\n'
-                '        self.persona = persona\n'
-                '    def intention(self) -> str:\n'
-                '        return "Temp"\n'
-                '    def path(self) -> str:\n'
-                '        return "stub"\n'
-            )
-
             async def consume(url):
                 persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
-                meanings.save_meaning(persona.id, "temp_meaning", valid_module)
+                meanings.save_meaning(persona.id, "temp_meaning", "Temp", "stub")
                 ego = agents.Ego(persona)
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
@@ -279,8 +267,8 @@ async def test_decide_remove_meaning_unlearns_existing():
 
                 consequences = await functions.decide(living)
                 assert consequences == []
-                meaning_file = paths.meanings(persona.id) / "temp_meaning.py"
-                assert not meaning_file.exists(), "module file should be deleted"
+                meaning_file = paths.meanings(persona.id) / "temp_meaning.md"
+                assert not meaning_file.exists(), "meaning file should be deleted"
                 assert "temp_meaning" not in ego.memory.custom_meanings
                 last = ego.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content

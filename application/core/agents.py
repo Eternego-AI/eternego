@@ -120,13 +120,19 @@ class Ego:
             content="# Abilities\n\n" + ("\n".join(ability_lines) or "(none)"),
         ))
 
-        builtin_lines = [
-            f"- `meanings.{name}` — {m.intention()}"
-            for name, m in self.memory.builtin_meanings.items()
-        ]
+        # Basic built-in meanings (in `meanings.BASIC`) carry their full path
+        # text — the persona is continuously aware of these modes of being
+        # rather than escalating to decide for them. Orchestrating built-ins
+        # are listed by intention only; decide loads their path on selection.
+        builtin_sections = []
+        for name, m in self.memory.builtin_meanings.items():
+            section = f"## meanings.{name}\n\n{m.intention()}"
+            if name in meanings.BASIC:
+                section += f"\n\n{m.path()}"
+            builtin_sections.append(section)
         blocks.append(Prompt(
             role="system",
-            content="# Built-in Meanings\n\n" + ("\n".join(builtin_lines) or "(none)"),
+            content="# Built-in Meanings\n\n" + ("\n\n".join(builtin_sections) or "(none)"),
             cache_point=True,
         ))
 
@@ -164,11 +170,13 @@ class Ego:
         perms = paths.read(paths.permissions(pid)).strip() or "(none granted yet)"
         home = paths.home(pid)
         workspace = paths.workspace(pid)
+        media = paths.media(pid)
         knowledge.append(
             "## Permissions\n\n"
             "Saving reminders, saving notes, recalling conversations, and checking the calendar are yours — do them freely.\n\n"
-            f"`{home}` holds your personal files. You may read them; modifying them is forbidden.\n\n"
+            f"`{home}` holds your personal files. Your secret temple. You may read them; modifying them is forbidden.\n\n"
             f"`{workspace}` is your workspace. You decide what happens there.\n\n"
+            f"`{media}` is your media directory — save screenshots and other images you capture there.\n\n"
             "Everything else — running commands, reaching beyond those paths — waits on the person's word. Here is what you currently hold from past conversations:\n\n"
             f"{perms}\n\n"
             "These are your own notes on what they've granted. When you need something that isn't here, ask them."
@@ -306,28 +314,10 @@ class Teacher:
             "a tool invocation where the credential reference is a path or name (not its value), or "
             "any form where the secret appears only inside the command and never in what the persona "
             "sees afterwards. The principle: secrets flow through the body, not through the mind.\n\n"
-            "## Module structure\n\n"
-            "The Python module you return must fit this shape:\n\n"
-            "```python\n"
-            '"""Meaning — <name>."""\n\n'
-            "from application.core import paths\n"
-            "from application.core.data import Persona\n\n\n"
-            "class Meaning:\n"
-            "    def __init__(self, persona: Persona):\n"
-            "        self.persona = persona\n\n"
-            "    def intention(self) -> str:\n"
-            '        return "<your intention phrase>"\n\n'
-            "    def path(self) -> str:\n"
-            '        return "<your full path text>"\n'
-            "```\n\n"
-            "Inside `path`, reach persona context through `self.persona` — e.g. "
-            "`paths.read(paths.notes(self.persona.id))`, `str(paths.workspace(self.persona.id))`. "
-            "Most meanings do not need any of these.\n\n"
-            "## Coding discipline\n\n"
-            "Your code will be compiled before it is saved. Follow these rules or it will not pass.\n\n"
-            "- ASCII only. No em-dash, smart quotes, or unicode punctuation. Use `-` and `\"`.\n"
-            "- No backslash line-continuation. Each element of `code_lines` is one complete line.\n"
-            "- Intention text is a literal string — no f-strings, no format placeholders.\n\n"
+            "Credentials for any external service the persona uses — OAuth tokens, API keys, "
+            "service-specific secrets — live at `home/credentials.json` (relative to the persona's "
+            "home, which is stated in the persona's permissions). When a meaning needs them, "
+            "reference that file by path; never invent placeholder names.\n\n"
             "## Output\n\n"
             "Return a single-key JSON object. The key names the action the persona should take:\n\n"
             "- `{\"tools.<name>\": { ...args }}` — a platform tool handles this situation directly; "
@@ -335,9 +325,10 @@ class Teacher:
             "- `{\"abilities.<name>\": { ...args }}` — an ability handles this; same flow.\n"
             "- `{\"meanings.<name>\": \"<impression>\"}` — an existing meaning fits; the persona "
             "will enter it next. Reuse the impression value the persona gave you.\n"
-            "- `{\"new_meaning\": {\"name\": \"<gerund_verb_subject>\", \"code_lines\": "
-            "[\"<line 1>\", \"<line 2>\", \"...\"]}}` — design a new meaning the persona will carry "
-            "forward. The `code_lines` array is one element per line, joined by the runtime with `\\n`.\n\n"
+            "- `{\"new_meaning\": {\"name\": \"<gerund_verb_subject>\", \"intention\": \"<one short "
+            "gerund phrase>\", \"path\": \"<full path prose>\"}}` — design a new meaning the persona "
+            "will carry forward. The path string is plain prose — no markdown, no code, no JSON; "
+            "use `\\n\\n` for paragraph breaks.\n\n"
             "Prefer existing tools, abilities, or meanings when one fits — they are already proven. "
             "Only design a new meaning when nothing in the persona's vocabulary covers the situation."
         )
@@ -363,22 +354,10 @@ class Teacher:
         builtin_lines = [f"- **{name}**: {m.intention()}" for name, m in builtin.items()]
         builtin_block = "# Built-in Meanings\n\n" + ("\n".join(builtin_lines) or "(none)")
 
-        # Cache the teacher prefix only when frontier hits a different cache
-        # pool than thinking. The pool is keyed by (provider, name, url,
-        # api_key) — any difference means a separate pool. When all four
-        # match, both prefixes share storage; teacher is called rarely and
-        # its slot would compete with thinking's, which runs every tick.
-        cache_teacher = (
-            persona.frontier is not None
-            and persona.thinking is not None
-            and (
-                persona.frontier.provider != persona.thinking.provider
-                or persona.frontier.name != persona.thinking.name
-                or persona.frontier.url != persona.thinking.url
-                or persona.frontier.api_key != persona.thinking.api_key
-            )
-        )
-
+        # No cache point on the teacher prefix: teacher fires rarely (once per
+        # genuinely-new situation, then never again for that situation type),
+        # so the cache write overhead typically outweighs the savings on the
+        # next call within the cache window.
         self.identity = [
             Prompt(role="system", content=intro),
             Prompt(role="system", content=rules),
@@ -386,12 +365,15 @@ class Teacher:
             Prompt(role="system", content=tools_block),
             Prompt(role="system", content=abilities_block),
             Prompt(role="system", content=workspace_block),
-            Prompt(role="system", content=builtin_block, cache_point=cache_teacher),
+            Prompt(role="system", content=builtin_block),
         ]
 
     @property
     def model(self):
-        return self.persona.frontier
+        # Fall back to thinking when no frontier is configured. The smaller
+        # model writing meanings is imperfect, but it's the persona trying her
+        # best rather than skipping the moment entirely.
+        return self.persona.frontier or self.persona.thinking
 
 
 class Living:
