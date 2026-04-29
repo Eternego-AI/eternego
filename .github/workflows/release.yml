@@ -21,7 +21,7 @@ jobs:
       - run: |
           pip install build
           python -m build --sdist --wheel --outdir dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: source
           path: dist/*
@@ -107,7 +107,7 @@ jobs:
       - name: Rename CLI binary
         run: |
           mv dist/eternego dist/eternego-${{ github.ref_name }}-linux-x86_64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binary-linux
           path: |
@@ -165,7 +165,7 @@ jobs:
       - name: Stage CLI binary
         run: |
           mv dist-cli/eternego dist/eternego-${{ github.ref_name }}-macos-arm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binary-macos
           path: |
@@ -201,7 +201,7 @@ jobs:
         run: |
           Move-Item dist/eternego.exe dist/eternego-${{ github.ref_name }}-windows-x86_64.exe
         shell: pwsh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binary-windows
           path: |
@@ -248,7 +248,7 @@ jobs:
           echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> $GITHUB_ENV
           echo -n "test" | gnome-keyring-daemon --unlock --components=secrets
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binary-linux
           path: dist
@@ -298,7 +298,7 @@ jobs:
         timeout-minutes: 10
         run: ollama pull "$OLLAMA_MODEL"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binary-macos
           path: dist
@@ -344,7 +344,7 @@ jobs:
           Expand-Archive -Path "$env:RUNNER_TEMP\ollama.zip" -DestinationPath "$env:RUNNER_TEMP\ollama-bin"
           echo "$env:RUNNER_TEMP\ollama-bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: binary-windows
           path: dist
@@ -411,7 +411,7 @@ jobs:
       - smoke-windows
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: '{binary-*,source}'
