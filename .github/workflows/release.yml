@@ -362,9 +362,18 @@ jobs:
       - name: Pull tiny model
         timeout-minutes: 10
         shell: pwsh
-        env:
-          OLLAMA_HOST: http://127.0.0.1:11434
-        run: ollama pull $env:OLLAMA_MODEL
+        run: |
+          # Standalone Windows CLI's `pull` insists on spawning ollama-app.exe
+          # (not in the zip), so call the running server's HTTP API directly.
+          $body = @{ name = $env:OLLAMA_MODEL; stream = $false } | ConvertTo-Json -Compress
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:11434/api/pull" `
+            -Method POST -Body $body -ContentType "application/json" `
+            -UseBasicParsing -TimeoutSec 600
+          if ($resp.StatusCode -ne 200) {
+            Write-Error "pull failed: $($resp.StatusCode) $($resp.Content)"
+            exit 1
+          }
+          Write-Host "pulled $env:OLLAMA_MODEL"
 
       - uses: actions/download-artifact@v4
         with:
