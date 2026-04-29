@@ -344,27 +344,39 @@ jobs:
           Expand-Archive -Path "$env:RUNNER_TEMP\ollama.zip" -DestinationPath "$env:RUNNER_TEMP\ollama-bin"
           echo "$env:RUNNER_TEMP\ollama-bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
-      - name: Start Ollama and wait
+      - uses: actions/download-artifact@v4
+        with:
+          name: binary-windows
+          path: dist
+
+      - name: Run smoke (ollama + daemon stay alive within one step)
+        timeout-minutes: 20
         shell: pwsh
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
         run: |
+          # GHA's Windows runner kills any process started in a step when
+          # that step exits — so ollama serve, model pull, daemon start,
+          # and smoke test all run inside this single step.
+
           Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\ollama.log" -RedirectStandardError "$env:RUNNER_TEMP\ollama.err.log"
+          $ready = $false
           for ($i=1; $i -le 120; $i++) {
             try {
               $r = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 5
-              if ($r.StatusCode -eq 200) { Write-Host "ollama up after ${i}s"; exit 0 }
+              if ($r.StatusCode -eq 200) { Write-Host "ollama up after ${i}s"; $ready = $true; break }
             } catch {}
             Start-Sleep -Seconds 1
           }
-          Write-Error "Ollama did not start"
-          Get-Content "$env:RUNNER_TEMP\ollama.log","$env:RUNNER_TEMP\ollama.err.log" -ErrorAction SilentlyContinue
-          exit 1
+          if (-not $ready) {
+            Write-Error "Ollama did not start"
+            Get-Content "$env:RUNNER_TEMP\ollama.log","$env:RUNNER_TEMP\ollama.err.log" -ErrorAction SilentlyContinue
+            exit 1
+          }
 
-      - name: Pull tiny model
-        timeout-minutes: 10
-        shell: pwsh
-        run: |
-          # Standalone Windows CLI's `pull` insists on spawning ollama-app.exe
-          # (not in the zip), so call the running server's HTTP API directly.
+          # Pull via HTTP — the standalone Windows CLI's `pull` tries to
+          # spawn ollama-app.exe (not in the zip).
           $body = @{ name = $env:OLLAMA_MODEL; stream = $false } | ConvertTo-Json -Compress
           $resp = Invoke-WebRequest -Uri "http://127.0.0.1:11434/api/pull" `
             -Method POST -Body $body -ContentType "application/json" `
@@ -375,23 +387,10 @@ jobs:
           }
           Write-Host "pulled $env:OLLAMA_MODEL"
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: binary-windows
-          path: dist
-
-      - name: Start daemon
-        shell: pwsh
-        run: |
           $bin = "dist\eternego-${{ github.ref_name }}-windows-x86_64.exe"
           Start-Process -FilePath $bin -ArgumentList "daemon" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\daemon.log" -RedirectStandardError "$env:RUNNER_TEMP\daemon.err.log"
 
-      - name: Run smoke test
-        shell: pwsh
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-        run: python installation/smoke.py
+          python installation/smoke.py
 
       - name: Daemon log on failure
         if: failure()
