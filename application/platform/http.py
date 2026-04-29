@@ -78,6 +78,10 @@ async def oauth1_request(method: str, url: str, body: str = "",
     body: request body as JSON string (for POST/PUT). Empty string for no body.
     consumer_key, consumer_secret, access_token, access_token_secret: OAuth 1.0a credentials.
     """
+    parsed = urllib.parse.urlsplit(url)
+    base_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+    query_params = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+
     oauth_params = {
         "oauth_consumer_key": consumer_key,
         "oauth_nonce": uuid.uuid4().hex,
@@ -86,11 +90,12 @@ async def oauth1_request(method: str, url: str, body: str = "",
         "oauth_token": access_token,
         "oauth_version": "1.0",
     }
-    oauth_params["oauth_signature"] = urllib.parse.quote(oauth1_sign(
-        method, url, oauth_params, consumer_secret, access_token_secret
-    ), safe="")
+    oauth_params["oauth_signature"] = oauth1_sign(
+        method, base_url, {**query_params, **oauth_params},
+        consumer_secret, access_token_secret,
+    )
     auth_header = "OAuth " + ", ".join(
-        f'{k}="{v}"' for k, v in sorted(oauth_params.items())
+        f'{k}="{urllib.parse.quote(v, safe="")}"' for k, v in sorted(oauth_params.items())
     )
 
     try:
