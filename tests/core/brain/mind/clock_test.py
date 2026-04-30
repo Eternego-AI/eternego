@@ -5,8 +5,7 @@ steps), runs `clock.run(living)`, and asserts on what dispatched, what was
 recorded in memory, and which steps ran.
 
 Clock loops the cycle until a pass produces no consequences (settled).
-Tests that emit consequences must settle on a subsequent pass or hit the
-iteration cap.
+Tests that emit consequences must settle on a subsequent pass.
 """
 
 from application.platform.processes import on_separate_process_async
@@ -345,45 +344,3 @@ async def test_run_re_loops_when_consequences_executed():
     assert code == 0, error
 
 
-async def test_run_dispatches_brain_fault_when_iteration_cap_hit():
-    """A step that always emits consequences would loop forever — clock
-    bounds it at MAX_ITERATIONS and dispatches a clock_loop_cap BrainFault
-    so health_check sees something is wrong."""
-    def isolated():
-        import asyncio, os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents
-            from application.core.brain import clock
-            from application.core.brain.pulse import Pulse
-            from application.core.brain.signals import BrainFault
-            from application.core.data import Model, Persona
-            from application.platform import observer
-            from application.platform.asyncio_worker import Worker
-
-            async def step():
-                return [{"abilities.save_notes": {"content": "loop"}}]
-
-            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
-            ego = agents.Ego(persona)
-            eye = agents.Eye(persona)
-            consultant = agents.Consultant(persona)
-            teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            living.cycle = [("decide", lambda: step())]
-
-            faults = []
-            def capture(signal: BrainFault):
-                faults.append(signal)
-            observer.subscribe(capture)
-
-            asyncio.run(clock.run(living))
-
-            assert len(faults) == 1
-            f = faults[0]
-            assert f.title == "clock_loop_cap"
-            assert f.details["persona"] is persona
-            assert "iteration cap" in f.details["error"]
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error

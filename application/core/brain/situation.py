@@ -14,7 +14,7 @@ dynamic tail (the part that changes every tick).
 """
 
 from application.core import paths
-from application.platform import datetimes, OS
+from application.platform import datetimes, desktop, OS
 
 
 def time() -> str:
@@ -27,10 +27,43 @@ def time() -> str:
 
 def environment() -> str:
     os_name = OS.get_supported() or "unknown — assume a unix-based system"
-    return (
+    body = (
         "## The System You Live On\n\n"
         f"You live on {os_name}."
     )
+    if desktop.available():
+        if os_name == "mac":
+            modifiers = "`cmd`, `ctrl`, `alt` (Option), `shift`"
+            shortcut_examples = "`cmd+c`, `cmd+v`, `cmd+s`, `cmd+space`"
+        elif os_name == "windows":
+            modifiers = "`ctrl`, `alt`, `shift`, `win`"
+            shortcut_examples = "`ctrl+c`, `ctrl+v`, `ctrl+s`, `win+e`"
+        else:
+            modifiers = "`ctrl`, `alt`, `shift`, `super`"
+            shortcut_examples = "`ctrl+c`, `ctrl+v`, `ctrl+s`, `super+space`"
+        body += (
+            "\n\n### Screen Control\n\n"
+            "A display is available right now — `screen` and `take_screenshot` will work. "
+            "When you act on the screen, name the parts you use by these conventions on this OS:\n\n"
+            "- Mouse buttons: `left`, `right`, `middle`.\n"
+            f"- Modifiers: {modifiers}.\n"
+            "- Whitespace and control: `enter`, `tab`, `space`, `esc`, `backspace`, `delete`.\n"
+            "- Navigation: `up`, `down`, `left`, `right`, `home`, `end`, `page_up`, `page_down`, `insert`.\n"
+            "- Locks: `caps_lock`.\n"
+            "- Function keys: `f1` through `f24`.\n"
+            "- Characters: type the literal character (`a`, `1`, `;`).\n"
+            "- Chords: join with `+`. "
+            f"Common shortcuts on this system: {shortcut_examples}."
+        )
+    else:
+        body += (
+            "\n\n### Screen Control\n\n"
+            "No display is available right now — `screen`, `take_screenshot` and `desktop` tools will fail "
+            "if you try them. If the person asks you to look at their screen or click "
+            "something, tell them you can't see or touch the screen from here rather than "
+            "attempting it."
+        )
+    return body
 
 
 def schedule(persona_id: str) -> str:

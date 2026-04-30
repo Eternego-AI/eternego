@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "cryptography>=41.0.0",
     "mss>=9.0.0",
+    "pynput>=1.7.6",
     "pywin32>=305; sys_platform == 'win32'",
 ]
 

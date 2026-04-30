@@ -43,6 +43,7 @@ hiddenimports += collect_modules('application/business/environment', 'applicatio
 hiddenimports += collect_modules('application/business/routine', 'application.business.routine')
 hiddenimports += [
     'application.platform.OS',
+    'application.platform.desktop',
     'application.platform.filesystem',
     'application.platform.http',
     'application.platform.telegram',
@@ -52,6 +53,15 @@ hiddenimports += [
     'application.platform.openai',
     'application.platform.ollama',
 ]
+
+# pynput dynamically imports the platform backend at runtime; PyInstaller
+# can't see those imports statically.
+if sys.platform == 'darwin':
+    hiddenimports += ['pynput.keyboard._darwin', 'pynput.mouse._darwin']
+elif sys.platform == 'win32':
+    hiddenimports += ['pynput.keyboard._win32', 'pynput.mouse._win32']
+else:
+    hiddenimports += ['pynput.keyboard._xorg', 'pynput.mouse._xorg']
 
 # Tray icon (macOS .app + Windows .exe only). Linux AppImage and Docker
 # don't ship pystray and never import cli/desktop.py — see index.py.

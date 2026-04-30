@@ -189,7 +189,7 @@ class Memory:
         self._messages.append(message)
         self._persist()
 
-    def add_tool_result(self, selector: str, value, status: str, result: str) -> None:
+    def add_tool_result(self, selector: str, value, status: str, result: str, media: Media | None = None) -> None:
         """Persist a tool/ability/special invocation as the standard pair: an
         assistant message naming the call (in the same JSON shape the model
         emits) followed by a user message carrying the TOOL_RESULT.
@@ -198,12 +198,21 @@ class Memory:
         `clear_memory` or `stop`), or any JSON-serializable value — whatever
         the model originally produced as the selector's value. Centralizing
         the convention here keeps memory legible to the persona on its next
-        read: it sees its own request right before the result."""
+        read: it sees its own request right before the result.
+
+        When `media` is given (e.g. screenshot from take_screenshot), the
+        TOOL_RESULT text travels as the media's caption and Prompt is left
+        unset — realize will route the image through Eye (if a vision model
+        is configured) or inline it as a multi-block prompt on the next
+        tick, the same way it handles incoming images from `see`."""
         name = selector.split(".", 1)[1] if "." in selector else selector
         call = json.dumps({selector: value})
         self.remember(Message(content=call, prompt=Prompt(role="assistant", content=call)))
         text = f"TOOL_RESULT\ntool: {name}\nstatus: {status}\nresult: {result}"
-        self.remember(Message(content=text, prompt=Prompt(role="user", content=text)))
+        if media:
+            self.remember(Message(content=text, media=Media(source=media.source, caption=text)))
+        else:
+            self.remember(Message(content=text, prompt=Prompt(role="user", content=text)))
 
     def forget(self) -> None:
         """Clear all messages. Context is preserved."""

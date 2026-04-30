@@ -7,7 +7,10 @@ file in this directory with a single top-level async function decorated with
 Contract:
 - Receives `persona` as the first positional argument (from the caller).
 - Receives `**kwargs` for its named parameters (filled in by the model).
-- Returns a string on success — a short, honest description of what happened.
+- Returns a string on success — a short, honest description of what happened —
+  or a `Media` for abilities that produce visual output (e.g. take_screenshot,
+  screen). The clock executor inlines the Media into the TOOL_RESULT message
+  so the persona sees it on the next pass.
 - Raises an exception on failure. The caller wraps it into a TOOL_RESULT with
   status=error.
 
@@ -101,8 +104,9 @@ def document(persona) -> str:
     return "\n".join(lines)
 
 
-async def call(persona, name: str, **args) -> str:
-    """Dispatch an ability by name. Returns the ability's string result.
+async def call(persona, name: str, **args):
+    """Dispatch an ability by name. Returns the ability's result — a string for
+    most abilities, or a `Media` for abilities that produce visual output.
     Raises ValueError if the ability is unknown or unavailable for this
     persona; propagates any exception the ability raises."""
     for a in _registry:
