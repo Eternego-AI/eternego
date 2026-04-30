@@ -46,8 +46,10 @@ services:
       - "5000:5000"   # Dashboard (web UI + OpenAI-compatible API)
       - "6080:6080"   # noVNC — peek at the persona's desktop
     volumes:
-      - eternego-data:/data
+      # Persona files live at ~/.eternego on the host by default — same place
+      # the native install uses, so you can switch between Docker and native
+      # without losing data. Set ETERNEGO_HOME to mount somewhere else.
+      - ${ETERNEGO_HOME:-${HOME}/.eternego}:/data
 
 volumes:
   ollama-data:
-  eternego-data:
