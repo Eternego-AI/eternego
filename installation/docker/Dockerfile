@@ -23,10 +23,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY . /app
 
-RUN pip install --no-cache-dir . \
+# pynput pulls evdev on Linux, which compiles against linux/input.h.
+# Install the build deps just for the pip step, then drop them so the
+# image stays slim.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev linux-libc-dev \
+    && pip install --no-cache-dir . \
     && if [ "$INSTALL_TRAINING" = "true" ]; then \
          pip install --no-cache-dir ".[training]"; \
-       fi
+       fi \
+    && apt-get purge -y gcc libc6-dev linux-libc-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Defaults that make `docker run --network=host eternego:latest` just work:
 # Ollama on the host is reachable as localhost when host networking is shared.
