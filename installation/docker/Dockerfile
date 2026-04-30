@@ -38,9 +38,13 @@ RUN apt-get update \
 
 # Defaults that make `docker run --network=host eternego:latest` just work:
 # Ollama on the host is reachable as localhost when host networking is shared.
-# Mac/Windows users without --network=host can override OLLAMA_HOST at run time.
+# Mac/Windows users without --network=host can override OLLAMA_BASE_URL at run time.
+# WEB_HOST=0.0.0.0 so the dashboard is reachable through the published port —
+# the daemon defaults to 127.0.0.1, which is right for native installs but
+# leaves the container unreachable from the host.
 ENV ETERNEGO_HOME=/data \
-    OLLAMA_HOST=http://localhost:11434 \
+    OLLAMA_BASE_URL=http://localhost:11434 \
+    WEB_HOST=0.0.0.0 \
     DISPLAY=:99 \
     XVFB_RESOLUTION=1280x720x24 \
     START_DESKTOP=true

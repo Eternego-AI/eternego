@@ -1,4 +1,4 @@
-# Eternego — fully containerized setup with a sibling Ollama service.
+# Eternego — single-service setup, configure your persona's model in the UI.
 #
 # Quick start:
 #   curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/docker/docker-compose.yml > eternego.compose.yml
@@ -10,38 +10,24 @@
 # Edit any line below to adjust ports, mount paths, GPU access, image variant.
 
 services:
-  # Ollama runs in its own container. Models persist in the named volume.
-  # On Mac, this is CPU-only — Docker on Mac can't see the host GPU. If you
-  # have an Apple Silicon machine, comment this service out and run Ollama
-  # natively on the host (https://ollama.com), then point eternego at it
-  # via OLLAMA_HOST=http://host.docker.internal:11434.
-  ollama:
-    image: ollama/ollama
-    restart: unless-stopped
-    volumes:
-      - ollama-data:/root/.ollama
-    # On Linux with NVIDIA: uncomment to give Ollama GPU access.
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
-
   eternego:
     image: ghcr.io/eternego-ai/eternego:latest
     # Or :full for the training-equipped image (~5.5 GB extra).
     restart: unless-stopped
-    depends_on:
-      - ollama
     environment:
-      # Talk to the sibling container instead of the image's built-in localhost default.
-      OLLAMA_HOST: http://ollama:11434
+      # Point at Ollama on the host. If you have it installed natively (the
+      # common path), make sure it's listening on all interfaces — set
+      # OLLAMA_HOST=0.0.0.0:11434 in its environment. To use the bundled
+      # ollama service below instead, change this to http://ollama:11434.
+      # Frontier-only personas (Anthropic / OpenAI / etc.) ignore this entirely.
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
       # Override the persona's screen size if you want bigger / smaller.
       # XVFB_RESOLUTION: 1920x1080x24
       # Set to "false" to skip the X stack entirely (channels-only).
       # START_DESKTOP: "true"
+    extra_hosts:
+      # Lets host.docker.internal resolve on Linux. Mac / Windows already do.
+      - "host.docker.internal:host-gateway"
     ports:
       - "5000:5000"   # Dashboard (web UI + OpenAI-compatible API)
       - "6080:6080"   # noVNC — peek at the persona's desktop
@@ -51,5 +37,21 @@ services:
       # without losing data. Set ETERNEGO_HOME to mount somewhere else.
       - ${ETERNEGO_HOME:-${HOME}/.eternego}:/data
 
-volumes:
-  ollama-data:
+  # Uncomment to run Ollama as a sibling container instead of using one on the
+  # host. Switch OLLAMA_BASE_URL above to http://ollama:11434 at the same time.
+  # On Linux with NVIDIA: uncomment the deploy block to give Ollama GPU access.
+  # ollama:
+  #   image: ollama/ollama
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+
+# volumes:
+#   ollama-data:
