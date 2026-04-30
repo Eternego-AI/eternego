@@ -141,6 +141,34 @@ async def test_chat_omits_system_key_when_no_system_messages():
     assert code == 0, error
 
 
+async def test_chat_does_not_mutate_caller_content_list():
+    """List content is the persona's stored Memory.Message.prompt.content
+    by reference. The cache_control attached for caching must not bleed
+    back into the source — successive ticks would otherwise stack
+    cache_control blocks until Anthropic rejects the request."""
+    def isolated():
+        from application.platform import anthropic
+
+        original_block = {"type": "text", "text": "hi"}
+        original_content = [original_block]
+
+        async def consume(url):
+            async for _ in anthropic.chat(url, "key", "model", [
+                {"role": "user", "content": original_content, "cache_control": "ephemeral"},
+            ]):
+                pass
+
+        anthropic.assert_chat(
+            run=lambda url: consume(url),
+            response={"content": [{"text": "ok"}]},
+        )
+
+        assert "cache_control" not in original_block, original_block
+        assert original_content == [{"type": "text", "text": "hi"}], original_content
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 async def test_chat_json_yields_same_as_chat():
     def isolated():
         import asyncio

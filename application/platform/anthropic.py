@@ -45,7 +45,10 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                 {"type": "text", "text": content, "cache_control": {"type": cache_type, "ttl": "1h"}},
             ]
         elif isinstance(content, list) and content:
-            content[-1]["cache_control"] = {"type": cache_type, "ttl": "1h"}
+            msg["content"] = [
+                *content[:-1],
+                {**content[-1], "cache_control": {"type": cache_type, "ttl": "1h"}},
+            ]
 
     headers = {
         "Content-Type": "application/json",
