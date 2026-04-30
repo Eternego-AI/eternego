@@ -1,339 +1,214 @@
-/**
- * UI — logical state, API, signals, and mode navigation.
- * No DOM. The visual frame lives in frame.js.
- */
+import { Router } from './platform/router.js';
+import { Socket } from './platform/socket.js';
+import { get, post, download } from './platform/network.js';
+import './business/frame.js';
 
-class Feed extends EventTarget {
-    #items = [];
-    get items() { return this.#items; }
-    push(...values) {
-        this.#items.push(...values);
-        this.dispatchEvent(new CustomEvent('update', { detail: values }));
+let personas = [];
+let currentPersonaId = null;
+let personaSocket = null;
+let connectedPersonaId = null;
+let systemSocket = null;
+const signals = new EventTarget();
+const chatListeners = [];
+
+async function listPersonas() {
+    try {
+        const data = await get('/api/personas');
+        personas = data.personas || [];
+        return personas;
+    } catch { return []; }
+}
+
+async function getPersona(id) {
+    if (!personas.length) await listPersonas();
+    return personas.find((p) => p.id === id) || null;
+}
+
+async function getConversation(id) {
+    try {
+        const data = await get(`/api/persona/${id}/conversation`);
+        return data.messages || [];
+    } catch { return []; }
+}
+
+async function getDiagnose(id) {
+    try { return await get(`/api/persona/${id}/diagnose`); }
+    catch { return null; }
+}
+
+async function getOversee(id) {
+    try { return await get(`/api/persona/${id}/oversee`); }
+    catch { return null; }
+}
+
+async function updatePersona(id, fields) {
+    try { return { success: true, ...(await post(`/api/persona/${id}/update`, fields)) }; }
+    catch (e) { return { success: false, error: e.message }; }
+}
+
+async function deletePersona(id) {
+    try {
+        await post(`/api/persona/${id}/delete`);
+        await listPersonas();
+        router.go('/');
+        return { success: true };
+    } catch (e) { return { success: false, error: e.message }; }
+}
+
+async function startPersona(id)   { try { await post(`/api/persona/${id}/start`);   return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+async function stopPersona(id)    { try { await post(`/api/persona/${id}/stop`);    return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+async function restartPersona(id) { try { await post(`/api/persona/${id}/restart`); return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+async function sleepPersona(id)   { try { await post(`/api/persona/${id}/sleep`);   return { success: true }; } catch (e) { return { success: false, error: e.message }; } }
+
+async function controlPersona(id, entryIds) {
+    try { await post(`/api/persona/${id}/control`, { entry_ids: entryIds }); return { success: true }; }
+    catch (e) { return { success: false, error: e.message }; }
+}
+
+async function hearPersona(id, message) {
+    try { await post(`/api/persona/${id}/hear`, { message }); return { success: true }; }
+    catch (e) { return { success: false, error: e.message }; }
+}
+
+async function seePersona(id, file, caption) {
+    const form = new FormData();
+    form.append('image', file);
+    if (caption) form.append('caption', caption);
+    try { await post(`/api/persona/${id}/see`, form); return { success: true }; }
+    catch (e) { return { success: false, error: e.message }; }
+}
+
+async function feedPersona(id, file, source) {
+    const form = new FormData();
+    form.append('history', file);
+    form.append('source', source);
+    try {
+        const data = await post(`/api/persona/${id}/feed`, form);
+        return { success: true, message: data?.message };
+    } catch (e) { return { success: false, error: e.message }; }
+}
+
+async function exportPersona(id) {
+    try { await download(`/api/persona/${id}/export`, `${id}.diary`); return { success: true }; }
+    catch (e) { return { success: false, error: e.message }; }
+}
+
+async function pairChannel(code, personaId) {
+    try { await post(`/api/persona/${personaId}/pair`, { code }); return { success: true }; }
+    catch (e) { return { success: false, error: e.message }; }
+}
+
+async function getProviderConfig() {
+    try { return await get('/api/config/providers'); }
+    catch {
+        return {
+            local: { url: 'http://localhost:11434' },
+            anthropic: { url: 'https://api.anthropic.com' },
+            openai: { url: 'https://api.openai.com' },
+        };
     }
 }
 
-const UI = {
-    booted: false,
-    personas: [],
-    currentPersonaId: null,
-    currentMode: null,
+async function createPersona(data) {
+    try {
+        const result = await post('/api/persona/create', data);
+        return { success: true, persona_id: result.persona?.id, ...result };
+    } catch (e) { return { success: false, error: e.message }; }
+}
 
-    signals: new Feed(),
+async function migratePersona(formData) {
+    try {
+        const result = await post('/api/persona/migrate', formData);
+        return { success: true, persona_id: result.persona?.id, ...result };
+    } catch (e) { return { success: false, error: e.message }; }
+}
 
-    // ── Chat (WebSocket incoming) ────────────────────────────
-    _chatListeners: [],
-    onChat(fn) { this._chatListeners.push(fn); },
-    offChat(fn) { this._chatListeners = this._chatListeners.filter(f => f !== fn); },
-    _dispatchChat(msg) { for (const fn of this._chatListeners) fn(msg); },
+function mediaUrl(id, source) {
+    const base = (source || '').split('/').pop();
+    return `/api/persona/${id}/media/${encodeURIComponent(base)}`;
+}
 
-    // ── WebSocket ────────────────────────────────────────────
-    _ws: null,
-    _wsPersonaId: null,
+function connectPersona(id) {
+    if (connectedPersonaId === id) return;
+    if (personaSocket) personaSocket.close();
+    connectedPersonaId = id;
+    personaSocket = new Socket(`/ws/${id}`);
+    personaSocket.on(handleMessage);
+    personaSocket.open();
+}
 
-    connectPersona(personaId) {
-        if (this._wsPersonaId === personaId && this._ws) return;
-        this.disconnectPersona();
-        this._wsPersonaId = personaId;
-        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${protocol}//${location.host}/ws/${personaId}`);
-        ws.onmessage = (e) => {
-            try {
-                const msg = JSON.parse(e.data);
-                if (msg.type === 'chat_message') this._dispatchChat(msg);
-                else if (msg.title) this.signals.push(msg);
-            } catch {}
-        };
-        ws.onclose = () => {
-            if (this._wsPersonaId === personaId) setTimeout(() => this.connectPersona(personaId), 3000);
-        };
-        this._ws = ws;
-    },
+function disconnectPersona() {
+    connectedPersonaId = null;
+    if (personaSocket) {
+        personaSocket.close();
+        personaSocket = null;
+    }
+}
 
-    disconnectPersona() {
-        this._wsPersonaId = null;
-        if (this._ws) { this._ws.onclose = null; this._ws.close(); this._ws = null; }
-    },
+function handleMessage(msg) {
+    if (msg.type === 'chat_message') {
+        for (const fn of chatListeners) fn(msg);
+    } else if (msg.title) {
+        signals.dispatchEvent(new CustomEvent('signal', { detail: msg }));
+    }
+}
 
-    // ── API helpers ──────────────────────────────────────────
-    async _get(url) {
-        const res = await fetch(url);
-        if (!res.ok) {
-            const detail = await res.json().catch(() => ({}));
-            throw new Error(detail.detail || res.statusText);
-        }
-        return res.json();
-    },
+function onChat(fn) { chatListeners.push(fn); }
+function offChat(fn) {
+    const i = chatListeners.indexOf(fn);
+    if (i >= 0) chatListeners.splice(i, 1);
+}
 
-    async _post(url, body) {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: body !== undefined ? JSON.stringify(body) : undefined,
-        });
-        if (!res.ok) {
-            const detail = await res.json().catch(() => ({}));
-            throw new Error(detail.detail || res.statusText);
-        }
-        return res.json();
-    },
+const router = new Router();
 
-    async _postForm(url, formData) {
-        const res = await fetch(url, { method: 'POST', body: formData });
-        if (!res.ok) {
-            const detail = await res.json().catch(() => ({}));
-            throw new Error(detail.detail || res.statusText);
-        }
-        return res.json();
-    },
-
-    // ── API: list ────────────────────────────────────────────
-    async fetchPersonas() {
-        try {
-            const data = await this._get('/api/personas');
-            this.personas = data.personas || [];
-        } catch { this.personas = []; }
-        return this.personas;
-    },
-
-    async fetchProviderConfig() {
-        try {
-            return await this._get('/api/config/providers');
-        } catch { return { local: { url: 'http://localhost:11434' }, anthropic: { url: 'https://api.anthropic.com' }, openai: { url: 'https://api.openai.com' } }; }
-    },
-
-    // ── API: persona data ────────────────────────────────────
-    async fetchPersona(id) {
-        if (!this.personas.length) await this.fetchPersonas();
-        return this.personas.find(p => p.id === id) || null;
-    },
-
-    async fetchConversation(id) {
-        try {
-            const data = await this._get(`/api/persona/${id}/conversation`);
-            return data.messages || [];
-        } catch { return []; }
-    },
-
-    async fetchDiagnose(id) {
-        try {
-            return await this._get(`/api/persona/${id}/diagnose`);
-        } catch { return null; }
-    },
-
-    async updatePersona(id, fields) {
-        try {
-            return await this._post(`/api/persona/${id}/update`, fields);
-        } catch (e) { return { error: e.message }; }
-    },
-
-    async fetchOversee(id) {
-        try {
-            return await this._get(`/api/persona/${id}/oversee`);
-        } catch { return null; }
-    },
-
-    // ── API: persona actions ─────────────────────────────────
-    async hearPersona(id, message) {
-        try {
-            await this._post(`/api/persona/${id}/hear`, { message });
-            return { success: true };
-        } catch (e) { return { success: false, error: e.message }; }
-    },
-
-    async seePersona(id, file, caption) {
-        try {
-            const form = new FormData();
-            form.append('image', file);
-            if (caption) form.append('caption', caption);
-            await this._postForm(`/api/persona/${id}/see`, form);
-            return { success: true };
-        } catch (e) { return { success: false, error: e.message }; }
-    },
-
-    mediaUrl(id, source) {
-        const base = (source || '').split('/').pop();
-        return `/api/persona/${id}/media/${encodeURIComponent(base)}`;
-    },
-
-    async actionPersona(id, action) {
-        try {
-            await this._post(`/api/persona/${id}/${action}`);
-            return { success: true };
-        } catch (e) { return { success: false, error: e.message }; }
-    },
-
-    async exportPersona(id) {
-        try {
-            const response = await fetch(`/api/persona/${id}/export`);
-            if (!response.ok) {
-                const err = await response.json();
-                return { success: false, error: err.detail };
-            }
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${id}.diary`;
-            a.click();
-            URL.revokeObjectURL(url);
-            return { success: true };
-        } catch (e) { return { success: false, error: e.message }; }
-    },
-
-    async controlPersona(id, entryIds) {
-        try {
-            await this._post(`/api/persona/${id}/control`, { entry_ids: entryIds });
-            return { success: true };
-        } catch (e) { return { success: false, error: e.message }; }
-    },
-
-    async feedPersona(id, file, source) {
-        try {
-            const form = new FormData();
-            form.append('history', file);
-            form.append('source', source);
-            const data = await this._postForm(`/api/persona/${id}/feed`, form);
-            return { success: true, message: data.message };
-        } catch (e) { return { success: false, error: e.message }; }
-    },
-
-    async deletePersona(personaId) {
-        try {
-            await this._post(`/api/persona/${personaId}/delete`);
-        } catch { return false; }
-        location.href = '/';
-        return true;
-    },
-
-    // ── API: setup ───────────────────────────────────────────
-    async createPersona(data) {
-        try {
-            const result = await this._post('/api/persona/create', data);
-            return { success: true, persona_id: result.persona?.id, recovery_phrase: result.recovery_phrase, message: result.message };
-        } catch (e) { return { success: false, message: e.message }; }
-    },
-
-    async migratePersona(formData) {
-        try {
-            const result = await this._postForm('/api/persona/migrate', formData);
-            return { success: true, persona_id: result.persona?.id, message: result.message };
-        } catch (e) { return { success: false, message: e.message }; }
-    },
-
-    async pairChannel(code, personaId) {
-        try {
-            await this._post(`/api/persona/${personaId}/pair`, { code });
-            return { success: true };
-        } catch (e) { return { success: false, message: e.message }; }
-    },
-
-    // ── Boot ─────────────────────────────────────────────────
-    async boot() {
-        await this.fetchPersonas();
-        this.booted = true;
-    },
-
-    // ── API object for modes ─────────────────────────────────
-    _api() {
-        return {
-            fetchPersona: (id) => this.fetchPersona(id),
-            fetchConversation: (id) => this.fetchConversation(id),
-            fetchDiagnose: (id) => this.fetchDiagnose(id),
-            updatePersona: (id, fields) => this.updatePersona(id, fields),
-            fetchOversee: (id) => this.fetchOversee(id),
-            hearPersona: (id, msg) => this.hearPersona(id, msg),
-            seePersona: (id, file, caption) => this.seePersona(id, file, caption),
-            mediaUrl: (id, source) => this.mediaUrl(id, source),
-            actionPersona: (id, action) => this.actionPersona(id, action),
-            exportPersona: (id) => this.exportPersona(id),
-            controlPersona: (id, ids) => this.controlPersona(id, ids),
-            feedPersona: (id, file, source) => this.feedPersona(id, file, source),
-            deletePersona: (id) => this.deletePersona(id),
-            connectPersona: (id) => this.connectPersona(id),
-            disconnectPersona: () => this.disconnectPersona(),
-            onChat: (fn) => this.onChat(fn),
-            offChat: (fn) => this.offChat(fn),
-            createPersona: (data) => this.createPersona(data),
-            migratePersona: (fd) => this.migratePersona(fd),
-            fetchProviderConfig: () => this.fetchProviderConfig(),
-            pairChannel: (code, personaId) => this.pairChannel(code, personaId),
-            fetchPersonas: () => this.fetchPersonas(),
-        };
-    },
-
-    // ── Mode change notification ─────────────────────────────
-    _onModeChange: [],
-    onModeChange(fn) { this._onModeChange.push(fn); },
-    _notifyModeChange(detail) {
-        for (const fn of this._onModeChange) fn(detail);
-    },
-
-    // ── Navigation ───────────────────────────────────────────
-    enterOuterWorld(personaId) {
-        this.currentPersonaId = personaId;
-        this.currentMode = 'outer';
-        history.pushState(null, '', `/persona/${personaId}`);
-        this._notifyModeChange({ mode: 'outer', personaId });
-    },
-
-    async enterInnerWorld() {
-        if (!this.currentPersonaId) return;
-        this.currentMode = 'inner';
-        history.pushState(null, '', `/persona/${this.currentPersonaId}/inner`);
-        const [data, persona] = await Promise.all([
-            this.fetchOversee(this.currentPersonaId),
-            this.fetchPersona(this.currentPersonaId),
-        ]);
-        this._notifyModeChange({
-            mode: 'inner',
-            personaId: this.currentPersonaId,
-            data,
-            persona,
-        });
-    },
-
-    enterSetup() {
-        this.currentMode = 'setup';
-        history.pushState(null, '', '/setup');
-        this._notifyModeChange({ mode: 'setup' });
-    },
-
-    enterStatus() {
-        if (!this.currentPersonaId) return;
-        this.currentMode = 'status';
-        history.pushState(null, '', `/persona/${this.currentPersonaId}/status`);
-        this._notifyModeChange({ mode: 'status', personaId: this.currentPersonaId });
-    },
-
-    // Resolve location.pathname to a mode and dispatch.
-    async routeFromPath() {
-        const path = location.pathname || '/';
-        if (path === '/setup' || path === '/setup/') return this.enterSetup();
-        const m = path.match(/^\/persona\/([^/]+)(?:\/(inner|status))?\/?$/);
-        if (m) {
-            const id = m[1];
-            const view = m[2];
-            if (view === 'inner') {
-                this.currentPersonaId = id;
-                return this.enterInnerWorld();
-            }
-            if (view === 'status') {
-                this.currentPersonaId = id;
-                return this.enterStatus();
-            }
-            return this.enterOuterWorld(id);
-        }
-        if (this.personas.length > 0) return this.enterOuterWorld(this.personas[0].id);
-        if (path !== '/setup') return this.enterSetup();
-    },
-
-    _SetupApp: null,
-    registerSetupApp(cls) { this._SetupApp = cls; },
-};
-
-window.addEventListener('popstate', () => {
-    UI.routeFromPath();
+router.add('/setup', () => showWorld('setup', {}));
+router.add('/migrate', () => showWorld('migrate', {}));
+router.add('/persona/{id}/inner', ({ id }) => showWorld('inner', { id }));
+router.add('/persona/{id}/status', ({ id }) => showWorld('status', { id }));
+router.add('/persona/{id}', ({ id }) => showWorld('outer', { id }));
+router.add('/', () => {
+    if (personas.length === 0) showWorld('welcome', {});
+    else showWorld('outer', { id: personas[0].id });
 });
+router.fallback(() => router.go('/'));
 
-export default UI;
-export { Feed };
+const frame = document.createElement('app-frame');
+document.getElementById('app').appendChild(frame);
+frame.init({ api: api(), signals });
+
+function showWorld(worldName, params) {
+    if (params.id) currentPersonaId = params.id;
+    if (worldName === 'outer' || worldName === 'inner' || worldName === 'status') {
+        if (params.id) connectPersona(params.id);
+    } else {
+        disconnectPersona();
+    }
+    frame.show(worldName, params);
+}
+
+function api() {
+    return {
+        listPersonas, getPersona, getConversation, getDiagnose, getOversee,
+        updatePersona, deletePersona,
+        startPersona, stopPersona, restartPersona, sleepPersona,
+        controlPersona, hearPersona, seePersona, feedPersona,
+        exportPersona, pairChannel, getProviderConfig,
+        createPersona, migratePersona, mediaUrl,
+        connectPersona, disconnectPersona, onChat, offChat,
+        goToOuter:   (id) => router.go(`/persona/${id}`),
+        goToInner:   (id) => router.go(`/persona/${id}/inner`),
+        goToStatus:  (id) => router.go(`/persona/${id}/status`),
+        goToSetup:   () => router.go('/setup'),
+        goToMigrate: () => router.go('/migrate'),
+        goToHome:    () => router.go('/'),
+    };
+}
+
+(async () => {
+    systemSocket = new Socket('/ws/system');
+    systemSocket.on(handleMessage);
+    systemSocket.open();
+
+    await listPersonas();
+    router.match();
+})();

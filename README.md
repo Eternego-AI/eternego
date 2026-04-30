@@ -1,11 +1,17 @@
 # Eternego
 
+[![Release](https://img.shields.io/github/v/release/Eternego-AI/eternego?include_prereleases&sort=semver)](https://github.com/Eternego-AI/eternego/releases)
 [![Website](https://img.shields.io/badge/website-eternego.ai-blue)](https://eternego.ai)
-[![Tests](https://img.shields.io/badge/tests-311%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-316%20passing-brightgreen)](tests/)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/nfHnWwYUR4)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 **An AI that doesn't forget you. Lives on your hardware. Yours to keep across any model.**
+
+[![Download for macOS](https://img.shields.io/badge/macOS-download_.dmg-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego.dmg)
+[![Download for Windows](https://img.shields.io/badge/Windows-download_installer-0078D6?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego-setup.exe)
+[![Download for Linux](https://img.shields.io/badge/Linux-AppImage-FCC624?logo=linux&logoColor=black&style=for-the-badge)](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego-x86_64.AppImage)
+[![Pull Docker image](https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker&logoColor=white&style=for-the-badge)](https://github.com/Eternego-AI/eternego/pkgs/container/eternego)
 
 ---
 
@@ -39,7 +45,8 @@ Every persona lives under `~/.eternego/`. Open any file in any editor.
 │       │   ├── history/             ← past days' conversations, archived nightly
 │       │   ├── media/               ← images she's seen
 │       │   │   └── gallery.jsonl    ← her notes on each image
-│       │   ├── meanings/            ← situations she's learned to handle (Python)
+│       │   ├── lessons/             ← raw lessons (frontier-authored principles)
+│       │   ├── meanings/            ← situations she's learned to handle (Markdown, in her own voice)
 │       │   └── training/            ← training pairs for optional fine-tuning
 │       └── workspace/             ← free space — files, scripts, drafts she's working on
 ├── diary/<id>/                  ← written nightly — used to migrate her to a new machine
@@ -52,28 +59,22 @@ No databases. No vendor. Total transparency.
 
 ## When she meets a moment she's never seen
 
-She reaches for a stronger model — Claude, GPT, whatever you've configured — to work out how to handle it. Then she writes the lesson down as a Python module, saved next to the ones she shipped with:
+She reaches for a stronger model — Claude, GPT, whatever you've configured — and asks it to *teach her the lesson*: what kind of moment this is, what works, what to watch for. The lesson is the principle, written by the strong model.
 
-```python
-# ~/.eternego/personas/yours/home/meanings/checking_disk_space.py
+Then her own thinking model reads that lesson and writes the **meaning** — the prose she'll read herself the next time the moment comes around, in her own voice:
 
-class Meaning:
-    def __init__(self, persona):
-        self.persona = persona
+```markdown
+# ~/.eternego/personas/yours/home/meanings/checking_disk_space.md
 
-    def intention(self) -> str:
-        return "Checking disk space"
+# Checking disk space
 
-    def path(self) -> str:
-        return (
-            "The person wants to know how full your storage is. Use "
-            "`tools.OS.execute_on_sub_process` with `command='df -h'`. "
-            "On the next cycle you'll see the TOOL_RESULT — read it and "
-            "reply with `say` summarizing the disks worth mentioning."
-        )
+The person wants to know how full your storage is. Run
+`tools.OS.execute_on_sub_process` with `command='df -h'`. On the
+next cycle you'll see the TOOL_RESULT — read it and reply with
+`say` summarizing the disks worth mentioning.
 ```
 
-Read it. Edit it. Trust it or don't. It's a file she'll carry forward forever — until you delete it.
+The raw lesson is kept alongside it in `lessons/`, so she can revise the meaning later without re-asking the strong model. Both files are plain Markdown. Read them. Edit them. Trust them or don't. She carries them forward forever — until you delete them.
 
 ## How she lives
 
@@ -94,25 +95,93 @@ Every beat she does one thing. Each stage has its own prompt, its own way of ask
 
 She has phases — **morning**, **day**, **night**. Each one shapes how she reads what's in front of her: morning is for picking up a thread or starting fresh, day is for living it, night is for closing and carrying forward what mattered.
 
-## Quick start
+## Install
+
+Pick the installer for your machine — the download buttons up top grab the latest release. Builds aren't code-signed yet, so each OS will warn the first time; instructions for getting past the warning are inline below.
+
+### macOS (.dmg)
+
+Download **[Eternego.dmg](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego.dmg)**. Open it, drag **Eternego** to **Applications**, then double-click Eternego from Applications.
+
+The first launch shows: *"Eternego.app cannot be opened because the developer cannot be verified."*  Right-click (or Control-click) the app, choose **Open**, then **Open** again in the dialog. macOS remembers the choice — subsequent launches are normal.
+
+### Windows (.exe installer)
+
+Download **[Eternego-setup.exe](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego-setup.exe)**. Double-click it, walk through the wizard (Next → Install → Finish). Eternego launches automatically and adds Start Menu and Desktop shortcuts.
+
+The wizard's first dialog is *"Windows protected your PC"* (SmartScreen). Click **More info**, then **Run anyway**. SmartScreen remembers this app afterwards.
+
+### Linux (.AppImage)
+
+Download **[Eternego-x86_64.AppImage](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego-x86_64.AppImage)**, make it executable, run it:
+
+```bash
+chmod +x Eternego-x86_64.AppImage
+./Eternego-x86_64.AppImage
+```
+
+A single self-contained binary. No system Python needed.
+
+### Docker
+
+The image ships with the persona's own desktop baked in (Xvfb + fluxbox + noVNC). She lives in there — clicks, types, opens windows, installs Firefox or anything else she needs herself when you ask. You can peek at what she's doing at `http://localhost:6080/vnc.html`.
+
+```bash
+docker run -d --name eternego --network=host \
+  -v ~/.eternego:/data \
+  ghcr.io/eternego-ai/eternego:latest
+```
+
+Persona files live in `~/.eternego` on the host — the same place the native install uses, so you can switch between Docker and native without losing data.
+
+`--network=host` lets the container reach Ollama running natively on your machine (`localhost:11434`). Without it, set `-e OLLAMA_HOST=http://host.docker.internal:11434` and add `-p 5000:5000 -p 6080:6080`.
+
+For an everything-in-containers setup with Ollama as a sibling service, grab the compose file:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/docker/docker-compose.yml > eternego.compose.yml
+# edit ports, GPU access, etc. inline; comments explain each line
+docker compose -f eternego.compose.yml up -d
+```
+
+Use the `:full` tag (or `image: ghcr.io/eternego-ai/eternego:full` in the compose file) for the training-equipped image — adds ~5.5 GB of CUDA wheels for LoRA fine-tuning.
+
+### Background service install (CLI, auto-start on boot)
+
+The installers above launch Eternego when you open them. If you want her to register as a system service so she keeps running across reboots, run this from a terminal instead:
+
+```bash
+# Linux (systemd) / macOS (launchd) — auto-installs Python and Ollama via apt/dnf/pacman/brew
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/install.sh | bash
+```
+
+```powershell
+# Windows (Scheduled Task) — auto-installs Python via winget
+iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/install.ps1 | iex
+```
+
+Both scripts also accept `--full` (or `-Full` on Windows) to install training extras.
+
+### From source (contributors)
 
 ```bash
 git clone https://github.com/Eternego-AI/eternego.git
 cd eternego
-
-# Linux/macOS
-bash install.sh
-
-# Windows
-powershell -ExecutionPolicy Bypass -File install.ps1
+bash installation/install.sh        # Linux/macOS
+pwsh installation/install.ps1       # Windows
 ```
 
-```bash
-# Pick a model — start small, upgrade anytime
-eternego env prepare --model llama3.2:3b   # or qwen2.5:7b, phi4:14b, etc.
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) before sending a PR.
 
-Open `http://localhost:5000`, create a persona, give her a name, start talking — through the web, Telegram, or any OpenAI-compatible client:
+---
+
+After install, your browser opens to **http://localhost:5000**. The setup form asks for:
+
+- **A name** for your persona.
+- **A thinking model** — pick **Cloud (Claude / GPT)** and paste an API key for the easiest path, or **Local (Ollama)** if you want everything to stay on your machine. The local path needs Ollama installed; the installer scripts above install it for you, the .dmg/.exe/.AppImage do not — grab it from [ollama.com](https://ollama.com) first if you're going local.
+- **Channels** (optional) — Telegram or Discord tokens to talk to her there too.
+
+Then she comes online. From any tool that speaks OpenAI:
 
 ```python
 from openai import OpenAI

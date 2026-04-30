@@ -1,0 +1,433 @@
+name: Release
+
+# Tag-driven release. Tags with a dash (`v0.1.0-rc1`, `v0.1.0-beta`) ship as
+# prereleases. Clean tags (`v0.1.0`, `v1.2.3`) ship as the latest release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  source:
+    name: Source artifacts (sdist + wheel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+      - run: |
+          pip install build
+          python -m build --sdist --wheel --outdir dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: source
+          path: dist/*
+
+  docker-light:
+    name: Docker (light)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: installation/docker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/eternego-ai/eternego:${{ github.ref_name }}
+            ghcr.io/eternego-ai/eternego:latest
+          build-args: |
+            INSTALL_TRAINING=false
+
+  docker-full:
+    name: Docker (full)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: installation/docker/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/eternego-ai/eternego:${{ github.ref_name }}-full
+            ghcr.io/eternego-ai/eternego:full
+          build-args: |
+            INSTALL_TRAINING=true
+
+  linux:
+    name: Linux binary + AppImage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+      - name: Install icon + AppImage tooling
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends librsvg2-bin file desktop-file-utils
+      - name: Generate PNG icon
+        run: |
+          mkdir -p build/icon
+          rsvg-convert -w 256 -h 256 assets/eternego-icon.svg -o build/icon/eternego.png
+      - name: Build PyInstaller binary
+        run: |
+          pip install -e .
+          pip install pyinstaller
+          pyinstaller installation/native/pyinstaller.spec
+      - name: Stage AppDir
+        run: |
+          mkdir -p AppDir/usr/bin
+          cp dist/eternego AppDir/usr/bin/eternego
+          cp installation/native/eternego.desktop AppDir/eternego.desktop
+          cp build/icon/eternego.png AppDir/eternego.png
+          cp installation/native/AppRun AppDir/AppRun
+          chmod +x AppDir/AppRun
+      - name: Build AppImage
+        run: |
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          ./appimagetool --appimage-extract > /dev/null
+          ARCH=x86_64 ./squashfs-root/AppRun AppDir dist/Eternego-${{ github.ref_name }}-x86_64.AppImage
+      - name: Rename CLI binary
+        run: |
+          mv dist/eternego dist/eternego-${{ github.ref_name }}-linux-x86_64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binary-linux
+          path: |
+            dist/eternego-${{ github.ref_name }}-linux-x86_64
+            dist/Eternego-${{ github.ref_name }}-x86_64.AppImage
+
+  macos:
+    name: macOS binary + .dmg
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+      - name: Install icon + DMG tooling
+        run: |
+          brew install librsvg create-dmg
+      - name: Generate .icns icon
+        run: |
+          mkdir -p build/icon/Eternego.iconset
+          for size in 16 32 64 128 256 512 1024; do
+            rsvg-convert -w $size -h $size assets/eternego-icon.svg -o build/icon/Eternego.iconset/icon_${size}x${size}.png
+          done
+          # iconutil expects @2x naming pairs alongside base sizes
+          cp build/icon/Eternego.iconset/icon_32x32.png   build/icon/Eternego.iconset/icon_16x16@2x.png
+          cp build/icon/Eternego.iconset/icon_64x64.png   build/icon/Eternego.iconset/icon_32x32@2x.png
+          cp build/icon/Eternego.iconset/icon_256x256.png build/icon/Eternego.iconset/icon_128x128@2x.png
+          cp build/icon/Eternego.iconset/icon_512x512.png build/icon/Eternego.iconset/icon_256x256@2x.png
+          cp build/icon/Eternego.iconset/icon_1024x1024.png build/icon/Eternego.iconset/icon_512x512@2x.png
+          rm build/icon/Eternego.iconset/icon_64x64.png build/icon/Eternego.iconset/icon_1024x1024.png
+          iconutil -c icns -o build/icon/eternego.icns build/icon/Eternego.iconset
+      - name: Install Python deps
+        run: |
+          pip install -e ".[bundle]"
+          pip install pyinstaller
+      - name: Build CLI binary (console mode)
+        env:
+          ETERNEGO_BUILD_TARGET: cli
+        run: pyinstaller --noconfirm --workpath build-cli --distpath dist-cli installation/native/pyinstaller.spec
+      - name: Build .app bundle (windowed mode)
+        env:
+          ETERNEGO_BUILD_TARGET: app
+        run: pyinstaller --noconfirm --workpath build-app --distpath dist-app installation/native/pyinstaller.spec
+      - name: Build .dmg
+        run: |
+          mkdir -p dist
+          create-dmg \
+            --volname "Eternego" \
+            --window-size 600 400 \
+            --icon-size 128 \
+            --icon "Eternego.app" 175 200 \
+            --hide-extension "Eternego.app" \
+            --app-drop-link 425 200 \
+            "dist/Eternego-${{ github.ref_name }}.dmg" \
+            "dist-app/Eternego.app"
+      - name: Stage CLI binary
+        run: |
+          mv dist-cli/eternego dist/eternego-${{ github.ref_name }}-macos-arm64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binary-macos
+          path: |
+            dist/eternego-${{ github.ref_name }}-macos-arm64
+            dist/Eternego-${{ github.ref_name }}.dmg
+
+  windows:
+    name: Windows binary + installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+        shell: pwsh
+      - name: Generate .ico icon
+        run: |
+          New-Item -ItemType Directory -Force -Path build/icon | Out-Null
+          magick assets/eternego-icon.svg -background none -define icon:auto-resize=16,32,48,64,128,256 build/icon/eternego.ico
+        shell: pwsh
+      - name: Build PyInstaller binary
+        run: |
+          pip install -e ".[bundle]"
+          pip install pyinstaller
+          pyinstaller installation/native/pyinstaller.spec
+        shell: pwsh
+      - name: Build Inno Setup installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" /DAppVersion=${{ github.ref_name }} installation\native\windows-installer.iss
+        shell: pwsh
+      - name: Rename CLI binary
+        run: |
+          Move-Item dist/eternego.exe dist/eternego-${{ github.ref_name }}-windows-x86_64.exe
+        shell: pwsh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binary-windows
+          path: |
+            dist/eternego-${{ github.ref_name }}-windows-x86_64.exe
+            dist/Eternego-${{ github.ref_name }}-setup.exe
+
+  smoke-linux:
+    name: Smoke (Linux)
+    needs: linux
+    runs-on: ubuntu-latest
+    env:
+      OLLAMA_MODEL: qwen2.5:0.5b
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama and wait
+        run: |
+          nohup ollama serve >/tmp/ollama.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1; then
+              echo "ollama up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Ollama did not start"; cat /tmp/ollama.log; exit 1
+
+      - name: Pull tiny model
+        timeout-minutes: 10
+        run: ollama pull "$OLLAMA_MODEL"
+
+      - name: Install keyring stack (diary encryption needs libsecret)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libsecret-tools gnome-keyring dbus-x11
+
+      - name: Start keyring daemon
+        run: |
+          eval $(dbus-launch --sh-syntax)
+          echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS" >> $GITHUB_ENV
+          echo -n "test" | gnome-keyring-daemon --unlock --components=secrets
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: binary-linux
+          path: dist
+
+      - name: Start daemon
+        run: |
+          BIN="dist/eternego-${{ github.ref_name }}-linux-x86_64"
+          chmod +x "$BIN"
+          nohup "$BIN" daemon >/tmp/daemon.log 2>&1 &
+
+      - name: Run smoke test
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: python installation/smoke.py
+
+      - name: Daemon log on failure
+        if: failure()
+        run: cat /tmp/daemon.log || true
+
+  smoke-macos:
+    name: Smoke (macOS)
+    needs: macos
+    runs-on: macos-latest
+    env:
+      OLLAMA_MODEL: qwen2.5:0.5b
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+
+      - name: Install Ollama
+        run: brew install ollama
+
+      - name: Start Ollama and wait
+        run: |
+          nohup ollama serve >/tmp/ollama.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1; then
+              echo "ollama up after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Ollama did not start"; cat /tmp/ollama.log; exit 1
+
+      - name: Pull tiny model
+        timeout-minutes: 10
+        run: ollama pull "$OLLAMA_MODEL"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: binary-macos
+          path: dist
+
+      - name: Start daemon
+        run: |
+          BIN="dist/eternego-${{ github.ref_name }}-macos-arm64"
+          chmod +x "$BIN"
+          # Unsigned binary downloaded via artifact has no quarantine flag, but
+          # Gatekeeper still checks code signatures on macos-latest. Disable it
+          # for this runner so the binary can launch.
+          sudo spctl --master-disable || true
+          nohup "$BIN" daemon >/tmp/daemon.log 2>&1 &
+
+      - name: Run smoke test
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: python installation/smoke.py
+
+      - name: Daemon log on failure
+        if: failure()
+        run: cat /tmp/daemon.log || true
+
+  smoke-windows:
+    name: Smoke (Windows)
+    needs: windows
+    runs-on: windows-latest
+    env:
+      OLLAMA_MODEL: qwen2.5:0.5b
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+
+      - name: Install Ollama
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          # Use the standalone zip — OllamaSetup.exe registers a Windows
+          # service and hangs forever on GHA runners on the SCM call.
+          Invoke-WebRequest -Uri "https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip" -OutFile "$env:RUNNER_TEMP\ollama.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\ollama.zip" -DestinationPath "$env:RUNNER_TEMP\ollama-bin"
+          echo "$env:RUNNER_TEMP\ollama-bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: binary-windows
+          path: dist
+
+      - name: Run smoke (ollama + daemon stay alive within one step)
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+        run: |
+          # GHA's Windows runner kills any process started in a step when
+          # that step exits — so ollama serve, model pull, daemon start,
+          # and smoke test all run inside this single step.
+
+          Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\ollama.log" -RedirectStandardError "$env:RUNNER_TEMP\ollama.err.log"
+          $ready = $false
+          for ($i=1; $i -le 120; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 5
+              if ($r.StatusCode -eq 200) { Write-Host "ollama up after ${i}s"; $ready = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 1
+          }
+          if (-not $ready) {
+            Write-Error "Ollama did not start"
+            Get-Content "$env:RUNNER_TEMP\ollama.log","$env:RUNNER_TEMP\ollama.err.log" -ErrorAction SilentlyContinue
+            exit 1
+          }
+
+          # Pull via HTTP — the standalone Windows CLI's `pull` tries to
+          # spawn ollama-app.exe (not in the zip).
+          $body = @{ name = $env:OLLAMA_MODEL; stream = $false } | ConvertTo-Json -Compress
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:11434/api/pull" `
+            -Method POST -Body $body -ContentType "application/json" `
+            -UseBasicParsing -TimeoutSec 600
+          if ($resp.StatusCode -ne 200) {
+            Write-Error "pull failed: $($resp.StatusCode) $($resp.Content)"
+            exit 1
+          }
+          Write-Host "pulled $env:OLLAMA_MODEL"
+
+          $bin = "dist\eternego-${{ github.ref_name }}-windows-x86_64.exe"
+          Start-Process -FilePath $bin -ArgumentList "daemon" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\daemon.log" -RedirectStandardError "$env:RUNNER_TEMP\daemon.err.log"
+
+          python installation/smoke.py
+
+      - name: Daemon log on failure
+        if: failure()
+        shell: pwsh
+        run: Get-Content "$env:RUNNER_TEMP\daemon.log","$env:RUNNER_TEMP\daemon.err.log" -ErrorAction SilentlyContinue
+
+  release:
+    name: Publish GitHub Release
+    needs:
+      - source
+      - docker-light
+      - docker-full
+      - linux
+      - macos
+      - windows
+      - smoke-linux
+      - smoke-macos
+      - smoke-windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: '{binary-*,source}'
+          merge-multiple: true
+      - name: Add versionless aliases
+        # /releases/latest/download/<file> redirects to the file by exact name.
+        # Stable names let README badges link to the latest release without
+        # baking in the version — the versioned originals are still uploaded.
+        run: |
+          cd dist
+          cp "Eternego-${{ github.ref_name }}.dmg"            "Eternego.dmg"
+          cp "Eternego-${{ github.ref_name }}-setup.exe"      "Eternego-setup.exe"
+          cp "Eternego-${{ github.ref_name }}-x86_64.AppImage" "Eternego-x86_64.AppImage"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          draft: false
+          generate_release_notes: true

@@ -2,8 +2,27 @@
 
 import argparse
 import asyncio
+import os
 import sys
 from dataclasses import dataclass
+
+# launchd hands GUI .apps a sparse PATH (/usr/bin:/bin:/usr/sbin:/sbin) and
+# silently ignores Info.plist LSEnvironment.PATH (other LSEnvironment keys
+# work; PATH specifically is overridden). Augment os.environ here so every
+# subprocess (brew/ollama/git checks, telegram polling, etc.) inherits a
+# usable PATH on macOS.
+if sys.platform == "darwin":
+    _existing = os.environ.get("PATH", "")
+    _extras = "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin"
+    if "/opt/homebrew/bin" not in _existing:
+        os.environ["PATH"] = f"{_extras}:{_existing}" if _existing else _extras
+
+# PyInstaller-bundled Python doesn't pick up the host system's CA store, so
+# urllib calls (telegram getMe, discord polling) fail TLS verification with
+# "self-signed certificate in certificate chain". Point ssl at certifi
+# explicitly — does no harm in dev (env var only takes effect if unset).
+import certifi as _certifi
+os.environ.setdefault("SSL_CERT_FILE", _certifi.where())
 
 from application.platform import logger, objects
 from application.platform.observer import Event, Plan, Signal, subscribe
@@ -79,6 +98,9 @@ def main():
 
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
+    # launch — entry point for the desktop app wrappers (.app / installer.exe / .AppImage)
+    sub.add_parser("launch", help="Start the daemon and open the dashboard in the default browser")
+
     # daemon — internal, called by systemd or developer
     sub.add_parser("daemon", help="Run the daemon process (used by OS service manager or for development)")
 
@@ -110,12 +132,29 @@ def main():
     env_prepare = env_sub.add_parser("prepare", help="Install dependencies and pull a model")
     env_prepare.add_argument("--model", default="", help="Model to pull (uses Ollama default if omitted)")
 
+    # When the macOS .app bundle launches from Finder/Dock, no argv is passed
+    # but LSEnvironment in Info.plist sets this flag. Treat it as `launch`.
+    if len(sys.argv) == 1 and os.environ.get("ETERNEGO_LAUNCH_FROM_BUNDLE") == "1":
+        sys.argv.append("launch")
+
     args = parser.parse_args()
 
     if args.command == "daemon":
         config = bootstrap(args)
         from daemon import run
         asyncio.run(run(config))
+
+    elif args.command == "launch":
+        config = bootstrap(args)
+        # Frozen .app (macOS) and .exe (Windows) get the tray-icon launcher so the
+        # user has a persistent affordance to reopen the dashboard. Linux .AppImage
+        # and the dev/source path keep the simpler browser-only launcher.
+        if getattr(sys, "frozen", False) and sys.platform in ("darwin", "win32"):
+            from installation.desktop import run as desktop_run
+            desktop_run(config)
+        else:
+            from cli.launch import run as launch_run
+            asyncio.run(launch_run(config))
 
     elif args.command == "service":
         from cli.service import dispatch

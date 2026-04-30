@@ -1,6 +1,7 @@
 """Application config — core application settings."""
 
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
 
@@ -22,8 +23,14 @@ LORA_CONVERT_SCRIPT: str = os.environ.get(
 )
 
 # Log directory — daily log files live here.
-# Installed version uses ~/.eternego/logs (set via .env); dev defaults to ./logs.
-LOGS_DIR: Path = Path(os.environ.get("LOGS_DIR") or str(_PROJECT_ROOT / "logs"))
+# Bundle (.dmg/.exe/.AppImage) always logs to ~/.eternego/logs since the bundle
+# is read-only and dev never runs there. Source installs honour .env's LOGS_DIR
+# (the installer scripts set it to ~/.eternego/logs); a bare clone falls back
+# to ./logs.
+if getattr(sys, "frozen", False):
+    LOGS_DIR: Path = Path.home() / ".eternego" / "logs"
+else:
+    LOGS_DIR: Path = Path(os.environ.get("LOGS_DIR") or str(_PROJECT_ROOT / "logs"))
 
 
 def log_file() -> Path:

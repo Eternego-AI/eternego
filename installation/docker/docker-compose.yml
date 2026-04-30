@@ -1,0 +1,55 @@
+# Eternego — fully containerized setup with a sibling Ollama service.
+#
+# Quick start:
+#   curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/docker/docker-compose.yml > eternego.compose.yml
+#   docker compose -f eternego.compose.yml up -d
+#
+# Open http://localhost:5000 for the dashboard, http://localhost:6080/vnc.html
+# to peek at the persona's desktop.
+#
+# Edit any line below to adjust ports, mount paths, GPU access, image variant.
+
+services:
+  # Ollama runs in its own container. Models persist in the named volume.
+  # On Mac, this is CPU-only — Docker on Mac can't see the host GPU. If you
+  # have an Apple Silicon machine, comment this service out and run Ollama
+  # natively on the host (https://ollama.com), then point eternego at it
+  # via OLLAMA_HOST=http://host.docker.internal:11434.
+  ollama:
+    image: ollama/ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    # On Linux with NVIDIA: uncomment to give Ollama GPU access.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  eternego:
+    image: ghcr.io/eternego-ai/eternego:latest
+    # Or :full for the training-equipped image (~5.5 GB extra).
+    restart: unless-stopped
+    depends_on:
+      - ollama
+    environment:
+      # Talk to the sibling container instead of the image's built-in localhost default.
+      OLLAMA_HOST: http://ollama:11434
+      # Override the persona's screen size if you want bigger / smaller.
+      # XVFB_RESOLUTION: 1920x1080x24
+      # Set to "false" to skip the X stack entirely (channels-only).
+      # START_DESKTOP: "true"
+    ports:
+      - "5000:5000"   # Dashboard (web UI + OpenAI-compatible API)
+      - "6080:6080"   # noVNC — peek at the persona's desktop
+    volumes:
+      # Persona files live at ~/.eternego on the host by default — same place
+      # the native install uses, so you can switch between Docker and native
+      # without losing data. Set ETERNEGO_HOME to mount somewhere else.
+      - ${ETERNEGO_HOME:-${HOME}/.eternego}:/data
+
+volumes:
+  ollama-data:

@@ -1,0 +1,4 @@
+#!/bin/sh
+# AppImage entry point — exec the bundled eternego binary with `launch`.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/eternego" launch "$@"

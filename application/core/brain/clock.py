@@ -6,8 +6,10 @@ nothing to do. A pass that runs at least one capability re-loops, so the
 TOOL_RESULT just written to memory gets read by the next pass's realize and
 the persona can act on what came back.
 
-Bounded by MAX_ITERATIONS to prevent runaway loops; if the cap is hit, a
-BrainFault is dispatched naming `clock_loop_cap`.
+Per-pass state — `memory.impression`, `memory.ability`, `memory.meaning` —
+is reset at the top of every iteration. Recognize/learn/decide are free to
+set it within a pass for the internal handoff (recognize → learn → decide);
+nothing carries across passes by design.
 
 Each function returns a list of capabilities (tool/ability invocations the
 function declared but did not execute). Clock's inner executor runs each
@@ -20,12 +22,10 @@ BrainFault and exits. Health_check decides what to do.
 
 from application.core import abilities, tools
 from application.core.brain.signals import BrainFault, CapabilityRun
+from application.core.data import Media
 from application.core.exceptions import BrainException, EngineConnectionError
 from application.platform import logger
 from application.platform.observer import dispatch
-
-
-MAX_ITERATIONS = 16
 
 
 async def run(living) -> None:
@@ -44,6 +44,7 @@ async def run(living) -> None:
             logger.warning("clock.execute unknown selector", {"selector": selector})
             return
         namespace, name = selector.split(".", 1)
+        media = None
         if namespace == "tools":
             try:
                 status, result = await tools.call(name, **args)
@@ -51,19 +52,28 @@ async def run(living) -> None:
                 status, result = "error", str(e)
         elif namespace == "abilities":
             try:
-                status, result = "ok", await abilities.call(persona, name, **args)
+                ability_result = await abilities.call(persona, name, **args)
+                status = "ok"
+                if isinstance(ability_result, Media):
+                    media = ability_result
+                    result = ability_result.caption
+                else:
+                    result = ability_result
             except Exception as e:
                 status, result = "error", str(e)
         else:
             logger.warning("clock.execute unknown namespace", {"selector": selector})
             return
-        memory.add_tool_result(selector, args, status, result)
+        memory.add_tool_result(selector, args, status, result, media=media)
         dispatch(CapabilityRun(selector, {"persona": persona, "args": args, "status": status, "result": result}))
 
     if worker.stopped:
         return
 
-    for iteration in range(MAX_ITERATIONS):
+    while True:
+        memory.impression = ""
+        memory.ability = 0
+        memory.meaning = None
         executed_any = False
 
         for name, step in living.cycle:
@@ -92,12 +102,3 @@ async def run(living) -> None:
 
         if not executed_any:
             return
-
-    logger.warning("clock.run hit iteration cap", {"persona": persona, "max": MAX_ITERATIONS})
-    dispatch(BrainFault("clock_loop_cap", {
-        "persona": persona,
-        "provider": None,
-        "url": None,
-        "model_name": None,
-        "error": f"clock.run hit iteration cap ({MAX_ITERATIONS})",
-    }))

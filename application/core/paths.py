@@ -114,6 +114,11 @@ def gallery(persona_id: str) -> Path:
     return media(persona_id) / "gallery.jsonl"
 
 
+def screenshots(persona_id: str) -> Path:
+    """Directory where screenshots the persona captures of her own screen are saved."""
+    return media(persona_id) / "screenshots"
+
+
 def notes(persona_id: str) -> Path:
     """Path to the notes.md file for that persona."""
     return home(persona_id) / "notes.md"

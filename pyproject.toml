@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "cryptography>=41.0.0",
     "mss>=9.0.0",
+    "pynput>=1.7.6",
     "pywin32>=305; sys_platform == 'win32'",
 ]
 
@@ -34,12 +35,18 @@ training = [
     "sentencepiece>=0.2.0",
     "protobuf>=4.0.0",
 ]
+# Tray-icon deps for the macOS .app and Windows .exe bundles only.
+# Linux AppImage / Docker / local source dev do not need these.
+bundle = [
+    "pystray>=0.19.0",
+    "Pillow>=10.0.0",
+]
 
 [project.scripts]
 eternego = "index:main"
 
 [tool.setuptools]
-py-modules = ["index", "daemon"]
+py-modules = ["index", "daemon", "desktop"]
 
 [tool.setuptools.packages.find]
 where = ["."]
