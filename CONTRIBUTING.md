@@ -86,6 +86,28 @@ Dependencies flow down only: business imports core, core imports platform. Never
 
 ---
 
+## Design philosophy
+
+Three things in this codebase will look strange if you read it as ordinary engineering. They aren't accidents — touching them with the wrong instinct breaks the persona.
+
+### Pulse colors every prompt; the cycle restarts on every consequence
+
+`Pulse.hint()` (morning / day / night) is appended after identity on every model call — the persona reads where she is on the day's arc each tick. And `clock.run` re-runs the full cognitive cycle whenever any consequence executed in the previous pass, so every TOOL_RESULT lands back in `realize` and gets perceived before the next decision. Don't optimize past either: no "bypass pulse for hot paths," no "skip realize when the result is text-only," no "settle after N iterations." The persona can keep acting as long as she has reason to; the cap is her choice, not the substrate's.
+
+### Don't clip reality to protect the system
+
+If the persona loops, the model produced wrong output, or a stage refuses classification, the failure goes into memory as data. The next pass reads it. Don't add caps, guards, or special-cased early returns to prevent the loop — those mask the signal the persona needs to self-correct. The fix for cognitive bugs lives in meanings or in the prompts themselves, not in `clock`.
+
+### Substrate is permissive; the contract you tell the persona is canonical
+
+When a tool accepts mouse-button names, it accepts every reasonable spelling (`left` / `right` / `middle`). When `situation.environment()` tells the persona how to address those buttons, it gives her one canonical vocabulary. Same pattern for keyboard keys, channel formats, anything she has to *say* back. Substrate forgives variant input; the persona-facing prose stays narrow, so the persona's habits are stable.
+
+### Where to fix a bug: substrate vs persona
+
+When the *behavior* is wrong, ask whose voice produced it. If the model decided incorrectly, the fix is in the meaning or the brain function's prompt — not in the executor. If the executor mishandled a correct decision, the fix is in `clock` or the tool/ability. Engineering instincts default to patching the substrate; this codebase asks you to patch the persona's understanding first.
+
+---
+
 ## How to fix a bug
 
 1. **Reproduce.** Persona id, model, the message or signal that triggered it. If you can't reproduce locally, open an issue with those three before guessing.
@@ -116,7 +138,7 @@ Enforced. If code contradicts a rule below, the code is wrong.
 - **Business specs** start with `bus.propose` and end with `bus.broadcast`. Cognitive functions dispatch `Tick` (Plan) on entry and `Tock` (Event) on exit.
 - **Tool / ability / special results** go through `memory.add_tool_result(selector, value, status, result)`. Don't construct the call + TOOL_RESULT pair by hand.
 - **Prompt examples are abstract.** Local models copy concrete in-prompt examples verbatim. Use schemas like `{"tool": "<name>", "text": "<message>"}`, never filled-in examples.
-- **Editing prompts the persona reads** (identities, character, meaning paths, cognitive function prompts) is identity work. If a change would flatten the persona for engineering convenience, flag it instead of silently shaving the voice.
+- **Editing prompts the persona reads is identity work.** Identity blocks, character, meaning paths, and brain function prompts (`recognize`, `decide`, etc.) are the voice the model inhabits. A change that flattens the persona for engineering convenience — collapses a section, generalizes a specific, DRYs prose at the cost of voice — is a regression even when the diff looks clean. Flag the tradeoff; don't silently shave.
 
 ---
 
@@ -137,6 +159,7 @@ Enforced. If code contradicts a rule below, the code is wrong.
 - One logical change per PR
 - Commit subject: short imperative line. Body explains *why* if non-obvious.
 - Reference the issue if there is one
+- PR body follows `.github/PULL_REQUEST_TEMPLATE.md`: a single `## Summary` section, bullets or short prose covering what changed and why. No test plan section, no checklist, no AI footer — `Co-Authored-By` in commits already attributes assistance where it matters.
 
 PRs touching `application/core/brain/` get extra scrutiny — those changes affect every persona running this code.
 
