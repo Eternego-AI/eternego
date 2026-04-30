@@ -9,7 +9,7 @@
 #     $env:INSTALL_FULL=1; iwr -useb https://eternego.ai/install.ps1 | iex
 #
 # Override the version (default: latest GitHub release):
-#     $env:ETERNEGO_VERSION="v0.1.0-rc1"; pwsh installation\install.ps1
+#     $env:ETERNEGO_VERSION="v0.1.0"; pwsh installation\install.ps1
 param([switch]$Full)
 
 $ErrorActionPreference = "Stop"

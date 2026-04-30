@@ -1,7 +1,7 @@
 # Eternego — fully containerized setup with a sibling Ollama service.
 #
 # Quick start:
-#   curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/installation/docker/docker-compose.yml > eternego.compose.yml
+#   curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/docker/docker-compose.yml > eternego.compose.yml
 #   docker compose -f eternego.compose.yml up -d
 #
 # Open http://localhost:5000 for the dashboard, http://localhost:6080/vnc.html

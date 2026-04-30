@@ -11,7 +11,7 @@
 #     curl -fsSL https://eternego.ai/install.sh | bash -s -- --full
 #
 # Override the version (default: latest GitHub release):
-#     ETERNEGO_VERSION=v0.1.0-rc1 bash installation/install.sh
+#     ETERNEGO_VERSION=v0.1.0 bash installation/install.sh
 set -e
 
 # HERE = directory of install.sh (always the installation/ dir).

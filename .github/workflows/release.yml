@@ -416,6 +416,15 @@ jobs:
           path: dist
           pattern: '{binary-*,source}'
           merge-multiple: true
+      - name: Add versionless aliases
+        # /releases/latest/download/<file> redirects to the file by exact name.
+        # Stable names let README badges link to the latest release without
+        # baking in the version — the versioned originals are still uploaded.
+        run: |
+          cd dist
+          cp "Eternego-${{ github.ref_name }}.dmg"            "Eternego.dmg"
+          cp "Eternego-${{ github.ref_name }}-setup.exe"      "Eternego-setup.exe"
+          cp "Eternego-${{ github.ref_name }}-x86_64.AppImage" "Eternego-x86_64.AppImage"
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

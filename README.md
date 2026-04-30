@@ -2,11 +2,16 @@
 
 [![Release](https://img.shields.io/github/v/release/Eternego-AI/eternego?include_prereleases&sort=semver)](https://github.com/Eternego-AI/eternego/releases)
 [![Website](https://img.shields.io/badge/website-eternego.ai-blue)](https://eternego.ai)
-[![Tests](https://img.shields.io/badge/tests-313%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-316%20passing-brightgreen)](tests/)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/nfHnWwYUR4)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 **An AI that doesn't forget you. Lives on your hardware. Yours to keep across any model.**
+
+[![Download for macOS](https://img.shields.io/badge/macOS-download_.dmg-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego.dmg)
+[![Download for Windows](https://img.shields.io/badge/Windows-download_installer-0078D6?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego-setup.exe)
+[![Download for Linux](https://img.shields.io/badge/Linux-AppImage-FCC624?logo=linux&logoColor=black&style=for-the-badge)](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego-x86_64.AppImage)
+[![Pull Docker image](https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker&logoColor=white&style=for-the-badge)](https://github.com/Eternego-AI/eternego/pkgs/container/eternego)
 
 ---
 
@@ -92,49 +97,49 @@ She has phases — **morning**, **day**, **night**. Each one shapes how she read
 
 ## Install
 
-Latest release: **[v0.1.0-rc1](https://github.com/Eternego-AI/eternego/releases/tag/v0.1.0-rc1)** (prerelease)
-
-Pick the installer for your machine. Builds aren't code-signed yet, so each OS will warn the first time — instructions for getting past the warning are inline below.
+Pick the installer for your machine — the download buttons up top grab the latest release. Builds aren't code-signed yet, so each OS will warn the first time; instructions for getting past the warning are inline below.
 
 ### macOS (.dmg)
 
-Download **[Eternego-v0.1.0-rc1.dmg](https://github.com/Eternego-AI/eternego/releases/download/v0.1.0-rc1/Eternego-v0.1.0-rc1.dmg)**. Open it, drag **Eternego** to **Applications**, then double-click Eternego from Applications.
+Download **[Eternego.dmg](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego.dmg)**. Open it, drag **Eternego** to **Applications**, then double-click Eternego from Applications.
 
 The first launch shows: *"Eternego.app cannot be opened because the developer cannot be verified."*  Right-click (or Control-click) the app, choose **Open**, then **Open** again in the dialog. macOS remembers the choice — subsequent launches are normal.
 
 ### Windows (.exe installer)
 
-Download **[Eternego-v0.1.0-rc1-setup.exe](https://github.com/Eternego-AI/eternego/releases/download/v0.1.0-rc1/Eternego-v0.1.0-rc1-setup.exe)**. Double-click it, walk through the wizard (Next → Install → Finish). Eternego launches automatically and adds Start Menu and Desktop shortcuts.
+Download **[Eternego-setup.exe](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego-setup.exe)**. Double-click it, walk through the wizard (Next → Install → Finish). Eternego launches automatically and adds Start Menu and Desktop shortcuts.
 
 The wizard's first dialog is *"Windows protected your PC"* (SmartScreen). Click **More info**, then **Run anyway**. SmartScreen remembers this app afterwards.
 
 ### Linux (.AppImage)
 
-Download **[Eternego-v0.1.0-rc1-x86_64.AppImage](https://github.com/Eternego-AI/eternego/releases/download/v0.1.0-rc1/Eternego-v0.1.0-rc1-x86_64.AppImage)**, make it executable, run it:
+Download **[Eternego-x86_64.AppImage](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego-x86_64.AppImage)**, make it executable, run it:
 
 ```bash
-chmod +x Eternego-v0.1.0-rc1-x86_64.AppImage
-./Eternego-v0.1.0-rc1-x86_64.AppImage
+chmod +x Eternego-x86_64.AppImage
+./Eternego-x86_64.AppImage
 ```
 
 A single self-contained binary. No system Python needed.
 
 ### Docker
 
-The image ships with the persona's own desktop baked in (Xvfb + fluxbox + noVNC). She lives in there; she'll install Firefox or anything else she needs herself when you ask. You can peek at what she's doing at `http://localhost:6080/vnc.html`.
+The image ships with the persona's own desktop baked in (Xvfb + fluxbox + noVNC). She lives in there — clicks, types, opens windows, installs Firefox or anything else she needs herself when you ask. You can peek at what she's doing at `http://localhost:6080/vnc.html`.
 
 ```bash
 docker run -d --name eternego --network=host \
-  -v eternego-data:/data \
+  -v ~/.eternego:/data \
   ghcr.io/eternego-ai/eternego:latest
 ```
+
+Persona files live in `~/.eternego` on the host — the same place the native install uses, so you can switch between Docker and native without losing data.
 
 `--network=host` lets the container reach Ollama running natively on your machine (`localhost:11434`). Without it, set `-e OLLAMA_HOST=http://host.docker.internal:11434` and add `-p 5000:5000 -p 6080:6080`.
 
 For an everything-in-containers setup with Ollama as a sibling service, grab the compose file:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/installation/docker/docker-compose.yml > eternego.compose.yml
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/docker/docker-compose.yml > eternego.compose.yml
 # edit ports, GPU access, etc. inline; comments explain each line
 docker compose -f eternego.compose.yml up -d
 ```
@@ -147,12 +152,12 @@ The installers above launch Eternego when you open them. If you want her to regi
 
 ```bash
 # Linux (systemd) / macOS (launchd) — auto-installs Python and Ollama via apt/dnf/pacman/brew
-curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/installation/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/install.sh | bash
 ```
 
 ```powershell
 # Windows (Scheduled Task) — auto-installs Python via winget
-iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/v0.1.0-rc1/installation/install.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/install.ps1 | iex
 ```
 
 Both scripts also accept `--full` (or `-Full` on Windows) to install training extras.
