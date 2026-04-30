@@ -38,6 +38,49 @@ class StatusWorld extends World {
             letter-spacing: 1.5px;
             color: var(--text-muted);
         }
+        status-world .states {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-sm);
+        }
+        status-world .state {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: var(--space-xs);
+            padding: var(--space-md);
+            background: var(--surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--time-quick);
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+        }
+        status-world .state:hover {
+            border-color: var(--border-hover);
+            background: var(--surface-hover);
+        }
+        status-world .state.current {
+            background: var(--accent-bg);
+            border-color: var(--accent-border);
+            color: var(--accent-text);
+            cursor: default;
+        }
+        status-world .state .name {
+            font-size: var(--text-sm);
+            text-transform: lowercase;
+            letter-spacing: 0.5px;
+        }
+        status-world .state .meaning {
+            font-size: var(--text-xs);
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+        status-world .state.current .meaning {
+            color: var(--accent-text);
+            opacity: 0.8;
+        }
         status-world .pair {
             display: flex;
             flex-direction: column;
@@ -149,6 +192,7 @@ class StatusWorld extends World {
 
         this.innerHTML = `
             <div class="bar"></div>
+            <div class="states"></div>
             <div class="pair" hidden></div>
             <div class="uptime"></div>
             <div class="controls">
@@ -166,9 +210,50 @@ class StatusWorld extends World {
 
     render() {
         this.renderBar();
+        this.renderStates();
         this.renderPair();
         this.renderUptime();
         this.renderControls();
+    }
+
+    renderStates() {
+        const el = this.querySelector('.states');
+        el.innerHTML = '';
+
+        const current = this.persona?.status || 'active';
+        const states = [
+            { id: 'active',    meaning: 'present, listening' },
+            { id: 'sick',      meaning: 'something is wrong' },
+            { id: 'hibernate', meaning: 'resting, not reachable' },
+        ];
+
+        for (const s of states) {
+            const btn = document.createElement('div');
+            btn.className = 'state';
+            if (s.id === current) btn.classList.add('current');
+
+            const name = document.createElement('span');
+            name.className = 'name';
+            name.textContent = s.id;
+            btn.appendChild(name);
+
+            const meaning = document.createElement('span');
+            meaning.className = 'meaning';
+            meaning.textContent = s.meaning;
+            btn.appendChild(meaning);
+
+            btn.addEventListener('click', () => this.setStatus(s.id, current));
+            el.appendChild(btn);
+        }
+    }
+
+    async setStatus(next, current) {
+        if (next === current) return;
+        const result = await this.api.updatePersona(this.personaId, { status: next });
+        if (!result.success) return;
+        this.persona = await this.api.getPersona(this.personaId);
+        this.diagnose = await this.api.getDiagnose(this.personaId);
+        this.render();
     }
 
     renderBar() {
