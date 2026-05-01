@@ -57,4 +57,5 @@ COPY installation/docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # tini reaps zombies from the X-stack background processes.
+# Use --debug as first argument for local development (e.g. docker compose run --rm eternego --debug daemon)
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

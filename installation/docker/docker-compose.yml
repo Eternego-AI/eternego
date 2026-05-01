@@ -1,19 +1,22 @@
 # Eternego — single-service setup, configure your persona's model in the UI.
 #
-# Quick start:
-#   curl -fsSL https://raw.githubusercontent.com/Eternego-AI/eternego/master/installation/docker/docker-compose.yml > eternego.compose.yml
+# Quick start (normal):
 #   docker compose -f eternego.compose.yml up -d
 #
-# Open http://localhost:5000 for the dashboard, http://localhost:6080/vnc.html
-# to peek at the persona's desktop.
+# Quick start with debug:
+#   docker compose -f eternego.compose.yml up --force-recreate
+#   (just set DEBUG=true in the environment section below first)
 #
-# Edit any line below to adjust ports, mount paths, GPU access, image variant.
+# Open:
+#   http://localhost:5000          → Dashboard
+#   http://localhost:6080/vnc.html → Persona desktop (when START_DESKTOP=true)
 
 services:
   eternego:
     image: ghcr.io/eternego-ai/eternego:latest
-    # Or :full for the training-equipped image (~5.5 GB extra).
+    # image: ghcr.io/eternego-ai/eternego:full   # for training support
     restart: unless-stopped
+
     environment:
       # Point at Ollama on the host. If you have it installed natively (the
       # common path), make sure it's listening on all interfaces — set
@@ -21,22 +24,26 @@ services:
       # ollama service below instead, change this to http://ollama:11434.
       # Frontier-only personas (Anthropic / OpenAI / etc.) ignore this entirely.
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      # Override the persona's screen size if you want bigger / smaller.
-      # XVFB_RESOLUTION: 1920x1080x24
-      # Set to "false" to skip the X stack entirely (channels-only).
-      # START_DESKTOP: "true"
-    extra_hosts:
-      # Lets host.docker.internal resolve on Linux. Mac / Windows already do.
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "5000:5000"   # Dashboard (web UI + OpenAI-compatible API)
-      - "6080:6080"   # noVNC — peek at the persona's desktop
-    volumes:
-      # Persona files live at ~/.eternego on the host by default — same place
-      # the native install uses, so you can switch between Docker and native
-      # without losing data. Set ETERNEGO_HOME to mount somewhere else.
-      - ${ETERNEGO_HOME:-${HOME}/.eternego}:/data
 
+      # === Debug mode ===
+      # Set to "true" to enable debug logging / verbose output.
+      # Very useful for troubleshooting, even in production environments.
+      DEBUG: "false"
+
+      # === Desktop / X11 ===
+      # Set to "false" for channels-only (headless) deployments
+      START_DESKTOP: "true"
+      # XVFB_RESOLUTION: 1920x1080x24
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    ports:
+      - "5000:5000"   # Dashboard + OpenAI-compatible API
+      - "6080:6080"   # noVNC desktop viewer
+
+    volumes:
+      - ${ETERNEGO_HOME:-${HOME}/.eternego}:/data
   # Uncomment to run Ollama as a sibling container instead of using one on the
   # host. Switch OLLAMA_BASE_URL above to http://ollama:11434 at the same time.
   # On Linux with NVIDIA: uncomment the deploy block to give Ollama GPU access.
@@ -55,3 +62,6 @@ services:
 
 # volumes:
 #   ollama-data:
+
+    # Optional: Uncomment to force debug mode via command override
+    # command: ["--debug", "daemon"]
