@@ -157,7 +157,7 @@ async def install(program: str) -> None:
             await process.communicate()
             return
         if os == "windows":
-            code, out = await execute_on_sub_process(
+            code, out = await execute(
                 "winget install Ollama.Ollama --silent --accept-package-agreements --accept-source-agreements"
             )
             if code != 0:
@@ -212,7 +212,7 @@ async def install(program: str) -> None:
         packages = {"git": "Git.Git"}
         if program not in packages:
             raise NotImplementedError(f"Automatic install of '{program}' is not supported on Windows.")
-        code, out = await execute_on_sub_process(
+        code, out = await execute(
             f"winget install {packages[program]} --silent --accept-package-agreements --accept-source-agreements"
         )
         if code != 0:
@@ -246,10 +246,11 @@ def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 0, pat
     return f"Screenshot saved to {path}"
 
 
-@tool("Execute a shell command on the person's system. Use for any OS operation, "
-      "running code, installing packages, checking status, file operations. "
-      "If multiple commands are needed, wrap them in one call (e.g. cmd1 && cmd2).")
-async def execute_on_sub_process(command: str) -> tuple[int, str]:
+@tool("Execute a command that completes on its own and return its output. "
+      "Use for commands with a natural end: reading files, checking system state, "
+      "installing packages, running scripts, querying services. "
+      "Do not use for programs that keep running — use run instead.")
+async def execute(command: str) -> tuple[int, str]:
     """Execute a shell command and return (return_code, output)."""
     os = get_supported()
 
@@ -272,6 +273,34 @@ async def execute_on_sub_process(command: str) -> tuple[int, str]:
         stdout, stderr = await process.communicate()
         output = stdout.decode() if process.returncode == 0 else stderr.decode()
         return process.returncode, output.strip()
+
+    raise NotImplementedError("Unsupported OS")
+
+
+@tool("Start a program that keeps running. Use for GUI applications, services, or anything "
+      "that should stay alive after this call returns. Output is not captured. "
+      "Use execute afterward to check whether it is running or ready.")
+async def run(command: str) -> tuple[int, str]:
+    """Launch a detached process. Returns immediately once the process is started."""
+    os = get_supported()
+
+    if os == "linux" or os == "mac":
+        await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return 0, "Started"
+
+    if os == "windows":
+        await asyncio.create_subprocess_exec(
+            "powershell", "-Command",
+            f"Start-Process -FilePath cmd -ArgumentList '/c {command}' -WindowStyle Hidden",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        return 0, "Started"
 
     raise NotImplementedError("Unsupported OS")
 

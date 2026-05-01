@@ -276,13 +276,13 @@ async def test_learn_returns_capability_for_tool():
                 consequences = await functions.learn(living)
 
                 assert len(consequences) == 1
-                assert consequences[0] == {"tools.OS.execute_on_sub_process": {"command": "ls"}}
+                assert consequences[0] == {"tools.OS.execute": {"command": "ls"}}
                 assert ego.memory.meaning is None
                 assert ego.memory.ability == 0
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"tools.OS.execute_on_sub_process": {"command": "ls"}}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"tools.OS.execute": {"command": "ls"}}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)

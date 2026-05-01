@@ -17,11 +17,11 @@ async def ensure_running() -> None:
     logger.info("Local inference engine not responding, starting server")
     os = OS.get_supported()
     if os == "linux":
-        await OS.execute_on_sub_process("systemctl start ollama")
+        await OS.execute("systemctl start ollama")
     elif os == "mac":
-        await OS.execute_on_sub_process("ollama serve >/dev/null 2>&1 &")
+        await OS.run("ollama serve")
     elif os == "windows":
-        await OS.execute_on_sub_process("Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden")
+        await OS.execute("Start-Process ollama -ArgumentList 'serve' -WindowStyle Hidden")
 
     for _ in range(10):
         await asyncio.sleep(1)

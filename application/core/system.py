@@ -21,7 +21,7 @@ async def execute(tool_calls: list[dict]) -> str:
         command = args.get("command", "")
         logger.info("Running tool", {"name": name, "command": command})
 
-        code, output = await OS.execute_on_sub_process(command)
+        code, output = await OS.execute(command)
 
         if code != 0:
             raise ExecutionError(f"{name}: {output}")

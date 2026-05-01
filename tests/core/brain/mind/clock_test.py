@@ -273,7 +273,7 @@ async def test_executor_runs_tool_consequence_and_records():
             async def step():
                 calls[0] += 1
                 if calls[0] == 1:
-                    return [{"tools.OS.execute_on_sub_process": {"command": "echo hello-clock"}}]
+                    return [{"tools.OS.execute": {"command": "echo hello-clock"}}]
                 return []  # settle on second pass
 
             persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
@@ -293,11 +293,11 @@ async def test_executor_runs_tool_consequence_and_records():
 
             msgs = ego.memory.messages
             assert len(msgs) == 2
-            assert "tools.OS.execute_on_sub_process" in msgs[0].content
+            assert "tools.OS.execute" in msgs[0].content
             assert "TOOL_RESULT" in msgs[1].content
             assert "hello-clock" in msgs[1].content
             assert len(runs) == 1
-            assert runs[0].title == "tools.OS.execute_on_sub_process"
+            assert runs[0].title == "tools.OS.execute"
             assert runs[0].details["status"] == "ok"
 
     code, error = await on_separate_process_async(isolated)
