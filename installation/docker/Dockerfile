@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         novnc \
         websockify \
         tini \
+        x11-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

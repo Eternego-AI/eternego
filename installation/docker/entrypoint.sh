@@ -9,7 +9,9 @@ set -e
 if [ "${START_DESKTOP:-true}" = "true" ]; then
     Xvfb "${DISPLAY:-:99}" -screen 0 "${XVFB_RESOLUTION:-1280x720x24}" -ac +extension GLX +render -noreset &
     # Give Xvfb a moment to bind before fluxbox tries to connect.
-    sleep 0.3
+    until xdpyinfo -display "${DISPLAY:-:99}" >/dev/null 2>&1; do
+      sleep 0.2
+    done
     fluxbox -display "${DISPLAY:-:99}" >/dev/null 2>&1 &
     # x11vnc listens on the loopback port noVNC bridges to. -nopw is fine because
     # noVNC itself is bound to localhost in the default port mapping; users who
@@ -19,4 +21,4 @@ if [ "${START_DESKTOP:-true}" = "true" ]; then
     websockify --web=/usr/share/novnc 6080 localhost:5900 >/dev/null 2>&1 &
 fi
 
-exec python /app/index.py daemon
+exec python /app/index.py "$@"
