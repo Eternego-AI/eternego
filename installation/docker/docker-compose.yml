@@ -1,12 +1,5 @@
 # Eternego — single-service setup, configure your persona's model in the UI.
 #
-# Quick start (normal):
-#   docker compose -f eternego.compose.yml up -d
-#
-# Quick start with debug:
-#   docker compose -f eternego.compose.yml up --force-recreate
-#   (just set DEBUG=true in the environment section below first)
-#
 # Open:
 #   http://localhost:5000          → Dashboard
 #   http://localhost:6080/vnc.html → Persona desktop (when START_DESKTOP=true)
@@ -27,7 +20,6 @@ services:
 
       # === Debug mode ===
       # Set to "true" to enable debug logging / verbose output.
-      # Very useful for troubleshooting, even in production environments.
       DEBUG: "false"
 
       # === Desktop / X11 ===
@@ -44,6 +36,7 @@ services:
 
     volumes:
       - ${ETERNEGO_HOME:-${HOME}/.eternego}:/data
+
   # Uncomment to run Ollama as a sibling container instead of using one on the
   # host. Switch OLLAMA_BASE_URL above to http://ollama:11434 at the same time.
   # On Linux with NVIDIA: uncomment the deploy block to give Ollama GPU access.
@@ -62,6 +55,3 @@ services:
 
 # volumes:
 #   ollama-data:
-
-    # Optional: Uncomment to force debug mode via command override
-    # command: ["--debug", "daemon"]
