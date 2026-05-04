@@ -13,8 +13,9 @@ reflect's trigger gates.
 Trigger:
 - If memory has nothing to consolidate, pass through.
 - If phase is night, consolidate immediately.
-- Otherwise, ask `living.is_idle()`. If yes, consolidate. If no, return —
-  the next beat will check again.
+- Otherwise, await `living.is_idle()`. It sleeps the remaining-to-idle window;
+  returns True if uninterrupted (idle confirmed → consolidate), False if a
+  nudge cancelled the wait (activity arrived → skip this beat).
 
 The persona reads its conversation as data inside a single user message and
 decides what to keep going forward — a new context (its carried internal
@@ -139,7 +140,7 @@ async def reflect(living: Living) -> list:
         dispatch(Tock("reflect", {"persona": persona}))
         return []
 
-    if living.pulse.phase != Phase.NIGHT and not living.is_idle():
+    if living.pulse.phase != Phase.NIGHT and not await living.is_idle():
         dispatch(Tock("reflect", {"persona": persona}))
         return []
 
