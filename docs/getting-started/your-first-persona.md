@@ -42,6 +42,10 @@ Optional. Telegram or Discord bot tokens to talk to her there too.
 
 Channels are configurable later — you don't have to decide now.
 
+## Other settings (defaults are sensible)
+
+The wizard uses defaults for some advanced settings — like how long she should wait without activity before reflecting (an hour). You don't need to think about them at create time. If you want to change one later, hand-edit her `~/.eternego/personas/<id>/home/config.json`.
+
 ## The recovery phrase
 
 After creation, she shows you a recovery phrase — 24 words.

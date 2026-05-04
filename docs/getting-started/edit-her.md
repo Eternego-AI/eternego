@@ -2,7 +2,7 @@
 
 Eternego's design has no enforcement layer. The permissions in `permissions.md` are real — she reads them and weighs them — but nothing mechanically stops her from doing something. The same is true for you: nothing stops you from editing any of her files. Eternego rests on transparency, not lockboxes.
 
-Three things you might want to edit by hand.
+A few things you might want to edit by hand.
 
 ## Add a fact about yourself
 
@@ -48,6 +48,16 @@ Add a line:
 The permission becomes part of how she decides. The next time she'd otherwise ask "may I run this?", she checks her permissions and acts if it's covered.
 
 This is permission-as-prose, not permission-as-config. She reads it, weighs it, asks if she's unsure. The trust is in the reading.
+
+## Tune her rhythm
+
+Open `~/.eternego/personas/<id>/home/config.json`. Among the other fields you'll see:
+
+```json
+"idle_timeout": 3600
+```
+
+This is how long, in seconds, she waits without activity before reflecting on the day. Default is one hour. Set it to `1800` if you want her to consolidate every half hour, or `7200` for every two hours. The change takes effect on her next restart.
 
 ## What now
 
