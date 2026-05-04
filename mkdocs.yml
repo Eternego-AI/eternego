@@ -1,0 +1,82 @@
+site_name: Eternego
+site_url: https://docs.eternego.ai
+site_description: Documentation for Eternego — an AI persona that lives on your hardware
+repo_url: https://github.com/Eternego-AI/eternego
+repo_name: Eternego-AI/eternego
+edit_uri: edit/master/docs/
+copyright: MIT — yours to fork, run, modify
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: white
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: switch to dark mode
+    - scheme: slate
+      primary: black
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  font:
+    text: Spectral
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Eternego-AI/eternego
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/nfHnWwYUR4
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Install: getting-started/install.md
+      - Your first persona: getting-started/your-first-persona.md
+      - Talk to her: getting-started/talk-to-her.md
+      - Read her files: getting-started/read-her-files.md
+      - Edit her: getting-started/edit-her.md
+  - Concepts: concepts/index.md
+  - Build & Extend: build/index.md
+  - Operating: operating/index.md
+  - Reference: reference/index.md
