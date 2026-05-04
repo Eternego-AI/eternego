@@ -138,7 +138,7 @@ async def migrate_persona(
     outcome = await environment.prepare(
         url=url,
         model=model,
-        provider=provider or None,
+        provider=provider,
         api_key=api_key,
     )
     if not outcome.success or not outcome.data:
@@ -150,7 +150,7 @@ async def migrate_persona(
         outcome = await environment.prepare(
             url=vision_url,
             model=vision_model,
-            provider=vision_provider or None,
+            provider=vision_provider,
             api_key=vision_api_key,
         )
         if not outcome.success or not outcome.data:
@@ -162,7 +162,7 @@ async def migrate_persona(
         outcome = await environment.prepare(
             url=frontier_url,
             model=frontier_model,
-            provider=frontier_provider or None,
+            provider=frontier_provider,
             api_key=frontier_api_key,
         )
         if not outcome.success or not outcome.data:
