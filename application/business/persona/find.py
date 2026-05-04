@@ -32,6 +32,7 @@ async def find(persona_id: str) -> Outcome[FindData]:
             base_model=raw_persona.get("base_model", thinking_data["name"]),
             birthday=raw_persona.get("birthday"),
             status=raw_persona.get("status", "active"),
+            idle_timeout=raw_persona.get("idle_timeout", 3600),
             vision=Model(**raw_persona["vision"]) if raw_persona.get("vision") else None,
             frontier=Model(**raw_persona["frontier"]) if raw_persona.get("frontier") else None,
             channels=[Channel(**n) for n in raw_persona["channels"]] if raw_persona.get("channels") else None,
