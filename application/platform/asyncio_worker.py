@@ -62,6 +62,20 @@ class Worker:
             except (RecursionError, Exception):
                 pass
 
+    async def can_sleep(self, seconds: float) -> bool:
+        """Sleep for `seconds` from inside the current job. Return True if
+        the wait completed uninterrupted; False if a cancellation was issued
+        against the calling task during the wait — i.e., a nudge fired against
+        this worker. Genuine cancellations (shutdown, etc.) propagate."""
+        current = asyncio.current_task()
+        try:
+            await asyncio.sleep(seconds)
+            return True
+        except asyncio.CancelledError:
+            if current is not None and current.cancelling() > 0:
+                return False
+            raise
+
     # ── Nudge ─────────────────────────────────────────────────────────────
 
     def nudge(self) -> None:

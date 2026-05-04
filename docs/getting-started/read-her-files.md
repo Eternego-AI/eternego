@@ -35,6 +35,10 @@ Everything she knows about you lives in `~/.eternego/personas/<id>/home/`. Plain
 - **When she learns something new** — a file appears in `lessons/` (the raw lesson the teacher wrote) and a corresponding file in `meanings/` (her own translation).
 - **When you grant something** — `permissions.md`. Updated when you say "yes" to a capability she asked for.
 
+## What's in `config.json`
+
+Her name, the models she's running on, her current status (`active` / `sleep` / `hibernate`), her connected channels, and a few tunable settings — including `idle_timeout` (how long she waits without activity before reflecting; default 3600 seconds). See [Edit her](edit-her.md) for the rhythm-tuning case.
+
 ## Workspace
 
 `~/.eternego/personas/<id>/workspace/` is a separate directory she has read/write access to. Not part of her identity — files she's working on, scripts she wrote, drafts. A sketchpad.

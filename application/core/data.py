@@ -32,6 +32,7 @@ class Persona(Data):
     base_model: str = ""
     birthday: str = field(default_factory=lambda: str(date.today()))
     status: str = "active"
+    idle_timeout: int = 3600
     vision: Model | None = None
     frontier: Model | None = None
     channels: list[Channel] | None = None

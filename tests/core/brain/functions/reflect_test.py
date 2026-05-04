@@ -40,8 +40,8 @@ async def test_reflect_no_messages_passes_through():
 
 
 async def test_reflect_during_day_when_not_idle_passes_through():
-    """During the day with recent activity, reflect skips — the persona is
-    living, not consolidating. Messages stay; person files unchanged."""
+    """During the day, when is_idle reports False (a nudge cancelled the wait
+    — activity arrived), reflect skips. Messages stay; person files unchanged."""
     def isolated():
         import asyncio, os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -62,6 +62,8 @@ async def test_reflect_during_day_when_not_idle_passes_through():
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.DAY
+            async def _not_idle(*a, **kw): return False
+            living.is_idle = _not_idle
             ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
             identity_file = paths.person_identity(persona.id)
@@ -158,7 +160,8 @@ async def test_reflect_when_idle_consolidates():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.DAY
-                living.is_idle = lambda *a, **kw: True
+                async def _idle(*a, **kw): return True
+                living.is_idle = _idle
                 ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
                 consequences = await functions.reflect(living)

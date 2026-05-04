@@ -43,10 +43,6 @@ from application.core.data import Persona, Prompt
 from application.platform.observer import Signal, subscribe, unsubscribe
 
 
-# Default idle window — one hour. Stages can pass a different duration to
-# living.is_idle(seconds) when they need to.
-DEFAULT_IDLE_SECONDS = 3600
-
 # Non-brain signal titles that count as conversation activity. Brain-side
 # capability runs are matched by class (CapabilityRun) above. Cycle noise
 # (Tick / Tock) and heartbeat / health / routine plans are not activity.
@@ -394,21 +390,32 @@ class Living:
         if signal_pid == self.ego.persona.id:
             self.signals.append(signal)
 
-    def is_idle(self, seconds: int = DEFAULT_IDLE_SECONDS) -> bool:
+    async def is_idle(self, seconds: int | None = None) -> bool:
         """True if no real conversation activity in the given window.
+
+        If `seconds` is omitted, reads `self.ego.persona.idle_timeout`. If the
+        last activity is already older than that, returns True immediately.
+        Otherwise sleeps the remaining time via `worker.can_sleep` and returns
+        True if the wait completed uninterrupted, or False if a nudge fired
+        during the wait (activity arrived).
 
         Activity is a CapabilityRun signal (tool/ability fired by Clock's
         executor) or a non-brain signal whose title names person/persona
         movement (say, notify, heard, etc.). Routine cycle ticks/tocks and
         heartbeat noise don't count. If no activity has been captured yet
         (fresh restart), Living's birth time is the reference."""
+        if seconds is None:
+            seconds = self.ego.persona.idle_timeout
         latest = self.created_at
         for signal in reversed(self.signals):
             if isinstance(signal, CapabilityRun) or signal.title in _ACTIVITY_TITLES:
                 latest = signal.time
                 break
         elapsed_ns = time.time_ns() - latest
-        return elapsed_ns >= seconds * 1_000_000_000
+        if elapsed_ns >= seconds * 1_000_000_000:
+            return True
+        remaining = seconds - elapsed_ns / 1_000_000_000
+        return await self.pulse.worker.can_sleep(remaining)
 
     def dispose(self) -> None:
         """Tear down. Unsubscribes from the bus so signals stop landing on a
