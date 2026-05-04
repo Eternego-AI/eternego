@@ -22,10 +22,10 @@ class SetupWorld extends World {
         this.app = null;
     }
 
-    activate() {
+    async activate() {
         if (this.app) return;
         this.app = new Setup();
-        this.app.init({
+        await this.app.init({
             api: this.api,
             onDone: (id) => this.api.goToOuter(id),
             onCancel: () => this.api.goToHome(),
