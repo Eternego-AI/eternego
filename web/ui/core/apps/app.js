@@ -1,8 +1,8 @@
 export default class App {
-    init(props) {
+    async init(props) {
         this._props = props || {};
         this._el = null;
-        this.start();
+        await this.start();
         return this;
     }
 
