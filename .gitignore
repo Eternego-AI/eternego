@@ -38,3 +38,6 @@ Thumbs.db
 
 # Downloaded tools (fetched by install.sh)
 tools/*
+
+# MkDocs build output
+site/
