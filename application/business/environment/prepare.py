@@ -22,12 +22,21 @@ class PrepareData:
 
 
 async def prepare(
-    url: str,
+    url: str | None = None,
     model: str | None = None,
     provider: str | None = None,
     api_key: str | None = None,
 ) -> Outcome[PrepareData]:
     """It makes it easy to set up and prepare an environment for your persona to grow."""
+    if not provider or provider == "local":
+        provider = None
+    if not url:
+        if provider is None:
+            url = config.OLLAMA_BASE_URL
+        elif provider == "anthropic":
+            url = config.ANTHROPIC_BASE_URL
+        elif provider == "openai":
+            url = config.OPENAI_BASE_URL
     bus.propose("Preparing environment", {"model": model, "provider": provider})
 
     try:

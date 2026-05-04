@@ -1,13 +1,16 @@
 import App from './app.js';
 import '../../platform/layouts/step-form.js';
+import '../widgets/phrase-confirm.js';
 
-class Migrate extends App {
+class Create extends App {
     async start() {
         this.step = 0;
         this.values = {};
         this.error = null;
         this.submitting = false;
         this.expanded = { vision: false, teacher: false };
+        this.created = null;
+        this.copied = false;
 
         try { this.providers = await this._props.api.getProviderConfig(); }
         catch { this.providers = {}; }
@@ -17,14 +20,14 @@ class Migrate extends App {
     }
 
     render() {
+        if (this.created) return this.renderPhrase();
         const p = this.providers || {};
         const steps = [
             {
-                title: 'Diary',
-                subtitle: 'Her memories live in a single file, sealed by the phrase you saved when she was first created.',
+                title: 'Name',
+                subtitle: 'What does she answer to?',
                 fields: [
-                    { name: 'diary', type: 'file', label: 'Diary file', accept: '.diary', required: true, help: 'The .diary file from her last home — notes, destiny, the meanings she has learned.' },
-                    { name: 'phrase', type: 'text', label: 'Recovery phrase', placeholder: 'the words you saved when she was created', required: true, help: 'Words shown on her first day. Without them, the diary stays sealed.' },
+                    { name: 'name', type: 'text', label: 'Name', placeholder: 'Lumen, Calla, Nox...', required: true, help: "Something short. You'll write it many times." },
                 ],
             },
             {
@@ -105,49 +108,60 @@ class Migrate extends App {
         });
     }
 
-    async submit() {
-        const v = this.values;
-        if (!v.diary || !v.phrase) {
-            this.error = 'Diary file and recovery phrase are required.';
-            this.step = 0;
-            this.render();
-            return;
+    renderPhrase() {
+        if (this._el.tagName.toLowerCase() !== 'phrase-confirm') {
+            const phraseEl = document.createElement('phrase-confirm');
+            this._el.replaceWith(phraseEl);
+            this._el = phraseEl;
         }
+        this._el.init({
+            title: `${this.created.persona?.name || 'She'}'s here. Save her recovery phrase.`,
+            warning: "These words are the only key to her diary. <strong>Without them, you can't bring her back if you ever lose this machine.</strong> Save them somewhere safe.",
+            phrase: this.created.recovery_phrase,
+            copied: this.copied,
+            onCopy: async () => {
+                try { await navigator.clipboard.writeText(this.created.recovery_phrase); }
+                catch {}
+                this.copied = true;
+                this.render();
+            },
+            onConfirm: () => this._props.onDone && this._props.onDone(this.created.persona_id),
+        });
+    }
+
+    async submit() {
         this.submitting = true;
         this.error = null;
         this.render();
 
-        const form = new FormData();
-        form.append('diary', v.diary);
-        form.append('phrase', v.phrase);
-        if (v.thinking_provider) form.append('provider', v.thinking_provider);
-        form.append('model', v.thinking_model);
-        if (v.thinking_url) form.append('url', v.thinking_url);
-        if (v.thinking_api_key) form.append('api_key', v.thinking_api_key);
-        if (v.vision_model) {
-            form.append('vision_model', v.vision_model);
-            if (v.vision_provider) form.append('vision_provider', v.vision_provider);
-            if (v.vision_url) form.append('vision_url', v.vision_url);
-            if (v.vision_api_key) form.append('vision_api_key', v.vision_api_key);
-        }
-        if (v.frontier_model) {
-            form.append('frontier_model', v.frontier_model);
-            if (v.frontier_provider) form.append('frontier_provider', v.frontier_provider);
-            if (v.frontier_url) form.append('frontier_url', v.frontier_url);
-            if (v.frontier_api_key) form.append('frontier_api_key', v.frontier_api_key);
-        }
-        if (v.telegram_token) form.append('telegram_token', v.telegram_token);
-        if (v.discord_token) form.append('discord_token', v.discord_token);
+        const v = this.values;
+        const result = await this._props.api.createPersona({
+            name: v.name,
+            thinking_provider: v.thinking_provider,
+            thinking_url: v.thinking_url || null,
+            thinking_model: v.thinking_model,
+            thinking_api_key: v.thinking_api_key || null,
+            vision_provider: v.vision_provider || null,
+            vision_url: v.vision_url || null,
+            vision_model: v.vision_model || null,
+            vision_api_key: v.vision_api_key || null,
+            frontier_provider: v.frontier_provider || null,
+            frontier_url: v.frontier_url || null,
+            frontier_model: v.frontier_model || null,
+            frontier_api_key: v.frontier_api_key || null,
+            telegram_token: v.telegram_token || null,
+            discord_token: v.discord_token || null,
+        });
 
-        const result = await this._props.api.migratePersona(form);
         if (result.success) {
-            this._props.onDone && this._props.onDone(result.persona_id);
+            this.created = result;
+            this.render();
         } else {
-            this.error = result.error || 'Migration failed.';
+            this.error = result.error || 'Failed to create persona.';
             this.submitting = false;
             this.render();
         }
     }
 }
 
-export default Migrate;
+export default Create;

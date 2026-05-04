@@ -161,13 +161,14 @@ function offChat(fn) {
 
 const router = new Router();
 
-router.add('/setup', () => showWorld('setup', {}));
-router.add('/migrate', () => showWorld('migrate', {}));
+router.add('/setup', () => showWorld('chooser', {}));
+router.add('/setup/create', () => showWorld('create', {}));
+router.add('/setup/migrate', () => showWorld('migrate', {}));
 router.add('/persona/{id}/inner', ({ id }) => showWorld('inner', { id }));
 router.add('/persona/{id}/status', ({ id }) => showWorld('status', { id }));
 router.add('/persona/{id}', ({ id }) => showWorld('outer', { id }));
 router.add('/', () => {
-    if (personas.length === 0) showWorld('welcome', {});
+    if (personas.length === 0) router.go('/setup');
     else showWorld('outer', { id: personas[0].id });
 });
 router.fallback(() => router.go('/'));
@@ -199,7 +200,8 @@ function api() {
         goToInner:   (id) => router.go(`/persona/${id}/inner`),
         goToStatus:  (id) => router.go(`/persona/${id}/status`),
         goToSetup:   () => router.go('/setup'),
-        goToMigrate: () => router.go('/migrate'),
+        goToCreate:  () => router.go('/setup/create'),
+        goToMigrate: () => router.go('/setup/migrate'),
         goToHome:    () => router.go('/'),
     };
 }

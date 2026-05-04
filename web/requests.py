@@ -16,7 +16,7 @@ class ChatRequest(BaseModel):
 class PersonaCreateRequest(BaseModel):
     name: str
     thinking_model: str
-    thinking_url: str
+    thinking_url: str | None = None
     thinking_provider: str | None = None
     thinking_api_key: str | None = None
     vision_model: str | None = None

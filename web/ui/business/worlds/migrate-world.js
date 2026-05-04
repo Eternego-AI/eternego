@@ -7,12 +7,16 @@ class MigrateWorld extends World {
         migrate-world {
             display: flex;
             flex-direction: column;
-            height: 100%;
-            max-width: 720px;
-            margin: 0 auto;
+            justify-content: center;
+            align-items: center;
+            min-height: 100%;
             padding: var(--space-3xl) var(--space-xl);
             background: var(--bg-deep);
-            min-height: 0;
+            box-sizing: border-box;
+        }
+        migrate-world > * {
+            width: 100%;
+            max-width: 560px;
         }
     `;
 
@@ -28,7 +32,7 @@ class MigrateWorld extends World {
         await this.app.init({
             api: this.api,
             onDone: (id) => this.api.goToOuter(id),
-            onCancel: () => this.api.goToHome(),
+            onCancel: () => this.api.goToSetup(),
         });
         this.appendChild(this.app.el);
     }

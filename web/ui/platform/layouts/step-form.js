@@ -9,10 +9,8 @@ class StepForm extends Layout {
             display: flex;
             flex-direction: column;
             gap: var(--space-xl);
-            height: 100%;
-            min-height: 0;
         }
-        step-form .header {
+        step-form .heading {
             display: flex;
             flex-direction: column;
             gap: var(--space-md);
@@ -40,10 +38,24 @@ class StepForm extends Layout {
             color: var(--text-muted);
             line-height: 1.55;
         }
-        step-form .body {
-            flex: 1;
-            min-height: 0;
-            overflow-y: auto;
+        step-form .description {
+            font-size: var(--text-base);
+            color: var(--text-secondary);
+            line-height: 1.7;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-md);
+        }
+        step-form .description[hidden] { display: none; }
+        step-form .description strong {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        step-form .body:empty { display: none; }
+        step-form .body.optional {
+            display: flex;
+            justify-content: center;
+            padding: var(--space-2xl) 0;
         }
         step-form .actions {
             display: flex;
@@ -63,10 +75,11 @@ class StepForm extends Layout {
         if (!step) return;
 
         this.innerHTML = `
-            <div class="header">
+            <div class="heading">
                 <div class="progress"></div>
                 <div class="title"></div>
                 <div class="subtitle" hidden></div>
+                <div class="description" hidden></div>
             </div>
             <div class="body"></div>
             <div class="actions">
@@ -78,6 +91,7 @@ class StepForm extends Layout {
         const progressEl = this.querySelector('.progress');
         const titleEl = this.querySelector('.title');
         const subtitleEl = this.querySelector('.subtitle');
+        const descriptionEl = this.querySelector('.description');
         const bodyEl = this.querySelector('.body');
         const leftEl = this.querySelector('.actions .left');
         const rightEl = this.querySelector('.actions .right');
@@ -92,15 +106,30 @@ class StepForm extends Layout {
             subtitleEl.textContent = step.subtitle;
             subtitleEl.hidden = false;
         }
+        if (step.description) {
+            descriptionEl.innerHTML = step.description;
+            descriptionEl.hidden = false;
+        }
 
-        const form = document.createElement('simple-form');
-        form.init({
-            fields: step.fields || [],
-            values,
-            error,
-            onChange,
-        });
-        bodyEl.appendChild(form);
+        if (step.fields && step.fields.length) {
+            const form = document.createElement('simple-form');
+            form.init({
+                fields: step.fields,
+                values,
+                error,
+                onChange,
+            });
+            bodyEl.appendChild(form);
+        } else if (step.optional) {
+            bodyEl.classList.add('optional');
+            const addBtn = document.createElement('action-button');
+            addBtn.init({
+                label: step.optional.prompt,
+                variant: 'ghost',
+                onClick: () => step.optional.onAdd && step.optional.onAdd(),
+            });
+            bodyEl.appendChild(addBtn);
+        }
 
         if (current > 0) {
             const back = document.createElement('action-button');

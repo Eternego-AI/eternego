@@ -1,6 +1,6 @@
 import Painted from '../platform/painted.js';
-import './worlds/welcome-world.js';
-import './worlds/setup-world.js';
+import './worlds/chooser-world.js';
+import './worlds/create-world.js';
 import './worlds/migrate-world.js';
 import './worlds/outer-world.js';
 import './worlds/inner-world.js';
@@ -188,7 +188,7 @@ class AppFrame extends Painted {
 
         this.currentWorldName = worldName;
         this.currentPersonaId = params.id || null;
-        this.toggleAttribute('no-header', worldName === 'welcome' || worldName === 'setup' || worldName === 'migrate');
+        this.toggleAttribute('no-header', worldName === 'chooser' || worldName === 'create' || worldName === 'migrate');
 
         const tag = `${worldName}-world`;
         const world = document.createElement(tag);

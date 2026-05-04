@@ -18,7 +18,7 @@ Three layers, dependencies flow down. Each layer has a UI side (paints content) 
 
 Read each row top-to-bottom: this is what the persona shows, how it's composed, and what it's composed of.
 
-- **Business** is the persona's worlds. `worlds/` are full-screen states with URLs (outer-world, inner-world, status-world, setup, welcome). `frame.js` is the chrome that holds them. `index.js` is the orchestrator — boots the app, owns session state, signals, and routing wiring.
+- **Business** is the persona's worlds. `worlds/` are full-screen states with URLs (outer-world, inner-world, status-world, chooser, create, migrate). `frame.js` is the chrome that holds them. `index.js` is the orchestrator — boots the app, owns session state, signals, and routing wiring.
 - **Core** is the engineering. `widgets/` are composite painted units (a conversation, a setup form, a pair flow). `apps/` are flows that coordinate widgets over time.
 - **Platform** is the primitives. `elements/` are DOM things (a button, a text input, a log line). `layouts/` compose what to draw — they pick which elements to use based on data shape, but don't paint themselves (forms, tail, composer, carousel, timeline). Non-visual primitives (`network.js`, `socket.js`, `router.js`, `markdown.js`) live alongside as **tools** — stateless utilities any layer may import. The shared HTMLElement base (`painted.js`) provides one-time CSS injection for everything that paints.
 
@@ -38,8 +38,9 @@ web/ui/
       outer-world.js
       inner-world.js
       status-world.js
-      setup.js
-      welcome.js
+      chooser-world.js
+      create-world.js
+      migrate-world.js
 
   core/
     widgets/                    composite painted units (core/UI)

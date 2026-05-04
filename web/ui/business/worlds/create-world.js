@@ -1,18 +1,22 @@
 import World from './world.js';
-import Setup from '../../core/apps/setup.js';
+import Create from '../../core/apps/create.js';
 
-class SetupWorld extends World {
+class CreateWorld extends World {
     static _styled = false;
     static _css = `
-        setup-world {
+        create-world {
             display: flex;
             flex-direction: column;
-            height: 100%;
-            max-width: 720px;
-            margin: 0 auto;
+            justify-content: center;
+            align-items: center;
+            min-height: 100%;
             padding: var(--space-3xl) var(--space-xl);
             background: var(--bg-deep);
-            min-height: 0;
+            box-sizing: border-box;
+        }
+        create-world > * {
+            width: 100%;
+            max-width: 560px;
         }
     `;
 
@@ -24,11 +28,11 @@ class SetupWorld extends World {
 
     async activate() {
         if (this.app) return;
-        this.app = new Setup();
+        this.app = new Create();
         await this.app.init({
             api: this.api,
             onDone: (id) => this.api.goToOuter(id),
-            onCancel: () => this.api.goToHome(),
+            onCancel: () => this.api.goToSetup(),
         });
         this.appendChild(this.app.el);
     }
@@ -39,5 +43,5 @@ class SetupWorld extends World {
     }
 }
 
-customElements.define('setup-world', SetupWorld);
-export default SetupWorld;
+customElements.define('create-world', CreateWorld);
+export default CreateWorld;
