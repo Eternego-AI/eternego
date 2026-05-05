@@ -93,6 +93,8 @@ async def run(living) -> None:
                     return
                 if worker.stopped:
                     return
+                if consequences is None:
+                    break
                 if not isinstance(consequences, list):
                     continue
                 for item in consequences:
