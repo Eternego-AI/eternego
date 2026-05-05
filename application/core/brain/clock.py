@@ -23,7 +23,7 @@ BrainFault and exits. Health_check decides what to do.
 from application.core import abilities, tools
 from application.core.brain.signals import BrainFault, CapabilityRun
 from application.core.data import Media
-from application.core.exceptions import BrainException, EngineConnectionError
+from application.core.exceptions import BrainException, EngineConnectionError, ReflectInterrupted
 from application.platform import logger
 from application.platform.observer import dispatch
 
@@ -76,29 +76,34 @@ async def run(living) -> None:
         memory.meaning = None
         executed_any = False
 
-        for name, step in living.cycle:
-            try:
-                consequences = await worker.dispatch(step)
-            except (EngineConnectionError, BrainException) as e:
-                model = e.model
-                dispatch(BrainFault(name, {
-                    "persona": persona,
-                    "provider": (model.provider or "ollama") if model else None,
-                    "url": model.url if model else None,
-                    "model_name": model.name if model else None,
-                    "error": str(e),
-                }))
-                logger.warning("Run fault", {"function": name, "error": str(e)})
-                return
-            if worker.stopped:
-                return
-            if not isinstance(consequences, list):
-                continue
-            for item in consequences:
-                await execute(item)
-                executed_any = True
+        try:
+            for name, step in living.cycle:
+                try:
+                    consequences = await worker.dispatch(step)
+                except (EngineConnectionError, BrainException) as e:
+                    model = e.model
+                    dispatch(BrainFault(name, {
+                        "persona": persona,
+                        "provider": (model.provider or "ollama") if model else None,
+                        "url": model.url if model else None,
+                        "model_name": model.name if model else None,
+                        "error": str(e),
+                    }))
+                    logger.warning("Run fault", {"function": name, "error": str(e)})
+                    return
                 if worker.stopped:
                     return
+                if not isinstance(consequences, list):
+                    continue
+                for item in consequences:
+                    await execute(item)
+                    executed_any = True
+                    if worker.stopped:
+                        return
+                if executed_any:
+                    break
+        except ReflectInterrupted:
+            continue
 
         if not executed_any:
             return

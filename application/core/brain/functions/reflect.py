@@ -34,7 +34,7 @@ from application.core.agents import Living
 from application.core.brain import situation
 from application.core.brain.pulse import Phase
 from application.core.brain.signals import Tick, Tock
-from application.core.exceptions import ModelError
+from application.core.exceptions import ModelError, ReflectInterrupted
 from application.platform import logger
 from application.platform.observer import dispatch
 
@@ -137,14 +137,15 @@ async def reflect(living: Living) -> list:
     logger.debug("brain.reflect", {"persona": persona, "messages_count": len(memory.messages)})
 
     if not memory.messages:
-        dispatch(Tock("reflect", {"persona": persona}))
+        dispatch(Tock("reflect", {"persona": persona, "branch": "no-messages"}))
         return []
 
-    if living.pulse.phase != Phase.NIGHT and not await living.is_idle():
-        dispatch(Tock("reflect", {"persona": persona}))
-        return []
+    if living.pulse.phase != Phase.NIGHT:
+        if not await living.is_idle():
+            dispatch(Tock("reflect", {"persona": persona, "branch": "not-idle"}))
+            raise ReflectInterrupted()
 
     await consolidate(living)
 
-    dispatch(Tock("reflect", {"persona": persona}))
+    dispatch(Tock("reflect", {"persona": persona, "branch": "consolidated"}))
     return []

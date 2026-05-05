@@ -108,3 +108,9 @@ class BrainException(Exception):
 
 class AgentError(Exception):
     pass
+
+
+class ReflectInterrupted(Exception):
+    """Reflect's idle wait was cancelled by a nudge — clock should drop the
+    current pass and restart the cycle from realize so the new input gets
+    seen on the next realize."""
