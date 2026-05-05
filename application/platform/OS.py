@@ -225,23 +225,137 @@ async def install(program: str) -> None:
 @tool("Take a screenshot of the screen or a specific region. "
       "Captures the full screen by default. Pass left, top, width, height to zoom into a specific area. "
       "path: where to save the image.")
-def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 0, path: str = "") -> str:
-    """Capture a screenshot and return the file path."""
-    import mss
-    import os
+async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 0, path: str = "") -> str:
+    """Capture a screenshot and return the file path.
+
+    One native API per OS — Linux goes through xdg-desktop-portal so the
+    same call works on every compositor (X11, KDE, GNOME, sway, hyprland);
+    macOS shells out to Apple's `screencapture` (TCC-gated, errors loudly
+    when permission is missing); Windows uses Pillow's ImageGrab (Win32 GDI).
+    """
+    import os as _os
     import tempfile
 
     if not path:
         fd, path = tempfile.mkstemp(suffix=".png")
-        os.close(fd)
+        _os.close(fd)
 
-    with mss.mss() as sct:
-        if left == 0 and top == 0 and width == 0 and height == 0:
-            region = sct.monitors[0]
+    region_requested = bool(left or top or width or height)
+    target_os = get_supported()
+
+    if target_os == "linux":
+        import shutil
+        import uuid
+        from urllib.parse import unquote, urlparse
+
+        from dbus_next import Variant
+        from dbus_next.aio import MessageBus
+        from dbus_next.constants import BusType
+        from dbus_next.introspection import Node
+
+        bus = await MessageBus(bus_type=BusType.SESSION).connect()
+        try:
+            # Hand-built introspection. We avoid bus.introspect() because the portal
+            # daemon exposes properties with dashes in their names (KDE's PowerProfile-
+            # Monitor `power-saver-enabled`), which dbus-next rejects as spec-invalid.
+            portal_node = Node.parse(
+                '<node>'
+                '<interface name="org.freedesktop.portal.Screenshot">'
+                '<method name="Screenshot">'
+                '<arg type="s" name="parent_window" direction="in"/>'
+                '<arg type="a{sv}" name="options" direction="in"/>'
+                '<arg type="o" name="handle" direction="out"/>'
+                '</method>'
+                '</interface>'
+                '</node>'
+            )
+            portal_obj = bus.get_proxy_object(
+                "org.freedesktop.portal.Desktop",
+                "/org/freedesktop/portal/desktop",
+                portal_node,
+            )
+            portal = portal_obj.get_interface("org.freedesktop.portal.Screenshot")
+
+            sender = bus.unique_name.replace(".", "_").lstrip(":")
+            token = "eternego_" + uuid.uuid4().hex[:8]
+            request_path = f"/org/freedesktop/portal/desktop/request/{sender}/{token}"
+
+            # The Request object is created lazily by the portal once Screenshot is
+            # invoked, so we hand-build its (fixed) introspection rather than fetch it.
+            request_node = Node.parse(
+                '<node>'
+                '<interface name="org.freedesktop.portal.Request">'
+                '<method name="Close"/>'
+                '<signal name="Response">'
+                '<arg type="u" name="response"/>'
+                '<arg type="a{sv}" name="results"/>'
+                '</signal>'
+                '</interface>'
+                '</node>'
+            )
+            request_obj = bus.get_proxy_object(
+                "org.freedesktop.portal.Desktop", request_path, request_node
+            )
+            request = request_obj.get_interface("org.freedesktop.portal.Request")
+
+            done = asyncio.get_running_loop().create_future()
+
+            def on_response(code: int, results: dict) -> None:
+                if not done.done():
+                    done.set_result((code, results))
+
+            request.on_response(on_response)
+
+            await portal.call_screenshot(
+                "",
+                {
+                    "interactive": Variant("b", False),
+                    "handle_token": Variant("s", token),
+                },
+            )
+
+            code, results = await asyncio.wait_for(done, timeout=60.0)
+            if code != 0:
+                raise RuntimeError(
+                    f"xdg-desktop-portal denied or cancelled the screenshot (response={code})"
+                )
+
+            src = unquote(urlparse(results["uri"].value).path)
+            if region_requested:
+                from PIL import Image
+                with Image.open(src) as img:
+                    img.crop((left, top, left + width, top + height)).save(path, "PNG")
+            else:
+                shutil.copy(src, path)
+        finally:
+            bus.disconnect()
+
+    elif target_os == "mac":
+        import subprocess
+
+        cmd = ["screencapture", "-x"]
+        if region_requested:
+            cmd += ["-R", f"{left},{top},{width},{height}"]
+        cmd.append(path)
+        result = subprocess.run(cmd, capture_output=True)
+        if result.returncode != 0:
+            raise RuntimeError(
+                "screencapture failed — usually means Screen Recording permission is "
+                "missing or not honored for this binary (System Settings → Privacy & "
+                f"Security → Screen Recording): {result.stderr.decode().strip()}"
+            )
+
+    elif target_os == "windows":
+        from PIL import ImageGrab
+
+        if region_requested:
+            img = ImageGrab.grab(bbox=(left, top, left + width, top + height), all_screens=True)
         else:
-            region = {"left": left, "top": top, "width": width, "height": height}
-        img = sct.grab(region)
-        mss.tools.to_png(img.rgb, img.size, output=path)
+            img = ImageGrab.grab(all_screens=True)
+        img.save(path, "PNG")
+
+    else:
+        raise NotImplementedError(f"screenshot not supported on this OS")
 
     return f"Screenshot saved to {path}"
 

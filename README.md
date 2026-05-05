@@ -106,6 +106,8 @@ Download **[Eternego.dmg](https://github.com/Eternego-AI/eternego/releases/lates
 
 The first launch shows: *"Eternego.app cannot be opened because the developer cannot be verified."*  Right-click (or Control-click) the app, choose **Open**, then **Open** again in the dialog. macOS remembers the choice — subsequent launches are normal.
 
+> **Heads-up — screen recording on the .dmg build.** Until we ship a Developer-ID-signed bundle, macOS's TCC may grant Screen Recording in System Settings but not honor it for the unsigned .app — your persona's screenshots come back as wallpaper-only. If you want her to see your screen reliably, install [from source](#from-source-contributors) until signing lands.
+
 ### Windows (.exe installer)
 
 Download **[Eternego-setup.exe](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego-setup.exe)**. Double-click it, walk through the wizard (Next → Install → Finish). Eternego launches automatically and adds Start Menu and Desktop shortcuts.
