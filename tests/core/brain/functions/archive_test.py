@@ -234,3 +234,59 @@ async def test_archive_describes_inline_image_at_night():
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
+
+
+async def test_archive_skips_screenshots_taken_by_persona():
+    """Screenshots from take_screenshot/screen abilities live under the
+    persona's screenshots/ dir and are working memory, not archive material —
+    archive must not gallery them or burn a model call describing them."""
+    def isolated():
+        import os, tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents, paths
+            from application.core.brain import functions
+            from application.core.brain.pulse import Phase, Pulse
+            from application.core.data import Media, Message, Model, Persona, Prompt
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume():
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url="http://unused"))
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                living.pulse.phase = Phase.NIGHT
+
+                screenshots_dir = paths.screenshots(persona.id)
+                screenshots_dir.mkdir(parents=True, exist_ok=True)
+                shot = screenshots_dir / "20260506000000.png"
+                shot.write_bytes(b"\x89PNG fake")
+
+                inline_blocks = [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "FAKE=="}},
+                    {"type": "text", "text": "screenshot"},
+                ]
+                ego.memory.remember(Message(
+                    content="screenshot",
+                    media=Media(source=str(shot), caption="screenshot"),
+                    prompt=Prompt(role="user", content=inline_blocks),
+                ))
+                ego.memory.archive_messages()
+                ego.memory.forget()
+
+                await functions.archive(living)
+
+                assert not paths.gallery(persona.id).exists(), \
+                    "gallery should not be written for self-taken screenshots"
+
+            import asyncio
+            asyncio.run(consume())
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
