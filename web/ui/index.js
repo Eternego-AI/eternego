@@ -105,6 +105,7 @@ async function getProviderConfig() {
             local: { url: 'http://localhost:11434' },
             anthropic: { url: 'https://api.anthropic.com' },
             openai: { url: 'https://api.openai.com' },
+            xai: { url: 'https://api.x.ai' },
         };
     }
 }

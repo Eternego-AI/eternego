@@ -401,11 +401,13 @@ class InnerWorld extends World {
                 { value: 'local', label: 'Local (Ollama)' },
                 { value: 'anthropic', label: 'Anthropic' },
                 { value: 'openai', label: 'OpenAI compatible' },
+                { value: 'xai', label: 'xAI (Grok)' },
             ]
             : [
                 { value: 'local', label: 'Local (Ollama)' },
                 { value: 'anthropic', label: 'Anthropic' },
                 { value: 'openai', label: 'OpenAI compatible' },
+                { value: 'xai', label: 'xAI (Grok)' },
             ];
 
         const form = document.createElement('simple-form');

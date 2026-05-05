@@ -318,6 +318,136 @@ async def test_openai_raises_engine_error_on_500():
     assert code == 0, error
 
 
+# ── xAI ─────────────────────────────────────────────────────────────────────
+
+
+async def test_xai_routes_to_xai_module():
+    """provider='xai' must dispatch to xai.py — not the openai catch-all path.
+    Detected by absence of stream_options in the request body, since xai.py
+    omits it (the field that was triggering xAI's silent connection drops)."""
+    def isolated():
+        from application.core import models
+        from application.core.data import Model
+        from application.platform import xai
+
+        model = Model(name="grok-4.3", provider="xai", api_key="test", url="TBD")
+        async def run(url):
+            model.url = url
+            await models.chat(model, [], "hi")
+
+        def validate(r):
+            assert "stream_options" not in r["body"], \
+                f"xai routing leaked into openai code path; stream_options in body: {r['body']}"
+            assert r["body"]["model"] == "grok-4.3", r["body"]["model"]
+            assert r["body"]["stream"] is True, r["body"]
+
+        xai.assert_chat(
+            run=run,
+            validate=validate,
+            response={"choices": [{"message": {"content": "ok"}}]},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_xai_returns_content():
+    def isolated():
+        from application.core import models
+        from application.core.data import Model
+        from application.platform import xai
+
+        model = Model(name="grok-4.3", provider="xai", api_key="test", url="TBD")
+        result = {}
+        async def run(url):
+            model.url = url
+            result["text"] = await models.chat(model, [], "hi")
+
+        xai.assert_chat(
+            run=run,
+            response={"choices": [{"message": {"content": "Grok says hi"}}]},
+        )
+        assert result["text"] == "Grok says hi"
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_xai_chat_json_routes_to_xai_module():
+    def isolated():
+        from application.core import models
+        from application.core.data import Model
+        from application.platform import xai
+
+        model = Model(name="grok-4.3", provider="xai", api_key="test", url="TBD")
+        async def run(url):
+            model.url = url
+            await models.chat_json(model, [], "json please")
+
+        def validate(r):
+            assert "stream_options" not in r["body"], r["body"]
+            assert r["body"]["response_format"] == {"type": "json_object"}, r["body"]
+            assert r["body"]["model"] == "grok-4.3", r["body"]
+
+        xai.assert_chat_json(
+            run=run,
+            validate=validate,
+            response={"choices": [{"message": {"content": '{"ok": true}'}}]},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_xai_raises_engine_error_on_401():
+    def isolated():
+        from application.platform import xai
+        from application.core import models
+        from application.core.data import Model
+
+        async def run(url):
+            from application.core.exceptions import EngineConnectionError
+            try:
+                await models.chat(
+                    Model(name="grok-4.3", provider="xai", api_key="x", url=url),
+                    [], "hi"
+                )
+                assert False, "Expected EngineConnectionError"
+            except EngineConnectionError:
+                pass
+
+        xai.assert_chat(
+            run=run,
+            response={"choices": [{"message": {"content": ""}}]},
+            status_code=401,
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_xai_raises_engine_error_on_500():
+    def isolated():
+        from application.platform import xai
+        from application.core import models
+        from application.core.data import Model
+
+        async def run(url):
+            from application.core.exceptions import EngineConnectionError
+            try:
+                await models.chat(
+                    Model(name="grok-4.3", provider="xai", api_key="x", url=url),
+                    [], "hi"
+                )
+                assert False, "Expected EngineConnectionError"
+            except EngineConnectionError:
+                pass
+
+        xai.assert_chat(
+            run=run,
+            response={"choices": [{"message": {"content": ""}}]},
+            status_code=500,
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 # ── Thinking tag stripping ──────────────────────────────────────────────────
 
 

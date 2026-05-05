@@ -17,11 +17,21 @@ What does she answer to? Something short — you'll write it many times.
 
 ## Mind
 
-The model that thinks for her. Three providers:
+The model that thinks for her. Supported providers:
 
 - **Local (Ollama)** — runs on your machine. Needs Ollama installed (the shell installer does this automatically; the .dmg/.exe/.AppImage installers don't — get it from [ollama.com](https://ollama.com) first if you're going local). Model name is whatever your Ollama exposes (e.g., `qwen2.5:14b`).
-- **Anthropic** — Claude. Needs an API key from [console.anthropic.com](https://console.anthropic.com).
-- **OpenAI compatible** — OpenAI itself, or anything that speaks the OpenAI Chat Completions API (Groq, OpenRouter, LM Studio, vLLM, etc.). Needs a key for non-local services.
+- **[Anthropic](https://console.anthropic.com)** — Claude. Needs an API key.
+- **[OpenAI](https://platform.openai.com)** — GPT. Needs an API key.
+- **[xAI](https://console.x.ai)** — Grok. Needs an API key. Model names from xAI's catalog (e.g., `grok-4.3`, `grok-4-1-fast-reasoning`).
+- **[Groq](https://groq.com)** — fast hosted inference for open-weight models. OpenAI-compatible.
+- **[OpenRouter](https://openrouter.ai)** — gateway to many models (Claude, GPT, Gemini, open-weight) from one key. OpenAI-compatible.
+- **[DeepSeek](https://platform.deepseek.com)** — DeepSeek's own reasoning and chat models. OpenAI-compatible.
+- **[Together AI](https://together.ai)** — open-weight models hosted. OpenAI-compatible.
+- **[Fireworks AI](https://fireworks.ai)** — open-weight models hosted. OpenAI-compatible.
+- **[LiteLLM](https://litellm.ai)** — open-source proxy that routes OpenAI-style calls to 100+ provider backends. Run it yourself if you want one endpoint in front of many providers.
+- **LM Studio**, **vLLM**, **llama.cpp server** — local OpenAI-compatible servers if you want to run models yourself with more control than Ollama gives.
+
+In the wizard, pick the matching provider type — **Local (Ollama)**, **Anthropic**, **xAI**, or **OpenAI compatible** (for everything else listed above). Set the URL from your provider's docs, paste the API key, set the model name they tell you to use.
 
 The mind drives everything — recognizing what you said, deciding what to do, reflecting on her day, remembering. Pick a model that's good at structured reasoning. Smaller models (7b–14b) work; larger ones work better.
 
