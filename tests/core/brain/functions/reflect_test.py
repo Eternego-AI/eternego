@@ -39,9 +39,10 @@ async def test_reflect_no_messages_passes_through():
     assert code == 0, error
 
 
-async def test_reflect_during_day_when_not_idle_passes_through():
+async def test_reflect_during_day_when_not_idle_raises_interrupted():
     """During the day, when is_idle reports False (a nudge cancelled the wait
-    — activity arrived), reflect skips. Messages stay; person files unchanged."""
+    — activity arrived), reflect raises ReflectInterrupted so clock restarts
+    the cycle from realize. Messages stay; person files unchanged."""
     def isolated():
         import asyncio, os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -50,6 +51,7 @@ async def test_reflect_during_day_when_not_idle_passes_through():
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
+            from application.core.exceptions import ReflectInterrupted
 
             class FakeWorker:
                 def run(self, *a): pass
@@ -69,8 +71,12 @@ async def test_reflect_during_day_when_not_idle_passes_through():
             identity_file = paths.person_identity(persona.id)
             assert not identity_file.exists(), "test premise: identity file should not exist yet"
 
-            consequences = asyncio.run(functions.reflect(living))
-            assert consequences == []
+            try:
+                asyncio.run(functions.reflect(living))
+                assert False, "reflect should have raised ReflectInterrupted"
+            except ReflectInterrupted:
+                pass
+
             assert len(ego.memory.messages) == 1, "messages stay during the day"
             assert not identity_file.exists(), "no person file should be written"
 

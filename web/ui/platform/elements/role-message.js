@@ -6,7 +6,6 @@ class RoleMessage extends Element {
         role-message { display: block; }
         role-message[role=them] {
             font-family: var(--font-serif);
-            font-style: italic;
             font-weight: 300;
             font-size: var(--text-md);
             line-height: 1.7;

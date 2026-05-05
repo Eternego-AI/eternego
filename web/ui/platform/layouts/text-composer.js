@@ -141,6 +141,8 @@ class TextComposer extends Layout {
                 onSend && onSend({ text: inputEl.value, file: pending });
             }
         });
+
+        requestAnimationFrame(() => inputEl.focus());
     }
 }
 
