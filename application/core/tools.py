@@ -30,6 +30,8 @@ def document() -> str:
         "Tools are platform functions the persona can call from a meaning's path.\n"
         "A meaning asks its model for JSON like {\"tools.<name>\": { ...args }}; decide\n"
         "dispatches that to the matching tool below.\n\n"
+        "When a tool argument is a file path, always pass an absolute path "
+        "Relative paths fail and you receive an error in the next TOOL_RESULT.\n\n"
         f"{tool_list}"
     )
 

@@ -23,6 +23,8 @@ def ensure_dir(path) -> None:
 @tool("Write text content to a file. Creates parent directories if needed. Overwrites if the file exists.")
 def write(path: str, content: str, encoding: str = "utf-8") -> str:
     p = Path(path)
+    if not p.is_absolute():
+        raise ValueError(f"path must be absolute, got {path!r}")
     ensure_dir(p.parent)
     p.write_text(content, encoding=encoding)
     return f"Written to {path}"
@@ -56,6 +58,8 @@ def zip(source) -> bytes:
 @tool("Append text content to the end of a file. Creates the file if it does not exist.")
 def append(path: str, content: str, encoding: str = "utf-8") -> str:
     p = Path(path)
+    if not p.is_absolute():
+        raise ValueError(f"path must be absolute, got {path!r}")
     ensure_dir(p.parent)
     with open(p, "a", encoding=encoding) as f:
         f.write(content)
@@ -64,7 +68,10 @@ def append(path: str, content: str, encoding: str = "utf-8") -> str:
 
 @tool("Read text content from a file.")
 def read(path: str, encoding: str = "utf-8") -> str:
-    return Path(path).read_text(encoding=encoding)
+    p = Path(path)
+    if not p.is_absolute():
+        raise ValueError(f"path must be absolute, got {path!r}")
+    return p.read_text(encoding=encoding)
 
 
 def read_bytes(path) -> bytes:
@@ -99,25 +106,40 @@ def move(source, destination) -> None:
 
 @tool("Delete a file.")
 def delete(path: str) -> str:
-    Path(path).unlink()
+    p = Path(path)
+    if not p.is_absolute():
+        raise ValueError(f"path must be absolute, got {path!r}")
+    p.unlink()
     return f"Deleted {path}"
 
 
 @tool("Create a directory and any parent directories needed.")
 def create_dir(path: str) -> str:
-    Path(path).mkdir(parents=True, exist_ok=True)
+    p = Path(path)
+    if not p.is_absolute():
+        raise ValueError(f"path must be absolute, got {path!r}")
+    p.mkdir(parents=True, exist_ok=True)
     return f"Created directory {path}"
 
 
 @tool("Delete a directory and everything inside it.")
 def delete_dir(path: str) -> str:
-    shutil.rmtree(path, ignore_errors=True)
+    p = Path(path)
+    if not p.is_absolute():
+        raise ValueError(f"path must be absolute, got {path!r}")
+    shutil.rmtree(p, ignore_errors=True)
     return f"Deleted directory {path}"
 
 
 @tool("Copy a directory and everything inside it to a new location.")
 def copy_dir(source: str, destination: str) -> str:
-    shutil.copytree(source, destination, dirs_exist_ok=True)
+    src = Path(source)
+    dst = Path(destination)
+    if not src.is_absolute():
+        raise ValueError(f"source must be absolute, got {source!r}")
+    if not dst.is_absolute():
+        raise ValueError(f"destination must be absolute, got {destination!r}")
+    shutil.copytree(src, dst, dirs_exist_ok=True)
     return f"Copied {source} to {destination}"
 
 
