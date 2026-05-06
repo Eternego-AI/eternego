@@ -36,6 +36,7 @@ async def archive(living: Living) -> list:
     gallery_file = paths.gallery(persona.id)
     gallery_file.parent.mkdir(parents=True, exist_ok=True)
     home_str = str(paths.home(persona.id))
+    screenshots_dir = str(paths.screenshots(persona.id))
 
     for batch in memory.archive:
         messages = [m for m in batch if m.prompt]
@@ -85,6 +86,8 @@ async def archive(living: Living) -> list:
 
         for m in batch:
             if not m.media:
+                continue
+            if m.media.source.startswith(screenshots_dir):
                 continue
             if not isinstance(m.prompt.content, list):
                 continue

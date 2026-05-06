@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/Eternego-AI/eternego?include_prereleases&sort=semver)](https://github.com/Eternego-AI/eternego/releases)
 [![Website](https://img.shields.io/badge/website-eternego.ai-blue)](https://eternego.ai)
 [![Docs](https://img.shields.io/badge/docs-docs.eternego.ai-blue)](https://docs.eternego.ai)
-[![Tests](https://img.shields.io/badge/tests-317%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-362%20passing-brightgreen)](tests/)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/nfHnWwYUR4)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -105,6 +105,8 @@ Pick the installer for your machine — the download buttons up top grab the lat
 Download **[Eternego.dmg](https://github.com/Eternego-AI/eternego/releases/latest/download/Eternego.dmg)**. Open it, drag **Eternego** to **Applications**, then double-click Eternego from Applications.
 
 The first launch shows: *"Eternego.app cannot be opened because the developer cannot be verified."*  Right-click (or Control-click) the app, choose **Open**, then **Open** again in the dialog. macOS remembers the choice — subsequent launches are normal.
+
+> **Heads-up — screen recording on the .dmg build.** Until we ship a Developer-ID-signed bundle, macOS's TCC may grant Screen Recording in System Settings but not honor it for the unsigned .app — your persona's screenshots come back as wallpaper-only. If you want her to see your screen reliably, install [from source](#from-source-contributors) until signing lands.
 
 ### Windows (.exe installer)
 

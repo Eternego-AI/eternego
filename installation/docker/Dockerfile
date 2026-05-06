@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         websockify \
         tini \
         x11-utils \
+        dbus \
+        dbus-x11 \
+        xdg-desktop-portal \
+        xdg-desktop-portal-gtk \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

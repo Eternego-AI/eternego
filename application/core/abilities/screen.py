@@ -36,5 +36,5 @@ async def screen(persona, action: str = "", **args) -> Media:
     directory = paths.screenshots(persona.id)
     filesystem.ensure_dir(directory)
     target = str(directory / f"{datetimes.stamp(datetimes.now())}.png")
-    OS.screenshot(path=target)
+    await OS.screenshot(path=target)
     return Media(source=target, caption=result)

@@ -55,6 +55,12 @@ def environment() -> str:
             "- Chords: join with `+`. "
             f"Common shortcuts on this system: {shortcut_examples}."
         )
+        if os_name == "linux":
+            body += (
+                "\n\n`keyboard_type` on this system can only emit ASCII characters; "
+                "for arbitrary unicode (accents, CJK, emoji), copy the text to the "
+                "clipboard and paste it instead."
+            )
     else:
         body += (
             "\n\n### Screen Control\n\n"

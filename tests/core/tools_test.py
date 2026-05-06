@@ -142,6 +142,28 @@ async def test_call_catches_exceptions():
     assert code == 0, error
 
 
+async def test_document_tells_model_to_use_absolute_paths():
+    """tools.document() prefaces the tool list with the absolute-path
+    convention so every prompt that includes the tool catalog also tells
+    the model how to pass paths."""
+    def isolated():
+        from application.core.tools import document
+        from application.platform.tool import _registry, tool
+
+        _registry.clear()
+
+        @tool("Write a file at the given path.")
+        def write(path: str, content: str) -> str:
+            return "ok"
+
+        text = document()
+        assert "absolute path" in text
+        assert "Relative paths fail" in text
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 async def test_call_converts_any_return_to_string():
     def isolated():
         import asyncio

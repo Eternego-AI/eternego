@@ -5,6 +5,10 @@ set -e
 
 if [ "${START_DESKTOP:-true}" = "true" ]; then
     echo "Starting X11 desktop stack..."
+    # Clear any stale lock + socket from a previous ungraceful exit, otherwise
+    # Xvfb refuses to start with "Server is already active for display N".
+    DISPLAY_NUM=$(echo "${DISPLAY:-:99}" | sed 's/^://')
+    rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}"
     Xvfb "${DISPLAY:-:99}" -screen 0 "${XVFB_RESOLUTION:-1280x720x24}" -ac +extension GLX +render -noreset &
 
     until xdpyinfo -display "${DISPLAY:-:99}" >/dev/null 2>&1; do
@@ -17,11 +21,13 @@ if [ "${START_DESKTOP:-true}" = "true" ]; then
     echo "Desktop stack ready."
 fi
 
-# Always run the daemon
+# Always run the daemon. dbus-run-session starts a session bus, exports
+# DBUS_SESSION_BUS_ADDRESS, and exec's the wrapped command in that env —
+# the persona's screenshot path goes through xdg-desktop-portal over dbus.
 if [ "${DEBUG:-false}" = "true" ]; then
     echo "=== Eternego starting in DEBUG mode ==="
-    exec python3 /app/index.py --debug -vvv daemon
+    exec dbus-run-session -- python3 /app/index.py --debug -vvv daemon
 else
     echo "=== Eternego starting normal ==="
-    exec python3 /app/index.py daemon
+    exec dbus-run-session -- python3 /app/index.py daemon
 fi

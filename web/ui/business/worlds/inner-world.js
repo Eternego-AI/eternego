@@ -184,10 +184,10 @@ class InnerWorld extends World {
 
         const sections = [
             { key: 'person',    label: 'About you' },
-            { key: 'traits',    label: 'How she is' },
-            { key: 'context',   label: 'Where she is' },
-            { key: 'wishes',    label: 'What she wants' },
-            { key: 'struggles', label: 'What she struggles with' },
+            { key: 'traits',    label: 'How you are' },
+            { key: 'context',   label: 'How she is with you' },
+            { key: 'wishes',    label: 'What you want' },
+            { key: 'struggles', label: 'What you struggle with' },
             { key: 'history',   label: 'History' },
             { key: 'destiny',   label: 'Destiny' },
         ];

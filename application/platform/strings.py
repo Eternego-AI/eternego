@@ -18,35 +18,22 @@ def strip_tag(text: str, tag: str) -> str:
 
 
 def extract_braces(text: str, start: int = 0) -> str | None:
-    """Find the first balanced {...} block starting from `start`, recursively.
+    """Find the first valid JSON object in `text` starting from `start`.
 
-    Returns the balanced text including outer braces, or None if not found.
+    Returns the JSON text (including outer braces), or None if no parseable
+    object is found. Uses `json.JSONDecoder.raw_decode` so balanced braces
+    inside string literals (escaped quotes, nested JSON in `content` args,
+    etc.) are not counted as object delimiters — naive brace counting
+    breaks the moment a tool-call's payload contains JSON-shaped text.
     """
-    opening = text.find("{", start)
-    if opening == -1:
-        return None
-
-    result = "{"
-    cursor = opening + 1
-
-    while cursor < len(text):
-        next_open = text.find("{", cursor)
-        next_close = text.find("}", cursor)
-
-        if next_close == -1:
-            return None
-
-        if next_open == -1 or next_close < next_open:
-            result += text[cursor:next_close + 1]
-            return result
-
-        result += text[cursor:next_open]
-        inner = extract_braces(text, next_open)
-        if inner is None:
-            return None
-        result += inner
-        cursor = next_open + len(inner)
-
+    decoder = json.JSONDecoder()
+    idx = text.find("{", start)
+    while idx != -1:
+        try:
+            _, end = decoder.raw_decode(text, idx)
+            return text[idx:end]
+        except json.JSONDecodeError:
+            idx = text.find("{", idx + 1)
     return None
 
 
