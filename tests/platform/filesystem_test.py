@@ -62,16 +62,18 @@ def test_delete_dir_rejects_relative_path():
 
 
 def test_copy_dir_rejects_relative_source():
+    abs_dst = str(Path(tempfile.gettempdir()) / "b")
     try:
-        filesystem.copy_dir("workspace/a", "/tmp/b")
+        filesystem.copy_dir("workspace/a", abs_dst)
         assert False, "expected ValueError"
     except ValueError as e:
         assert "source" in str(e) and "absolute" in str(e)
 
 
 def test_copy_dir_rejects_relative_destination():
+    abs_src = str(Path(tempfile.gettempdir()) / "a")
     try:
-        filesystem.copy_dir("/tmp/a", "workspace/b")
+        filesystem.copy_dir(abs_src, "workspace/b")
         assert False, "expected ValueError"
     except ValueError as e:
         assert "destination" in str(e) and "absolute" in str(e)
