@@ -83,11 +83,38 @@ class OuterWorld extends World {
             this.renderChat();
         };
         this.api.onChat(this.chatHandler);
+
+        // Cross-channel echo: Heard / Said bus signals fire whenever the persona
+        // receives or sends a message on any channel. The web Connection only
+        // delivers chat_message events for messages routed through the web
+        // channel itself, so out-of-band activity (Telegram, Discord) wouldn't
+        // appear in the conversation view without picking it up here. Filter
+        // by persona id and ignore web-channel events to avoid duplicating the
+        // chat_message path.
+        this.signalHandler = (e) => {
+            const sig = e.detail || {};
+            if (sig.title !== 'Heard' && sig.title !== 'Said') return;
+            const details = sig.details || {};
+            if (details.persona?.id !== this.personaId) return;
+            const channelType = details.channel?.type;
+            if (!channelType || channelType === 'web') return;
+            const content = details.content;
+            if (!content) return;
+            this.messages = [...this.messages, {
+                role: sig.title === 'Heard' ? 'me' : 'them',
+                text: content,
+                time: this.formatTime(new Date().toISOString()),
+            }];
+            this.renderChat();
+        };
+        this.signals.addEventListener('signal', this.signalHandler);
     }
 
     deactivate() {
         if (this.chatHandler) this.api.offChat(this.chatHandler);
         this.chatHandler = null;
+        if (this.signalHandler) this.signals.removeEventListener('signal', this.signalHandler);
+        this.signalHandler = null;
     }
 
     renderOrb() {
@@ -151,7 +178,7 @@ class OuterWorld extends World {
             role,
             text,
             time: this.formatTime(msg.time),
-            image: msg.image || (msg.media ? this.api.mediaUrl(this.personaId, msg.media) : null),
+            image: msg.image || (msg.media?.source ? this.api.mediaUrl(this.personaId, msg.media.source) : null),
         };
     }
 
