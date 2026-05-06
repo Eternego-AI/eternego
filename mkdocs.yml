@@ -78,5 +78,7 @@ nav:
       - Edit her: getting-started/edit-her.md
   - Concepts: concepts/index.md
   - Build & Extend: build/index.md
-  - Operating: operating/index.md
+  - Operating:
+      - operating/index.md
+      - Desktop access on each OS: operating/desktop-access.md
   - Reference: reference/index.md
