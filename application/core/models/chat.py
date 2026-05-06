@@ -2,7 +2,7 @@
 
 from application.core.data import Model, Prompt
 from application.core.exceptions import EngineConnectionError
-from application.platform import logger, ollama, anthropic, openai, strings
+from application.platform import logger, ollama, anthropic, openai, xai, strings
 
 from .is_local import is_local
 
@@ -52,6 +52,25 @@ async def chat(model: Model, prompts: list[Prompt], question: str) -> str:
                 elif msg.pop("cache_point", False):
                     msg["cache_control"] = "ephemeral"
             async for chunk in anthropic.chat(model.url, model.api_key, model.name, messages):
+                parts.append(chunk)
+        elif model.provider == "xai":
+            for msg in messages:
+                msg.pop("cache_point", None)
+                if isinstance(msg["content"], list):
+                    new_content = []
+                    for block in msg["content"]:
+                        if block.get("type") == "image":
+                            source = block.get("source", {})
+                            media_type = source.get("media_type", "image/jpeg")
+                            data = source.get("data", "")
+                            new_content.append({
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{media_type};base64,{data}"},
+                            })
+                        else:
+                            new_content.append(block)
+                    msg["content"] = new_content
+            async for chunk in xai.chat(model.url, model.api_key, model.name, messages):
                 parts.append(chunk)
         else:
             for msg in messages:

@@ -34,10 +34,11 @@ class Create extends App {
                 title: 'Mind',
                 subtitle: 'Where her thoughts come from. She uses this model for everything — recognizing, deciding, reflecting, remembering.',
                 fields: [
-                    { name: 'thinking_provider', type: 'options', label: 'Provider', help: 'Local runs on your machine through Ollama. Anthropic and OpenAI-compatible run in the cloud and need a key.', options: [
+                    { name: 'thinking_provider', type: 'options', label: 'Provider', help: 'Local runs on your machine through Ollama. Anthropic, OpenAI-compatible, and xAI run in the cloud and need a key.', options: [
                         { value: 'local', label: 'Local (Ollama)' },
                         { value: 'anthropic', label: 'Anthropic' },
                         { value: 'openai', label: 'OpenAI compatible' },
+                        { value: 'xai', label: 'xAI (Grok)' },
                     ]},
                     { name: 'thinking_model', type: 'text', label: 'Model', placeholder: 'qwen2.5:7b', required: true, help: 'The exact model name your provider exposes.' },
                     { name: 'thinking_url', type: 'text', label: 'URL', placeholder: p.local?.url || 'http://localhost:11434', help: 'Where the model lives. Defaults to Ollama on localhost.' },
@@ -53,6 +54,7 @@ class Create extends App {
                             { value: 'local', label: 'Local' },
                             { value: 'anthropic', label: 'Anthropic' },
                             { value: 'openai', label: 'OpenAI compatible' },
+                            { value: 'xai', label: 'xAI (Grok)' },
                         ]},
                         { name: 'vision_model', type: 'text', label: 'Model', placeholder: 'llava, claude-haiku-4-5...' },
                         { name: 'vision_url', type: 'text', label: 'URL', placeholder: p.local?.url || '' },
@@ -74,6 +76,7 @@ class Create extends App {
                             { value: 'local', label: 'Local (Ollama)' },
                             { value: 'anthropic', label: 'Anthropic' },
                             { value: 'openai', label: 'OpenAI compatible' },
+                            { value: 'xai', label: 'xAI (Grok)' },
                         ]},
                         { name: 'frontier_model', type: 'text', label: 'Model', placeholder: 'claude-opus-4-7, qwen2.5:32b...' },
                         { name: 'frontier_url', type: 'text', label: 'URL', placeholder: p.local?.url || '' },

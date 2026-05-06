@@ -37,6 +37,8 @@ async def prepare(
             url = config.ANTHROPIC_BASE_URL
         elif provider == "openai":
             url = config.OPENAI_BASE_URL
+        elif provider == "xai":
+            url = config.XAI_BASE_URL
     bus.propose("Preparing environment", {"model": model, "provider": provider})
 
     try:

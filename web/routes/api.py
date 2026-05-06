@@ -32,6 +32,7 @@ async def get_provider_config():
         "local": {"url": cfg.OLLAMA_BASE_URL},
         "anthropic": {"url": cfg.ANTHROPIC_BASE_URL},
         "openai": {"url": cfg.OPENAI_BASE_URL},
+        "xai": {"url": cfg.XAI_BASE_URL},
     }
 
 
