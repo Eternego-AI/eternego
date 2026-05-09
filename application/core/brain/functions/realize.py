@@ -67,10 +67,10 @@ async def realize(living: Living) -> list:
         image_prompt = Prompt(role="user", content=image_content)
         reality = living.ego.memory.prompts + [image_prompt]
         question_prompt = (
-            "The living.ego.persona just received an image. A vision model will look at it next. "
-            "Based on the conversation, what observable things in the image would best "
-            "serve the living.ego.persona? Produce questions that can be answered by looking at "
-            "the image itself.\n\n"
+            f"The persona {living.ego.persona.name} just received an image. A vision model "
+            "will look at it next. Based on the conversation, what observable things in the "
+            "image would best serve the persona? Produce questions that can be answered by "
+            "looking at the image itself.\n\n"
             "## Output\n\n"
             "```json\n"
             "{\"questions\": [\"<question>\", \"<question>\"]}\n"

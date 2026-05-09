@@ -19,7 +19,7 @@ class PersonaChat extends Widget {
     `;
 
     build() {
-        const { messages = [], placeholder = 'Speak.', pending, onSend, onPickFile, onClearFile, onTextChange } = this._props;
+        const { messages = [], placeholder = 'Speak.', pending, text = '', onSend, onPickFile, onClearFile, onTextChange } = this._props;
         this.innerHTML = '';
 
         const tail = document.createElement('tail-list');
@@ -41,7 +41,7 @@ class PersonaChat extends Widget {
 
         const composer = document.createElement('text-composer');
         composer.init({
-            text: '',
+            text,
             pending,
             placeholder,
             onTextChange,

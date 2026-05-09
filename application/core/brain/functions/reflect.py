@@ -1,37 +1,42 @@
 """Brain — reflect on living.
 
-The single sleep-time function for text-side memory consolidation. Replaces
-the old reflect (per-tick context update) and the old transform (night-time
-distillation): one stage, one model call, one shared decision about what to
-keep.
+Reflect runs on every beat that reaches it (mid-procedure beats restart on
+tool dispatch and never reach here). Most beats reflect just clears
+per-pass meaning state and exits.
 
-Reflect itself is the trigger: it fires `consolidate(living)` only when the
-moment calls for it. `consolidate` is exposed so feed (importing past chat
-data) can call it directly on a sandboxed past Living without going through
-reflect's trigger gates.
+When the moment is right — night, or confirmed idle — reflect does two
+jobs that both belong to "growing" rather than acting:
 
-Trigger:
+1. **Update meanings from the day's lived experience.** The persona looks
+   at the meanings she actually used and decides what to refine — and
+   whether any kind of moment she handled without a meaning is worth
+   crystallizing into one. This is procedural memory consolidation: what
+   she did today becomes what she knows tomorrow. Live conversation memory
+   carries her through the day; meanings carry her across sleep.
+
+2. **Consolidate the conversation into long-term files.** Person facts,
+   traits, wishes, struggles, persona-trait, permissions — and the working
+   context that should bridge to the next beat. Then the conversation
+   archives and clears.
+
+`consolidate(living)` is exposed so feed (importing past chat data) can
+call it directly on a sandboxed past Living without reflect's trigger
+gates.
+
+Trigger for the night/idle work:
 - If memory has nothing to consolidate, pass through.
-- If phase is night, consolidate immediately.
-- Otherwise, await `living.is_idle()`. It sleeps the remaining-to-idle window;
-  returns True if uninterrupted (idle confirmed → consolidate), False if a
-  nudge cancelled the wait (activity arrived → skip this beat).
-
-The persona reads its conversation as data inside a single user message and
-decides what to keep going forward — a new context (its carried internal
-narrative) and updated person files (identity, traits, wishes, struggles,
-persona-traits, permissions). What it says replaces what it currently has.
-
-Order after the model returns: write person files → set context → archive
-messages and forget. Most fail-prone work first: if file writes fail, nothing
-changed and the next call retries cleanly.
+- If phase is night, do the work immediately.
+- Otherwise, await `living.is_idle()`. It sleeps the remaining-to-idle
+  window; returns True if uninterrupted (idle confirmed → do the work),
+  False if a nudge cancelled the wait (activity arrived → raise
+  ReflectInterrupted).
 """
 
 import json
 
 from application.core import models, paths
 from application.core.agents import Living
-from application.core.brain import situation
+from application.core.brain import meanings, situation
 from application.core.brain.pulse import Phase
 from application.core.brain.signals import Tick, Tock
 from application.core.exceptions import ModelError, ReflectInterrupted
@@ -144,6 +149,88 @@ async def reflect(living: Living) -> list:
         if not await living.is_idle():
             dispatch(Tock("reflect", {"persona": persona, "branch": "not-idle"}))
             raise ReflectInterrupted()
+
+    # Procedural memory: refine the custom meanings she used today, and
+    # crystallize any new ones from arcs she handled without a meaning. Lives
+    # inline because it's part of the close-of-day — same trigger gate as the
+    # long-term consolidation below. Built-in meanings are not editable, so
+    # they don't appear here even if she used them today.
+    used_custom = sorted(memory.used_meanings & set(memory.custom_meanings.keys()))
+    used_block = "\n\n".join(
+        f"## meanings.{name}\n\n# {m.intention()}\n\n{m.path()}"
+        for name in used_custom
+        for m in [memory.custom_meanings.get(name)]
+        if m is not None
+    ) or "(none used today)"
+
+    question = (
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "# ▶ YOUR TASK: Crystallize today's experience\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "You're closing this stretch. Live conversation memory has carried you "
+        "through the day, but won't survive into tomorrow. What survives is your "
+        "meanings — the procedures you read when a kind of moment recurs.\n\n"
+        "Look back at the meanings you actually used today, plus anything you "
+        "handled without a meaning that's worth keeping.\n\n"
+        "## Custom meanings you used today\n\n"
+        "```markdown\n"
+        f"{used_block}\n"
+        "```\n\n"
+        "## What to return\n\n"
+        "Return a JSON object with an `updates` list. Each item in the list is one of:\n\n"
+        "- `{\"refine\": \"<existing-stem>\", \"path\": \"<full new body>\"}` — "
+        "rewrite one of the meanings above based on what actually worked today. "
+        "The path you return REPLACES the existing one entirely; include everything "
+        "future-you should read.\n"
+        "- `{\"new\": true, \"intention\": \"<short gerund phrase>\", \"path\": \"<full body>\"}` — "
+        "create a new meaning for a kind of moment you handled today without one. "
+        "Only crystallize kinds that will recur; one-offs aren't worth saving.\n\n"
+        "Return `{\"updates\": []}` if nothing today is worth refining or saving. "
+        "Default to keeping what you have unless today's experience clearly improves it."
+    )
+
+    try:
+        response = await models.chat_json(
+            living.ego.model,
+            living.ego.identity + living.pulse.hint(),
+            question,
+        )
+    except ModelError as e:
+        logger.warning("brain.reflect meaning updates produced invalid JSON, skipping", {"persona": persona, "error": str(e)})
+        response = None
+
+    updates = response.get("updates") if isinstance(response, dict) else None
+    if isinstance(updates, list):
+        for item in updates:
+            if not isinstance(item, dict):
+                continue
+            if "refine" in item:
+                name = str(item.get("refine", "")).strip()
+                body = str(item.get("path", "")).strip()
+                if not name or not body or name not in memory.custom_meanings:
+                    continue
+                current = memory.custom_meanings[name]
+                paths.save_as_string(paths.meanings(persona.id) / f"{name}.md", body + "\n")
+                memory.learn(name, meanings.Meaning(name, current.intention(), body))
+                logger.debug("brain.reflect refined meaning", {"persona": persona, "meaning": name})
+            elif item.get("new"):
+                intention = str(item.get("intention", "")).strip()
+                body = str(item.get("path", "")).strip()
+                if not intention or not body:
+                    continue
+                try:
+                    stem = meanings.save_lesson(persona.id, intention, body)
+                except ValueError as e:
+                    logger.warning("brain.reflect new meaning rejected", {"persona": persona, "intention": intention, "error": str(e)})
+                    continue
+                paths.save_as_string(paths.meanings(persona.id) / f"{stem}.md", body + "\n")
+                memory.learn(stem, meanings.Meaning(stem, intention, body))
+                intention_to_stem = paths.read_json(paths.learned(persona.id)) or {}
+                intention_to_stem[intention] = stem
+                paths.save_as_json(persona.id, paths.learned(persona.id), intention_to_stem)
+                logger.debug("brain.reflect created meaning", {"persona": persona, "meaning": stem})
+
+    memory.reset_used_meanings()
 
     await consolidate(living)
 

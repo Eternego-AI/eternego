@@ -1,7 +1,7 @@
 """Memory — the mind's stream of messages, known meanings, and carried context.
 
 Messages and context cross sleep (they're what the persona carries forward). Impression,
-ability, meaning, and plan are ephemeral — they belong to one pass of cognition. On
+meaning, and plan are ephemeral — they belong to one pass of cognition. On
 wake, the situation has changed; last night's impression or plan no longer applies.
 The persona decides again from the messages and context it has now. Known meanings
 live here too — the persona has its abilities by heart, not re-discovered every tick.
@@ -22,7 +22,7 @@ class Memory:
     """Per-persona mind state.
 
     Mutations to messages and context persist to disk immediately so nothing is
-    lost across a crash. Impression, ability, and meaning are in-memory only —
+    lost across a crash. Impression and meaning are in-memory only —
     recomputed every cognitive pass and never carried across sleep.
     """
 
@@ -31,8 +31,8 @@ class Memory:
         self._messages: list[Message] = []
         self._archive: list[list[Message]] = []
         self._impression: str | None = None
-        self._ability: int = 0
         self._meaning: str | None = None
+        self._used_meanings: set[str] = set()
         self._context: str | None = None
         self._builtin_meanings: dict = _meanings.builtin(persona)
         self._custom_meanings: dict = _meanings.custom(persona)
@@ -156,15 +156,6 @@ class Memory:
         self._impression = value
 
     @property
-    def ability(self) -> int:
-        return self._ability
-
-    @ability.setter
-    def ability(self, value: int) -> None:
-        logger.debug("memory.ability", {"persona": self._persona.id, "value": value})
-        self._ability = value
-
-    @property
     def meaning(self) -> str | None:
         return self._meaning
 
@@ -172,6 +163,19 @@ class Memory:
     def meaning(self, value: str | None) -> None:
         logger.debug("memory.meaning", {"persona": self._persona.id, "value": value})
         self._meaning = value
+        if value is not None and value in self.meanings:
+            self._used_meanings.add(value)
+
+    @property
+    def used_meanings(self) -> set[str]:
+        """Names of meanings the persona has entered since the last reset.
+        Reset by reflect after a consolidation pass — accumulates across
+        beats until then so reflect can ask the persona to refine the ones
+        she actually used today."""
+        return set(self._used_meanings)
+
+    def reset_used_meanings(self) -> None:
+        self._used_meanings = set()
 
     @property
     def context(self) -> str | None:

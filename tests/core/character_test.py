@@ -1,11 +1,11 @@
 from application.platform.processes import on_separate_process_async
 
 
-async def test_shape_starts_with_root_h1_and_includes_character():
+async def test_identity_starts_with_root_h1_and_includes_character():
     def isolated():
         import os
         import tempfile
-        from application.core.brain.character import shape
+        from application.core.brain.character import identity
         from application.core.data import Model, Persona
         from application.core import paths
 
@@ -23,7 +23,7 @@ async def test_shape_starts_with_root_h1_and_includes_character():
         (home / "person.md").write_text("The person lives in Amsterdam.")
         (home / "persona-trait.md").write_text("Use Dutch idioms when possible.")
 
-        result = shape(persona)
+        result = identity(persona)
 
         assert result.startswith("# You are an Eternego Persona"), "character must start with root H1"
         assert "Primus" in result
@@ -35,20 +35,21 @@ async def test_shape_starts_with_root_h1_and_includes_character():
         assert "## Who You Are" in result
         assert "## What Sustains and Threatens You" in result
         assert "## How You Act" in result
-        assert "## Permissions" in result
-        # character is purely about the persona's being — no person data here
+        # identity is purely the character block — person data and permissions
+        # live in substrate, not here.
         assert "Amsterdam" not in result
         assert "Dutch idioms" not in result
+        assert "## Permissions" not in result
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_shape_includes_permissions_block_when_empty():
+async def test_substrate_includes_permissions_block_when_empty():
     def isolated():
         import os
         import tempfile
-        from application.core.brain.character import shape
+        from application.core.brain.character import substrate
         from application.core.data import Model, Persona
         from application.core import paths
 
@@ -63,7 +64,7 @@ async def test_shape_includes_permissions_block_when_empty():
         home = paths.home(persona.id)
         home.mkdir(parents=True)
 
-        result = shape(persona)
+        result = substrate(persona)
 
         assert "## Permissions" in result
         assert "(none granted yet)" in result

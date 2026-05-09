@@ -6,15 +6,17 @@ nothing to do. A pass that runs at least one capability re-loops, so the
 TOOL_RESULT just written to memory gets read by the next pass's realize and
 the persona can act on what came back.
 
-Per-pass state — `memory.impression`, `memory.ability`, `memory.meaning` —
-is reset at the top of every iteration. Recognize/learn/decide are free to
-set it within a pass for the internal handoff (recognize → learn → decide);
-nothing carries across passes by design.
+Per-pass state — `memory.impression`, `memory.meaning` — is reset at the top
+of every iteration. Recognize/learn/decide are free to set it within a pass
+for the internal handoff (recognize → learn → decide); nothing carries
+across passes by design.
 
 Each function returns a list of capabilities (tool/ability invocations the
 function declared but did not execute). Clock's inner executor runs each
-item, persists the call+result pair to memory via add_tool_result, and
-dispatches a CapabilityRun event.
+item in order, persists the call+result pair to memory via add_tool_result,
+and dispatches a CapabilityRun event. On the first non-ok status, it stops
+running the remaining items — partial TOOL_RESULTs in memory become the
+re-entry signal for realize on the next pass.
 
 On EngineConnectionError or BrainException from any step, run dispatches a
 BrainFault and exits. Health_check decides what to do.
@@ -34,15 +36,15 @@ async def run(living) -> None:
     memory = living.ego.memory
     persona = living.ego.persona
 
-    async def execute(item: dict) -> None:
+    async def execute(item: dict) -> str | None:
         if not isinstance(item, dict) or not item:
-            return
+            return None
         selector, args = next(iter(item.items()))
         if not isinstance(args, dict):
             args = {} if args is None else args
         if "." not in selector:
             logger.warning("clock.execute unknown selector", {"selector": selector})
-            return
+            return None
         namespace, name = selector.split(".", 1)
         media = None
         if namespace == "tools":
@@ -63,16 +65,16 @@ async def run(living) -> None:
                 status, result = "error", str(e)
         else:
             logger.warning("clock.execute unknown namespace", {"selector": selector})
-            return
+            return None
         memory.add_tool_result(selector, args, status, result, media=media)
         dispatch(CapabilityRun(selector, {"persona": persona, "args": args, "status": status, "result": result}))
+        return status
 
     if worker.stopped:
         return
 
     while True:
         memory.impression = ""
-        memory.ability = 0
         memory.meaning = None
         executed_any = False
 
@@ -98,10 +100,17 @@ async def run(living) -> None:
                 if not isinstance(consequences, list):
                     continue
                 for item in consequences:
-                    await execute(item)
+                    status = await execute(item)
                     executed_any = True
                     if worker.stopped:
                         return
+                    if worker.pending_restart:
+                        # A signal arrived during this consequence — let the
+                        # current call land in memory, then abandon any
+                        # remaining queued items. The outer break re-perceives.
+                        break
+                    if status is not None and status != "ok":
+                        break
                 if executed_any:
                     break
         except ReflectInterrupted:

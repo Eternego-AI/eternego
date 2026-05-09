@@ -286,30 +286,6 @@ def read_json(path: Path) -> dict | None:
     return filesystem.read_json(path)
 
 
-def md_dict(path: Path) -> dict[str, str]:
-    """Parse a markdown file by `# ` headers; returns {header: body} per section.
-
-    Lines before the first `# ` header are dropped. Empty file or missing file
-    returns an empty dict.
-    """
-    if not path.exists():
-        return {}
-    sections: dict[str, str] = {}
-    current_header: str | None = None
-    current_body: list[str] = []
-    for line in filesystem.read(path).splitlines():
-        if line.startswith("# "):
-            if current_header is not None:
-                sections[current_header] = "\n".join(current_body).strip()
-            current_header = line[2:].strip()
-            current_body = []
-        elif current_header is not None:
-            current_body.append(line)
-    if current_header is not None:
-        sections[current_header] = "\n".join(current_body).strip()
-    return sections
-
-
 def md_list(path: Path, section: str) -> list[str]:
     """Return non-empty lines under a markdown section header (## section) from a file."""
     if not path.exists():

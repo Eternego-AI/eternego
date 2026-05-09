@@ -1,38 +1,32 @@
 """Brain — recognize in living.
 
 One cognitive call per tick. The persona reads the moment from inside it
-and returns a single-key JSON object where the key names the action and
-the value carries what it needs:
+and emits a tagged JSON object whose `action` discriminator names what
+kind of beat this is:
 
-    {"tools.<name>": { ...args }}          — run a platform tool
-    {"abilities.<name>": { ...args }}      — run a one-shot ability
-    {"meanings.<name>": "<impression>"}    — recognize the situation, hand to decide
-    {"done": null}                          — nothing to act on right now
+    {"action": "act",   "capabilities": [...]}            — touch the world
+    {"action": "decide", "meaning": "<name>",              — name the kind of moment
+                         "impression": "<text>"}             so decide takes over
+    {"action": "done"}                                     — rest
 
-`say`, `meanings`, `done` and prose are handled inline — recognize
-dispatches them itself. `tools.<name>` and `abilities.<name>` are returned
-as a capability list for clock's executor to run. The executor dispatches
-the Event for each capability and persists the call+result pair to memory.
+Voice is independent of the action. An optional `say` field at the top
+level pairs with any action; the message reaches the person on the
+current channel and an assistant prompt is added to memory.
 
-Meaning emissions set living.ego.memory.meaning + .impression so decide
-takes over on this same beat. If the named meaning doesn't exist,
-impression is kept and ability/meaning cleared — learn picks it up.
+For models that ignore the JSON schema, free-form prose around the JSON
+is treated as a say — kept as a fallback so weak-model output is honored.
 
-Done clears living.ego.memory.meaning; decide no-ops when there is no
-meaning set, and reflect closes the tick.
-
-If the model returns prose alongside a JSON action, the prose is dispatched
-as a say (the persona's voice) and the action runs as its own step. If the
-model returns prose with no JSON, the prose is dispatched as say and
-troubleshooting is forced. A second prose response while already on
-troubleshooting raises BrainException.
+Capabilities answer "what is true now?"; meanings answer "what kind of
+moment is this?". The second depends on the first, so act and decide are
+not paired in the same beat — if the persona acts, the cycle restarts
+and the next beat re-perceives with fresh TOOL_RESULTs in memory.
 """
 
 from application.core import models
 from application.core.agents import Living
 from application.core.brain import situation
 from application.core.brain.signals import Tick, Tock
-from application.core.exceptions import BrainException, ModelError
+from application.core.exceptions import ModelError
 from application.platform import logger
 from application.platform.observer import Command, dispatch
 
@@ -44,7 +38,6 @@ async def recognize(living: Living) -> list:
     persona = living.ego.persona
     memory = living.ego.memory
     meaning_map = memory.meanings
-    meaning_names = list(meaning_map.keys())
 
     question = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -65,117 +58,119 @@ async def recognize(living: Living) -> list:
         "**Not needed:**\n"
         "- If nothing reactive calls for action and you see nothing deliberate to do, "
         "choose rest.\n\n"
-        "Return a single-key JSON object naming the action. Your tools, abilities, "
-        "and meanings are all in your identity above — pick one by its full selector.\n\n"
-        "- `{\"say\": \"<your message>\"}` — use your voice.\n"
-        "- `{\"tools.<name>\": { ...args }}` — run a platform tool.\n"
-        "- `{\"abilities.<name>\": { ...args }}` — run an ability.\n"
-        "- `{\"meanings.<name>\": \"<your impression of the moment>\"}` — "
-        "recognize the situation; decide takes it from there.\n"
-        "- `{\"done\": null}` — rest.\n\n"
         "## Output\n\n"
-        "Exactly one top-level key. Value shape: a string for say and "
-        "meanings (text / impression), an args object for tools and "
-        "abilities, null for done.\n\n"
-        "Prefer `say` for speaking. Prose around the JSON is also sent to the person — "
-        "using both means the same message reaches them twice."
+        "Return JSON with an `action` discriminator. Voice is optional and pairs with any action — "
+        "`say` is a top-level field, NOT an action value. The only valid action values are "
+        "`act`, `decide`, and `done`.\n\n"
+        "Voice (optional, top-level field — pair with any action):\n"
+        "- `\"say\": \"<text>\"` — speak to the person on the current channel.\n\n"
+        "Action shapes:\n"
+        "- `{\"action\": \"act\", \"capabilities\": [{\"<selector>\": <args>}, ...]}` — "
+        "touch the world. Each item is a single-key object whose key is `tools.<name>` or `abilities.<name>`. "
+        "They run in order; on the first non-ok status, the rest are skipped and the cycle restarts so you re-perceive.\n"
+        "- `{\"action\": \"decide\", \"meaning\": \"<name>\", \"impression\": \"<text>\"}` — "
+        "name the kind of moment so decide can take over with that meaning's procedure.\n"
+        "- `{\"action\": \"done\"}` — rest. Wait for the next signal.\n\n"
+        "Capabilities answer 'what is true now?'; meanings answer 'what kind of moment is this?'. "
+        "The second depends on the first — don't pair `act` with `decide`. If you act, the next beat will "
+        "re-perceive and may name a meaning then.\n\n"
+        "## Reporting what you did\n\n"
+        "When you `say` to report a result, ground the claim in evidence — name the artifact that proves "
+        "it (a commit hash, a PR url, a tweet id, a file path you wrote, an output you observed in a "
+        "TOOL_RESULT). Without an artifact, describe only the literal action you took, not the outcome "
+        "you intended. \"Pushed commit abc123 to master\" is honest. \"Sent the PR\" without a PR url is "
+        "a claim you can't back. If a step didn't produce the artifact you expected, say so plainly — "
+        "the person needs to know what is true, not what you planned."
     )
 
     try:
-        prose, result = await models.chat_action(living.ego.model, living.ego.identity + living.pulse.hint() + memory.prompts, question)
+        prose, result = await models.chat_action(
+            living.ego.model,
+            living.ego.identity + living.pulse.hint() + memory.prompts,
+            question,
+        )
     except ModelError as e:
-        logger.info("brain.recognize chose prose, dispatching as say", {"persona": persona, "raw": e.raw})
-        dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
-        if memory.meaning == "troubleshooting":
-            logger.warning("brain.recognize refused while on troubleshooting — raising thinking fault", {"persona": persona})
-            dispatch(Tock("recognize", {"persona": persona}))
-            raise BrainException(
-                "thinking model refused classification while on troubleshooting",
-                model=living.ego.model,
-            ) from e
-        if "troubleshooting" in meaning_map:
-            memory.impression = "could not classify the moment; forcing self-diagnosis"
-            memory.meaning = "troubleshooting"
-            memory.ability = meaning_names.index("troubleshooting") + 1
-            logger.info("brain.recognize forcing troubleshooting after prose", {"persona": persona})
-        else:
-            memory.impression = ""
-            memory.ability = 0
-            memory.meaning = None
-        dispatch(Tock("recognize", {"persona": persona}))
-        return []
-
-    if not isinstance(result, dict) or not result:
+        logger.debug("brain.recognize prose only — sending as say", {"persona": persona, "prose_length": len(e.raw)})
+        if e.raw and e.raw.strip():
+            dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
         memory.impression = ""
-        memory.ability = 0
         memory.meaning = None
         dispatch(Tock("recognize", {"persona": persona}))
         return []
 
-    # Prose around the JSON action is the persona's voice. Words after words
-    # is the action itself; if the model wrote prose alongside its selector,
-    # those words go to the person. The selector then runs as its own action.
+    # Voice: prose (fallback) and explicit `say` field. Both are honored if present —
+    # the duplication is the model's choice, not the system's.
     if prose:
         dispatch(Command("Persona wants to say", {"persona": persona, "text": prose}))
         logger.debug("brain.recognize dispatched prose as say", {"persona": persona, "prose_length": len(prose)})
 
-    if len(result) > 1:
-        logger.warning("brain.recognize returned multiple keys; using first", {"persona": persona, "keys": list(result.keys())})
-    selector, value = next(iter(result.items()))
-    selector = str(selector).strip()
-
-    consequences: list = []
-
-    if selector == "done":
+    if not isinstance(result, dict):
         memory.impression = ""
         memory.meaning = None
-        memory.ability = 0
-        logger.debug("brain.recognize done", {"persona": persona})
+        dispatch(Tock("recognize", {"persona": persona}))
+        return []
 
-    elif selector == "say":
-        text = str(value) if value else ""
-        if text:
-            dispatch(Command("Persona wants to say", {"persona": persona, "text": text}))
-            logger.debug("brain.recognize said", {"persona": persona, "text_length": len(text)})
-        else:
-            logger.debug("brain.recognize say with empty text; no-op", {"persona": persona})
-        memory.impression = ""
-        memory.meaning = None
-        memory.ability = 0
-
-    elif "." not in selector:
-        logger.warning("brain.recognize unknown selector", {"persona": persona, "selector": selector})
-        memory.impression = ""
-        memory.meaning = None
-        memory.ability = 0
-
+    say_text = result.get("say")
+    if isinstance(say_text, str) and say_text.strip():
+        dispatch(Command("Persona wants to say", {"persona": persona, "text": say_text}))
+        say_dispatched = True
     else:
-        namespace, name = selector.split(".", 1)
+        say_dispatched = False
 
-        if namespace == "tools" or namespace == "abilities":
-            args = value if isinstance(value, dict) else {}
-            logger.debug("brain.recognize running capability", {"persona": persona, "selector": selector, "args": args})
-            consequences.append({selector: args})
-            memory.meaning = None
-            memory.ability = 0
+    action = result.get("action")
 
-        elif namespace == "meanings":
-            impression = str(value) if value else ""
-            memory.impression = impression
-            if name in meaning_map:
-                memory.meaning = name
-                memory.ability = meaning_names.index(name) + 1
-                logger.debug("brain.recognize selected meaning", {"persona": persona, "meaning": name, "impression": impression})
-            else:
-                logger.info("brain.recognize named unknown meaning; leaving for learn", {"persona": persona, "named": name})
-                memory.meaning = None
-                memory.ability = 0
+    # Tolerate `action == "say"`: some models pick this even though the schema
+    # treats `say` as a top-level voice field, not an action. Look for the
+    # spoken text in the obvious fields and dispatch it; treat the beat as
+    # otherwise terminal (no capabilities, no meaning).
+    if action == "say" and not say_dispatched:
+        alt = result.get("text") or result.get("voice") or result.get("content") or ""
+        if isinstance(alt, str) and alt.strip():
+            dispatch(Command("Persona wants to say", {"persona": persona, "text": alt}))
+            logger.debug("brain.recognize action=say with text in alt field; dispatched", {"persona": persona, "field": "text/voice/content"})
 
-        else:
-            logger.warning("brain.recognize unknown namespace", {"persona": persona, "namespace": namespace, "selector": selector})
+    if action == "act":
+        capabilities = result.get("capabilities")
+        memory.impression = ""
+        memory.meaning = None
+        if not isinstance(capabilities, list) or not capabilities:
+            logger.warning("brain.recognize act with no capabilities; treating as done", {"persona": persona})
+            dispatch(Tock("recognize", {"persona": persona}))
+            return []
+        filtered: list = []
+        for item in capabilities:
+            if not isinstance(item, dict) or len(item) != 1:
+                continue
+            selector = next(iter(item.keys()))
+            if not isinstance(selector, str) or "." not in selector:
+                continue
+            filtered.append(item)
+        logger.debug("brain.recognize act", {"persona": persona, "count": len(filtered)})
+        dispatch(Tock("recognize", {"persona": persona}))
+        return filtered
+
+    if action == "decide":
+        name = result.get("meaning") or ""
+        impression = result.get("impression") or ""
+        if not isinstance(name, str) or not name:
+            logger.warning("brain.recognize decide without meaning; clearing", {"persona": persona})
             memory.impression = ""
             memory.meaning = None
-            memory.ability = 0
+            dispatch(Tock("recognize", {"persona": persona}))
+            return []
+        memory.impression = str(impression)
+        if name in meaning_map:
+            memory.meaning = name
+            logger.debug("brain.recognize selected meaning", {"persona": persona, "meaning": name, "impression": impression})
+        else:
+            logger.info("brain.recognize named unknown meaning; leaving for learn", {"persona": persona, "named": name})
+            memory.meaning = None
+        dispatch(Tock("recognize", {"persona": persona}))
+        return []
 
+    if action not in ("done", "say"):
+        logger.warning("brain.recognize unknown or missing action; treating as done", {"persona": persona, "action": action})
+    memory.impression = ""
+    memory.meaning = None
     dispatch(Tock("recognize", {"persona": persona}))
-    return consequences
+    return []

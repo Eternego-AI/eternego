@@ -31,7 +31,7 @@ async def grow(persona: Persona) -> Outcome[GrowData]:
             bus.broadcast("Grown", {"persona": persona})
             return Outcome(success=True, message="No traits to grow from.", data=GrowData(trained=False, finetune=False))
 
-        persona_character = character.shape(persona)
+        persona_character = character.identity(persona)
         if persona.frontier:
             try:
                 all_pairs = await models.generate_training_set(persona.frontier, persona_character, traits)

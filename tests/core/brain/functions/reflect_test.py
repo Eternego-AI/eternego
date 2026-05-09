@@ -191,6 +191,144 @@ async def test_reflect_when_idle_consolidates():
     assert code == 0, error
 
 
+async def test_reflect_at_night_refines_used_meanings_and_creates_new():
+    """At night, reflect first asks the persona to update meanings she used
+    today (refine existing, create new), then calls consolidate. Two model
+    calls: one for the meaning updates, one for the long-term files."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents, paths
+            from application.core.brain import functions, meanings
+            from application.core.brain.pulse import Phase, Pulse
+            from application.core.data import Message, Model, Persona, Prompt
+            from application.platform import ollama
+            import json
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume(url):
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
+                # Seed a custom meaning the persona "used" today.
+                paths.save_as_string(paths.meanings(persona.id) / "asking_for_keys.md", "Old vague body.\n")
+                paths.save_as_json(persona.id, paths.learned(persona.id), {"asking for keys": "asking_for_keys"})
+
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                living.pulse.phase = Phase.NIGHT
+                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                # Mark the meaning as used during the day.
+                ego.memory.meaning = "asking_for_keys"
+                # Clear it (reflect would clear it anyway) — used_meanings has the record.
+                assert "asking_for_keys" in ego.memory.used_meanings
+
+                consequences = await functions.reflect(living)
+                assert consequences == []
+
+                # Refined body persisted.
+                refined_body = paths.read(paths.meanings(persona.id) / "asking_for_keys.md")
+                assert "specific updated body" in refined_body
+                assert "Old vague body" not in refined_body
+
+                # New meaning created. Stem is slugified intention.
+                new_file = paths.meanings(persona.id) / "publishing_via_pr.md"
+                assert new_file.exists()
+                assert "gh pr create" in new_file.read_text()
+
+                # learned.json carries both intentions.
+                learned = paths.read_json(paths.learned(persona.id)) or {}
+                assert learned.get("asking for keys") == "asking_for_keys"
+                assert learned.get("publishing via PR") == "publishing_via_pr"
+
+                # used_meanings reset after reflect.
+                assert ego.memory.used_meanings == set()
+
+                # Long-term consolidation also happened.
+                assert paths.person_identity(persona.id).exists()
+                assert ego.memory.messages == []
+
+            updates = json.dumps({
+                "updates": [
+                    {"refine": "asking_for_keys", "path": "specific updated body with steps"},
+                    {"new": True, "intention": "publishing via PR", "path": "Run gh pr create with the right base and head."},
+                ]
+            })
+            consolidation = json.dumps({
+                "context": "today closed",
+                "identity": ["A"],
+                "traits": [], "wishes": [], "struggles": [],
+                "persona_traits": [], "permissions": [],
+            })
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[
+                    [{"message": {"content": updates}, "done": True}],
+                    [{"message": {"content": consolidation}, "done": True}],
+                ],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_reflect_at_night_with_no_used_meanings_still_asks():
+    """Even if no custom meanings were used today, reflect still asks the
+    persona about meanings — she might want to crystallize a new one from a
+    pure act-mode arc. Two model calls: one for the meaning question (which
+    returns empty updates), one for the long-term consolidation."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents, paths
+            from application.core.brain import functions
+            from application.core.brain.pulse import Phase, Pulse
+            from application.core.data import Message, Model, Persona, Prompt
+            from application.platform import ollama
+            import json
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume(url):
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                living.pulse.phase = Phase.NIGHT
+                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                assert ego.memory.used_meanings == set()
+
+                consequences = await functions.reflect(living)
+                assert consequences == []
+
+            empty_updates = json.dumps({"updates": []})
+            consolidation = json.dumps({
+                "context": "quiet day",
+                "identity": [], "traits": [], "wishes": [], "struggles": [],
+                "persona_traits": [], "permissions": [],
+            })
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[
+                    [{"message": {"content": empty_updates}, "done": True}],
+                    [{"message": {"content": consolidation}, "done": True}],
+                ],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 async def test_consolidate_writes_person_files_and_archives():
     """Direct call to consolidate (no trigger gate) writes all six person files,
     sets context, archives messages, and forgets."""

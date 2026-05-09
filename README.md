@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/Eternego-AI/eternego?include_prereleases&sort=semver)](https://github.com/Eternego-AI/eternego/releases)
 [![Website](https://img.shields.io/badge/website-eternego.ai-blue)](https://eternego.ai)
 [![Docs](https://img.shields.io/badge/docs-docs.eternego.ai-blue)](https://docs.eternego.ai)
-[![Tests](https://img.shields.io/badge/tests-362%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-381%20passing-brightgreen)](tests/)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/nfHnWwYUR4)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 

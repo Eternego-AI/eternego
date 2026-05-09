@@ -2,7 +2,7 @@
 
 Runs a loop function (tick) and dispatches individual jobs within it.
 One job at a time — jobs are cancellable. The loop restarts on nudge
-when idle.
+when idle, or re-runs after exit when a nudge fired during the tick.
 """
 
 import asyncio
@@ -19,6 +19,7 @@ class Worker:
         self._job: asyncio.Task | None = None
         self._error: Exception | None = None
         self._stopped: bool = False
+        self._pending_restart: bool = False
 
     # ── Main loop ─────────────────────────────────────────────────────────
 
@@ -32,13 +33,20 @@ class Worker:
             self._tick_task = asyncio.create_task(self._loop())
 
     async def _loop(self):
-        """Run tick, storing any unhandled exception."""
+        """Run tick, storing any unhandled exception. Re-runs the tick if a
+        nudge fired during the run — so a signal arriving mid-tick produces a
+        fresh perception once the cancelled work unwinds."""
         if not self._tick_fn:
             return
-        try:
-            await self._tick_fn(*self._tick_args)
-        except Exception as e:
-            self._error = e
+        while True:
+            self._pending_restart = False
+            try:
+                await self._tick_fn(*self._tick_args)
+            except Exception as e:
+                self._error = e
+                return
+            if not self._pending_restart or self._stopped:
+                return
 
     # ── Job dispatch ──────────────────────────────────────────────────────
 
@@ -79,13 +87,16 @@ class Worker:
     # ── Nudge ─────────────────────────────────────────────────────────────
 
     def nudge(self) -> None:
-        """Signal new work. Start tick if idle, cancel current job if running."""
+        """Signal new work. Start tick if idle; if running, mark the tick for
+        restart and cancel the current job so the cancelled work unwinds and
+        the loop re-runs with the new memory in place."""
         if self._stopped:
             return
         if not self._tick_task or self._tick_task.done():
             if self._tick_fn:
                 self._tick_task = asyncio.create_task(self._loop())
         else:
+            self._pending_restart = True
             self.cancel()
 
     # ── Settle & stop ─────────────────────────────────────────────────────
@@ -116,6 +127,10 @@ class Worker:
     @property
     def stopped(self) -> bool:
         return self._stopped
+
+    @property
+    def pending_restart(self) -> bool:
+        return self._pending_restart
 
     @property
     def error(self) -> Exception | None:

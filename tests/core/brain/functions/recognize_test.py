@@ -3,22 +3,20 @@
 Each test constructs a real Living (Ego/Eye/Consultant/Teacher + Pulse with a
 no-op worker), calls `recognize(living)`, and asserts on:
 - the returned consequences list
-- memory state (impression / meaning / ability / messages)
+- memory state (impression / meaning / messages)
 - bus traffic (Tick/Tock signals, Command dispatches)
+
+Recognize emits a tagged JSON object with an `action` discriminator
+(`act`, `decide`, `done`) plus optional voice fields (`say`). Free-form
+prose around the JSON is dispatched as a fallback say.
 """
 
 from application.platform.processes import on_separate_process_async
 
 
-def _build_living(persona):
-    """Helper duplicated in each isolated() body — kept inline by tradition,
-    but extracted here so the spec of "what setup looks like" is one place."""
-    raise NotImplementedError("Inline this in each test for separate-process isolation")
-
-
-async def test_recognize_dispatches_say_and_clears_state():
-    """When the model emits {"say": "..."}, recognize dispatches a Persona-wants-to-say
-    Command and clears memory.meaning/ability/impression. Returns [] (no capabilities)."""
+async def test_recognize_say_field_dispatches_and_clears_state():
+    """Top-level `say` field dispatches a Persona-wants-to-say Command and
+    clears memory.meaning/impression. Returns [] (no capabilities)."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -54,13 +52,12 @@ async def test_recognize_dispatches_say_and_clears_state():
 
                 assert consequences == [], f"expected [], got {consequences!r}"
                 assert ego.memory.meaning is None
-                assert ego.memory.ability == 0
                 assert ego.memory.impression == ""
                 assert said == ["hello"], f"expected one say 'hello', got {said!r}"
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"say": "hello"}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"action": "say", "say": "hello"}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -68,7 +65,7 @@ async def test_recognize_dispatches_say_and_clears_state():
 
 
 async def test_recognize_done_clears_state():
-    """{"done": null} clears meaning/ability/impression. No consequences, no say."""
+    """{"action": "done"} clears meaning/impression. No consequences, no say."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -92,7 +89,6 @@ async def test_recognize_done_clears_state():
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
                 ego.memory.meaning = "stale"
-                ego.memory.ability = 5
                 ego.memory.impression = "stale"
 
                 said = []
@@ -107,22 +103,22 @@ async def test_recognize_done_clears_state():
 
                 assert consequences == []
                 assert ego.memory.meaning is None
-                assert ego.memory.ability == 0
                 assert ego.memory.impression == ""
                 assert said == [], f"done should not dispatch a say, got {said!r}"
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"done": null}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"action": "done"}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_recognize_meaning_selected_sets_state():
-    """{"meanings.chatting": "<impression>"} sets memory.meaning + ability and
-    leaves the impression for decide. Returns [] (decide takes over next stage)."""
+async def test_recognize_decide_meaning_sets_state():
+    """{"action": "decide", "meaning": "chatting", "impression": "..."} sets
+    memory.meaning and leaves the impression for decide. Returns []
+    (decide takes over next stage)."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -150,21 +146,22 @@ async def test_recognize_meaning_selected_sets_state():
 
                 assert consequences == []
                 assert ego.memory.meaning == "chatting"
-                assert ego.memory.ability != 0, "chatting is a built-in meaning, ability should be set"
+                assert ego.memory.meaning == "chatting"
                 assert ego.memory.impression == "casual greeting"
 
+            payload = '{"action": "decide", "meaning": "chatting", "impression": "casual greeting"}'
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"meanings.chatting": "casual greeting"}'}, "done": True}]],
+                responses=[[{"message": {"content": payload}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_recognize_tool_returns_capability():
-    """{"tools.OS.execute": {...}} returns a single-item capability
-    list for clock's executor to run. Memory state cleared (ability=0, meaning=None)."""
+async def test_recognize_act_returns_capabilities():
+    """{"action": "act", "capabilities": [...]} returns the capabilities list
+    for clock's executor to run. Memory state cleared (meaning=None)."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -193,21 +190,21 @@ async def test_recognize_tool_returns_capability():
                 assert len(consequences) == 1
                 assert consequences[0] == {"tools.OS.execute": {"command": "ls"}}
                 assert ego.memory.meaning is None
-                assert ego.memory.ability == 0
 
+            payload = '{"action": "act", "capabilities": [{"tools.OS.execute": {"command": "ls"}}]}'
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"tools.OS.execute": {"command": "ls"}}'}, "done": True}]],
+                responses=[[{"message": {"content": payload}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_recognize_prose_forces_troubleshooting():
-    """When the model returns prose with no JSON, recognize dispatches the prose as
-    a say and forces memory.meaning='troubleshooting' so decide can self-diagnose
-    on the next stage. Returns []."""
+async def test_recognize_action_say_with_text_field_dispatches():
+    """Some models pick `action: "say"` and put the text in `text` or `voice`
+    rather than the documented `say` field. Recognize tolerates this and
+    dispatches the text from whichever field carries it."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -242,23 +239,23 @@ async def test_recognize_prose_forces_troubleshooting():
                 await _a.sleep(0)
 
                 assert consequences == []
-                assert ego.memory.meaning == "troubleshooting"
-                assert ego.memory.ability != 0
-                assert any("just some prose" in t for t in said), \
-                    f"expected the prose dispatched as a say, got {said!r}"
+                assert any("hello there" in t for t in said), \
+                    f"text in voice/text field should dispatch as say, got {said!r}"
 
+            payload = '{"action": "say", "text": "hello there"}'
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": "just some prose, no json here"}, "done": True}]],
+                responses=[[{"message": {"content": payload}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_recognize_prose_during_troubleshooting_raises():
-    """Second prose response while already on troubleshooting raises BrainException
-    (attributed to thinking model). Health_check sees the BrainFault next tick."""
+async def test_recognize_prose_dispatched_as_say():
+    """When the model returns prose with no JSON, recognize dispatches the prose
+    as a say (fallback for models that don't follow the schema). Returns []
+    with state cleared."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -267,8 +264,7 @@ async def test_recognize_prose_during_troubleshooting_raises():
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
-            from application.core.exceptions import BrainException
-            from application.platform import ollama
+            from application.platform import observer, ollama
 
             class FakeWorker:
                 def run(self, *a): pass
@@ -282,18 +278,25 @@ async def test_recognize_prose_during_troubleshooting_raises():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-                ego.memory.meaning = "troubleshooting"
-                ego.memory.ability = 8
 
-                try:
-                    await functions.recognize(living)
-                    assert False, "expected BrainException"
-                except BrainException as e:
-                    assert e.model is persona.thinking
+                said = []
+                async def capture(cmd: observer.Command):
+                    if cmd.title == "Persona wants to say":
+                        said.append(cmd.details.get("text", ""))
+                observer.subscribe(capture)
+
+                consequences = await functions.recognize(living)
+                import asyncio as _a
+                await _a.sleep(0)
+
+                assert consequences == []
+                assert ego.memory.meaning is None
+                assert any("just some prose" in t for t in said), \
+                    f"expected the prose dispatched as a say, got {said!r}"
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": "still prose"}, "done": True}]],
+                responses=[[{"message": {"content": "just some prose, no json here"}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -388,7 +391,7 @@ async def test_recognize_prose_alongside_json_dispatches_both():
             raw = (
                 "I'm sitting with this. Nothing calls right now.\n\n"
                 "```json\n"
-                '{"done": null}\n'
+                '{"action": "done"}\n'
                 "```"
             )
             ollama.assert_call(
