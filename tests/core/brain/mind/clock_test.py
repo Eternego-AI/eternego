@@ -146,9 +146,9 @@ async def test_run_exits_immediately_when_worker_stopped():
 
 
 async def test_executor_runs_ability_consequence_and_records():
-    """When a step returns [{"abilities.<name>": {...}}], the executor calls
-    the ability, records add_tool_result with the result, and dispatches a
-    CapabilityRun signal."""
+    """When a step returns [{"tools.<name>": {...}}] for an ability, the
+    executor resolves the name in the abilities registry, records
+    add_tool_result with the result, and dispatches a CapabilityRun signal."""
     def isolated():
         import asyncio, os, tempfile
         from pathlib import Path
@@ -166,7 +166,7 @@ async def test_executor_runs_ability_consequence_and_records():
             async def step():
                 calls[0] += 1
                 if calls[0] == 1:
-                    return [{"abilities.save_notes": {"content": "remember this"}}]
+                    return [{"tools.save_notes": {"content": "remember this"}}]
                 return []  # settle on second pass
 
             persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
@@ -190,13 +190,13 @@ async def test_executor_runs_ability_consequence_and_records():
             msgs = ego.memory.messages
             assert len(msgs) == 2
             assert msgs[0].prompt.role == "assistant"
-            assert "abilities.save_notes" in msgs[0].content
+            assert "tools.save_notes" in msgs[0].content
             assert msgs[1].prompt.role == "user"
             assert "TOOL_RESULT" in msgs[1].content
             assert "notes updated" in msgs[1].content
             # CapabilityRun dispatched with the right shape
             assert len(runs) == 1
-            assert runs[0].title == "abilities.save_notes"
+            assert runs[0].title == "tools.save_notes"
             assert runs[0].details["status"] == "ok"
             assert runs[0].details["result"] == "notes updated"
 
@@ -224,7 +224,7 @@ async def test_executor_records_error_when_ability_raises():
                 calls[0] += 1
                 if calls[0] == 1:
                     # save_notes raises ValueError when content is empty
-                    return [{"abilities.save_notes": {"content": ""}}]
+                    return [{"tools.save_notes": {"content": ""}}]
                 return []  # settle on second pass
 
             persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
@@ -323,7 +323,7 @@ async def test_run_re_loops_when_consequences_executed():
             async def step():
                 calls[0] += 1
                 if calls[0] == 1:
-                    return [{"abilities.save_notes": {"content": "first pass"}}]
+                    return [{"tools.save_notes": {"content": "first pass"}}]
                 return []  # settle on second pass
 
             persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))

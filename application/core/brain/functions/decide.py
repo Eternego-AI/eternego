@@ -1,33 +1,26 @@
 """Brain — decide for living.
 
-One cognitive call per tick when recognize handed us a meaning. Decide reads
-the meaning's prompt and emits a single-key JSON object in the unified shape.
+Gates on memory: only fires when `memory.comprehension()` returns a
+fresh impression — i.e. learn just produced a procedure body for the
+persona to follow. Decide is the moment of focus right after guidance
+arrives.
 
-Extends recognize's vocabulary with:
-- `{"notify": "text"}` — broadcast (agent fans out)
-- `{"clear_memory": null}` — wipe active messages
-- `{"remove_meaning": {name}}` — delete a custom meaning
-- `{"revise_meaning": "<new path>"}` — replace the current custom meaning's path
-- `{"stop": null}` — stop until the person returns
+The body is in conversation memory; decide reads it via `memory.prompts`
+the same way it reads everything else. No injection.
 
-These specials, plus `say`, `done`, and prose, are handled inline. Tools and
-abilities are returned as a capability list for clock's executor to run.
+Decide's vocabulary is the same single-key / `steps:[...]` shape recognize
+uses, plus self-care specials (clear_memory, remove_meaning, stop) that
+decide handles inline. If the persona emits `tools.load_instruction` for
+sub-guidance, decide records a fresh intention and the cycle continues.
 
-`revise_meaning` carries the full new path text directly — the persona writes
-the wisdom at the same moment she chooses to capture it, no second model call.
-It's offered only when the current meaning is custom; built-ins are stable
-system vocabulary, not revisable. The persona can still `remove_meaning` and
-re-learn if she wants a custom replacement.
-
-If the model returns prose alongside a JSON action, the prose is dispatched
-as a say (the persona's voice) and the action still runs. If the model
-returns prose with no JSON, the prose is dispatched as say and decide
-returns an empty list.
+The pilot/autopilot rhythm: decide is a single moment of focus after an
+impression arrives; subsequent beats run recognize (fresh perception
+with the body still in memory) until the procedure completes.
 """
 
 from application.core import models, paths
 from application.core.agents import Living
-from application.core.brain import meanings, situation
+from application.core.brain import situation
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Message, Prompt
 from application.core.exceptions import ModelError
@@ -36,158 +29,145 @@ from application.platform.observer import Command, dispatch
 
 
 async def decide(living: Living) -> list:
-    """decide FOR living — choose the next action on its behalf."""
+    """decide FOR living — focus on the just-arrived instruction."""
     dispatch(Tick("decide", {"persona": living.ego.persona}))
 
     persona = living.ego.persona
     memory = living.ego.memory
 
-    meaning = memory.meanings.get(memory.meaning)
-    if not meaning:
-        dispatch(Tock("decide", {"persona": persona}))
+    if memory.comprehension() is None:
+        dispatch(Tock("decide", {"persona": persona, "branch": "skipped"}))
         return []
 
-    is_custom = memory.meaning in memory.custom_meanings
-    self_care_lines = [
-        "Memory and self-care:",
-        "- `{\"clear_memory\": null}` — wipe the current messages.",
-        "- `{\"remove_meaning\": {\"name\": \"<name>\"}}` — delete a custom meaning.",
-    ]
-    if is_custom:
-        self_care_lines.append(
-            "- `{\"revise_meaning\": \"<full new path text>\"}` — when something you just "
-            "did or learned should be how you handle this situation next time, write the "
-            "complete new path here. Whatever you write replaces the current path. "
-            "Use sparingly — only when the meaning is genuinely wrong, missing, or could "
-            "capture something useful for next time. Plain prose, paragraphs separated by "
-            "`\\n\\n`. No headings, no code blocks."
-        )
-    self_care_lines.append("- `{\"stop\": null}` — stop yourself until someone speaks.")
-    self_care_block = "\n".join(self_care_lines)
+    self_care_block = (
+        "Self-care:\n"
+        "- `{\"clear_memory\": null}` — wipe the current messages.\n"
+        "- `{\"remove_meaning\": {\"name\": \"<stem>\"}}` — delete a custom instruction.\n"
+        "- `{\"stop\": null}` — stop yourself until someone speaks."
+    )
 
     question = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"# ▶ YOUR TASK: {memory.meaning.capitalize()}\n"
+        "# ▶ YOUR TASK: Focus on the last instruction\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"{situation.time()}\n\n"
-        f"{meaning.path()}\n\n"
+        "You just received an instruction. The procedure body is in your most "
+        "recent TOOL_RESULT — read it and follow the procedure.\n\n"
+        "If the procedure has multiple steps, pay attention to the conversation "
+        "to see which step you are on and continue from there.\n\n"
         "## Output\n\n"
-        "Return a single-key JSON object. The key names the action; the value carries what it needs. "
-        "Your tools and abilities are in your identity above — pick one by its full selector.\n\n"
+        "Return a single-key JSON object naming the action, or wrap several in "
+        "`{\"steps\": [...]}` to chain them in one beat. Each step is one of:\n\n"
         "Voice:\n"
         "- `{\"say\": \"<text>\"}` — speak to the person on the current channel.\n"
         "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
         f"{self_care_block}\n\n"
-        "Tools and abilities:\n"
-        "- `{\"tools.<name>\": { ...args }}` — run a platform tool.\n"
-        "- `{\"abilities.<name>\": { ...args }}` — run an ability.\n\n"
+        "Tools:\n"
+        "- `{\"tools.<name>\": { ...args }}` — run a tool from your catalog.\n"
+        "- `{\"tools.load_instruction\": {\"intention\": \"<name>\"}}` — ask for "
+        "sub-guidance if a step references another kind of moment you don't yet "
+        "have a procedure for.\n\n"
         "Done:\n"
-        "- `{\"done\": null}` — this cycle is finished.\n\n"
-        "Prefer `say` for speaking. Prose around the JSON is also sent to the person — "
-        "using both means the same message reaches them twice."
+        "- `{\"done\": null}` — the procedure is complete.\n\n"
+        "When you `say` to report a result, ground the claim in evidence — name "
+        "the artifact that proves it (a commit hash, a PR url, a tweet id, a file "
+        "path, an output you observed in a TOOL_RESULT). Without an artifact, "
+        "describe only the literal action you took, not the outcome you intended."
     )
 
     try:
-        prose, result = await models.chat_action(living.ego.model, living.ego.identity + living.pulse.hint() + memory.prompts, question)
+        prose, result = await models.chat_action(
+            living.ego.model,
+            living.ego.identity + living.pulse.hint() + memory.prompts,
+            question,
+        )
     except ModelError as e:
-        logger.debug("brain.decide chose prose, dispatching as say", {"persona": persona, "meaning": memory.meaning, "raw": e.raw})
-        dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
-        memory.meaning = None
-        memory.ability = 0
+        logger.debug("brain.decide chose prose, dispatching as say", {"persona": persona, "raw": e.raw})
+        if e.raw and e.raw.strip():
+            dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
         dispatch(Tock("decide", {"persona": persona}))
         return []
 
-    if not isinstance(result, dict) or not result:
-        memory.meaning = None
-        memory.ability = 0
-        dispatch(Tock("decide", {"persona": persona}))
-        return []
-
-    # Prose around the JSON action is the persona's voice. Words after words
-    # is the action itself; if the model wrote prose alongside its selector,
-    # those words go to the person. The selector then runs as its own action.
     if prose:
         dispatch(Command("Persona wants to say", {"persona": persona, "text": prose}))
         logger.debug("brain.decide dispatched prose as say", {"persona": persona, "prose_length": len(prose)})
 
-    if len(result) > 1:
-        logger.warning("brain.decide returned multiple keys; using first", {"persona": persona, "keys": list(result.keys())})
-    selector, value = next(iter(result.items()))
-    selector = str(selector).strip()
+    if not isinstance(result, dict) or not result:
+        dispatch(Tock("decide", {"persona": persona}))
+        return []
+
+    steps_value = result.get("steps")
+    items = steps_value if isinstance(steps_value, list) else [result]
 
     consequences: list = []
+    for item in items:
+        if not isinstance(item, dict) or not item:
+            continue
+        if len(item) > 1:
+            logger.warning("brain.decide step has multiple keys; using first", {"persona": persona, "keys": list(item.keys())})
+        selector, value = next(iter(item.items()))
+        selector = str(selector).strip()
 
-    if selector == "done":
-        pass
+        if selector == "done":
+            pass
 
-    elif selector == "say":
-        text = str(value) if value else ""
-        if text:
-            dispatch(Command("Persona wants to say", {"persona": persona, "text": text}))
+        elif selector == "say":
+            text = str(value) if value else ""
+            if text:
+                dispatch(Command("Persona wants to say", {"persona": persona, "text": text}))
 
-    elif selector == "notify":
-        text = str(value) if value else ""
-        if text:
-            memory.remember(Message(content=text, prompt=Prompt(role="assistant", content=text)))
-            dispatch(Command("Persona wants to notify", {"persona": persona, "text": text}))
+        elif selector == "notify":
+            text = str(value) if value else ""
+            if text:
+                memory.remember(Message(content=text, prompt=Prompt(role="assistant", content=text)))
+                dispatch(Command("Persona wants to notify", {"persona": persona, "text": text}))
 
-    elif selector == "clear_memory":
-        memory.forget()
-        memory.add_tool_result("clear_memory", value, "ok", "memory cleared")
+        elif selector == "clear_memory":
+            memory.forget()
+            memory.add_tool_result("clear_memory", value, "ok", "memory cleared")
 
-    elif selector == "remove_meaning":
-        args = value if isinstance(value, dict) else {}
-        name = args.get("name", "")
-        status = "ok"
-        result_text = ""
-        if not name:
-            status, result_text = "error", "name is required"
-        else:
-            meaning_file = paths.meanings(persona.id) / f"{name}.md"
-            if meaning_file.exists():
-                meaning_file.unlink()
-                memory.unlearn(name)
-                paths.save_as_json(persona.id, paths.learned(persona.id), {n: n for n in memory.custom_meanings})
-                result_text = f"removed meaning: {name}"
-            else:
-                status, result_text = "error", f"meaning not found: {name}"
-        memory.add_tool_result("remove_meaning", value, status, result_text)
-
-    elif selector == "revise_meaning":
-        status = "ok"
-        result_text = ""
-        meaning_name = memory.meaning
-        new_path = (str(value).strip() if value is not None else "")
-        if not is_custom or meaning_name is None:
-            status, result_text = "error", "only custom meanings can be revised"
-        elif not new_path:
-            status, result_text = "error", "revise_meaning needs the new path text"
-        else:
-            current = memory.custom_meanings.get(meaning_name)
-            if current is None:
-                status, result_text = "error", "current meaning could not be loaded"
-            else:
-                body = f"# {current.intention()}\n\n{new_path}\n"
-                paths.save_as_string(paths.meanings(persona.id) / f"{meaning_name}.md", body)
-                memory.learn(meaning_name, meanings.Meaning(meaning_name, current.intention(), new_path))
-                result_text = f"revised meaning: {meaning_name}"
-        memory.add_tool_result("revise_meaning", value, status, result_text)
-
-    elif selector == "stop":
-        dispatch(Command("Persona requested stop", {"persona": persona}))
-
-    elif "." in selector:
-        namespace, _name = selector.split(".", 1)
-        if namespace == "tools" or namespace == "abilities":
+        elif selector == "remove_meaning":
             args = value if isinstance(value, dict) else {}
-            consequences.append({selector: args})
+            name = args.get("name", "").removeprefix("meanings.")
+            status = "ok"
+            result_text = ""
+            if not name:
+                status, result_text = "error", "name is required"
+            else:
+                meaning_file = paths.meanings(persona.id) / f"{name}.md"
+                if meaning_file.exists():
+                    meaning_file.unlink()
+                    memory.unlearn(name)
+                    intention_to_stem = paths.read_json(paths.learned(persona.id)) or {}
+                    intention_to_stem = {i: s for i, s in intention_to_stem.items() if s != name}
+                    paths.save_as_json(persona.id, paths.learned(persona.id), intention_to_stem)
+                    result_text = f"removed instruction: {name}"
+                else:
+                    status, result_text = "error", f"instruction not found: {name}"
+            memory.add_tool_result("remove_meaning", value, status, result_text)
+
+        elif selector == "stop":
+            dispatch(Command("Persona requested stop", {"persona": persona}))
+
+        elif selector == "tools.load_instruction":
+            # Cognitive sub-call: record a fresh intention. Learn fires
+            # next, produces the matching impression on the same iteration.
+            args = value if isinstance(value, dict) else {}
+            text = str(args.get("intention", "")).strip()
+            if text:
+                memory.intention(text)
+                logger.debug("brain.decide expressed sub-intention", {"persona": persona, "intention": text[:120]})
+
+        elif "." in selector:
+            namespace, _name = selector.split(".", 1)
+            if namespace == "tools":
+                args = value if isinstance(value, dict) else {}
+                consequences.append({selector: args})
+            else:
+                logger.warning("brain.decide unknown namespace", {"persona": persona, "namespace": namespace, "selector": selector})
+
         else:
-            logger.warning("brain.decide unknown namespace", {"persona": persona, "namespace": namespace, "selector": selector})
+            logger.warning("brain.decide unknown selector", {"persona": persona, "selector": selector})
 
-    else:
-        logger.warning("brain.decide unknown selector", {"persona": persona, "selector": selector})
-
-    memory.meaning = None
-    memory.ability = 0
     dispatch(Tock("decide", {"persona": persona}))
     return consequences

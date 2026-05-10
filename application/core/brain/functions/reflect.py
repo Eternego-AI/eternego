@@ -1,37 +1,41 @@
 """Brain — reflect on living.
 
-The single sleep-time function for text-side memory consolidation. Replaces
-the old reflect (per-tick context update) and the old transform (night-time
-distillation): one stage, one model call, one shared decision about what to
-keep.
+Reflect runs on every beat that reaches it (mid-procedure beats restart on
+tool dispatch and never reach here). Most beats it skips through quickly.
 
-Reflect itself is the trigger: it fires `consolidate(living)` only when the
-moment calls for it. `consolidate` is exposed so feed (importing past chat
-data) can call it directly on a sandboxed past Living without going through
-reflect's trigger gates.
+When the moment is right — night, or confirmed idle — reflect does two
+jobs that both belong to "growing" rather than acting:
 
-Trigger:
+1. **Update procedural memory from the day's lived experience.** The persona
+   looks at her conversation — the `tools.load_instruction` exchanges she
+   had today — and decides what to refine, what to add as a new instruction,
+   what to delete. Prompt-driven; she reads her own residue and answers.
+   Live conversation memory carries her through the day; instructions carry
+   her across sleep.
+
+2. **Consolidate the conversation into long-term files.** Person facts,
+   traits, wishes, struggles, persona-trait, permissions — and the working
+   context that should bridge to the next beat. Then the conversation
+   archives and clears.
+
+`consolidate(living)` is exposed so feed (importing past chat data) can
+call it directly on a sandboxed past Living without reflect's trigger
+gates.
+
+Trigger for the night/idle work:
 - If memory has nothing to consolidate, pass through.
-- If phase is night, consolidate immediately.
-- Otherwise, await `living.is_idle()`. It sleeps the remaining-to-idle window;
-  returns True if uninterrupted (idle confirmed → consolidate), False if a
-  nudge cancelled the wait (activity arrived → skip this beat).
-
-The persona reads its conversation as data inside a single user message and
-decides what to keep going forward — a new context (its carried internal
-narrative) and updated person files (identity, traits, wishes, struggles,
-persona-traits, permissions). What it says replaces what it currently has.
-
-Order after the model returns: write person files → set context → archive
-messages and forget. Most fail-prone work first: if file writes fail, nothing
-changed and the next call retries cleanly.
+- If phase is night, do the work immediately.
+- Otherwise, await `living.is_idle()`. It sleeps the remaining-to-idle
+  window; returns True if uninterrupted (idle confirmed → do the work),
+  False if a nudge cancelled the wait (activity arrived → raise
+  ReflectInterrupted).
 """
 
 import json
 
 from application.core import models, paths
 from application.core.agents import Living
-from application.core.brain import situation
+from application.core.brain import meanings, situation
 from application.core.brain.pulse import Phase
 from application.core.brain.signals import Tick, Tock
 from application.core.exceptions import ModelError, ReflectInterrupted
@@ -144,6 +148,109 @@ async def reflect(living: Living) -> list:
         if not await living.is_idle():
             dispatch(Tock("reflect", {"persona": persona, "branch": "not-idle"}))
             raise ReflectInterrupted()
+
+    # Procedural memory consolidation: ask the persona to look at the
+    # instructions she used today (visible in conversation as load_instruction
+    # tool exchanges) and decide what to refine, what to add new, what to
+    # delete. Prompt-driven — no tracking sets, no setter hooks. The persona
+    # reads her own conversation as input; the catalog she has is already in
+    # her identity prompt via character.meanings(), no need to dupe it here.
+
+    question = (
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "# ▶ YOUR TASK: Build maps for future-you\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "This is reflection, not action. No tools run from your response — "
+        "only the JSON described below has effect. Walk through what already "
+        "happened.\n\n"
+        "Your active memory will not survive forever. What survives are your "
+        "instructions: the maps you write now, that future-you reads and follows.\n\n"
+        "The goal is concrete. Future-you should fail less, hesitate less, and "
+        "move faster than current-you. Every error you hit, every workflow you "
+        "figured out, every detail you discovered — these are the things to "
+        "write down. Less failure, less effort, more automation.\n\n"
+        "## What to look for\n\n"
+        "Walk through the whole conversation, not just any one stage. For each "
+        "thing you actually did, ask:\n\n"
+        "- What did the work require?\n"
+        "- What failed and why?\n"
+        "- What worked the second time after the first failed?\n"
+        "- What would future-you need to know to do this without anyone "
+        "walking her through it again?\n\n"
+        "Bias toward operational specifics. Concrete details that future-you "
+        "can follow beat themes she has to interpret.\n\n"
+        "## What to return\n\n"
+        "Return a JSON object with an `updates` list. Each item is one of:\n\n"
+        "- `{\"refine\": \"<intention>\", \"path\": \"<full new body>\"}` — "
+        "rewrite an existing custom map with what you learned. The path "
+        "REPLACES the existing one. Built-in maps are immutable.\n"
+        "- `{\"new\": true, \"intention\": \"<short gerund phrase>\", \"path\": \"<full body>\"}` — "
+        "write a new map for a kind of work you did. Do not filter for "
+        "\"will this recur\" — write it down regardless.\n"
+        "- `{\"delete\": \"<intention>\"}` — delete a custom map that's "
+        "outdated or redundant with another. Built-ins cannot be deleted.\n\n"
+        "Return `{\"updates\": []}` only if there's no operational lesson to "
+        "keep. Friction contains lessons; smoothness does not."
+    )
+
+    try:
+        response = await models.chat_json(
+            living.ego.model,
+            living.ego.identity + living.pulse.hint(),
+            question,
+        )
+    except ModelError as e:
+        logger.warning("brain.reflect instruction updates produced invalid JSON, skipping", {"persona": persona, "error": str(e)})
+        response = None
+
+    updates = response.get("updates") if isinstance(response, dict) else None
+    if isinstance(updates, list):
+        for item in updates:
+            if not isinstance(item, dict):
+                continue
+            if "refine" in item:
+                target_intention = str(item.get("refine", "")).strip()
+                body = str(item.get("path", "")).strip()
+                if not target_intention or not body:
+                    continue
+                # Match by intention text against custom catalog.
+                for stem, m in memory.custom_meanings.items():
+                    if m.intention() == target_intention:
+                        paths.save_as_string(paths.meanings(persona.id) / f"{stem}.md", body + "\n")
+                        memory.learn(stem, meanings.Meaning(stem, target_intention, body))
+                        logger.debug("brain.reflect refined instruction", {"persona": persona, "stem": stem, "intention": target_intention})
+                        break
+            elif item.get("new"):
+                intention = str(item.get("intention", "")).strip()
+                body = str(item.get("path", "")).strip()
+                if not intention or not body:
+                    continue
+                try:
+                    stem = meanings.save_lesson(persona.id, intention, body)
+                except ValueError as e:
+                    logger.warning("brain.reflect new instruction rejected", {"persona": persona, "intention": intention, "error": str(e)})
+                    continue
+                paths.save_as_string(paths.meanings(persona.id) / f"{stem}.md", body + "\n")
+                memory.learn(stem, meanings.Meaning(stem, intention, body))
+                intention_to_stem = paths.read_json(paths.learned(persona.id)) or {}
+                intention_to_stem[intention] = stem
+                paths.save_as_json(persona.id, paths.learned(persona.id), intention_to_stem)
+                logger.debug("brain.reflect created instruction", {"persona": persona, "stem": stem})
+            elif "delete" in item:
+                target_intention = str(item.get("delete", "")).strip()
+                if not target_intention:
+                    continue
+                for stem, m in list(memory.custom_meanings.items()):
+                    if m.intention() == target_intention:
+                        meaning_file = paths.meanings(persona.id) / f"{stem}.md"
+                        if meaning_file.exists():
+                            meaning_file.unlink()
+                        memory.unlearn(stem)
+                        intention_to_stem = paths.read_json(paths.learned(persona.id)) or {}
+                        intention_to_stem = {i: s for i, s in intention_to_stem.items() if s != stem}
+                        paths.save_as_json(persona.id, paths.learned(persona.id), intention_to_stem)
+                        logger.debug("brain.reflect deleted instruction", {"persona": persona, "stem": stem, "intention": target_intention})
+                        break
 
     await consolidate(living)
 

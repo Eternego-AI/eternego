@@ -51,6 +51,7 @@ class OuterWorld extends World {
         this.persona = null;
         this.messages = [];
         this.pending = null;
+        this.draft = '';
         this.chatHandler = null;
 
         this.innerHTML = `
@@ -140,6 +141,8 @@ class OuterWorld extends World {
             messages: this.messages,
             placeholder: this.persona ? `Speak to ${this.persona.name}.` : 'Speak.',
             pending: this.pending,
+            text: this.draft,
+            onTextChange: (text) => { this.draft = text; },
             onSend: ({ text, file }) => this.send(text, file),
             onPickFile: (file) => { this.pending = file; this.renderChat(); },
             onClearFile: () => { this.pending = null; this.renderChat(); },
@@ -152,6 +155,7 @@ class OuterWorld extends World {
         if (file) {
             this.messages = [...this.messages, { role: 'me', text: text || '', image: URL.createObjectURL(file), time }];
             this.pending = null;
+            this.draft = '';
             this.renderChat();
             const result = await this.api.seePersona(this.personaId, file, text);
             if (!result.success) {
@@ -160,6 +164,7 @@ class OuterWorld extends World {
             }
         } else if (text && text.trim()) {
             this.messages = [...this.messages, { role: 'me', text, time }];
+            this.draft = '';
             this.renderChat();
             const result = await this.api.hearPersona(this.personaId, text);
             if (!result.success) {

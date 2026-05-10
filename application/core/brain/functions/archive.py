@@ -51,7 +51,7 @@ async def archive(living: Living) -> list:
             if not isinstance(call, dict) or len(call) != 1:
                 continue
             selector, args = next(iter(call.items()))
-            if selector not in ("tools.vision", "abilities.look_at"):
+            if selector not in ("tools.vision", "tools.look_at"):
                 continue
             tool_name = selector.split(".", 1)[-1]
             args = args if isinstance(args, dict) else {}

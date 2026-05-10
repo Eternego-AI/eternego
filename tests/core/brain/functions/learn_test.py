@@ -1,16 +1,24 @@
 """Learn stage — integration tests over a real Living.
 
 Each test constructs a Living (Ego/Eye/Consultant/Teacher + Pulse with no-op
-worker), seeds memory state to the precondition learn expects, calls
-`learn(living)`, and asserts on returned consequences and memory state.
+worker), seeds memory with a pending intention via `memory.intention()`
+(the gate condition), calls `learn(living)`, and asserts on the impression
+learn records back.
+
+Learn fires only when `memory.perception()` returns an intention text.
+On match against the catalog: records the meaning's body as the impression.
+On miss: consults teacher, has the persona translate, saves both lesson and
+meaning to disk, records the translated body as the impression. No
+consequences emitted — cognitive function, no cycle restart.
 """
 
 from application.platform.processes import on_separate_process_async
 
 
-async def test_learn_passes_when_ability_already_set():
-    """If recognize already chose a meaning (memory.ability != 0), learn passes
-    through immediately — no model call, no consequences, no state change."""
+async def test_learn_skips_when_no_pending_call():
+    """Without a pending `tools.load_instruction` call as the last signal,
+    learn passes through immediately — no model call, no consequences, no
+    memory mutation."""
     def isolated():
         import asyncio, os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -18,7 +26,7 @@ async def test_learn_passes_when_ability_already_set():
             from application.core import agents
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
-            from application.core.data import Model, Persona
+            from application.core.data import Message, Model, Persona, Prompt
 
             class FakeWorker:
                 def run(self, *a): pass
@@ -30,22 +38,20 @@ async def test_learn_passes_when_ability_already_set():
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.ability = 3
-            ego.memory.meaning = "chatting"
-            ego.memory.impression = "doesn't matter"
+            ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
+            msgs_before = len(ego.memory.messages)
             consequences = asyncio.run(functions.learn(living))
             assert consequences == []
-            assert ego.memory.meaning == "chatting"
-            assert ego.memory.ability == 3
+            assert len(ego.memory.messages) == msgs_before
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_learn_passes_when_no_impression():
-    """If recognize concluded the moment cleanly (say or done), no impression
-    remains. Learn passes through silently — nothing to escalate."""
+async def test_learn_skips_when_last_signal_is_result():
+    """If the last signal is already a TOOL_RESULT (the round-trip is complete),
+    learn skips so decide can act on it."""
     def isolated():
         import asyncio, os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -53,138 +59,119 @@ async def test_learn_passes_when_no_impression():
             from application.core import agents
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
-            from application.core.data import Model, Persona
+            from application.core.data import Message, Model, Persona, Prompt
 
             class FakeWorker:
                 def run(self, *a): pass
                 def nudge(self): pass
 
-            persona = Persona(
-                id="t", name="T",
-                thinking=Model(name="m", url="not used"),
-                frontier=Model(name="m", url="not used"),
-            )
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
             ego = agents.Ego(persona)
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.ability = 0
-            ego.memory.impression = ""
+            ego.memory.intention("chatting")
+            ego.memory.impression("talk simply")
+
+            msgs_before = len(ego.memory.messages)
+            consequences = asyncio.run(functions.learn(living))
+            assert consequences == []
+            assert len(ego.memory.messages) == msgs_before
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_learn_matches_existing_intention():
+    """When the pending call's intention matches an existing meaning's
+    intention text, learn writes the meaning's body as the matching
+    TOOL_RESULT — no teacher call."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import functions, meanings
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Message, Model, Persona, Prompt
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            # Plant a custom meaning the persona will reach for.
+            ego.memory.learn("posting_to_x", meanings.Meaning("posting_to_x", "Posting To X", "Draft. Ask. Post."))
+            ego.memory.intention("Posting To X")
 
             consequences = asyncio.run(functions.learn(living))
             assert consequences == []
 
+            # Last message is the TOOL_RESULT carrying the meaning's body.
+            last = ego.memory.messages[-1]
+            assert "TOOL_RESULT" in last.content
+            assert "tool: load_instruction" in last.content
+            assert "status: ok" in last.content
+            assert "Draft. Ask. Post." in last.content
+
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_learn_falls_back_to_thinking_when_no_frontier():
-    """Without a frontier configured, teacher uses the persona's thinking
-    model. Learn still consults it and lets the persona try, rather than
-    skipping the moment entirely."""
+async def test_learn_matches_with_normalized_intention():
+    """The match is case- and underscore-tolerant. A stored intention of
+    `posting_to_x` matches an asked intention of "Posting To X" via _norm,
+    so a humanized catalog and a snake_case stem don't create duplicates."""
     def isolated():
-        import os, tempfile
+        import asyncio, os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
-            from application.core.brain import functions
+            from application.core.brain import functions, meanings
             from application.core.brain.pulse import Pulse
-            from application.core.data import Model, Persona
-            from application.platform import ollama
-            import json
+            from application.core.data import Message, Model, Persona, Prompt
 
             class FakeWorker:
                 def run(self, *a): pass
                 def nudge(self): pass
 
-            async def consume(url):
-                # Note: thinking is set, frontier is None — teacher.model
-                # should fall back to thinking and learn should fire.
-                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
-                ego = agents.Ego(persona)
-                eye = agents.Eye(persona)
-                consultant = agents.Consultant(persona)
-                teacher = agents.Teacher(persona)
-                assert teacher.model is persona.thinking, "teacher must fall back to thinking"
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.ability = 0
-                ego.memory.impression = "something new the persona is meeting"
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            # Stored intention is snake_case; asked intention is humanized.
+            ego.memory.learn("posting_to_x", meanings.Meaning("posting_to_x", "posting_to_x", "Body for posting."))
+            ego.memory.intention("Posting To X")
 
-                consequences = await functions.learn(living)
-                # The teacher named an existing meaning, so learn sets state
-                # and returns without consequences.
-                assert consequences == []
-                assert ego.memory.meaning == "chatting"
+            consequences = asyncio.run(functions.learn(living))
+            assert consequences == []
 
-            response = json.dumps({"meanings.chatting": "the person just wants to talk"})
-            ollama.assert_call(
-                run=lambda url: consume(url),
-                responses=[[{"message": {"content": response}, "done": True}]],
-            )
+            last = ego.memory.messages[-1]
+            assert "TOOL_RESULT" in last.content
+            assert "Body for posting." in last.content
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_learn_existing_meaning_sets_state():
-    """Teacher returns {"meanings.chatting": "<impression>"} — recognize simply
-    missed it. Learn sets memory.meaning + ability so decide takes over next."""
-    def isolated():
-        import os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents
-            from application.core.brain import functions
-            from application.core.brain.pulse import Pulse
-            from application.core.data import Model, Persona
-            from application.platform import ollama
-
-            class FakeWorker:
-                def run(self, *a): pass
-                def nudge(self): pass
-
-            async def consume(url):
-                persona = Persona(
-                    id="t", name="T",
-                    thinking=Model(name="m", url=url),
-                    frontier=Model(name="m", url=url),
-                )
-                ego = agents.Ego(persona)
-                eye = agents.Eye(persona)
-                consultant = agents.Consultant(persona)
-                teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.ability = 0
-                ego.memory.impression = "casual greeting"
-
-                consequences = await functions.learn(living)
-
-                assert consequences == []
-                assert ego.memory.meaning == "chatting"
-                assert ego.memory.ability != 0
-                assert ego.memory.impression == "casual greeting"
-
-            ollama.assert_call(
-                run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"meanings.chatting": "casual greeting"}'}, "done": True}]],
-            )
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
-async def test_learn_creates_new_meaning_from_lesson():
-    """Teacher returns {"lesson": {"intention", "path"}} — learn saves the
-    lesson, asks the persona's thinking model to translate it into a meaning
-    in her own voice, writes the meaning, and links the two in learned.json
-    so revise_meaning can find the lesson later."""
+async def test_learn_consults_teacher_on_no_match():
+    """When no meaning matches the intention, learn consults the teacher,
+    has the persona translate the lesson, saves both, and writes the
+    translated body as the matching TOOL_RESULT."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
-            from application.core.brain import functions, meanings
+            from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
             from application.platform import ollama
@@ -205,31 +192,32 @@ async def test_learn_creates_new_meaning_from_lesson():
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.ability = 0
-                ego.memory.impression = "check disk space"
+                ego.memory.intention("Checking disk space")
 
                 consequences = await functions.learn(living)
-
                 assert consequences == []
-                assert ego.memory.meaning == "checking_disk_space"
-                assert ego.memory.ability != 0
 
+                # Teacher → translate produces a saved lesson and meaning.
                 lesson_file = paths.lessons(persona.id) / "checking_disk_space.md"
                 assert lesson_file.exists(), f"lesson should be saved at {lesson_file}"
                 meaning_file = paths.meanings(persona.id) / "checking_disk_space.md"
                 assert meaning_file.exists(), f"meaning should be saved at {meaning_file}"
                 assert "checking_disk_space" in ego.memory.custom_meanings
                 assert "df -h" in meaning_file.read_text()
+                assert paths.read_json(paths.learned(persona.id)) == {"Checking disk space": "checking_disk_space"}
 
-                assert paths.read_json(paths.learned(persona.id)) == {"checking_disk_space": "checking_disk_space"}
+                # Last message is the TOOL_RESULT with the translated body.
+                last = ego.memory.messages[-1]
+                assert "TOOL_RESULT" in last.content
+                assert "tool: load_instruction" in last.content
+                assert "status: ok" in last.content
+                assert "df -h" in last.content
 
             teacher_response = json.dumps({
-                "lesson": {
-                    "intention": "Checking disk space",
-                    "path": "Disk space sits behind the operating system's disk-free utility — `df` on Unix-like systems, `Get-PSDrive` on Windows. The mechanism reports filesystem capacity, used space, and what is available; the answer the person wants is how much is left.",
-                }
+                "intention": "Checking disk space",
+                "path": "Disk space sits behind the operating system's disk-free utility — `df` on Unix.",
             })
-            translation_response = "When the person asks how much disk space is free, run df -h on this machine and tell them what is left in plain language."
+            translation_response = "When asked, run df -h and tell them what's left."
             ollama.assert_call(
                 run=lambda url: consume(url),
                 responses=[
@@ -242,56 +230,114 @@ async def test_learn_creates_new_meaning_from_lesson():
     assert code == 0, error
 
 
-async def test_learn_returns_capability_for_tool():
-    """Teacher returns {"tools.<name>": {...args}} — learn declares it as a
-    consequence; clock's executor will run it. No state set, no message added."""
+async def test_learn_teacher_falls_back_to_thinking_when_no_frontier():
+    """Without a frontier configured, teacher uses the persona's thinking
+    model. Learn still consults it and creates a meaning."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents
+            from application.core import agents, paths
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
             from application.platform import ollama
+            import json
 
             class FakeWorker:
                 def run(self, *a): pass
                 def nudge(self): pass
 
             async def consume(url):
-                persona = Persona(
-                    id="t", name="T",
-                    thinking=Model(name="m", url=url),
-                    frontier=Model(name="m", url=url),
-                )
+                # thinking is set, frontier is None — teacher.model falls back.
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
                 ego = agents.Ego(persona)
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
+                assert teacher.model is persona.thinking, "teacher must fall back to thinking"
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.ability = 0
-                ego.memory.impression = "list files"
+                ego.memory.intention("Greeting the person")
 
                 consequences = await functions.learn(living)
+                assert consequences == []
+                assert paths.learned(persona.id).exists()
 
-                assert len(consequences) == 1
-                assert consequences[0] == {"tools.OS.execute": {"command": "ls"}}
-                assert ego.memory.meaning is None
-                assert ego.memory.ability == 0
+                # TOOL_RESULT got written.
+                last = ego.memory.messages[-1]
+                assert "TOOL_RESULT" in last.content
+                assert "status: ok" in last.content
 
+            teacher_response = json.dumps({
+                "intention": "Greeting the person",
+                "path": "Return the greeting in your own voice.",
+            })
+            translation_response = "When the person says hello, say hello back warmly."
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"tools.OS.execute": {"command": "ls"}}'}, "done": True}]],
+                responses=[
+                    [{"message": {"content": teacher_response}, "done": True}],
+                    [{"message": {"content": translation_response}, "done": True}],
+                ],
             )
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 
 
-async def test_learn_invalid_json_skips_silently():
-    """Teacher returns prose — extract_json raises ModelError. Learn catches it,
-    logs a warning, and returns [] silently. No state mutation."""
+async def test_learn_records_failure_impression_when_lesson_missing_fields():
+    """Teacher returns a partial lesson (no path). Learn records a failure
+    impression so the persona's next read sees that the round-trip closed
+    without producing a usable procedure."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import functions
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Model, Persona
+            from application.platform import ollama
+            import json
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume(url):
+                persona = Persona(
+                    id="t", name="T",
+                    thinking=Model(name="m", url=url),
+                    frontier=Model(name="m", url=url),
+                )
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                ego.memory.intention("doing something")
+
+                consequences = await functions.learn(living)
+                assert consequences == []
+
+                # Last message is the failure impression (round-trip closed).
+                last = ego.memory.messages[-1]
+                assert "TOOL_RESULT" in last.content
+                assert "could not produce a procedure" in last.content
+
+            partial = json.dumps({"intention": "doing something", "path": ""})
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[[{"message": {"content": partial}, "done": True}]],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_learn_records_failure_impression_when_teacher_invalid_json():
+    """Teacher returns prose — extract_json fails. Learn catches the
+    ModelError, records a failure impression to close the exchange."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -317,19 +363,57 @@ async def test_learn_invalid_json_skips_silently():
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.ability = 0
-                ego.memory.impression = "something needing escalation"
+                ego.memory.intention("something")
 
                 consequences = await functions.learn(living)
-
                 assert consequences == []
-                assert ego.memory.meaning is None
-                assert ego.memory.ability == 0
+
+                last = ego.memory.messages[-1]
+                assert "TOOL_RESULT" in last.content
+                assert "could not produce a procedure" in last.content
 
             ollama.assert_call(
                 run=lambda url: consume(url),
                 responses=[[{"message": {"content": "I don't know how to design this"}, "done": True}]],
             )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_learn_skips_when_intention_is_empty():
+    """A `tools.load_instruction` call with empty `intention` — perception()
+    returns None (empty strings filtered), so learn skips cleanly. The
+    dangling call sits in memory but doesn't loop the cycle."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain import functions
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Message, Model, Persona, Prompt
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            # Manually plant an empty-intention call (intention() filters
+            # empty strings, so we write the wire shape directly).
+            empty = '{"tools.load_instruction": {}}'
+            ego.memory.remember(Message(content=empty, prompt=Prompt(role="assistant", content=empty)))
+
+            msgs_before = len(ego.memory.messages)
+            consequences = asyncio.run(functions.learn(living))
+            assert consequences == []
+            assert len(ego.memory.messages) == msgs_before, "learn should skip without writing"
+            assert ego.memory.perception() is None, "empty intention surfaces as None"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

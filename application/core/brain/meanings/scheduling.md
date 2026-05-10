@@ -1,5 +1,3 @@
-# Saving a reminder or event for a future moment, or responding when one has come due
-
 Hold time-bound things. Two situations call for this meaning.
 
 **The person asks you to save something for a future moment.** Resolve the trigger time from the conversation and the current time. A `reminder` is a personal nudge; a `schedule` is an appointment at a fixed time. If the essentials are missing (what, when), ask with `say` first. Use `abilities.save_destiny` with `type`, `trigger` (YYYY-MM-DD HH:MM), `content`, and optionally `recurrence` (daily, weekly, monthly, hourly).

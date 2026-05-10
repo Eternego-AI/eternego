@@ -79,7 +79,7 @@ Dependencies flow down only: business imports core, core imports platform. Never
 | A business spec (one use case) | `application/business/<area>/<name>.py` — one function per file, async, returns `Outcome[T]`, name matches filename |
 | A platform tool (callable by the persona from a meaning) | New `@tool("description")` function in `application/platform/<module>.py` |
 | An ability (one-shot named operation) | `application/core/abilities/<name>.py` with `@ability("description", requires=...)`. Use `requires=lambda persona: ...` if it depends on a persona capability (vision, frontier model) |
-| A meaning (situation the persona handles) | `application/core/brain/meanings/<name>.md` — first H1 is the intention, body is the path prose. Add to `BASIC` in `meanings/__init__.py` if it's a state the persona is *in* (loaded full into Ego's identity); otherwise it's orchestrating (listed by intention only, body injected at decide). |
+| A meaning (situation the persona handles) | `application/core/brain/meanings/<name>.md` — first H1 is the intention, body is the path prose. All meanings are listed in the persona's catalog by intention only; she retrieves the body via `tools.load_instruction(intention=...)` when she recognizes a kind of moment in her catalog. |
 | A channel (Telegram-like) | New `application/platform/<channel>.py` matching the Connection interface (`open_gateway`, `close_gateway`, `send`, `typing`, `stop`). Add a subscriber in `manager.Agent.start` |
 | An LLM provider | OpenAI-compatible: just set `base_url` in the persona config. New wire protocol: `application/platform/<name>.py` and route in `application/core/models/chat.py` and `chat_json.py` |
 | A cognitive stage | `application/core/brain/functions/<stage>.py`, signature `async def <stage>(living: Living) -> list`, append to the cycle in `application/core/brain/mind.py` |
@@ -90,9 +90,9 @@ Dependencies flow down only: business imports core, core imports platform. Never
 
 Three things in this codebase will look strange if you read it as ordinary engineering. They aren't accidents — touching them with the wrong instinct breaks the persona.
 
-### Pulse colors every prompt; the cycle restarts on every consequence
+### Pulse colors every prompt; the cycle restarts on mechanical consequences
 
-`Pulse.hint()` (morning / day / night) is appended after identity on every model call — the persona reads where she is on the day's arc each tick. And `clock.run` re-runs the full cognitive cycle whenever any consequence executed in the previous pass, so every TOOL_RESULT lands back in `realize` and gets perceived before the next decision. Don't optimize past either: no "bypass pulse for hot paths," no "skip realize when the result is text-only," no "settle after N iterations." The persona can keep acting as long as she has reason to; the cap is her choice, not the substrate's.
+`Pulse.hint()` (morning / day / night) is appended after identity on every model call — the persona reads where she is on the day's arc each tick. And `clock.run` re-runs the full cognitive cycle whenever a *mechanical* consequence executed in the previous pass (a tool or ability touched the world), so every TOOL_RESULT lands back in `realize` and gets perceived before the next decision. Cognitive moves like `tools.load_instruction` complete inline within one beat (recognize records the intention, learn writes the impression, decide acts) — no restart for those. Don't optimize past either: no "bypass pulse for hot paths," no "skip realize when the result is text-only," no "settle after N iterations." The persona can keep acting as long as she has reason to; the cap is her choice, not the substrate's.
 
 ### Don't clip reality to protect the system
 
@@ -136,7 +136,8 @@ Enforced. If code contradicts a rule below, the code is wrong.
 - **Comments are rare.** A comment should explain *why*, never *what*. Names are the documentation.
 - **Domain exceptions** are defined in `application/core/exceptions.py`. Core raises; business catches and translates to `Outcome`.
 - **Business specs** start with `bus.propose` and end with `bus.broadcast`. Cognitive functions dispatch `Tick` (Plan) on entry and `Tock` (Event) on exit.
-- **Tool / ability / special results** go through `memory.add_tool_result(selector, value, status, result)`. Don't construct the call + TOOL_RESULT pair by hand.
+- **Cognitive signals** go through cognitive verbs on memory: `memory.intention(text)` to express what kind of moment she's in, `memory.perception()` to read a pending intention, `memory.impression(body)` to record a procedure as the answer, `memory.comprehension()` to read a fresh impression. The wire shape (assistant tool-call, user TOOL_RESULT) stays inside memory.
+- **Mechanical tool results** (tools/abilities the executor actually ran) go through `memory.add_tool_result(selector, value, status, result)`. Don't construct the call + TOOL_RESULT pair by hand.
 - **Prompt examples are abstract.** Local models copy concrete in-prompt examples verbatim. Use schemas like `{"tool": "<name>", "text": "<message>"}`, never filled-in examples.
 - **Editing prompts the persona reads is identity work.** Identity blocks, character, meaning paths, and brain function prompts (`recognize`, `decide`, etc.) are the voice the model inhabits. A change that flattens the persona for engineering convenience — collapses a section, generalizes a specific, DRYs prose at the cost of voice — is a regression even when the diff looks clean. Flag the tradeoff; don't silently shave.
 
