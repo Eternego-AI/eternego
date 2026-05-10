@@ -50,7 +50,7 @@ class CapabilityRun(Event):
     """Clock's executor ran a tool or ability declared by a function.
 
     title:   the full selector, e.g. "tools.OS.execute"
-             or "abilities.save_destiny"
+             or "tools.save_destiny"
     details: {
         "persona": Persona,
         "args": dict,

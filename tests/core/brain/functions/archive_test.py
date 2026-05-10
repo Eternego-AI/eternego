@@ -117,7 +117,7 @@ async def test_archive_records_look_at_call_in_gallery():
             living.pulse.phase = Phase.NIGHT
 
             ego.memory.add_tool_result(
-                "abilities.look_at",
+                "tools.look_at",
                 {"source": "/screenshots/8am.png", "question": "what app?"},
                 "ok",
                 "browser tab",

@@ -6,10 +6,10 @@ nothing to do. A pass that runs at least one capability re-loops, so the
 TOOL_RESULT just written to memory gets read by the next pass's realize and
 the persona can act on what came back.
 
-Per-pass state — `memory.impression`, `memory.meaning` — is reset at the top
-of every iteration. Recognize/learn/decide are free to set it within a pass
-for the internal handoff (recognize → learn → decide); nothing carries
-across passes by design.
+Cognitive state lives in the message stream — recognize emits a
+`tools.load_instruction` call (assistant message), learn writes the matching
+TOOL_RESULT (user message), decide reads it. The handoff is visible to the
+persona in her own conversation; nothing is mutated out-of-band.
 
 Each function returns a list of capabilities (tool/ability invocations the
 function declared but did not execute). Clock's inner executor runs each
@@ -46,13 +46,21 @@ async def run(living) -> None:
             logger.warning("clock.execute unknown selector", {"selector": selector})
             return None
         namespace, name = selector.split(".", 1)
+        if namespace != "tools":
+            logger.warning("clock.execute unknown namespace", {"selector": selector})
+            return None
         media = None
-        if namespace == "tools":
+        # Persona's view: one `tools.<name>` namespace. Code's view: platform
+        # primitives in `tools` registry, persona-aware verbs in `abilities`
+        # registry. Look up by name; platform takes precedence on a clash.
+        platform_names = {t.name for t in tools.discover()}
+        ability_names = {a.name for a in abilities.available(persona)}
+        if name in platform_names:
             try:
                 status, result = await tools.call(name, **args)
             except Exception as e:
                 status, result = "error", str(e)
-        elif namespace == "abilities":
+        elif name in ability_names:
             try:
                 ability_result = await abilities.call(persona, name, **args)
                 status = "ok"
@@ -64,8 +72,8 @@ async def run(living) -> None:
             except Exception as e:
                 status, result = "error", str(e)
         else:
-            logger.warning("clock.execute unknown namespace", {"selector": selector})
-            return None
+            logger.warning("clock.execute unknown tool name", {"selector": selector})
+            status, result = "error", f"unknown tool: {name}"
         memory.add_tool_result(selector, args, status, result, media=media)
         dispatch(CapabilityRun(selector, {"persona": persona, "args": args, "status": status, "result": result}))
         return status
@@ -74,8 +82,6 @@ async def run(living) -> None:
         return
 
     while True:
-        memory.impression = ""
-        memory.meaning = None
         executed_any = False
 
         try:

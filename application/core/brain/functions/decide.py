@@ -1,28 +1,21 @@
 """Brain — decide for living.
 
-One cognitive call per tick when recognize handed us a meaning. Decide reads
-the meaning's prompt and emits JSON describing what to do next.
+Gates on memory: only fires when `memory.comprehension()` returns a
+fresh impression — i.e. learn just produced a procedure body for the
+persona to follow. Decide is the moment of focus right after guidance
+arrives.
 
-Single action shape:
-- `{"say": "<text>"}`, `{"notify": "<text>"}`
-- `{"clear_memory": null}`, `{"remove_meaning": {name}}`, `{"stop": null}`
-- `{"tools.<name>": { ...args }}`, `{"abilities.<name>": { ...args }}`
-- `{"done": null}`
+The body is in conversation memory; decide reads it via `memory.prompts`
+the same way it reads everything else. No injection.
 
-Multi-step shape:
-- `{"steps": [<single-action>, <single-action>, ...]}` — a list of the same
-  single-action objects above. Items run in order; voice and specials run
-  inline, tools and abilities are queued as consequences for clock's
-  executor. On the first non-ok status from a tool/ability, clock skips
-  the rest and the cycle restarts.
+Decide's vocabulary is the same single-key / `steps:[...]` shape recognize
+uses, plus self-care specials (clear_memory, remove_meaning, stop) that
+decide handles inline. If the persona emits `tools.load_instruction` for
+sub-guidance, decide records a fresh intention and the cycle continues.
 
-Meaning refinement is not decide's job — reflect handles it after decide
-finishes. Decide focuses on action; reflect on what to keep.
-
-If the model returns prose alongside JSON, the prose is dispatched as a say
-(fallback for models that don't emit clean JSON). Meaning state
-(memory.meaning) is left set on exit — reflect reads it for refinement, then
-clears it.
+The pilot/autopilot rhythm: decide is a single moment of focus after an
+impression arrives; subsequent beats run recognize (fresh perception
+with the body still in memory) until the procedure completes.
 """
 
 from application.core import models, paths
@@ -36,79 +29,77 @@ from application.platform.observer import Command, dispatch
 
 
 async def decide(living: Living) -> list:
-    """decide FOR living — choose the next action on its behalf."""
+    """decide FOR living — focus on the just-arrived instruction."""
     dispatch(Tick("decide", {"persona": living.ego.persona}))
 
     persona = living.ego.persona
     memory = living.ego.memory
 
-    meaning = memory.meanings.get(memory.meaning)
-    if not meaning:
-        dispatch(Tock("decide", {"persona": persona}))
+    if memory.comprehension() is None:
+        dispatch(Tock("decide", {"persona": persona, "branch": "skipped"}))
         return []
 
     self_care_block = (
-        "Memory and self-care:\n"
+        "Self-care:\n"
         "- `{\"clear_memory\": null}` — wipe the current messages.\n"
-        "- `{\"remove_meaning\": {\"name\": \"<name>\"}}` — delete a custom meaning.\n"
+        "- `{\"remove_meaning\": {\"name\": \"<stem>\"}}` — delete a custom instruction.\n"
         "- `{\"stop\": null}` — stop yourself until someone speaks."
     )
 
     question = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"# ▶ YOUR TASK: {memory.impression}\n"
+        "# ▶ YOUR TASK: Focus on the last instruction\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"{situation.time()}\n\n"
-        f"{meaning.path()}\n\n"
+        "You just received an instruction. The procedure body is in your most "
+        "recent TOOL_RESULT — read it and follow the procedure.\n\n"
+        "If the procedure has multiple steps, pay attention to the conversation "
+        "to see which step you are on and continue from there.\n\n"
         "## Output\n\n"
-        "Return a single-key JSON object naming the action, or wrap several "
-        "in `{\"steps\": [...]}` to chain them in one beat. Each step is one "
-        "of the single-key shapes below. Your tools and abilities are in your "
-        "identity above — pick one by its full selector.\n\n"
-        "If you see multiple steps are there in the procedure, pay attention to the conversation to see on which step you are and continue from there.\n\n"
+        "Return a single-key JSON object naming the action, or wrap several in "
+        "`{\"steps\": [...]}` to chain them in one beat. Each step is one of:\n\n"
         "Voice:\n"
         "- `{\"say\": \"<text>\"}` — speak to the person on the current channel.\n"
         "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
         f"{self_care_block}\n\n"
-        "Tools and abilities:\n"
-        "- `{\"tools.<name>\": { ...args }}` — run a platform tool.\n"
-        "- `{\"abilities.<name>\": { ...args }}` — run an ability.\n\n"
+        "Tools:\n"
+        "- `{\"tools.<name>\": { ...args }}` — run a tool from your catalog.\n"
+        "- `{\"tools.load_instruction\": {\"intention\": \"<name>\"}}` — ask for "
+        "sub-guidance if a step references another kind of moment you don't yet "
+        "have a procedure for.\n\n"
         "Done:\n"
-        "- `{\"done\": null}` — this cycle is finished.\n\n"
-        "When you use `steps`, items run in order; voice and self-care run "
-        "inline, tools and abilities run after this beat. On the first "
-        "non-ok status the rest are skipped and the cycle restarts so you "
-        "re-perceive.\n\n"
-        "Prefer `say` for speaking. Prose around the JSON is also sent to the person — "
-        "using both means the same message reaches them twice."
+        "- `{\"done\": null}` — the procedure is complete.\n\n"
+        "When you `say` to report a result, ground the claim in evidence — name "
+        "the artifact that proves it (a commit hash, a PR url, a tweet id, a file "
+        "path, an output you observed in a TOOL_RESULT). Without an artifact, "
+        "describe only the literal action you took, not the outcome you intended."
     )
 
     try:
-        prose, result = await models.chat_action(living.ego.model, living.ego.identity + living.pulse.hint() + memory.prompts, question)
+        prose, result = await models.chat_action(
+            living.ego.model,
+            living.ego.identity + living.pulse.hint() + memory.prompts,
+            question,
+        )
     except ModelError as e:
-        logger.debug("brain.decide chose prose, dispatching as say", {"persona": persona, "meaning": memory.meaning, "raw": e.raw})
-        dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
-        memory.meaning = None
+        logger.debug("brain.decide chose prose, dispatching as say", {"persona": persona, "raw": e.raw})
+        if e.raw and e.raw.strip():
+            dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
         dispatch(Tock("decide", {"persona": persona}))
         return []
 
-    if not isinstance(result, dict) or not result:
-        memory.meaning = None
-        dispatch(Tock("decide", {"persona": persona}))
-        return []
-
-    # Prose around the JSON action is the persona's voice. Words after words
-    # is the action itself; if the model wrote prose alongside its selector,
-    # those words go to the person. The selector then runs as its own action.
     if prose:
         dispatch(Command("Persona wants to say", {"persona": persona, "text": prose}))
         logger.debug("brain.decide dispatched prose as say", {"persona": persona, "prose_length": len(prose)})
+
+    if not isinstance(result, dict) or not result:
+        dispatch(Tock("decide", {"persona": persona}))
+        return []
 
     steps_value = result.get("steps")
     items = steps_value if isinstance(steps_value, list) else [result]
 
     consequences: list = []
-
     for item in items:
         if not isinstance(item, dict) or not item:
             continue
@@ -147,21 +138,29 @@ async def decide(living: Living) -> list:
                 if meaning_file.exists():
                     meaning_file.unlink()
                     memory.unlearn(name)
-                    # Drop every map entry pointing at this stem (defensive — usually one).
                     intention_to_stem = paths.read_json(paths.learned(persona.id)) or {}
                     intention_to_stem = {i: s for i, s in intention_to_stem.items() if s != name}
                     paths.save_as_json(persona.id, paths.learned(persona.id), intention_to_stem)
-                    result_text = f"removed meaning: {name}"
+                    result_text = f"removed instruction: {name}"
                 else:
-                    status, result_text = "error", f"meaning not found: {name}"
+                    status, result_text = "error", f"instruction not found: {name}"
             memory.add_tool_result("remove_meaning", value, status, result_text)
 
         elif selector == "stop":
             dispatch(Command("Persona requested stop", {"persona": persona}))
 
+        elif selector == "tools.load_instruction":
+            # Cognitive sub-call: record a fresh intention. Learn fires
+            # next, produces the matching impression on the same iteration.
+            args = value if isinstance(value, dict) else {}
+            text = str(args.get("intention", "")).strip()
+            if text:
+                memory.intention(text)
+                logger.debug("brain.decide expressed sub-intention", {"persona": persona, "intention": text[:120]})
+
         elif "." in selector:
             namespace, _name = selector.split(".", 1)
-            if namespace == "tools" or namespace == "abilities":
+            if namespace == "tools":
                 args = value if isinstance(value, dict) else {}
                 consequences.append({selector: args})
             else:

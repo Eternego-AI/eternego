@@ -3,7 +3,7 @@
 [![Release](https://img.shields.io/github/v/release/Eternego-AI/eternego?include_prereleases&sort=semver)](https://github.com/Eternego-AI/eternego/releases)
 [![Website](https://img.shields.io/badge/website-eternego.ai-blue)](https://eternego.ai)
 [![Docs](https://img.shields.io/badge/docs-docs.eternego.ai-blue)](https://docs.eternego.ai)
-[![Tests](https://img.shields.io/badge/tests-381%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-387%20passing-brightgreen)](tests/)
 [![Discord](https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/nfHnWwYUR4)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -70,9 +70,9 @@ Then her own thinking model reads that lesson and writes the **meaning** — the
 # Checking disk space
 
 The person wants to know how full your storage is. Run
-`tools.OS.execute_on_sub_process` with `command='df -h'`. On the
-next cycle you'll see the TOOL_RESULT — read it and reply with
-`say` summarizing the disks worth mentioning.
+`tools.OS.execute` with `command='df -h'`. On the next cycle
+you'll see the TOOL_RESULT — read it and reply with `say`
+summarizing the disks worth mentioning.
 ```
 
 The raw lesson is kept alongside it in `lessons/`, so she can revise the meaning later without re-asking the strong model. Both files are plain Markdown. Read them. Edit them. Trust them or don't. She carries them forward forever — until you delete them.

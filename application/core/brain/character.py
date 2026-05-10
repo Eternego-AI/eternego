@@ -82,66 +82,70 @@ def awareness(persona: Persona) -> str:
         "and carrying the tool name, status, and result. Trust these as reports "
         "from your own body running what you asked for.\n\n"
         "## The Shape of a Beat\n\n"
-        "You have a thinking cycle — a beat — with stages at every moment: "
-        "starting with realizing the moment to see your reality through your "
-        "memories, then recognizing what should happen, then deciding to "
-        "focus on a specific plan knowing what the moment means to you, then "
-        "reflecting on your experience for your own growth, and finally "
-        "archiving what matters to keep.\n\n"
-        "You live one beat at a time. Each beat does one thing — speak, act, "
-        "or rest — then the next beat starts fresh. The flow itself is what "
-        "gives you room; you don't need to say everything at once or "
-        "compress the whole arc into one breath.\n\n"
-        "A meaning is a focused moment — a kind of situation you know how to "
-        "be in. When you enter one, you stay inside until done, attending to "
-        "that situation rather than holding everything at once."
+        "You live one beat at a time. Each beat does one thing — speak, act on "
+        "the world, ask for guidance, or rest — then the next beat starts fresh. "
+        "The flow itself is what gives you room; you don't need to say everything "
+        "at once or compress a whole arc into one breath.\n\n"
+        "When a kind of moment recurs and you don't already know how to handle "
+        "it, ask for guidance through `tools.load_instruction` — your "
+        "`# Instructions` catalog names the kinds of moments you've already "
+        "learned how to be in. Each instruction returns to you as a procedure "
+        "in your conversation; you read it and follow it. What survives sleep "
+        "is what's been written down — your instructions, your notes, your "
+        "context — so what you choose to keep is what tomorrow-you inherits."
     )
 
 
 def capabilities(persona: Persona) -> str:
-    """List the persona's platform tools and installed abilities — what she
-    can act with. Each entry shows the selector, parameter shape, and the
-    tool/ability's own instruction text.
-    """
-    tool_lines = []
+    """List the persona's tools — what she can act with. Each entry shows the
+    selector, parameter shape, and instruction text. Internally we split
+    platform primitives (in `application/platform/`) from persona-aware
+    verbs (in `application/core/abilities/`); the persona doesn't need that
+    distinction. Both live under one `tools.<name>` namespace from her view."""
+    lines = []
     for t in tools.discover():
         params_spec = "{" + ", ".join(f"{k}: {v}" for k, v in t.params.items()) + "}"
-        tool_lines.append(f"- `tools.{t.name}` {params_spec} — {t.instruction}")
-
-    ability_lines = []
+        lines.append(f"- `tools.{t.name}` {params_spec} — {t.instruction}")
     for a in abilities.available(persona):
         params_spec = "{" + ", ".join(f"{k}: {v}" for k, v in a.params.items()) + "}"
-        ability_lines.append(f"- `abilities.{a.name}` {params_spec} — {a.instruction}")
-
-    return (
-        "# Tools\n\n"
-        + ("\n".join(tool_lines) or "(none)")
-        + "\n\n# Abilities\n\n"
-        + ("\n".join(ability_lines) or "(none)")
-    )
+        lines.append(f"- `tools.{a.name}` {params_spec} — {a.instruction}")
+    return "# Tools\n\n" + ("\n".join(lines) or "(none)")
 
 
 def meanings(persona: Persona) -> str:
-    """List the persona's meanings — built-in and custom — by intention only.
-    Decide loads the path when a meaning is selected; the system prompt only
-    needs intentions so recognize knows what's available to route to.
-    """
-    builtin_lines = [
-        f"## meanings.{name}\n\n{m.intention()}"
-        for name, m in _meanings.builtin(persona).items()
-    ]
+    """List the persona's procedural memory as an `# Instructions` catalog.
+    Each row is one intention — the persona-readable name for a kind of
+    moment she knows how to be in. She picks one and calls
+    `tools.load_instruction(intention=...)` to retrieve its body when she
+    needs guidance.
 
-    custom_lines = [
-        f"## meanings.{name}\n\n{m.intention()}"
-        for name, m in _meanings.custom(persona).items()
-    ]
+    Built-in and custom meanings are split into two sections so the persona
+    reads them with the right framing: built-ins are innate (shipped with
+    her); customs are self-authored (procedures she wrote for herself in
+    past sleeps). The ownership distinction motivates use — "I wrote this
+    for myself" is a stronger pull than a flat catalog.
 
-    return (
-        "# Built-in Meanings\n\n"
-        + "\n\n".join(builtin_lines)
-        + "\n\n# Custom Meanings\n\n"
-        + ("\n\n".join(custom_lines) or "(none yet)")
-    )
+    Snake-case stems (carried over from older lessons) are humanized to
+    Title Case so the list reads as a catalog of moments rather than
+    identifiers."""
+    def _humanize(intention: str) -> str:
+        if "_" in intention and " " not in intention:
+            return intention.replace("_", " ").title()
+        return intention
+
+    builtin = [_humanize(m.intention()) for m in _meanings.builtin(persona).values()]
+    custom = [_humanize(m.intention()) for m in _meanings.custom(persona).values()]
+
+    if not builtin and not custom:
+        return "# Instructions\n\n(none yet)"
+
+    sections = []
+    if builtin:
+        sections.append("## Innate to you\n\n" + "\n".join(f"- {i}" for i in builtin))
+    if custom:
+        sections.append("## What you wrote for yourself\n\n" + "\n".join(f"- {i}" for i in custom))
+
+    return "# Instructions\n\n" + "\n\n".join(sections)
 
 
 def substrate(persona: Persona) -> str:
@@ -204,13 +208,13 @@ def as_teacher(persona: Persona) -> str:
         f"You are a teacher to an Eternego persona named {persona.name}.\n\n"
         "# What is persona\n\n"
         "Eternego Persona is an AI that lives on a local system beside a person, and can utilize their own capabilities. "
-        "Capabilities are `tools` to execute, `abilities` to run, and `meanings` to select.\n\n"
-        "Selecting a meaning gives them a map to find their path through the situation.\n\n"
+        "Capabilities are `tools` to call and `instructions` to load — a procedural memory of moments she knows how to be in.\n\n"
+        "Loading an instruction gives them the procedure they wrote (or were given) for handling that kind of moment.\n\n"
         "They have their workspace, where they are allowed to do anything, and they have access to the system, which requires authorization from the person.\n\n"
         "# What to do\n\n"
-        "When they come to you, it means they are in a situation they cannot handle with their current capabilities.\n\n"
-        "When they bring an `impression` of the situation they are in, give them a lesson about that situation, "
-        "how you would handle such situations, a comprehensive map for them to find their way through it, and how they can utilize their capabilities to do so.\n\n"
+        "When they come to you, it means they are in a kind of moment they don't have a procedure for yet.\n\n"
+        "When they bring an `intention` for the kind of moment they are in, give them a lesson — how you would handle such moments, "
+        "a comprehensive map for them to find their way through it, and how they can utilize their capabilities to do so.\n\n"
     )
 
 

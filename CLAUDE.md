@@ -25,7 +25,7 @@ Business imports core. Core imports platform. Never upward, never sideways. The 
 
 The mind (`application/core/brain/`) thinks. The body (`application/platform/` + `manager.py`'s Agent) carries the mind's words into the world and brings signals back. Messages follow the standard chat convention: `role=user` for anything from outside the persona (person's words, tool results, body signals), `role=assistant` for what the persona itself produced.
 
-`TOOL_RESULT` is the prefix on user-role messages that follow an assistant-role tool/ability call — naming tool, status, and result. The convention is enforced in one place: `memory.add_tool_result(selector, value, status, result)` writes the standard pair (assistant call + user TOOL_RESULT).
+`TOOL_RESULT` is the prefix on user-role messages that follow an assistant-role tool/ability call — naming tool, status, and result. Cognitive functions speak in cognitive verbs (`memory.intention(text)`, `memory.perception()`, `memory.impression(body)`, `memory.comprehension()`); memory translates those into the standard tool-call/TOOL_RESULT shape under the hood. Mechanical tools/abilities the executor actually runs go through `memory.add_tool_result(selector, value, status, result)`.
 
 ## Four alive voices
 
@@ -34,7 +34,7 @@ Each cognitive stage uses one of four "alive" voices. All four live in `applicat
 - **Ego** — the persona's own voice. Identity is rebuilt every read from character, situation, person facts, and carried context. Speaks through `persona.thinking`. Used by recognize, decide, reflect, archive.
 - **Consultant** — a neutral observer. Reads the conversation from outside without slipping into the persona's voice. Reuses `persona.thinking` with a different framing. Used by realize to formulate vision questions.
 - **Eye** — the persona's sight. Looks at images, reports what it sees. Uses `persona.vision` (optional).
-- **Teacher** — a frontier mind that, on a moment the persona doesn't yet know, either dispatches a tool/ability call, routes to an existing meaning, or teaches a new lesson (the principle behind this kind of moment). Uses `persona.frontier`. When the Teacher teaches a lesson, the persona's own thinking model then translates it into the meaning prose she'll read herself next time. Called by learn.
+- **Teacher** — a frontier mind that writes a new lesson when the persona expresses an intention for a kind of moment she has no procedure for. Uses `persona.frontier`. When the Teacher teaches a lesson, the persona's own thinking model translates it into the meaning prose she'll read herself next time. Called by learn (and by reflect when she crystallizes a new instruction).
 
 ## The cognitive cycle
 
@@ -48,7 +48,7 @@ Each stage takes only `living: Living` and returns `list[Consequence]` — a dec
 
 Two exceptions exit the cycle cleanly: `EngineConnectionError` (provider unreachable/empty) and `BrainException` (recognize refused classification again while already on the troubleshooting meaning). Both dispatch a `BrainFault` signal that health_check reads on the next heartbeat.
 
-When recognize or decide receive prose instead of JSON, they dispatch the prose as a say (assistant-role) rather than raising. Recognize forces `memory.meaning = "troubleshooting"` on first refusal so the next tick runs the self-diagnostic. Only a second refusal while on troubleshooting escalates to `BrainException`.
+When recognize or decide receive prose instead of JSON, they dispatch the prose as a say (assistant-role) rather than raising — graceful fallback for models that don't follow the schema cleanly. The cycle continues; the persona reads her own prose on the next beat and re-perceives.
 
 ## Phase
 
@@ -58,13 +58,13 @@ Pulse holds `phase: Phase | None` (Enum: `MORNING` / `DAY` / `NIGHT`). Phase tra
 
 ## Three entities — tools, abilities, meanings
 
-Layered by what state they see.
+Layered by what state they see. From the persona's view, tools and abilities share the `tools.<name>` namespace — the distinction lives in the codebase, not in her vocabulary.
 
 - **Tools** (`application/platform/*.py`, `@tool`) — platform primitives. `tools.call(name, **args) → (status, result)`. Catches its own exceptions.
-- **Abilities** (`application/core/abilities/*.py`, `@ability("desc", requires=...)`) — one-shot named verbs. `abilities.call(persona, name, **args)`. The optional `requires=lambda persona: bool` predicate gates per-persona availability (e.g., `look_at` requires a vision model).
-- **Meanings** (`application/core/brain/meanings/*.md`) — situations the persona knows how to be in. Markdown files: first H1 is the intention, body is the path prose. Built-ins ship; custom meanings live in the persona's home `meanings/` dir alongside the originating `lessons/` file (the frontier-authored principle the persona translated into her own voice). `meanings.builtin(persona)` and `meanings.custom(persona)` load both layers.
+- **Abilities** (`application/core/abilities/*.py`, `@ability("desc", requires=...)`) — one-shot named verbs. `abilities.call(persona, name, **args)`. The optional `requires=lambda persona: bool` predicate gates per-persona availability (e.g., `look_at` requires a vision model). Surfaced under `tools.<name>` to the persona; `clock.execute` resolves names against both registries.
+- **Meanings** (`application/core/brain/meanings/*.md`) — situations the persona knows how to be in. Markdown files: first H1 is the intention, body is the path prose. The persona retrieves a meaning's body via `tools.load_instruction(intention=...)` — recognize records her intention, learn matches the catalog and writes the impression, decide acts on it. Built-ins ship; custom meanings live in the persona's home `meanings/` dir alongside the originating `lessons/` file. `meanings.builtin(persona)` and `meanings.custom(persona)` load both layers.
 
-Selectors in consequences: `tools.<module>.<function>`, `abilities.<name>`, `meanings.<name>`.
+Consequence selectors are always `tools.<name>` — clock's executor looks up `name` in the platform-tools registry first, then abilities.
 
 ## Business layer conventions
 
@@ -95,7 +95,7 @@ Selectors in consequences: `tools.<module>.<function>`, `abilities.<name>`, `mea
 - **Naming**: gerund intents (`saying`, `doing`, `recognizing`, `chatting`). The vocabulary mirrors human cognition deliberately — treat it as load-bearing
 - **Paths**: every path comes from `application/core/paths.py`. Don't hardcode filenames or compute paths inline
 - **Memory**: per-persona via `Memory(persona)` or `ego.memory`. No global memory state
-- **Tool results**: every tool/ability/special invocation goes through `memory.add_tool_result` — the convention lives in one place
+- **Tool results**: cognitive signals go through cognitive verbs (`memory.intention`, `memory.perception`, `memory.impression`, `memory.comprehension`); mechanical tool/ability invocations go through `memory.add_tool_result`. The wire shape (assistant call + user TOOL_RESULT) lives only inside memory
 - **Signals**: `bus.propose` at start, `bus.broadcast` at end, every business function
 - **Exceptions**: domain-specific, defined in `exceptions.py`, caught at the business layer
 - **No helpers**: prefer explicit repetition over premature abstraction. No `_*` helper functions that exist to dedupe a few lines — write them twice

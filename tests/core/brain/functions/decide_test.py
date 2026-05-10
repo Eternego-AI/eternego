@@ -1,20 +1,23 @@
 """Decide stage — integration tests over a real Living.
 
-Each test seeds memory with a meaning name (recognize already chose), constructs
-a real Living, calls `decide(living)`, and asserts on consequences, dispatched
-Commands, and memory state.
+Each test seeds memory with an intention + matching impression (the
+state decide requires), constructs a real Living, calls `decide(living)`,
+and asserts on consequences, dispatched Commands, and memory state.
 
-Decide leaves `memory.meaning` set on exit — reflect reads it for refinement
-and clears it. So tests check effects (consequences, dispatched Commands,
-memory writes) rather than state cleanup.
+Decide gates on `memory.comprehension()` — it only fires after learn has
+produced an impression. The body lives in the conversation; decide reads
+it via memory.prompts and acts on it.
+
+Decide's vocabulary is the single-key / `steps:[...]` shape recognize uses,
+plus self-care specials (clear_memory, remove_meaning, stop) handled inline.
 """
 
 from application.platform.processes import on_separate_process_async
 
 
-async def test_decide_no_meaning_passes_through():
-    """If memory.meaning is None or unknown, decide returns [] without a model
-    call (no meaning, nothing to act on)."""
+async def test_decide_no_impression_passes_through():
+    """If `memory.comprehension()` is None, decide returns [] without a
+    model call (gate didn't fire)."""
     def isolated():
         import asyncio, os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -43,8 +46,7 @@ async def test_decide_no_meaning_passes_through():
 
 
 async def test_decide_say_dispatches_command():
-    """{"say": "..."} dispatches a 'Persona wants to say' Command. Meaning state
-    stays set — reflect handles cleanup on the next stage."""
+    """`{"say": "..."}` dispatches a 'Persona wants to say' Command."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -67,7 +69,8 @@ async def test_decide_say_dispatches_command():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("chatting")
+                ego.memory.impression("talk simply")
 
                 said = []
                 async def capture(cmd: observer.Command):
@@ -92,7 +95,7 @@ async def test_decide_say_dispatches_command():
 
 
 async def test_decide_done_returns_empty():
-    """{"done": null} returns [] with no Command. Meaning state stays set."""
+    """`{"done": null}` returns [] with no Command."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -115,7 +118,8 @@ async def test_decide_done_returns_empty():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("chatting")
+                ego.memory.impression("rest is fine")
 
                 consequences = await functions.decide(living)
                 assert consequences == []
@@ -130,7 +134,7 @@ async def test_decide_done_returns_empty():
 
 
 async def test_decide_notify_remembers_and_dispatches():
-    """{"notify": "<text>"} adds an assistant message to memory and dispatches
+    """`{"notify": "<text>"}` adds an assistant message to memory and dispatches
     a 'Persona wants to notify' Command."""
     def isolated():
         import os, tempfile
@@ -154,7 +158,8 @@ async def test_decide_notify_remembers_and_dispatches():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("broadcasting")
+                ego.memory.impression("broadcast on every channel")
 
                 notified = []
                 async def capture(cmd: observer.Command):
@@ -184,7 +189,7 @@ async def test_decide_notify_remembers_and_dispatches():
 
 
 async def test_decide_clear_memory_forgets_and_records():
-    """{"clear_memory": null} wipes messages and records a tool-result pair so
+    """`{"clear_memory": null}` wipes messages then records a tool-result pair so
     the persona's next read sees that it just cleared its own memory."""
     def isolated():
         import os, tempfile
@@ -208,11 +213,12 @@ async def test_decide_clear_memory_forgets_and_records():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="old chatter", prompt=Prompt(role="user", content="old chatter")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("resetting")
+                ego.memory.impression("wipe and start fresh")
 
                 consequences = await functions.decide(living)
                 assert consequences == []
-                # Memory is forgotten then add_tool_result pair appended → 2 messages.
+                # forget() then add_tool_result writes 2 messages → 2 messages total.
                 assert len(ego.memory.messages) == 2
                 call_msg, result_msg = ego.memory.messages
                 assert call_msg.prompt.role == "assistant"
@@ -230,7 +236,7 @@ async def test_decide_clear_memory_forgets_and_records():
 
 
 async def test_decide_remove_meaning_unlearns_existing():
-    """{"remove_meaning": {"name": "<existing>"}} deletes the file, calls
+    """`{"remove_meaning": {"name": "<existing>"}}` deletes the file, calls
     memory.unlearn, and records a success TOOL_RESULT."""
     def isolated():
         import os, tempfile
@@ -256,7 +262,8 @@ async def test_decide_remove_meaning_unlearns_existing():
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.learn("temp_meaning", meanings.Meaning("temp_meaning", "Temp", "stub"))
                 ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("pruning")
+                ego.memory.impression("drop the stale meaning")
 
                 consequences = await functions.decide(living)
                 assert consequences == []
@@ -265,7 +272,7 @@ async def test_decide_remove_meaning_unlearns_existing():
                 assert "temp_meaning" not in ego.memory.custom_meanings
                 last = ego.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content
-                assert "removed meaning: temp_meaning" in last.content
+                assert "removed instruction: temp_meaning" in last.content
 
             ollama.assert_call(
                 run=lambda url: consume(url),
@@ -277,7 +284,7 @@ async def test_decide_remove_meaning_unlearns_existing():
 
 
 async def test_decide_stop_dispatches_command():
-    """{"stop": null} dispatches a 'Persona requested stop' Command."""
+    """`{"stop": null}` dispatches a 'Persona requested stop' Command."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -300,7 +307,8 @@ async def test_decide_stop_dispatches_command():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("stopping")
+                ego.memory.impression("stop here")
 
                 stops = []
                 async def capture(cmd: observer.Command):
@@ -325,7 +333,7 @@ async def test_decide_stop_dispatches_command():
 
 
 async def test_decide_tool_returns_capability():
-    """{"tools.<name>": {...}} returns a single-item capability list for
+    """`{"tools.<name>": {...}}` returns a single-item capability list for
     clock's executor to run."""
     def isolated():
         import os, tempfile
@@ -349,7 +357,8 @@ async def test_decide_tool_returns_capability():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("listing")
+                ego.memory.impression("run ls -la")
 
                 consequences = await functions.decide(living)
                 assert len(consequences) == 1
@@ -365,9 +374,8 @@ async def test_decide_tool_returns_capability():
 
 
 async def test_decide_steps_returns_list_of_capabilities():
-    """{"steps": [{"tools.X": {...}}, {"abilities.Y": {...}}]} returns multiple
-    consequences in order. Voice and specials run inline; tools/abilities are
-    queued for clock."""
+    """`{"steps": [...]}` returns multiple consequences in order. Voice and
+    specials run inline; tools queue for clock."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -390,7 +398,8 @@ async def test_decide_steps_returns_list_of_capabilities():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("exploring")
+                ego.memory.impression("describe then list")
 
                 said = []
                 async def capture(cmd: observer.Command):
@@ -449,7 +458,8 @@ async def test_decide_prose_dispatches_as_say():
                 teacher = agents.Teacher(persona)
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("drifting")
+                ego.memory.impression("let it sit")
 
                 said = []
                 async def capture(cmd: observer.Command):
@@ -503,7 +513,8 @@ async def test_decide_remove_meaning_clears_learned_entry():
                 living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
                 ego.memory.learn("temp_meaning", meanings.Meaning("temp_meaning", "Temp", "stub"))
                 ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                ego.memory.meaning = "chatting"
+                ego.memory.intention("pruning")
+                ego.memory.impression("drop it")
 
                 consequences = await functions.decide(living)
                 assert consequences == []

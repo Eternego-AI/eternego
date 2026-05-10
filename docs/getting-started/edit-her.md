@@ -26,14 +26,14 @@ Create `~/.eternego/personas/<id>/home/meanings/checking_disk_space.md`:
 # Checking disk space
 
 The person wants to know how full your storage is. Run
-`tools.OS.execute_on_sub_process` with `command='df -h'`. On the
-next cycle you'll see the TOOL_RESULT — read it and reply with
-`say` summarizing the disks worth mentioning.
+`tools.OS.execute` with `command='df -h'`. On the next cycle
+you'll see the TOOL_RESULT — read it and reply with `say`
+summarizing the disks worth mentioning.
 ```
 
 The H1 is the *intention* — what she's doing in this kind of moment. The body is the *path* — what she does, in her own voice.
 
-Save. The next tick, she sees this meaning is available and can recognize the situation when it comes up. Ask her: "How full is my disk?" — she'll match the situation, run the command, summarize.
+Save. The next tick, the intention shows up in her `# Instructions` catalog. When she recognizes a moment that matches, she calls `tools.load_instruction(intention="Checking disk space")` to retrieve the path and follow it. Ask her: "How full is my disk?" — she'll recognize the kind of moment, load the procedure, run the command, summarize.
 
 ## Grant a permission
 
