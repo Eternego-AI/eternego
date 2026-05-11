@@ -8,7 +8,7 @@ Decide gates on `memory.comprehension()` — it only fires after learn has
 produced an impression. The body lives in the conversation; decide reads
 it via memory.prompts and acts on it.
 
-Decide's vocabulary is the single-key / `steps:[...]` shape recognize uses,
+Decide's vocabulary is the `{"decision": [<actions>]}` shape recognize uses,
 plus self-care specials (clear_memory, remove_meaning, stop) handled inline.
 """
 
@@ -87,7 +87,7 @@ async def test_decide_say_dispatches_command():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"say": "hi there"}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"say": "hi there"}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -126,7 +126,7 @@ async def test_decide_done_returns_empty():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"done": null}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"done": null}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -181,7 +181,7 @@ async def test_decide_notify_remembers_and_dispatches():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"notify": "broadcast this"}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"notify": "broadcast this"}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -228,7 +228,7 @@ async def test_decide_clear_memory_forgets_and_records():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"clear_memory": null}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"clear_memory": null}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -276,7 +276,7 @@ async def test_decide_remove_meaning_unlearns_existing():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"remove_meaning": {"name": "temp_meaning"}}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"remove_meaning": {"name": "temp_meaning"}}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -325,7 +325,7 @@ async def test_decide_stop_dispatches_command():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"stop": null}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"stop": null}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -366,7 +366,7 @@ async def test_decide_tool_returns_capability():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"tools.OS.execute": {"command": "ls"}}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"tools.OS.execute": {"command": "ls"}}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -374,7 +374,7 @@ async def test_decide_tool_returns_capability():
 
 
 async def test_decide_steps_returns_list_of_capabilities():
-    """`{"steps": [...]}` returns multiple consequences in order. Voice and
+    """`{"decision": [...]}` with multiple items returns consequences in order. Voice and
     specials run inline; tools queue for clock."""
     def isolated():
         import os, tempfile
@@ -418,7 +418,7 @@ async def test_decide_steps_returns_list_of_capabilities():
                 assert said == ["checking"]
 
             payload = (
-                '{"steps": ['
+                '{"decision": ['
                 '{"say": "checking"},'
                 '{"tools.OS.execute": {"command": "ls"}},'
                 '{"tools.OS.execute": {"command": "pwd"}}'
@@ -473,7 +473,7 @@ async def test_decide_remove_meaning_clears_learned_entry():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"remove_meaning": {"name": "temp_meaning"}}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"remove_meaning": {"name": "temp_meaning"}}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)

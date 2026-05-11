@@ -74,3 +74,31 @@ class Observation:
     struggles: list[str]
 
 
+@dataclass(kw_only=True)
+class Action:
+    """A cognitive function's declaration of what JSON it expects from the model.
+
+    Recursive: `fields` are themselves Actions. A leaf has empty `fields`
+    and a primitive `type`. An object has `type="object"` and a populated
+    `fields` list. An array has `type="array"` and an `items` Action.
+
+    `required` says whether *this* Action is required at the level where
+    it appears as a field. `one_of=True` on an object Action means
+    exactly one of its `fields` must be present (a union type).
+
+    `name` identifies an Action where it appears as a property key (in
+    object fields) or as the function name on the wire. Array items and
+    inline anonymous shapes can omit it.
+
+    The class itself is provider-agnostic. Translation to each
+    provider's native tool-call shape lives in `core.actions`.
+    """
+    name: str = ""
+    type: str = "object"                       # JSON type: object, array, string, null, integer, etc.
+    description: str = ""
+    fields: list["Action"] = field(default_factory=list)
+    required: bool = False
+    items: "Action | None" = None              # element type when type == "array"
+    one_of: bool = False                       # exactly one of `fields` must be present
+
+

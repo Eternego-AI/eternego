@@ -14,11 +14,20 @@ from application.core import models, paths
 from application.core.agents import Living
 from application.core.brain.pulse import Phase
 from application.core.brain.signals import Tick, Tock
-from application.core.data import Prompt
+from application.core.data import Action, Prompt
 from application.core.exceptions import ModelError
 from application.platform import datetimes, logger
 from application.platform.objects import to_dict
 from application.platform.observer import dispatch
+
+
+ARCHIVING = Action(
+    name="archiving",
+    description="A short description of the image as the persona remembers it.",
+    fields=[
+        Action(name="description", type="string", required=True),
+    ],
+)
 
 
 async def archive(living: Living) -> list:
@@ -105,7 +114,7 @@ async def archive(living: Living) -> list:
                 "```"
             )
             try:
-                result = await models.tool(living.ego.model, living.ego.identity + living.pulse.hint() + prompts, question)
+                result = await models.tool(living.ego.model, living.ego.identity + living.pulse.hint() + prompts, question, ARCHIVING)
                 description = str(result.get("description", "")).strip() if isinstance(result, dict) else ""
             except ModelError as e:
                 logger.warning("brain.archive description failed", {"persona": persona, "source": m.media.source, "error": str(e)})

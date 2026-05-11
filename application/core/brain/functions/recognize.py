@@ -1,8 +1,11 @@
 """Brain — recognize in living.
 
-One cognitive call per tick. The persona reads the moment and emits an action
-in the same JSON shape decide uses — a single-key object naming the action,
-or `{"steps": [...]}` for multi-call.
+One cognitive call per tick. The persona reads the moment and emits a
+`{"decision": [<actions>]}` JSON object — a list of actions to execute
+in order for this beat. Each action is one of the single-key shapes
+(`{"say": ...}`, `{"done": null}`, `{"tools.<name>": {...}}`,
+`{"tools.load_instruction": {"intention": "..."}}`). An empty list
+means "no action this beat."
 
 When she needs guidance she emits `{"tools.load_instruction": {"intention":
 "..."}}` — the recognize handler writes that as an assistant tool call to
@@ -17,18 +20,52 @@ Recognize gates on memory state: if the last tool signal is a pending
 finish the round-trip. If the last signal is a load_instruction result,
 recognize also skips so decide can act on it. Otherwise — fresh perception.
 
-The model's response must be valid JSON; `models.tool` raises ModelError
-on anything else and recognize skips the beat. No prose fallback — if the
-model can't return JSON, the beat produces nothing and the cycle moves on.
+The model's response must be valid JSON with a `decision` list; `models.tool`
+raises ModelError on anything else and recognize skips the beat. No prose
+fallback — if the model can't return JSON, the beat produces nothing and
+the cycle moves on.
 """
 
-from application.core import models
+from application.core import abilities, models, tools
 from application.core.agents import Living
 from application.core.brain import situation
 from application.core.brain.signals import Tick, Tock
+from application.core.data import Action
 from application.core.exceptions import ModelError
 from application.platform import logger
 from application.platform.observer import Command, dispatch
+
+
+def _recognizing(persona) -> Action:
+    """Build the Action describing what recognize accepts this beat —
+    a `decision` array whose items are one_of every action shape the
+    persona can emit (fixed cognitive variants plus every registered
+    tool and persona-available ability, each with its typed params).
+    Built per-call because the ability catalog is persona-specific."""
+    variants: list[Action] = [
+        Action(name="say", type="string", description="speak to the person on the current channel"),
+        Action(name="done", type="null", description="rest; nothing more to do this beat"),
+        Action(
+            name="tools.load_instruction",
+            type="object",
+            description="ask for guidance on a kind of moment; the procedure body comes back as a TOOL_RESULT on the same beat",
+            fields=[Action(name="intention", type="string", required=True)],
+        ),
+    ]
+    variants.extend(tools.actions())
+    variants.extend(abilities.actions(persona))
+    return Action(
+        name="recognizing",
+        description="What this moment calls for. A list of actions to execute in order.",
+        fields=[
+            Action(
+                name="decision",
+                type="array",
+                required=True,
+                items=Action(one_of=True, fields=variants),
+            ),
+        ],
+    )
 
 
 async def recognize(living: Living) -> list:
@@ -68,27 +105,24 @@ async def recognize(living: Living) -> list:
         "- If nothing reactive calls for action and you see nothing deliberate to do, "
         "choose rest.\n\n"
         "## Output\n\n"
-        "Return a single-key JSON object naming the action — one shape per beat. "
-        "If you also have work to do this beat, wrap calls in `{\"steps\": [...]}` "
-        "instead; otherwise the beat ends after the shape you pick. When you can "
-        "both speak and act, prefer acting — speech alone is right when speaking "
-        "is the whole point. Your tools are listed in your identity above — pick "
-        "one by its full selector.\n\n"
+        "Return a JSON object with a single `decision` key — a list of actions to "
+        "execute in order for this beat. Each action in the list is one of the "
+        "single-key shapes below. If you have nothing to do, return "
+        "`{\"decision\": []}`. The cycle re-runs when an action touches the world, "
+        "so you'll re-perceive what came back on the next beat.\n\n"
         "Voice:\n"
-        "- `{\"say\": \"<text>\"}` — speak to the person and rest this beat (no "
-        "follow-up action). For speech inside a procedure, use `tools.report` in "
-        "`steps`.\n\n"
+        "- `{\"say\": \"<text>\"}` — speak to the person on the current channel.\n\n"
         "Tools:\n"
-        "- `{\"tools.<name>\": { ...args }}` — run a tool. Most tools touch the world "
-        "(read a file, run a command, post on X) and end the beat — the next beat "
-        "re-perceives with the result in memory.\n"
+        "- `{\"tools.<name>\": { ...args }}` — run one of your tools. Most touch the "
+        "world (read a file, run a command, post on X); when the action's result "
+        "comes back as a TOOL_RESULT, you read it on the next beat.\n"
         "- `{\"tools.load_instruction\": { \"intention\": \"<intention>\" }}` — "
         "ask for guidance on a kind of moment. Pick an intention from your "
         "`# Instructions` catalog above (exact match), or invent a new one for a "
         "kind you've never handled before. On the same beat, the procedure body "
         "comes back as a TOOL_RESULT and you act on it — no world-touch, no restart.\n\n"
         "Done:\n"
-        "- `{\"done\": null}` — rest. Wait for the next signal.\n\n"
+        "- `{\"done\": null}` — explicit rest. Equivalent to an empty decision list.\n\n"
         "When you `say` to report a result, ground the claim in evidence — name the "
         "artifact that proves it (a commit hash, a PR url, a tweet id, a file path "
         "you wrote, an output you observed in a TOOL_RESULT). Without an artifact, "
@@ -101,18 +135,26 @@ async def recognize(living: Living) -> list:
             living.ego.model,
             living.ego.identity + living.pulse.hint() + memory.prompts,
             question,
+            _recognizing(persona),
         )
     except ModelError as e:
         logger.warning("brain.recognize model returned non-JSON", {"persona": persona, "error": str(e)})
         dispatch(Tock("recognize", {"persona": persona, "branch": "non-json"}))
         return []
 
-    if not isinstance(result, dict) or not result:
+    if result is None:
+        # Model returned {} — gave up / chose nothing. Treat as rest.
+        dispatch(Tock("recognize", {"persona": persona, "branch": "empty"}))
+        return []
+
+    if not isinstance(result, dict):
         dispatch(Tock("recognize", {"persona": persona}))
         return []
 
-    steps_value = result.get("steps")
-    items = steps_value if isinstance(steps_value, list) else [result]
+    items = result.get("decision")
+    if not isinstance(items, list):
+        dispatch(Tock("recognize", {"persona": persona, "branch": "no-decision"}))
+        return []
 
     consequences: list = []
     for item in items:

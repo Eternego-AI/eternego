@@ -6,12 +6,14 @@ no-op worker), calls `recognize(living)`, and asserts on:
 - memory state (cognitive signals via perception / comprehension)
 - bus traffic (Tick/Tock signals, Command dispatches)
 
-Recognize emits a single-key JSON object naming the action — `{"say": ...}`,
-`{"done": null}`, `{"tools.X": {...}}`, or `{"steps": [...]}`. No prose
-fallback — non-JSON from the model raises `ModelError` and the beat is
-skipped. Recognize gates on `memory.perception()` and `memory.comprehension()`:
-if there's a pending intention or a fresh impression, recognize skips so
-learn or decide runs.
+Recognize emits `{"decision": [<actions>]}` — a JSON object with one key
+whose value is a list of actions to execute in order. Each action is one
+of `{"say": ...}`, `{"done": null}`, `{"tools.<name>": {...}}`, or
+`{"tools.load_instruction": {"intention": "..."}}`. Empty list = rest.
+No prose fallback — non-JSON from the model raises `ModelError` and the
+beat is skipped. Recognize gates on `memory.perception()` and
+`memory.comprehension()`: if there's a pending intention or a fresh
+impression, recognize skips so learn or decide runs.
 """
 
 from application.platform.processes import on_separate_process_async
@@ -58,7 +60,7 @@ async def test_recognize_say_dispatches_command():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"say": "hello"}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"say": "hello"}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -107,7 +109,7 @@ async def test_recognize_done_returns_empty():
 
             ollama.assert_call(
                 run=lambda url: consume(url),
-                responses=[[{"message": {"content": '{"done": null}'}, "done": True}]],
+                responses=[[{"message": {"content": '{"decision": [{"done": null}]}'}, "done": True}]],
             )
 
     code, error = await on_separate_process_async(isolated)
@@ -148,7 +150,7 @@ async def test_recognize_load_instruction_records_intention():
                 # Perception should report the pending intention.
                 assert ego.memory.perception() == "chatting"
 
-            payload = '{"tools.load_instruction": {"intention": "chatting"}}'
+            payload = '{"decision": [{"tools.load_instruction": {"intention": "chatting"}}]}'
             ollama.assert_call(
                 run=lambda url: consume(url),
                 responses=[[{"message": {"content": payload}, "done": True}]],
@@ -189,7 +191,7 @@ async def test_recognize_tool_returns_capability():
                 assert len(consequences) == 1
                 assert consequences[0] == {"tools.OS.execute": {"command": "ls"}}
 
-            payload = '{"tools.OS.execute": {"command": "ls"}}'
+            payload = '{"decision": [{"tools.OS.execute": {"command": "ls"}}]}'
             ollama.assert_call(
                 run=lambda url: consume(url),
                 responses=[[{"message": {"content": payload}, "done": True}]],
@@ -200,7 +202,7 @@ async def test_recognize_tool_returns_capability():
 
 
 async def test_recognize_steps_returns_list():
-    """`{"steps": [...]}` returns multiple consequences in order. Voice runs
+    """`{"decision": [...]}` with multiple items returns the consequences in order. Voice runs
     inline (dispatched as Command); tools queue for clock."""
     def isolated():
         import os, tempfile
@@ -241,7 +243,7 @@ async def test_recognize_steps_returns_list():
                 assert said == ["checking"]
 
             payload = (
-                '{"steps": ['
+                '{"decision": ['
                 '{"say": "checking"},'
                 '{"tools.OS.execute": {"command": "ls"}},'
                 '{"tools.OS.execute": {"command": "pwd"}}'

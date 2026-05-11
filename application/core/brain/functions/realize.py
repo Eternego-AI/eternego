@@ -22,10 +22,24 @@ from pathlib import Path
 from application.core import models
 from application.core.agents import Living
 from application.core.brain.signals import Tick, Tock
-from application.core.data import Prompt
+from application.core.data import Action, Prompt
 from application.core.exceptions import ModelError
 from application.platform import filesystem, logger
 from application.platform.observer import dispatch
+
+
+CONSULTING = Action(
+    name="consulting",
+    description="Questions the consultant would ask to see this moment more clearly.",
+    fields=[
+        Action(
+            name="questions",
+            type="array",
+            required=True,
+            items=Action(name="question", type="string"),
+        ),
+    ],
+)
 
 
 async def realize(living: Living) -> list:
@@ -77,7 +91,7 @@ async def realize(living: Living) -> list:
             "```"
         )
         try:
-            question_result = await models.tool(living.consultant.model, living.consultant.identity + reality, question_prompt)
+            question_result = await models.tool(living.consultant.model, living.consultant.identity + reality, question_prompt, CONSULTING)
             questions = question_result.get("questions", []) if isinstance(question_result, dict) else []
         except ModelError as formulation_error:
             logger.warning("brain.realize question formulation failed, defaulting", {"persona": living.ego.persona, "error": str(formulation_error)})

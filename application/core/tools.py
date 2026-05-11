@@ -3,13 +3,47 @@
 import asyncio
 import inspect
 
+from application.core.data import Action
 from application.platform.tool import Tool, registered_tools
 from application.platform import logger
+
+
+_TYPE_MAP = {
+    "str": "string",
+    "int": "integer",
+    "float": "number",
+    "bool": "boolean",
+    "list": "array",
+    "dict": "object",
+    "Path": "string",
+}
 
 
 def discover() -> list[Tool]:
     """Return all registered tools from platform modules."""
     return registered_tools()
+
+
+def actions() -> list[Action]:
+    """Return an Action variant per registered tool — used by cognitive
+    functions (recognize, decide) to build a closed `one_of` schema that
+    enumerates exactly what the persona can dispatch. Each tool's params
+    become typed fields on the Action; the Action's name is the full
+    selector (`tools.<tool_name>`) the persona emits as the dict key.
+    """
+    out: list[Action] = []
+    for t in registered_tools():
+        fields = [
+            Action(
+                name=p,
+                type=_TYPE_MAP.get(type_str, "string"),
+                description="",
+                required=True,
+            )
+            for p, type_str in t.params.items()
+        ]
+        out.append(Action(name=f"tools.{t.name}", type="object", description=t.instruction, fields=fields))
+    return out
 
 
 def document() -> str:

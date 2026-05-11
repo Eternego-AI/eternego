@@ -299,8 +299,8 @@ async def test_reflect_at_night_refines_and_creates_instructions():
             # Refine matches by intention text ("asking for keys"), not stem.
             updates = json.dumps({
                 "updates": [
-                    {"refine": "asking for keys", "path": "specific updated body with steps"},
-                    {"new": True, "intention": "publishing via PR", "path": "Run gh pr create with the right base and head."},
+                    {"refine": {"intention": "asking for keys", "path": "specific updated body with steps"}},
+                    {"new": {"intention": "publishing via PR", "path": "Run gh pr create with the right base and head."}},
                 ]
             })
             consolidation = json.dumps({
@@ -425,7 +425,7 @@ async def test_reflect_new_with_existing_intention_updates_existing_file():
 
             updates = json.dumps({
                 "updates": [
-                    {"new": True, "intention": "X engagement", "path": "New body for X engagement"},
+                    {"new": {"intention": "X engagement", "path": "New body for X engagement"}},
                 ]
             })
             consolidation = json.dumps({
@@ -489,7 +489,7 @@ async def test_reflect_at_night_delete_unlearns_custom_instruction():
                 # Memory's custom catalog forgot it.
                 assert "outdated" not in ego.memory.custom_meanings
 
-            updates = json.dumps({"updates": [{"delete": "outdated thing"}]})
+            updates = json.dumps({"updates": [{"delete": {"intention": "outdated thing"}}]})
             consolidation = json.dumps({
                 "context": "pruned",
                 "identity": [], "traits": [], "wishes": [], "struggles": [],

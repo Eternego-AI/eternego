@@ -7,7 +7,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import httpx
 
 from application.platform import logger
-from application.platform.observer import send, dispatch, Message
+from application.platform.observer import send, dispatch, Message, Plan
 
 BASE_URL = "https://api.openai.com"
 
@@ -15,17 +15,13 @@ BASE_URL = "https://api.openai.com"
 async def chat(base_url: str, api_key: str | None, model: str, messages: list[dict]):
     """Stream chat response, yielding content chunks."""
     api_key = api_key or ""
+    url = f"{base_url}/v1/chat/completions"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    body = {"model": model, "messages": messages, "stream": True, "stream_options": {"include_usage": True}}
+    dispatch(Plan("Sending OpenAI Request", {"url": url, "headers": {**headers, "Authorization": "Bearer ***"}, "body": body}))
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
-            async with http.stream("POST", f"{base_url}/v1/chat/completions", json={
-                "model": model,
-                "messages": messages,
-                "stream": True,
-                "stream_options": {"include_usage": True},
-            }, headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            }) as response:
+            async with http.stream("POST", url, json=body, headers=headers) as response:
                 if response.status_code >= 400:
                     body_bytes = await response.aread()
                     body_text = body_bytes.decode("utf-8", errors="replace")
@@ -79,21 +75,38 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
         raise ConnectionError(str(e)) from e
 
 
-async def tool(base_url: str, api_key: str | None, model: str, messages: list[dict]):
-    """Stream JSON chat response, yielding content chunks. Uses response_format constraint."""
+async def chat_json(base_url: str, api_key: str | None, model: str, messages: list[dict], tools: list[dict] | None = None, tool_choice: dict | None = None):
+    """Stream JSON response, yielding content chunks.
+
+    Without `tools`: uses `response_format: {"type": "json_object"}` to
+    enforce valid JSON output via the content stream. With `tools` (and
+    optional `tool_choice`): passes them through verbatim and the model
+    emits via `tool_calls[0].function.arguments`.
+    """
     api_key = api_key or ""
+    body: dict = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if tools is not None:
+        body["tools"] = tools
+        if tool_choice is not None:
+            body["tool_choice"] = tool_choice
+        # We force a single function; disable parallel tool calls so the
+        # model can't emit multiple invocations whose args get concatenated
+        # into one stream by our parser. Without this, a leading `{}` call
+        # would shadow the real call.
+        body["parallel_tool_calls"] = False
+    else:
+        body["response_format"] = {"type": "json_object"}
+    url = f"{base_url}/v1/chat/completions"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    dispatch(Plan("Sending OpenAI Request", {"url": url, "headers": {**headers, "Authorization": "Bearer ***"}, "body": body}))
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
-            async with http.stream("POST", f"{base_url}/v1/chat/completions", json={
-                "model": model,
-                "messages": messages,
-                "stream": True,
-                "stream_options": {"include_usage": True},
-                "response_format": {"type": "json_object"},
-            }, headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            }) as response:
+            async with http.stream("POST", url, json=body, headers=headers) as response:
                 if response.status_code >= 400:
                     body_bytes = await response.aread()
                     body_text = body_bytes.decode("utf-8", errors="replace")
@@ -126,11 +139,16 @@ async def tool(base_url: str, api_key: str | None, model: str, messages: list[di
                     choices = event.get("choices", [])
                     if not choices:
                         continue
-                    content = choices[0].get("delta", {}).get("content", "")
-                    if content:
+                    delta = choices[0].get("delta", {})
+                    tool_calls = delta.get("tool_calls", [])
+                    if tool_calls:
+                        chunk = tool_calls[0].get("function", {}).get("arguments", "")
+                    else:
+                        chunk = delta.get("content", "")
+                    if chunk:
                         yielded = True
-                        await send(Message("OpenAI stream chunk received", {"chunk": content}))
-                        yield content
+                        await send(Message("OpenAI stream chunk received", {"chunk": chunk}))
+                        yield chunk
                 if not yielded:
                     raise OSError("OpenAI returned empty response")
                 cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if usage else 0
@@ -175,14 +193,28 @@ def assert_chat(run, validate=None, response=None, status_code=200):
     assert_call(run, validate, text, status_code)
 
 
-def assert_tool(run, validate=None, response=None, status_code=200):
-    """Run tool against a local SSE server."""
+def assert_chat_json(run, validate=None, response=None, status_code=200):
+    """Run chat_json against a local SSE server.
+
+    Response shapes:
+    - `response={"choices": [{"message": {"content": "..."}}]}` —
+      content-delta stream (default JSON-mode shape).
+    - `response={"tool_use_input": "..."}` — function-call arguments
+      stream (used when caller passes `tools`).
+    """
+    if response and "tool_use_input" in response:
+        assert_call(run, validate, response["tool_use_input"], status_code, mode="tool_calls")
+        return
     text = response.get("choices", [{}])[0].get("message", {}).get("content", "") if response else ""
-    assert_call(run, validate, text, status_code)
+    assert_call(run, validate, text, status_code, mode="content")
 
 
-def assert_call(run, validate, response_text, status_code=200):
-    """Run async code against a local SSE streaming server."""
+def assert_call(run, validate, response_text, status_code=200, mode="content"):
+    """Run async code against a local SSE streaming server.
+
+    `mode` controls the delta shape: "content" for plain chat, "tool_calls"
+    for native function calling (the model's arguments stream).
+    """
     import asyncio
     import inspect
 
@@ -201,7 +233,11 @@ def assert_call(run, validate, response_text, status_code=200):
             self.end_headers()
 
             if response_text:
-                event = {"choices": [{"delta": {"content": response_text}}]}
+                if mode == "tool_calls":
+                    delta = {"tool_calls": [{"index": 0, "function": {"arguments": response_text}}]}
+                else:
+                    delta = {"content": response_text}
+                event = {"choices": [{"delta": delta}]}
                 self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
             self.wfile.write("data: [DONE]\n\n".encode())
 

@@ -113,17 +113,23 @@ async def test_chat_passes_messages_through():
 
 
 async def test_tool_sends_response_format():
+    """tool() uses xAI's `response_format: json_object` constraint. Native
+    function calling on xAI leaks chat template tokens (`<|tool_calls_section_begin|>`)
+    into the content stream — server-side quirk — so we fall back to
+    response_format for JSON enforcement and let the prompt carry shape."""
     def isolated():
         from application.platform import xai
 
         async def consume(url):
-            async for _ in xai.tool(url, "key", "grok-4.3", [{"role": "user", "content": "json"}]):
+            async for _ in xai.chat_json(url, "key", "grok-4.3", [{"role": "user", "content": "json"}]):
                 pass
 
         def validate(r):
             assert r["body"]["response_format"] == {"type": "json_object"}, r["body"]
+            assert "tools" not in r["body"], r["body"]
+            assert "tool_choice" not in r["body"], r["body"]
 
-        xai.assert_tool(
+        xai.assert_chat_json(
             run=lambda url: consume(url),
             validate=validate,
             response={"choices": [{"message": {"content": '{"ok": true}'}}]},
@@ -137,13 +143,13 @@ async def test_tool_omits_stream_options():
         from application.platform import xai
 
         async def consume(url):
-            async for _ in xai.tool(url, "key", "grok-4.3", [{"role": "user", "content": "json"}]):
+            async for _ in xai.chat_json(url, "key", "grok-4.3", [{"role": "user", "content": "json"}]):
                 pass
 
         def validate(r):
             assert "stream_options" not in r["body"], r["body"]
 
-        xai.assert_tool(
+        xai.assert_chat_json(
             run=lambda url: consume(url),
             validate=validate,
             response={"choices": [{"message": {"content": '{"ok": true}'}}]},
@@ -159,11 +165,11 @@ async def test_tool_yields_response_text():
         result = {}
         async def consume(url):
             parts = []
-            async for chunk in xai.tool(url, "key", "grok-4.3", []):
+            async for chunk in xai.chat_json(url, "key", "grok-4.3", []):
                 parts.append(chunk)
             result["text"] = "".join(parts)
 
-        xai.assert_tool(
+        xai.assert_chat_json(
             run=lambda url: consume(url),
             response={"choices": [{"message": {"content": '{"result": true}'}}]},
         )
