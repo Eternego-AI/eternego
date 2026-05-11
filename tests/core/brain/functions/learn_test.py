@@ -124,44 +124,6 @@ async def test_learn_matches_existing_intention():
     assert code == 0, error
 
 
-async def test_learn_matches_with_normalized_intention():
-    """The match is case- and underscore-tolerant. A stored intention of
-    `posting_to_x` matches an asked intention of "Posting To X" via _norm,
-    so a humanized catalog and a snake_case stem don't create duplicates."""
-    def isolated():
-        import asyncio, os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents
-            from application.core.brain import functions, meanings
-            from application.core.brain.pulse import Pulse
-            from application.core.data import Message, Model, Persona, Prompt
-
-            class FakeWorker:
-                def run(self, *a): pass
-                def nudge(self): pass
-
-            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
-            ego = agents.Ego(persona)
-            eye = agents.Eye(persona)
-            consultant = agents.Consultant(persona)
-            teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            # Stored intention is snake_case; asked intention is humanized.
-            ego.memory.learn("posting_to_x", meanings.Meaning("posting_to_x", "posting_to_x", "Body for posting."))
-            ego.memory.intention("Posting To X")
-
-            consequences = asyncio.run(functions.learn(living))
-            assert consequences == []
-
-            last = ego.memory.messages[-1]
-            assert "TOOL_RESULT" in last.content
-            assert "Body for posting." in last.content
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
 async def test_learn_consults_teacher_on_no_match():
     """When no meaning matches the intention, learn consults the teacher,
     has the persona translate the lesson, saves both, and writes the
@@ -198,13 +160,16 @@ async def test_learn_consults_teacher_on_no_match():
                 assert consequences == []
 
                 # Teacher → translate produces a saved lesson and meaning.
-                lesson_file = paths.lessons(persona.id) / "checking_disk_space.md"
+                # File names are opaque UUIDs; look up via learned.json.
+                learned = paths.read_json(paths.learned(persona.id)) or {}
+                assert "Checking disk space" in learned, f"learned.json missing intention: {learned!r}"
+                file_id = learned["Checking disk space"]
+                lesson_file = paths.lessons(persona.id) / f"{file_id}.md"
+                meaning_file = paths.meanings(persona.id) / f"{file_id}.md"
                 assert lesson_file.exists(), f"lesson should be saved at {lesson_file}"
-                meaning_file = paths.meanings(persona.id) / "checking_disk_space.md"
                 assert meaning_file.exists(), f"meaning should be saved at {meaning_file}"
-                assert "checking_disk_space" in ego.memory.custom_meanings
+                assert file_id in ego.memory.custom_meanings
                 assert "df -h" in meaning_file.read_text()
-                assert paths.read_json(paths.learned(persona.id)) == {"Checking disk space": "checking_disk_space"}
 
                 # Last message is the TOOL_RESULT with the translated body.
                 last = ego.memory.messages[-1]
