@@ -3,20 +3,28 @@
 Two layers, one shape:
 
 - `builtin(persona)` — meanings that ship with Eternego. The `_BUILTIN`
-  map below holds `{stem: intention}`; each body lives next to this
-  module as `{stem}.md` (pure Markdown, no H1 wrapper). Stems are the
-  persona-facing names used in selectors (`meanings.<stem>`).
+  map below holds `{intention: stem}`; each body lives next to this
+  module as `{stem}.md` (pure Markdown, no H1 wrapper). Built-in stems
+  are stable named identifiers that ship with the codebase.
 
-- `custom(persona)` — persona-specific meanings written by `learn`. The
-  per-persona `{intention: stem}` map at `paths.learned(...)` carries the
-  metadata; bodies live in `meanings/{stem}.md` (also pure Markdown).
+- `custom(persona)` — persona-specific meanings written by `learn` or
+  `reflect`. The per-persona `{intention: file_id}` map at
+  `paths.learned(...)` carries the metadata; bodies live in
+  `meanings/{file_id}.md`. File IDs for new custom meanings are opaque
+  UUIDs — the cognitive layer never sees them, only the intention text.
 
 Same file shape both ways — body is whatever was written, no parsing.
 Both layers list by intention in Ego's identity prompt; the path text is
-injected by decide only when a meaning is selected.
+injected via `tools.load_instruction(intention=...)` when the persona
+asks for guidance.
+
+Writes to `learned.json` happen at the call sites (reflect, learn). Each
+caller reads the catalog once, mutates the dict in-memory, writes it
+back once. The shape is `{intention_text: file_id}` and dict assignment
+is the natural primitive — no helper needed.
 """
 
-import re
+import uuid
 from pathlib import Path
 
 from application.core import paths
@@ -41,10 +49,9 @@ class Meaning:
 
 
 def builtin(persona) -> dict[str, Meaning]:
-    """Every built-in meaning. The `_BUILTIN` map below mirrors the shape
-    of the per-persona `learned.json` for custom meanings: `{intention:
-    stem}`. Stems are the file names of the body markdown next to this
-    module and the persona-facing names used in selectors."""
+    """Every built-in meaning. The `_BUILTIN` map below carries
+    `{intention: stem}`. Stems are stable named identifiers shipping with
+    the codebase; bodies live as `{stem}.md` next to this module."""
     _BUILTIN: dict[str, str] = {
         "Any type of conversation, there is nothing to do but talk": "chatting",
         "Working with files and directories on the machine": "exploring_filesystem",
@@ -62,41 +69,44 @@ def builtin(persona) -> dict[str, Meaning]:
 
 
 def custom(persona) -> dict[str, Meaning]:
-    """Persona-specific meanings written to disk by learn.
+    """Persona-specific meanings written to disk by learn or reflect.
 
     Source of truth is the per-persona map at `paths.learned(persona.id)`,
-    which carries `{intention: stem}` entries. The meaning's body is the
-    full content of `meanings/{stem}.md` — pure Markdown, no H1 wrapper,
-    no internal parsing. Whatever the persona learned is what decide reads.
+    which carries `{intention: file_id}` entries. The meaning's body is
+    the full content of `meanings/{file_id}.md` — pure Markdown, no H1
+    wrapper, no internal parsing. Whatever was written is what the
+    persona reads when she loads the instruction.
     """
     out: dict[str, Meaning] = {}
     persona_dir = paths.meanings(persona.id)
     if not persona_dir.exists():
         return out
-    intention_to_stem = paths.read_json(paths.learned(persona.id)) or {}
-    for intention, stem in intention_to_stem.items():
-        meaning_file = persona_dir / f"{stem}.md"
+    intention_to_id = paths.read_json(paths.learned(persona.id)) or {}
+    for intention, file_id in intention_to_id.items():
+        meaning_file = persona_dir / f"{file_id}.md"
         if not meaning_file.exists():
             continue
         body = paths.read(meaning_file).strip()
-        out[stem] = Meaning(stem, intention, body)
+        out[file_id] = Meaning(file_id, intention, body)
     return out
 
 
-def save_lesson(persona_id: str, intention: str, path: str) -> str:
-    """Write a frontier-authored lesson to disk; return its slugified id."""
+def save_lesson(persona_id: str, intention: str, body: str) -> str:
+    """Write a lesson to disk under an opaque UUID; return the UUID.
+
+    Lessons are teacher-authored principles (raw form). Filename is a
+    UUID — the cognitive layer never references lesson files by name,
+    so the name only needs to be unique on disk. Reflect's persona-
+    authored procedures don't go through save_lesson (they aren't
+    teacher-authored), so reflect generates its own UUID inline.
+    """
     intention = (intention or "").strip()
-    path = (path or "").strip()
+    body = (body or "").strip()
     if not intention:
         raise ValueError("lesson intention is empty")
-    if not path:
-        raise ValueError("lesson path is empty")
-    lesson_id = re.sub(r"[^\w-]", "", intention.lower().replace(" ", "_"))[:60]
-    lesson_id = lesson_id.strip("_-")
-    if not lesson_id:
-        raise ValueError("lesson id is empty after sanitization")
-    body = f"# {intention}\n\n{path}\n"
-    paths.save_as_string(paths.lessons(persona_id) / f"{lesson_id}.md", body)
-    return lesson_id
-
-
+    if not body:
+        raise ValueError("lesson body is empty")
+    file_id = str(uuid.uuid4())
+    full = f"# {intention}\n\n{body}\n"
+    paths.save_as_string(paths.lessons(persona_id) / f"{file_id}.md", full)
+    return file_id

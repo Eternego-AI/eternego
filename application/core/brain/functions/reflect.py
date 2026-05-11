@@ -32,6 +32,7 @@ Trigger for the night/idle work:
 """
 
 import json
+import uuid
 
 from application.core import models, paths
 from application.core.agents import Living
@@ -144,6 +145,13 @@ async def reflect(living: Living) -> list:
         dispatch(Tock("reflect", {"persona": persona, "branch": "no-messages"}))
         return []
 
+    # Morning is for waking and starting, not for reflection. Reflect runs
+    # during NIGHT (consolidating the day) or when the persona is idle
+    # during DAY (a natural pause). Never during MORNING.
+    if living.pulse.phase == Phase.MORNING:
+        dispatch(Tock("reflect", {"persona": persona, "branch": "morning-skip"}))
+        return []
+
     if living.pulse.phase != Phase.NIGHT:
         if not await living.is_idle():
             dispatch(Tock("reflect", {"persona": persona, "branch": "not-idle"}))
@@ -205,6 +213,15 @@ async def reflect(living: Living) -> list:
 
     updates = response.get("updates") if isinstance(response, dict) else None
     if isinstance(updates, list):
+        # Read the catalog once; mutate in-memory across all updates; write
+        # back at the end if anything changed. The persona reads intention
+        # text from her catalog and emits it back verbatim — exact match
+        # here, no normalization.
+        catalog = paths.read_json(paths.learned(persona.id)) or {}
+        if not isinstance(catalog, dict):
+            catalog = {}
+        catalog_dirty = False
+
         for item in updates:
             if not isinstance(item, dict):
                 continue
@@ -213,44 +230,52 @@ async def reflect(living: Living) -> list:
                 body = str(item.get("path", "")).strip()
                 if not target_intention or not body:
                     continue
-                # Match by intention text against custom catalog.
-                for stem, m in memory.custom_meanings.items():
-                    if m.intention() == target_intention:
-                        paths.save_as_string(paths.meanings(persona.id) / f"{stem}.md", body + "\n")
-                        memory.learn(stem, meanings.Meaning(stem, target_intention, body))
-                        logger.debug("brain.reflect refined instruction", {"persona": persona, "stem": stem, "intention": target_intention})
-                        break
+                file_id = catalog.get(target_intention)
+                if not file_id:
+                    logger.debug("brain.reflect refine no match", {"persona": persona, "intention": target_intention})
+                    continue
+                paths.save_as_string(paths.meanings(persona.id) / f"{file_id}.md", body + "\n")
+                memory.learn(file_id, meanings.Meaning(file_id, target_intention, body))
+                logger.debug("brain.reflect refined instruction", {"persona": persona, "file_id": file_id, "intention": target_intention})
             elif item.get("new"):
                 intention = str(item.get("intention", "")).strip()
                 body = str(item.get("path", "")).strip()
                 if not intention or not body:
                     continue
-                try:
-                    stem = meanings.save_lesson(persona.id, intention, body)
-                except ValueError as e:
-                    logger.warning("brain.reflect new instruction rejected", {"persona": persona, "intention": intention, "error": str(e)})
+                existing = catalog.get(intention)
+                if existing:
+                    # Intention already exists — treat as refine, update the
+                    # existing file rather than orphaning it under a fresh UUID.
+                    paths.save_as_string(paths.meanings(persona.id) / f"{existing}.md", body + "\n")
+                    memory.learn(existing, meanings.Meaning(existing, intention, body))
+                    logger.debug("brain.reflect updated existing instruction from new", {"persona": persona, "file_id": existing, "intention": intention})
                     continue
-                paths.save_as_string(paths.meanings(persona.id) / f"{stem}.md", body + "\n")
-                memory.learn(stem, meanings.Meaning(stem, intention, body))
-                intention_to_stem = paths.read_json(paths.learned(persona.id)) or {}
-                intention_to_stem[intention] = stem
-                paths.save_as_json(persona.id, paths.learned(persona.id), intention_to_stem)
-                logger.debug("brain.reflect created instruction", {"persona": persona, "stem": stem})
+                # Generate an opaque UUID for the meaning file. Persona-
+                # authored procedures don't have a separate teacher-lesson
+                # form, so we write only to meanings/ (not lessons/).
+                file_id = str(uuid.uuid4())
+                paths.save_as_string(paths.meanings(persona.id) / f"{file_id}.md", body + "\n")
+                memory.learn(file_id, meanings.Meaning(file_id, intention, body))
+                catalog[intention] = file_id
+                catalog_dirty = True
+                logger.debug("brain.reflect created instruction", {"persona": persona, "file_id": file_id, "intention": intention})
             elif "delete" in item:
                 target_intention = str(item.get("delete", "")).strip()
                 if not target_intention:
                     continue
-                for stem, m in list(memory.custom_meanings.items()):
-                    if m.intention() == target_intention:
-                        meaning_file = paths.meanings(persona.id) / f"{stem}.md"
-                        if meaning_file.exists():
-                            meaning_file.unlink()
-                        memory.unlearn(stem)
-                        intention_to_stem = paths.read_json(paths.learned(persona.id)) or {}
-                        intention_to_stem = {i: s for i, s in intention_to_stem.items() if s != stem}
-                        paths.save_as_json(persona.id, paths.learned(persona.id), intention_to_stem)
-                        logger.debug("brain.reflect deleted instruction", {"persona": persona, "stem": stem, "intention": target_intention})
-                        break
+                file_id = catalog.get(target_intention)
+                if not file_id:
+                    continue
+                meaning_file = paths.meanings(persona.id) / f"{file_id}.md"
+                if meaning_file.exists():
+                    meaning_file.unlink()
+                memory.unlearn(file_id)
+                catalog = {k: v for k, v in catalog.items() if v != file_id}
+                catalog_dirty = True
+                logger.debug("brain.reflect deleted instruction", {"persona": persona, "file_id": file_id, "intention": target_intention})
+
+        if catalog_dirty:
+            paths.save_as_json(persona.id, paths.learned(persona.id), catalog)
 
     await consolidate(living)
 

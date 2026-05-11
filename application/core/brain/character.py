@@ -125,16 +125,12 @@ def meanings(persona: Persona) -> str:
     past sleeps). The ownership distinction motivates use — "I wrote this
     for myself" is a stronger pull than a flat catalog.
 
-    Snake-case stems (carried over from older lessons) are humanized to
-    Title Case so the list reads as a catalog of moments rather than
-    identifiers."""
-    def _humanize(intention: str) -> str:
-        if "_" in intention and " " not in intention:
-            return intention.replace("_", " ").title()
-        return intention
-
-    builtin = [_humanize(m.intention()) for m in _meanings.builtin(persona).values()]
-    custom = [_humanize(m.intention()) for m in _meanings.custom(persona).values()]
+    Intentions are displayed verbatim as stored — no humanization, no
+    case transformation. What the persona sees here is what she emits
+    back for refine/delete/load_instruction. Mechanical layer (memory,
+    reflect, learn) does exact-match lookups."""
+    builtin = [m.intention() for m in _meanings.builtin(persona).values()]
+    custom = [m.intention() for m in _meanings.custom(persona).values()]
 
     if not builtin and not custom:
         return "# Instructions\n\n(none yet)"

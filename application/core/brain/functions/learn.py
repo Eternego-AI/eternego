@@ -190,15 +190,11 @@ async def learn(living: Living) -> list:
 
     logger.debug("brain.learn", {"persona": persona, "intention": intention})
 
-    # Match by intention text against the full catalog (built-in + custom).
-    # Normalize so a snake_case stored intention matches a humanized "Title
-    # Case" form the persona may have read from her catalog display.
-    def _norm(s: str) -> str:
-        return s.strip().lower().replace("_", " ")
-
-    asked = _norm(intention)
+    # Match by exact intention text. The persona reads the catalog as
+    # stored and emits the intention back verbatim — no normalization
+    # needed at either end.
     for stem, m in memory.meanings.items():
-        if _norm(m.intention()) == asked:
+        if m.intention() == intention:
             memory.impression(m.path())
             logger.debug("brain.learn matched existing instruction", {"persona": persona, "intention": intention, "stem": stem})
             dispatch(Tock("learn", {"persona": persona, "branch": "matched"}))
