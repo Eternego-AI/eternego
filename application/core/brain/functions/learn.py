@@ -27,10 +27,20 @@ from application.core import models, paths
 from application.core.agents import Living
 from application.core.brain import character, meanings
 from application.core.brain.signals import Tick, Tock
-from application.core.data import Prompt
+from application.core.data import Action, Prompt
 from application.core.exceptions import ModelError
 from application.platform import logger
 from application.platform.observer import dispatch
+
+
+LECTURING = Action(
+    name="lecturing",
+    description="A procedure the persona will carry forward — the intention and the path she will follow.",
+    fields=[
+        Action(name="intention", type="string", required=True),
+        Action(name="path", type="string", required=True),
+    ],
+)
 
 
 async def consult_teacher_for_instruction(persona, intention: str) -> tuple[str, str, str] | None:
@@ -104,7 +114,7 @@ async def consult_teacher_for_instruction(persona, intention: str) -> tuple[str,
     )
 
     try:
-        result = await models.tool(teacher.model, teacher.identity + reality, question)
+        result = await models.tool(teacher.model, teacher.identity + reality, question, LECTURING)
     except ModelError as e:
         logger.warning("brain.consult_teacher produced invalid JSON, skipping", {"persona": persona, "model": teacher.model.name, "error": str(e)})
         return None

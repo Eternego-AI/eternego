@@ -8,24 +8,64 @@ arrives.
 The body is in conversation memory; decide reads it via `memory.prompts`
 the same way it reads everything else. No injection.
 
-Decide's vocabulary is the same single-key / `steps:[...]` shape recognize
-uses, plus self-care specials (clear_memory, remove_meaning, stop) that
-decide handles inline. If the persona emits `tools.load_instruction` for
-sub-guidance, decide records a fresh intention and the cycle continues.
+Decide's vocabulary is the same `{"decision": [<actions>]}` shape
+recognize uses, plus self-care specials (notify, clear_memory,
+remove_meaning, stop) that decide handles inline. If the persona emits
+`tools.load_instruction` for sub-guidance, decide records a fresh
+intention and the cycle continues.
 
 The pilot/autopilot rhythm: decide is a single moment of focus after an
 impression arrives; subsequent beats run recognize (fresh perception
 with the body still in memory) until the procedure completes.
 """
 
-from application.core import models, paths
+from application.core import abilities, models, paths, tools
 from application.core.agents import Living
 from application.core.brain import situation
 from application.core.brain.signals import Tick, Tock
-from application.core.data import Message, Prompt
+from application.core.data import Action, Message, Prompt
 from application.core.exceptions import ModelError
 from application.platform import logger
 from application.platform.observer import Command, dispatch
+
+
+def _deciding(persona) -> Action:
+    """Build the Action describing what decide accepts this beat — same
+    structure as recognize but with decide's extra cognitive variants
+    (notify, clear_memory, stop, remove_meaning) in the items oneOf."""
+    variants: list[Action] = [
+        Action(name="say", type="string", description="speak to the person on the current channel"),
+        Action(name="notify", type="string", description="broadcast to every connected channel"),
+        Action(name="done", type="null", description="the procedure is complete"),
+        Action(name="clear_memory", type="null", description="wipe the current messages"),
+        Action(name="stop", type="null", description="stop until someone speaks"),
+        Action(
+            name="remove_meaning",
+            type="object",
+            description="delete a custom instruction by its stem",
+            fields=[Action(name="name", type="string", required=True)],
+        ),
+        Action(
+            name="tools.load_instruction",
+            type="object",
+            description="ask for sub-guidance on another kind of moment",
+            fields=[Action(name="intention", type="string", required=True)],
+        ),
+    ]
+    variants.extend(tools.actions())
+    variants.extend(abilities.actions(persona))
+    return Action(
+        name="deciding",
+        description="The next action(s) of the procedure you are following. A list of actions to execute in order.",
+        fields=[
+            Action(
+                name="decision",
+                type="array",
+                required=True,
+                items=Action(one_of=True, fields=variants),
+            ),
+        ],
+    )
 
 
 async def decide(living: Living) -> list:
@@ -56,15 +96,13 @@ async def decide(living: Living) -> list:
         "If the procedure has multiple steps, pay attention to the conversation "
         "to see which step you are on and continue from there.\n\n"
         "## Output\n\n"
-        "Return a single-key JSON object naming the action — one shape per beat. "
-        "If the procedure has more than one move left, wrap them in "
-        "`{\"steps\": [...]}`; otherwise the beat ends after the shape you pick. "
-        "Prefer acting over speaking when both fit.\n\n"
+        "Return a JSON object with a single `decision` key — a list of actions to "
+        "execute in order for this beat. Each action in the list is one of the "
+        "single-key shapes below. If the procedure is complete with nothing to do "
+        "this beat, return `{\"decision\": []}` or include `{\"done\": null}`.\n\n"
         "Voice:\n"
-        "- `{\"say\": \"<text>\"}` — speak to the person and rest this beat. For "
-        "speech inside a procedure, use `tools.report` in `steps`.\n"
-        "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel and "
-        "rest this beat.\n\n"
+        "- `{\"say\": \"<text>\"}` — speak to the person on the current channel.\n"
+        "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
         f"{self_care_block}\n\n"
         "Tools:\n"
         "- `{\"tools.<name>\": { ...args }}` — run a tool from your catalog.\n"
@@ -72,7 +110,8 @@ async def decide(living: Living) -> list:
         "sub-guidance if a step references another kind of moment you don't yet "
         "have a procedure for.\n\n"
         "Done:\n"
-        "- `{\"done\": null}` — the procedure is complete.\n\n"
+        "- `{\"done\": null}` — the procedure is complete. Equivalent to an empty "
+        "decision list.\n\n"
         "When you `say` to report a result, ground the claim in evidence — name "
         "the artifact that proves it (a commit hash, a PR url, a tweet id, a file "
         "path, an output you observed in a TOOL_RESULT). Without an artifact, "
@@ -84,18 +123,26 @@ async def decide(living: Living) -> list:
             living.ego.model,
             living.ego.identity + living.pulse.hint() + memory.prompts,
             question,
+            _deciding(persona),
         )
     except ModelError as e:
         logger.warning("brain.decide model returned non-JSON", {"persona": persona, "error": str(e)})
         dispatch(Tock("decide", {"persona": persona, "branch": "non-json"}))
         return []
 
-    if not isinstance(result, dict) or not result:
+    if result is None:
+        # Model returned {} — gave up. Treat as rest.
+        dispatch(Tock("decide", {"persona": persona, "branch": "empty"}))
+        return []
+
+    if not isinstance(result, dict):
         dispatch(Tock("decide", {"persona": persona}))
         return []
 
-    steps_value = result.get("steps")
-    items = steps_value if isinstance(steps_value, list) else [result]
+    items = result.get("decision")
+    if not isinstance(items, list):
+        dispatch(Tock("decide", {"persona": persona, "branch": "no-decision"}))
+        return []
 
     consequences: list = []
     for item in items:

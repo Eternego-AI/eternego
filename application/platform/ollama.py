@@ -7,7 +7,7 @@ import httpx
 
 from config.inference import OLLAMA_BASE_URL
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from application.platform.observer import send, dispatch, Message
+from application.platform.observer import send, dispatch, Message, Plan
 
 
 class OllamaError(Exception):
@@ -97,6 +97,7 @@ async def chat(base_url: str, model: str, messages: list[dict]):
     e.g. out-of-memory — the API returns an empty stream).
     """
     body = {"model": model, "messages": messages}
+    dispatch(Plan("Sending Ollama Request", {"url": f"{base_url}/api/chat", "headers": {"Content-Type": "application/json"}, "body": body}))
     yielded = False
     usage = {}
     async for chunk in stream(base_url, "/api/chat", body):
@@ -119,12 +120,13 @@ async def chat(base_url: str, model: str, messages: list[dict]):
     }))
 
 
-async def tool(base_url: str, model: str, messages: list[dict]):
+async def chat_json(base_url: str, model: str, messages: list[dict]):
     """Stream JSON chat response, yielding content chunks. Uses format:json constraint.
 
     Raises OllamaError on empty streams — see chat() for why.
     """
     body = {"model": model, "messages": messages, "format": "json"}
+    dispatch(Plan("Sending Ollama Request", {"url": f"{base_url}/api/chat", "headers": {"Content-Type": "application/json"}, "body": body}))
     yielded = False
     usage = {}
     async for chunk in stream(base_url, "/api/chat", body):

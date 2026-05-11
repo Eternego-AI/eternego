@@ -7,7 +7,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import httpx
 
 from application.platform import logger
-from application.platform.observer import send, dispatch, Message
+from application.platform.observer import send, dispatch, Message, Plan
 
 BASE_URL = "https://api.anthropic.com"
 
@@ -58,9 +58,11 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
     if has_cache:
         headers["anthropic-beta"] = "extended-cache-ttl-2025-04-11"
 
+    url = f"{base_url}/v1/messages"
+    dispatch(Plan("Sending Anthropic Request", {"url": url, "headers": {**headers, "x-api-key": "***"}, "body": body}))
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
-            async with http.stream("POST", f"{base_url}/v1/messages", json=body, headers=headers) as response:
+            async with http.stream("POST", url, json=body, headers=headers) as response:
                 if response.status_code >= 400:
                     body_bytes = await response.aread()
                     body_text = body_bytes.decode("utf-8", errors="replace")
@@ -114,18 +116,15 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
         raise ConnectionError(str(e)) from e
 
 
-async def tool(base_url: str, api_key: str | None, model: str, messages: list[dict]):
-    """Stream JSON response via tool_use, yielding content chunks.
+async def chat_json(base_url: str, api_key: str | None, model: str, messages: list[dict], tools: list[dict] | None = None, tool_choice: dict | None = None):
+    """Stream JSON response, yielding content chunks.
 
-    Anthropic has no JSON-mode flag; the API-level way to force JSON
-    output is to send a tool definition and use `tool_choice` to force
-    the model to call it. We always send the same permissive tool — an
-    `act` with `input_schema: {"type": "object"}` — so the model has to
-    emit a JSON object as the tool's arguments. Shape inside that object
-    is the caller's prompt's contract, not ours.
-
-    Yields the `input_json_delta.partial_json` chunks; the concatenation
-    is the JSON the caller parses as the structured answer.
+    Anthropic has no JSON-mode flag; the API-level way to force JSON is
+    `tool_use`. When the caller provides `tools` (and optionally
+    `tool_choice`), they are passed through to the API verbatim and the
+    model emits via `input_json_delta`. Without them this becomes a
+    plain chat — useful for callers that want the streaming machinery
+    without structured-output constraints.
     """
     api_key = api_key or ""
     system_parts = []
@@ -136,14 +135,16 @@ async def tool(base_url: str, api_key: str | None, model: str, messages: list[di
         else:
             chat_messages.append(m)
 
-    body = {
+    body: dict = {
         "model": model,
         "messages": chat_messages,
         "max_tokens": 4096,
         "stream": True,
-        "tools": [{"name": "act", "input_schema": {"type": "object", "minProperties": 1}}],
-        "tool_choice": {"type": "tool", "name": "act"},
     }
+    if tools is not None:
+        body["tools"] = tools
+        if tool_choice is not None:
+            body["tool_choice"] = tool_choice
     has_cache = False
     if system_parts:
         text = "\n".join(system_parts)
@@ -178,9 +179,11 @@ async def tool(base_url: str, api_key: str | None, model: str, messages: list[di
     if has_cache:
         headers["anthropic-beta"] = "extended-cache-ttl-2025-04-11"
 
+    url = f"{base_url}/v1/messages"
+    dispatch(Plan("Sending Anthropic Request", {"url": url, "headers": {**headers, "x-api-key": "***"}, "body": body}))
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
-            async with http.stream("POST", f"{base_url}/v1/messages", json=body, headers=headers) as response:
+            async with http.stream("POST", url, json=body, headers=headers) as response:
                 if response.status_code >= 400:
                     body_bytes = await response.aread()
                     body_text = body_bytes.decode("utf-8", errors="replace")
@@ -307,15 +310,20 @@ def assert_chat(run, validate=None, response=None, status_code=200):
     assert_call(run, validate, text, status_code)
 
 
-def assert_tool(run, validate=None, response=None, status_code=200):
-    """Run tool against a local SSE server.
+def assert_chat_json(run, validate=None, response=None, status_code=200):
+    """Run chat_json against a local SSE server.
 
-    The response is the tool's input JSON, emitted as `input_json_delta`
-    events (the shape `tool()` always uses). Pass it as
-    `response={"tool_use_input": "<json>"}`.
+    Response shapes:
+    - `response={"tool_use_input": "<json>"}` — input_json_delta stream
+      (used when caller passes `tools`).
+    - `response={"content": [{"text": "..."}]}` — text_delta stream
+      (used when caller omits `tools`; plain chat fallback).
     """
-    input_json = response.get("tool_use_input", "") if response else ""
-    assert_call(run, validate, input_json, status_code, mode="input_json")
+    if response and "tool_use_input" in response:
+        assert_call(run, validate, response["tool_use_input"], status_code, mode="input_json")
+        return
+    text = response.get("content", [{}])[0].get("text", "") if response else ""
+    assert_call(run, validate, text, status_code, mode="text")
 
 
 def assert_call(run, validate, response_text, status_code=200, mode="text"):

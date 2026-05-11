@@ -81,7 +81,7 @@ Dependencies flow down only: business imports core, core imports platform. Never
 | An ability (one-shot named operation) | `application/core/abilities/<name>.py` with `@ability("description", requires=...)`. Use `requires=lambda persona: ...` if it depends on a persona capability (vision, frontier model) |
 | A meaning (situation the persona handles) | `application/core/brain/meanings/<name>.md` — first H1 is the intention, body is the path prose. All meanings are listed in the persona's catalog by intention only; she retrieves the body via `tools.load_instruction(intention=...)` when she recognizes a kind of moment in her catalog. |
 | A channel (Telegram-like) | New `application/platform/<channel>.py` matching the Connection interface (`open_gateway`, `close_gateway`, `send`, `typing`, `stop`). Add a subscriber in `manager.Agent.start` |
-| An LLM provider | OpenAI-compatible: just set `base_url` in the persona config. New wire protocol: `application/platform/<name>.py` and route in `application/core/models/chat.py` and `chat_json.py` |
+| An LLM provider | OpenAI-compatible: just set `base_url` in the persona config. New wire protocol: `application/platform/<name>.py` (exporting `chat` and `chat_json`) and dispatch in `application/core/models/chat.py` + `application/core/models/tool.py` |
 | A cognitive stage | `application/core/brain/functions/<stage>.py`, signature `async def <stage>(living: Living) -> list`, append to the cycle in `application/core/brain/mind.py` |
 
 ---

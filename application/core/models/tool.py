@@ -1,53 +1,47 @@
-"""Models — call a model in structured mode and return parsed JSON.
+"""Models — call a model with an Action declaration; return parsed JSON.
 
-`tool(model, prompts, question)` is the strict path: send the conversation
-to the model, expect JSON back, return the parsed dict. If the model
-returns anything that doesn't parse as JSON, raise `ModelError`. No
-prose fallback, no salvage — cognitive callers either get a dict or a
-failure they can handle.
+`tool(model, prompts, question, action)` is the single JSON path for
+every cognitive function. The caller declares what shape it expects
+via an `Action` (see `core.data.Action`); `core.actions.translation`
+converts that to each provider's tool-call shape. Platforms with
+native tool support (Anthropic, OpenAI) get a schema-enforced call;
+platforms without (xAI, Ollama) fall through to their JSON-mode flag
+and rely on the prompt for shape.
 
-Provider dispatch routes to each platform module's `tool()`, which uses
-the provider's native JSON-enforcement mechanism:
-
-- Ollama → `format: "json"`
-- OpenAI / xAI → `response_format: {"type": "json_object"}`
-- Anthropic → `tool_use` with a permissive `act` tool (no JSON-mode flag
-  on Anthropic, so the API-level way to force JSON is via tool_use).
-
-Shape compliance (which keys appear in the JSON) is the prompt's job
-on every provider — the platform layer only enforces "valid JSON object."
+The cognitive layer never speaks JSON Schema directly — it speaks
+Action. Provider translation lives in one place.
 """
 
-from application.core.data import Model, Prompt
-from application.core.exceptions import ModelError, EngineConnectionError
+import json
+
+from application.core import actions
+from application.core.data import Action, Model, Prompt
+from application.core.exceptions import EngineConnectionError
 from application.platform import logger, ollama, anthropic, openai, xai, strings
 
 from .extract_json import extract_json
 from .is_local import is_local
 
 
-async def tool(model: Model, prompts: list[Prompt], question: str, done=None) -> dict:
-    """Stream a conversation to a model in structured mode; return parsed JSON.
+async def tool(model: Model, prompts: list[Prompt], question: str, action: Action, done=None) -> dict | None:
+    """Stream a conversation to a model in tool mode; return parsed JSON or None.
 
-    `prompts` is the full conversation as a flat list of `Prompt` objects —
-    system blocks, past user/assistant turns, anything the caller wants. The
-    models layer does not care what is system and what is not; it reads
-    `role` on each Prompt. `question` is appended as the final user turn.
+    `prompts` is the conversation; `question` is appended as the final
+    user turn. `action` declares the expected JSON shape.
 
-    Providers are fed the same message list; system-role prompts are
-    collected into the provider's system slot, cache_point flags translate
-    to cache_control on Anthropic and are stripped elsewhere.
+    Returns:
+    - `dict` — model produced a non-empty JSON object. Caller validates
+      whatever fields it expects; missing fields are the model deliberately
+      choosing not to address that area.
+    - `None` — model returned `{}` (empty). Means "model gave up" / "no
+      useful content this call." Distinct from missing-fields. Each caller
+      decides what None means for them.
+    - Raises `ModelError` — no JSON at all, or malformed JSON.
 
-    Prompts whose content is a list of blocks (text + image) are carried
-    through in anthropic-shaped form. For Ollama the images are extracted
-    into the message's `images` field and the text is collapsed; for OpenAI
-    the image blocks are rewritten to `image_url` form.
-
-    When `done` is provided, it is called with the accumulated text after
-    each chunk. If `done` returns True, streaming stops early and the
-    accumulated text is parsed.
-
-    Raises `ModelError` if the response is not valid JSON.
+    `done(accumulated_text)` is optional. Without it, the stream auto-
+    stops the moment the accumulated text parses as a complete root
+    JSON object — saves tokens when a provider keeps generating after
+    the answer.
     """
     messages: list[dict] = []
     for p in prompts:
@@ -58,7 +52,9 @@ async def tool(model: Model, prompts: list[Prompt], question: str, done=None) ->
             entry["cache_point"] = True
         messages.append(entry)
     messages.append({"role": "user", "content": question})
-    logger.debug("models.tool", {"model": model.name, "provider": model.provider, "messages": messages, "done": done})
+    logger.debug("models.tool", {"model": model.name, "provider": model.provider, "messages": messages, "action": action.name, "done": done})
+
+    tools, tool_choice = actions.translation(model.provider or "", action)
 
     try:
         parts = []
@@ -78,14 +74,17 @@ async def tool(model: Model, prompts: list[Prompt], question: str, done=None) ->
                     msg["content"] = "\n".join(text_parts)
                     if images:
                         msg["images"] = images
-            gen = ollama.tool(model.url, model.name, messages)
+            gen = ollama.chat_json(model.url, model.name, messages)
         elif model.provider == "anthropic":
             for msg in messages:
                 if msg.get("role") == "system":
                     msg["cache_control"] = "ephemeral"
                 elif msg.pop("cache_point", False):
                     msg["cache_control"] = "ephemeral"
-            gen = anthropic.tool(model.url, model.api_key, model.name, messages)
+            gen = anthropic.chat_json(
+                model.url, model.api_key, model.name, messages,
+                tools=tools, tool_choice=tool_choice,
+            )
         elif model.provider == "xai":
             for msg in messages:
                 msg.pop("cache_point", None)
@@ -103,7 +102,7 @@ async def tool(model: Model, prompts: list[Prompt], question: str, done=None) ->
                         else:
                             new_content.append(block)
                     msg["content"] = new_content
-            gen = xai.tool(model.url, model.api_key, model.name, messages)
+            gen = xai.chat_json(model.url, model.api_key, model.name, messages)
         else:
             for msg in messages:
                 msg.pop("cache_point", None)
@@ -121,15 +120,30 @@ async def tool(model: Model, prompts: list[Prompt], question: str, done=None) ->
                         else:
                             new_content.append(block)
                     msg["content"] = new_content
-            gen = openai.tool(model.url, model.api_key, model.name, messages)
+            gen = openai.chat_json(
+                model.url, model.api_key, model.name, messages,
+                tools=tools, tool_choice=tool_choice,
+            )
 
+        decoder = json.JSONDecoder()
         async for chunk in gen:
             parts.append(chunk)
-            if done and done("".join(parts)):
-                break
+            accumulated = "".join(parts)
+            if done:
+                if done(accumulated):
+                    break
+            else:
+                text = accumulated.lstrip()
+                if text.startswith("{"):
+                    try:
+                        decoder.raw_decode(text)
+                        break
+                    except ValueError:
+                        pass
 
         raw = strings.strip_tag("".join(parts), "think")
-        return extract_json(raw)
+        parsed = extract_json(raw)
+        return parsed if parsed else None
     except ollama.OllamaError as e:
         raise EngineConnectionError(f"Model service returned an error: {e}", model=model) from e
     except ConnectionError as e:

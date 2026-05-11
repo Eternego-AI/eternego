@@ -169,24 +169,55 @@ async def test_chat_does_not_mutate_caller_content_list():
     assert code == 0, error
 
 
-async def test_tool_always_sends_tool_use_body():
-    """tool() always uses tool_use mode — body carries a permissive `act`
-    tool and forces it via `tool_choice`. There is no chat fallback."""
+async def test_chat_json_passes_tools_and_tool_choice_through():
+    """When the caller provides `tools` and `tool_choice`, chat_json passes
+    them to the API verbatim — platform is a dumb pass-through, no
+    translation or default-forcing."""
+    def isolated():
+        from application.platform import anthropic
+
+        caller_tools = [{
+            "name": "act",
+            "description": "make a decision",
+            "input_schema": {"type": "object", "minProperties": 1},
+        }]
+        caller_tool_choice = {"type": "tool", "name": "act"}
+
+        async def consume(url):
+            async for _ in anthropic.chat_json(url, "key", "model", [{"role": "user", "content": "hi"}], caller_tools, caller_tool_choice):
+                pass
+
+        def validate(r):
+            assert r["body"]["tools"] == caller_tools, r["body"]
+            assert r["body"]["tool_choice"] == caller_tool_choice, r["body"]
+
+        anthropic.assert_chat_json(
+            run=lambda url: consume(url),
+            validate=validate,
+            response={"tool_use_input": '{"say": "hello"}'},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_chat_json_omits_tools_when_not_provided():
+    """Without `tools`, chat_json sends no tools/tool_choice — falls back
+    to plain chat (no JSON enforcement at the platform layer)."""
     def isolated():
         from application.platform import anthropic
 
         async def consume(url):
-            async for _ in anthropic.tool(url, "key", "model", [{"role": "user", "content": "hi"}]):
+            async for _ in anthropic.chat_json(url, "key", "model", [{"role": "user", "content": "hi"}]):
                 pass
 
         def validate(r):
-            assert r["body"]["tools"] == [{"name": "act", "input_schema": {"type": "object", "minProperties": 1}}], r["body"]
-            assert r["body"]["tool_choice"] == {"type": "tool", "name": "act"}, r["body"]
+            assert "tools" not in r["body"], r["body"]
+            assert "tool_choice" not in r["body"], r["body"]
 
-        anthropic.assert_tool(
+        anthropic.assert_chat_json(
             run=lambda url: consume(url),
             validate=validate,
-            response={"tool_use_input": '{"say": "hello"}'},
+            response={"content": [{"text": '{"ok": true}'}]},
         )
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -230,8 +261,9 @@ async def test_tool_falls_back_to_content_block_start_input():
         url = f"http://127.0.0.1:{server.server_address[1]}"
         try:
             async def consume():
+                tools = [{"name": "act", "input_schema": {"type": "object"}}]
                 parts = []
-                async for chunk in anthropic.tool(url, "key", "model", [{"role": "user", "content": "hi"}]):
+                async for chunk in anthropic.chat_json(url, "key", "model", [{"role": "user", "content": "hi"}], tools):
                     parts.append(chunk)
                 return "".join(parts)
             result = asyncio.run(consume())
@@ -249,14 +281,16 @@ async def test_tool_yields_input_json_chunks():
     def isolated():
         from application.platform import anthropic
 
+        tools = [{"name": "act", "input_schema": {"type": "object"}}]
+
         result = {}
         async def consume(url):
             parts = []
-            async for chunk in anthropic.tool(url, "key", "model", [{"role": "user", "content": "hi"}]):
+            async for chunk in anthropic.chat_json(url, "key", "model", [{"role": "user", "content": "hi"}], tools):
                 parts.append(chunk)
             result["text"] = "".join(parts)
 
-        anthropic.assert_tool(
+        anthropic.assert_chat_json(
             run=lambda url: consume(url),
             response={"tool_use_input": '{"done": null}'},
         )

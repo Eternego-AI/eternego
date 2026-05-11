@@ -2,11 +2,34 @@
 
 import json
 
-from application.core.data import Model, Prompt
+from application.core.data import Action, Model, Prompt
 from application.core.exceptions import ModelError, EngineConnectionError
 from application.platform import logger
 
 from .tool import tool
+
+
+GENERATING = Action(
+    name="generating",
+    description="Fine-tuning training pairs from the persona's character and traits.",
+    fields=[
+        Action(
+            name="training_pairs",
+            type="array",
+            required=True,
+            items=Action(
+                name="pair",
+                type="object",
+                fields=[
+                    Action(name="trait_source", type="string", required=True),
+                    Action(name="system",       type="string", required=True),
+                    Action(name="user",         type="string", required=True),
+                    Action(name="assistant",    type="string", required=True),
+                ],
+            ),
+        ),
+    ],
+)
 
 
 async def generate_training_set(model: Model, character: str, traits: str) -> list[dict]:
@@ -65,7 +88,7 @@ async def generate_training_set(model: Model, character: str, traits: str) -> li
     )
 
     try:
-        result = await tool(model, [Prompt(role="system", content=identity_text)], question)
+        result = await tool(model, [Prompt(role="system", content=identity_text)], question, GENERATING)
         return result.get("training_pairs", [])
     except (ModelError, EngineConnectionError):
         return []

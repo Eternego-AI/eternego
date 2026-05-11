@@ -7,7 +7,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import httpx
 
 from application.platform import logger
-from application.platform.observer import send, dispatch, Message
+from application.platform.observer import send, dispatch, Message, Plan
 
 BASE_URL = "https://api.x.ai"
 
@@ -15,16 +15,13 @@ BASE_URL = "https://api.x.ai"
 async def chat(base_url: str, api_key: str | None, model: str, messages: list[dict]):
     """Stream chat response, yielding content chunks."""
     api_key = api_key or ""
+    url = f"{base_url}/v1/chat/completions"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    body = {"model": model, "messages": messages, "stream": True}
+    dispatch(Plan("Sending xAI Request", {"url": url, "headers": {**headers, "Authorization": "Bearer ***"}, "body": body}))
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
-            async with http.stream("POST", f"{base_url}/v1/chat/completions", json={
-                "model": model,
-                "messages": messages,
-                "stream": True,
-            }, headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            }) as response:
+            async with http.stream("POST", url, json=body, headers=headers) as response:
                 if response.status_code >= 400:
                     body_bytes = await response.aread()
                     body_text = body_bytes.decode("utf-8", errors="replace")
@@ -78,20 +75,24 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
         raise ConnectionError(str(e)) from e
 
 
-async def tool(base_url: str, api_key: str | None, model: str, messages: list[dict]):
-    """Stream JSON chat response, yielding content chunks. Uses response_format constraint."""
+async def chat_json(base_url: str, api_key: str | None, model: str, messages: list[dict]):
+    """Stream JSON response, yielding content chunks.
+
+    xAI's function-calling implementation leaks chat template tokens
+    (`<|tool_calls_section_begin|>...`) into the content stream when
+    `tool_choice` forces a specific function — server-side quirk, not
+    fixable on our end. So xAI does not accept a `tools` argument; it
+    uses `response_format: json_object` to force valid JSON and lets
+    the caller's prompt carry the shape.
+    """
     api_key = api_key or ""
+    url = f"{base_url}/v1/chat/completions"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+    body = {"model": model, "messages": messages, "stream": True, "response_format": {"type": "json_object"}}
+    dispatch(Plan("Sending xAI Request", {"url": url, "headers": {**headers, "Authorization": "Bearer ***"}, "body": body}))
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10.0)) as http:
-            async with http.stream("POST", f"{base_url}/v1/chat/completions", json={
-                "model": model,
-                "messages": messages,
-                "stream": True,
-                "response_format": {"type": "json_object"},
-            }, headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            }) as response:
+            async with http.stream("POST", url, json=body, headers=headers) as response:
                 if response.status_code >= 400:
                     body_bytes = await response.aread()
                     body_text = body_bytes.decode("utf-8", errors="replace")
@@ -124,11 +125,11 @@ async def tool(base_url: str, api_key: str | None, model: str, messages: list[di
                     choices = event.get("choices", [])
                     if not choices:
                         continue
-                    content = choices[0].get("delta", {}).get("content", "")
-                    if content:
+                    chunk = choices[0].get("delta", {}).get("content", "")
+                    if chunk:
                         yielded = True
-                        await send(Message("xAI stream chunk received", {"chunk": content}))
-                        yield content
+                        await send(Message("xAI stream chunk received", {"chunk": chunk}))
+                        yield chunk
                 if not yielded:
                     raise OSError("xAI returned empty response")
                 cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if usage else 0
@@ -153,7 +154,7 @@ def assert_chat(run, validate=None, response=None, status_code=200):
     assert_call(run, validate, text, status_code)
 
 
-def assert_tool(run, validate=None, response=None, status_code=200):
+def assert_chat_json(run, validate=None, response=None, status_code=200):
     """Run tool against a local SSE server."""
     text = response.get("choices", [{}])[0].get("message", {}).get("content", "") if response else ""
     assert_call(run, validate, text, status_code)

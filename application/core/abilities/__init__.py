@@ -29,6 +29,19 @@ import pkgutil
 from dataclasses import dataclass
 from typing import Callable, get_type_hints
 
+from application.core.data import Action
+
+
+_TYPE_MAP = {
+    "str": "string",
+    "int": "integer",
+    "float": "number",
+    "bool": "boolean",
+    "list": "array",
+    "dict": "object",
+    "Path": "string",
+}
+
 
 @dataclass
 class Ability:
@@ -104,6 +117,39 @@ def document(persona) -> str:
         params_str = ", ".join(f"{k}: {v}" for k, v in a.params.items())
         lines.append(f"- `{a.name}({params_str})` — {a.instruction}")
     return "\n".join(lines)
+
+
+def actions(persona) -> list[Action]:
+    """Return an Action variant per ability this persona can use — used by
+    cognitive functions to build a closed `one_of` schema enumerating every
+    valid action the persona can emit. Each ability's params become typed
+    fields on the Action; the Action's name is `tools.<ability_name>` to
+    match the selector the persona writes in her decision items.
+
+    Abilities with variadic params (`*args` / `**kwargs`) are skipped —
+    their args are open-shaped and can't be typed for strict mode. The
+    persona reaches the same capability via the underlying typed tools/
+    abilities those variadic dispatchers forward to (e.g. `screen` →
+    `desktop.<verb>` directly)."""
+    out: list[Action] = []
+    for a in available(persona):
+        sig = inspect.signature(a.fn)
+        if any(
+            p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            for p in sig.parameters.values()
+        ):
+            continue
+        fields = [
+            Action(
+                name=p,
+                type=_TYPE_MAP.get(type_str, "string"),
+                description="",
+                required=True,
+            )
+            for p, type_str in a.params.items()
+        ]
+        out.append(Action(name=f"tools.{a.name}", type="object", description=a.instruction, fields=fields))
+    return out
 
 
 async def call(persona, name: str, **args):

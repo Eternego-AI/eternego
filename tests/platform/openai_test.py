@@ -91,18 +91,57 @@ async def test_chat_passes_system_messages_in_messages():
     assert code == 0, error
 
 
-async def test_tool_sends_response_format():
+async def test_chat_json_passes_tools_and_tool_choice_through():
+    """When the caller provides `tools` and `tool_choice`, chat_json passes
+    them to the API verbatim — platform is a dumb pass-through, no
+    translation or default-forcing."""
+    def isolated():
+        from application.platform import openai
+
+        caller_tools = [{
+            "type": "function",
+            "function": {
+                "name": "act",
+                "description": "make a decision",
+                "parameters": {"type": "object", "minProperties": 1},
+            },
+        }]
+        caller_tool_choice = {"type": "function", "function": {"name": "act"}}
+
+        async def consume(url):
+            async for _ in openai.chat_json(url, "key", "gpt-4", [{"role": "user", "content": "json"}], caller_tools, caller_tool_choice):
+                pass
+
+        def validate(r):
+            assert "response_format" not in r["body"], r["body"]
+            assert r["body"]["tools"] == caller_tools, r["body"]
+            assert r["body"]["tool_choice"] == caller_tool_choice, r["body"]
+
+        openai.assert_chat_json(
+            run=lambda url: consume(url),
+            validate=validate,
+            response={"tool_use_input": '{"ok": true}'},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_chat_json_uses_response_format_when_no_tools():
+    """Without `tools`, chat_json falls back to `response_format: json_object`
+    to enforce valid JSON via the content stream."""
     def isolated():
         from application.platform import openai
 
         async def consume(url):
-            async for _ in openai.tool(url, "key", "gpt-4", [{"role": "user", "content": "json"}]):
+            async for _ in openai.chat_json(url, "key", "gpt-4", [{"role": "user", "content": "json"}]):
                 pass
 
         def validate(r):
             assert r["body"]["response_format"] == {"type": "json_object"}, r["body"]
+            assert "tools" not in r["body"], r["body"]
+            assert "tool_choice" not in r["body"], r["body"]
 
-        openai.assert_tool(
+        openai.assert_chat_json(
             run=lambda url: consume(url),
             validate=validate,
             response={"choices": [{"message": {"content": '{"ok": true}'}}]},
@@ -111,21 +150,25 @@ async def test_tool_sends_response_format():
     assert code == 0, error
 
 
-async def test_tool_yields_response_text():
+async def test_chat_json_yields_function_arguments():
+    """When `tools` is provided, the function-call arguments stream becomes
+    the yielded chunks."""
     def isolated():
-        import asyncio
         from application.platform import openai
+
+        caller_tools = [{"type": "function", "function": {"name": "act", "parameters": {"type": "object"}}}]
+        caller_tool_choice = {"type": "function", "function": {"name": "act"}}
 
         result = {}
         async def consume(url):
             parts = []
-            async for chunk in openai.tool(url, "key", "gpt-4", []):
+            async for chunk in openai.chat_json(url, "key", "gpt-4", [], caller_tools, caller_tool_choice):
                 parts.append(chunk)
             result["text"] = "".join(parts)
 
-        openai.assert_tool(
+        openai.assert_chat_json(
             run=lambda url: consume(url),
-            response={"choices": [{"message": {"content": '{"result": true}'}}]},
+            response={"tool_use_input": '{"result": true}'},
         )
         assert result["text"] == '{"result": true}', result
     code, error = await on_separate_process_async(isolated)

@@ -108,6 +108,29 @@ async def test_look_at_raises_when_source_missing_or_file_absent():
     assert code == 0, error
 
 
+async def test_actions_skip_variadic_abilities():
+    """Abilities with `**kwargs` (the `screen` dispatcher pattern) can't
+    be typed for strict-mode schemas — their args are open. `actions()`
+    must skip them so the schema stays closed; the persona reaches the
+    same capability via the underlying typed tools the variadic ability
+    forwards to."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import abilities
+            from application.core.data import Model, Persona
+
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            names = {a.name for a in abilities.actions(persona)}
+            # `screen` has `**args` → must be excluded
+            assert "tools.screen" not in names, names
+            # `ask` has typed params → must be present
+            assert "tools.ask" in names, names
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 async def test_report_dispatches_say_command():
     """`report` dispatches a 'Persona wants to say' Command — same dispatch as
     `say`, but called from inside a procedure (steps[]) to narrate progress

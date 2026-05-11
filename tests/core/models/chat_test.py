@@ -1,5 +1,4 @@
 """chat — send messages to local, anthropic, and openai models."""
-from wsgiref import validate
 
 from application.platform.processes import on_separate_process_async
 
@@ -371,26 +370,81 @@ async def test_xai_returns_content():
     assert code == 0, error
 
 
-async def test_xai_tool_routes_to_xai_module():
+async def test_tool_returns_none_when_model_emits_empty_object():
+    """`{}` from the model = "no useful content this call." models.tool
+    converts it to None so callers can distinguish 'model gave up' from
+    'model deliberately emptied a field'. The former should preserve
+    state; the latter applies the change."""
     def isolated():
         from application.core import models
-        from application.core.data import Model
+        from application.core.data import Action, Model
+        from application.platform import ollama
+
+        result = {}
+
+        async def consume(url):
+            action = Action(name="thinking", fields=[Action(name="x", type="string", required=True)])
+            result["value"] = await models.tool(Model(name="m", url=url), [], "hi", action)
+
+        ollama.assert_call(
+            run=lambda url: consume(url),
+            response={"message": {"content": "{}"}, "done": True},
+        )
+        assert result["value"] is None, result["value"]
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_tool_returns_dict_when_model_emits_non_empty_object():
+    """Non-empty JSON object — even if fields are empty strings — is the
+    model deliberately committing to that content. Returned as-is."""
+    def isolated():
+        from application.core import models
+        from application.core.data import Action, Model
+        from application.platform import ollama
+
+        result = {}
+
+        async def consume(url):
+            action = Action(name="thinking", fields=[Action(name="identity", type="string", required=True)])
+            result["value"] = await models.tool(Model(name="m", url=url), [], "hi", action)
+
+        # The empty-string field is intentional — the persona deliberately
+        # wiped identity. The dict is returned, not None.
+        ollama.assert_call(
+            run=lambda url: consume(url),
+            response={"message": {"content": '{"identity": ""}'}, "done": True},
+        )
+        assert result["value"] == {"identity": ""}, result["value"]
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_xai_tool_routes_to_xai_module():
+    """xAI doesn't support native tools; models.tool falls through to its
+    `response_format: json_object` JSON-mode."""
+    def isolated():
+        from application.core import models
+        from application.core.data import Action, Model
         from application.platform import xai
 
         model = Model(name="grok-4.3", provider="xai", api_key="test", url="TBD")
+        action = Action(name="thinking", description="any object",
+                        fields=[Action(name="result", type="string", required=True)])
         async def run(url):
             model.url = url
-            await models.tool(model, [], "json please")
+            await models.tool(model, [], "json please", action)
 
         def validate(r):
             assert "stream_options" not in r["body"], r["body"]
             assert r["body"]["response_format"] == {"type": "json_object"}, r["body"]
             assert r["body"]["model"] == "grok-4.3", r["body"]
+            assert "tools" not in r["body"], r["body"]
 
-        xai.assert_tool(
+        xai.assert_chat_json(
             run=run,
             validate=validate,
-            response={"choices": [{"message": {"content": '{"ok": true}'}}]},
+            response={"choices": [{"message": {"content": '{"result": "ok"}'}}]},
         )
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

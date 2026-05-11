@@ -50,8 +50,15 @@ def mouse_move(x: int, y: int) -> str:
         # Slam cursor to (0,0) via massive relative move, then move to target —
         # uinput has no absolute pointer registered, and Wayland exposes no API
         # to query current cursor position, so this is the standard trick.
+        # The two syn() calls are load-bearing: relative events within a single
+        # syn batch accumulate as one net delta, so without the intermediate
+        # syn the compositor sees `(-10000 + x, -10000 + y)` — a huge negative
+        # delta that clamps the cursor to (0, 0) regardless of x/y. The slam
+        # must commit first so the second batch starts from origin.
         ui.write(e.EV_REL, e.REL_X, -10000)
         ui.write(e.EV_REL, e.REL_Y, -10000)
+        ui.syn()
+        time.sleep(0.05)
         ui.write(e.EV_REL, e.REL_X, int(x))
         ui.write(e.EV_REL, e.REL_Y, int(y))
         ui.syn()

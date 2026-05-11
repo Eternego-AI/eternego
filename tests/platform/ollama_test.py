@@ -160,7 +160,7 @@ async def test_tool_raises_on_empty_stream():
         from application.platform import ollama
 
         async def consume(url):
-            async for _ in ollama.tool(url, "m", [{"role": "user", "content": "hi"}]):
+            async for _ in ollama.chat_json(url, "m", [{"role": "user", "content": "hi"}]):
                 pass
 
         try:
