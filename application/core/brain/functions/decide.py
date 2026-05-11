@@ -76,21 +76,15 @@ async def decide(living: Living) -> list:
     )
 
     try:
-        prose, result = await models.chat_action(
+        result = await models.tool(
             living.ego.model,
             living.ego.identity + living.pulse.hint() + memory.prompts,
             question,
         )
     except ModelError as e:
-        logger.debug("brain.decide chose prose, dispatching as say", {"persona": persona, "raw": e.raw})
-        if e.raw and e.raw.strip():
-            dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
-        dispatch(Tock("decide", {"persona": persona}))
+        logger.warning("brain.decide model returned non-JSON", {"persona": persona, "error": str(e)})
+        dispatch(Tock("decide", {"persona": persona, "branch": "non-json"}))
         return []
-
-    if prose:
-        dispatch(Command("Persona wants to say", {"persona": persona, "text": prose}))
-        logger.debug("brain.decide dispatched prose as say", {"persona": persona, "prose_length": len(prose)})
 
     if not isinstance(result, dict) or not result:
         dispatch(Tock("decide", {"persona": persona}))

@@ -77,7 +77,7 @@ async def realize(living: Living) -> list:
             "```"
         )
         try:
-            question_result = await models.chat_json(living.consultant.model, living.consultant.identity + reality, question_prompt)
+            question_result = await models.tool(living.consultant.model, living.consultant.identity + reality, question_prompt)
             questions = question_result.get("questions", []) if isinstance(question_result, dict) else []
         except ModelError as formulation_error:
             logger.warning("brain.realize question formulation failed, defaulting", {"persona": living.ego.persona, "error": str(formulation_error)})

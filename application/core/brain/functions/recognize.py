@@ -17,8 +17,9 @@ Recognize gates on memory state: if the last tool signal is a pending
 finish the round-trip. If the last signal is a load_instruction result,
 recognize also skips so decide can act on it. Otherwise — fresh perception.
 
-Free-form prose around the JSON is dispatched as a say (fallback for models
-that don't follow the schema cleanly).
+The model's response must be valid JSON; `models.tool` raises ModelError
+on anything else and recognize skips the beat. No prose fallback — if the
+model can't return JSON, the beat produces nothing and the cycle moves on.
 """
 
 from application.core import models
@@ -92,21 +93,15 @@ async def recognize(living: Living) -> list:
     )
 
     try:
-        prose, result = await models.chat_action(
+        result = await models.tool(
             living.ego.model,
             living.ego.identity + living.pulse.hint() + memory.prompts,
             question,
         )
     except ModelError as e:
-        logger.debug("brain.recognize prose only — sending as say", {"persona": persona, "prose_length": len(e.raw)})
-        if e.raw and e.raw.strip():
-            dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
-        dispatch(Tock("recognize", {"persona": persona}))
+        logger.warning("brain.recognize model returned non-JSON", {"persona": persona, "error": str(e)})
+        dispatch(Tock("recognize", {"persona": persona, "branch": "non-json"}))
         return []
-
-    if prose:
-        dispatch(Command("Persona wants to say", {"persona": persona, "text": prose}))
-        logger.debug("brain.recognize dispatched prose as say", {"persona": persona, "prose_length": len(prose)})
 
     if not isinstance(result, dict) or not result:
         dispatch(Tock("recognize", {"persona": persona}))

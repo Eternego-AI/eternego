@@ -114,7 +114,7 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
         raise ConnectionError(str(e)) from e
 
 
-async def chat_json(base_url: str, api_key: str | None, model: str, messages: list[dict]):
+async def tool(base_url: str, api_key: str | None, model: str, messages: list[dict]):
     """Stream JSON chat response, yielding content chunks. No format constraint (Anthropic does not support it)."""
     async for chunk in chat(base_url, api_key, model, messages):
         yield chunk
@@ -149,8 +149,8 @@ def assert_chat(run, validate=None, response=None, status_code=200):
     assert_call(run, validate, text, status_code)
 
 
-def assert_chat_json(run, validate=None, response=None, status_code=200):
-    """Run chat_json against a local SSE server."""
+def assert_tool(run, validate=None, response=None, status_code=200):
+    """Run tool against a local SSE server."""
     text = response.get("content", [{}])[0].get("text", "") if response else ""
     assert_call(run, validate, text, status_code)
 

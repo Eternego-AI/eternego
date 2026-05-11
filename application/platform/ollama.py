@@ -119,7 +119,7 @@ async def chat(base_url: str, model: str, messages: list[dict]):
     }))
 
 
-async def chat_json(base_url: str, model: str, messages: list[dict]):
+async def tool(base_url: str, model: str, messages: list[dict]):
     """Stream JSON chat response, yielding content chunks. Uses format:json constraint.
 
     Raises OllamaError on empty streams — see chat() for why.

@@ -11,7 +11,7 @@ async def chat(model: Model, prompts: list[Prompt], question: str) -> str:
     """Stream a conversation to a model and return the complete response text.
 
     `prompts` is the full conversation as a flat list of `Prompt` objects;
-    `question` is appended as the final user turn. See `chat_json` for the
+    `question` is appended as the final user turn. See `tool` for the
     per-provider serialization contract, including how image content blocks
     are translated per provider."""
     messages: list[dict] = []

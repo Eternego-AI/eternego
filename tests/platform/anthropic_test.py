@@ -169,7 +169,7 @@ async def test_chat_does_not_mutate_caller_content_list():
     assert code == 0, error
 
 
-async def test_chat_json_yields_same_as_chat():
+async def test_tool_yields_same_as_chat():
     def isolated():
         import asyncio
         from application.platform import anthropic
@@ -177,11 +177,11 @@ async def test_chat_json_yields_same_as_chat():
         result = {}
         async def consume(url):
             parts = []
-            async for chunk in anthropic.chat_json(url, "key", "model", [{"role": "user", "content": "json"}]):
+            async for chunk in anthropic.tool(url, "key", "model", [{"role": "user", "content": "json"}]):
                 parts.append(chunk)
             result["text"] = "".join(parts)
 
-        anthropic.assert_chat_json(
+        anthropic.assert_tool(
             run=lambda url: consume(url),
             response={"content": [{"text": '{"answer": 42}'}]},
         )
