@@ -20,10 +20,13 @@ from application.platform import OS, datetimes, filesystem, logger
     "Act on your screen and see the result. action is one of the desktop "
     "input verbs (mouse_move, mouse_click, mouse_drag, mouse_press, "
     "mouse_release, mouse_scroll, keyboard_type, keyboard_tap, keyboard_press, "
-    "keyboard_release); the rest of the args are that verb's args. Returns a "
-    "screenshot — you see the screen after the action on the next cycle. Your "
-    "environment notes whether a display is currently available; if it is not, "
-    "this ability will fail and you should tell the person rather than retry."
+    "keyboard_release); pass the verb's own kwargs flat alongside action — "
+    "shape is `{\"tools.screen\": {\"action\": \"<verb>\", <verb's kwargs>}}`. "
+    "See each `tools.desktop.<verb>` entry above for that verb's parameters. "
+    "Returns a screenshot — you see the screen after the action on the next "
+    "cycle. Your environment notes whether a display is currently available; "
+    "if it is not, this ability will fail and you should tell the person "
+    "rather than retry."
 )
 async def screen(persona, action: str = "", **args) -> Media:
     logger.debug("ability.screen", {"persona": persona, "action": action, "args": args})

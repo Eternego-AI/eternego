@@ -160,6 +160,26 @@ async def test_report_requires_text():
     assert code == 0, error
 
 
+async def test_var_keyword_params_excluded_from_schema():
+    """`**kwargs` (VAR_KEYWORD) must not appear in `Ability.params`. The
+    `screen` ability uses `**args` to forward the desktop verb's kwargs;
+    leaking that as a literal `args` key in the schema misled the persona
+    into passing `args="<json>"` and the desktop verb rejected it."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import abilities
+
+            screen = next(a for a in abilities._registry if a.name == "screen")
+            assert "action" in screen.params
+            assert "args" not in screen.params
+            assert "kwargs" not in screen.params
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 async def test_look_at_returns_eye_answer_for_real_image():
     """When source is valid and vision is configured, look_at calls the eye
     and returns its description as the ability's string result."""
