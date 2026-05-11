@@ -58,8 +58,10 @@ def ability(instruction: str, requires: Callable | None = None):
     def decorator(fn):
         hints = get_type_hints(fn)
         params = {}
-        for param_name in inspect.signature(fn).parameters:
+        for param_name, param in inspect.signature(fn).parameters.items():
             if param_name == "persona":
+                continue
+            if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 continue
             type_hint = hints.get(param_name)
             params[param_name] = getattr(type_hint, "__name__", str(type_hint)) if type_hint else "str"
