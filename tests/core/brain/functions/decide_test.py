@@ -433,55 +433,6 @@ async def test_decide_steps_returns_list_of_capabilities():
     assert code == 0, error
 
 
-async def test_decide_prose_dispatches_as_say():
-    """When the model returns prose with no JSON, decide dispatches the prose
-    as a say. Returns []."""
-    def isolated():
-        import os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents
-            from application.core.brain import functions
-            from application.core.brain.pulse import Pulse
-            from application.core.data import Message, Model, Persona, Prompt
-            from application.platform import observer, ollama
-
-            class FakeWorker:
-                def run(self, *a): pass
-                def nudge(self): pass
-
-            async def consume(url):
-                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
-                ego = agents.Ego(persona)
-                eye = agents.Eye(persona)
-                consultant = agents.Consultant(persona)
-                teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                ego.memory.intention("drifting")
-                ego.memory.impression("let it sit")
-
-                said = []
-                async def capture(cmd: observer.Command):
-                    if cmd.title == "Persona wants to say":
-                        said.append(cmd.details.get("text", ""))
-                observer.subscribe(capture)
-
-                consequences = await functions.decide(living)
-                import asyncio as _a
-                await _a.sleep(0)
-
-                assert consequences == []
-                assert any("just thinking aloud" in t for t in said)
-
-            ollama.assert_call(
-                run=lambda url: consume(url),
-                responses=[[{"message": {"content": "just thinking aloud, no action"}, "done": True}]],
-            )
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
 
 async def test_decide_remove_meaning_clears_learned_entry():
     """remove_meaning also drops the lesson_id mapping in learned.json so the

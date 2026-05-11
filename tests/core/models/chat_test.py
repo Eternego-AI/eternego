@@ -371,7 +371,7 @@ async def test_xai_returns_content():
     assert code == 0, error
 
 
-async def test_xai_chat_json_routes_to_xai_module():
+async def test_xai_tool_routes_to_xai_module():
     def isolated():
         from application.core import models
         from application.core.data import Model
@@ -380,14 +380,14 @@ async def test_xai_chat_json_routes_to_xai_module():
         model = Model(name="grok-4.3", provider="xai", api_key="test", url="TBD")
         async def run(url):
             model.url = url
-            await models.chat_json(model, [], "json please")
+            await models.tool(model, [], "json please")
 
         def validate(r):
             assert "stream_options" not in r["body"], r["body"]
             assert r["body"]["response_format"] == {"type": "json_object"}, r["body"]
             assert r["body"]["model"] == "grok-4.3", r["body"]
 
-        xai.assert_chat_json(
+        xai.assert_tool(
             run=run,
             validate=validate,
             response={"choices": [{"message": {"content": '{"ok": true}'}}]},

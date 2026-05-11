@@ -17,8 +17,9 @@ Recognize gates on memory state: if the last tool signal is a pending
 finish the round-trip. If the last signal is a load_instruction result,
 recognize also skips so decide can act on it. Otherwise — fresh perception.
 
-Free-form prose around the JSON is dispatched as a say (fallback for models
-that don't follow the schema cleanly).
+The model's response must be valid JSON; `models.tool` raises ModelError
+on anything else and recognize skips the beat. No prose fallback — if the
+model can't return JSON, the beat produces nothing and the cycle moves on.
 """
 
 from application.core import models
@@ -67,12 +68,16 @@ async def recognize(living: Living) -> list:
         "- If nothing reactive calls for action and you see nothing deliberate to do, "
         "choose rest.\n\n"
         "## Output\n\n"
-        "Return a single-key JSON object naming the action, or wrap several in "
-        "`{\"steps\": [...]}` to chain them in one beat. Each step is one of the "
-        "single-key shapes below. Your tools are listed in your identity above — "
-        "pick one by its full selector.\n\n"
+        "Return a single-key JSON object naming the action — one shape per beat. "
+        "If you also have work to do this beat, wrap calls in `{\"steps\": [...]}` "
+        "instead; otherwise the beat ends after the shape you pick. When you can "
+        "both speak and act, prefer acting — speech alone is right when speaking "
+        "is the whole point. Your tools are listed in your identity above — pick "
+        "one by its full selector.\n\n"
         "Voice:\n"
-        "- `{\"say\": \"<text>\"}` — speak to the person on the current channel.\n\n"
+        "- `{\"say\": \"<text>\"}` — speak to the person and rest this beat (no "
+        "follow-up action). For speech inside a procedure, use `tools.report` in "
+        "`steps`.\n\n"
         "Tools:\n"
         "- `{\"tools.<name>\": { ...args }}` — run a tool. Most tools touch the world "
         "(read a file, run a command, post on X) and end the beat — the next beat "
@@ -92,21 +97,15 @@ async def recognize(living: Living) -> list:
     )
 
     try:
-        prose, result = await models.chat_action(
+        result = await models.tool(
             living.ego.model,
             living.ego.identity + living.pulse.hint() + memory.prompts,
             question,
         )
     except ModelError as e:
-        logger.debug("brain.recognize prose only — sending as say", {"persona": persona, "prose_length": len(e.raw)})
-        if e.raw and e.raw.strip():
-            dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
-        dispatch(Tock("recognize", {"persona": persona}))
+        logger.warning("brain.recognize model returned non-JSON", {"persona": persona, "error": str(e)})
+        dispatch(Tock("recognize", {"persona": persona, "branch": "non-json"}))
         return []
-
-    if prose:
-        dispatch(Command("Persona wants to say", {"persona": persona, "text": prose}))
-        logger.debug("brain.recognize dispatched prose as say", {"persona": persona, "prose_length": len(prose)})
 
     if not isinstance(result, dict) or not result:
         dispatch(Tock("recognize", {"persona": persona}))

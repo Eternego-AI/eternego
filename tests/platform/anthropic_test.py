@@ -169,23 +169,98 @@ async def test_chat_does_not_mutate_caller_content_list():
     assert code == 0, error
 
 
-async def test_chat_json_yields_same_as_chat():
+async def test_tool_always_sends_tool_use_body():
+    """tool() always uses tool_use mode — body carries a permissive `act`
+    tool and forces it via `tool_choice`. There is no chat fallback."""
     def isolated():
-        import asyncio
+        from application.platform import anthropic
+
+        async def consume(url):
+            async for _ in anthropic.tool(url, "key", "model", [{"role": "user", "content": "hi"}]):
+                pass
+
+        def validate(r):
+            assert r["body"]["tools"] == [{"name": "act", "input_schema": {"type": "object", "minProperties": 1}}], r["body"]
+            assert r["body"]["tool_choice"] == {"type": "tool", "name": "act"}, r["body"]
+
+        anthropic.assert_tool(
+            run=lambda url: consume(url),
+            validate=validate,
+            response={"tool_use_input": '{"say": "hello"}'},
+        )
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_tool_falls_back_to_content_block_start_input():
+    """When the model commits to an empty/small tool input upfront,
+    Anthropic ships it in `content_block_start.input` and emits empty
+    `input_json_delta` heartbeats. tool() yields the start-event input
+    so callers parse a valid JSON object rather than getting an empty stream."""
+    def isolated():
+        import asyncio, json, threading
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+        from application.platform import anthropic
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                content_length = self.headers.get("Content-Length")
+                if content_length:
+                    self.rfile.read(int(content_length))
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                start = {
+                    "type": "content_block_start",
+                    "index": 0,
+                    "content_block": {"type": "tool_use", "id": "toolu_1", "name": "act", "input": {}},
+                }
+                self.wfile.write(f"data: {json.dumps(start)}\n\n".encode())
+                heartbeat = {"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": ""}}
+                self.wfile.write(f"data: {json.dumps(heartbeat)}\n\n".encode())
+                block_stop = {"type": "content_block_stop", "index": 0}
+                self.wfile.write(f"data: {json.dumps(block_stop)}\n\n".encode())
+                msg_stop = {"type": "message_stop"}
+                self.wfile.write(f"data: {json.dumps(msg_stop)}\n\n".encode())
+            def log_message(self, *args): pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = f"http://127.0.0.1:{server.server_address[1]}"
+        try:
+            async def consume():
+                parts = []
+                async for chunk in anthropic.tool(url, "key", "model", [{"role": "user", "content": "hi"}]):
+                    parts.append(chunk)
+                return "".join(parts)
+            result = asyncio.run(consume())
+            assert result == "{}", repr(result)
+        finally:
+            server.shutdown()
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_tool_yields_input_json_chunks():
+    """input_json_delta events yield their partial_json as chunks; the
+    concatenation is the tool's argument JSON."""
+    def isolated():
         from application.platform import anthropic
 
         result = {}
         async def consume(url):
             parts = []
-            async for chunk in anthropic.chat_json(url, "key", "model", [{"role": "user", "content": "json"}]):
+            async for chunk in anthropic.tool(url, "key", "model", [{"role": "user", "content": "hi"}]):
                 parts.append(chunk)
             result["text"] = "".join(parts)
 
-        anthropic.assert_chat_json(
+        anthropic.assert_tool(
             run=lambda url: consume(url),
-            response={"content": [{"text": '{"answer": 42}'}]},
+            response={"tool_use_input": '{"done": null}'},
         )
-        assert result["text"] == '{"answer": 42}', result
+        assert result["text"] == '{"done": null}', result
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
 

@@ -155,12 +155,12 @@ async def test_chat_raises_on_error_chunk():
     assert code == 0, error
 
 
-async def test_chat_json_raises_on_empty_stream():
+async def test_tool_raises_on_empty_stream():
     def isolated():
         from application.platform import ollama
 
         async def consume(url):
-            async for _ in ollama.chat_json(url, "m", [{"role": "user", "content": "hi"}]):
+            async for _ in ollama.tool(url, "m", [{"role": "user", "content": "hi"}]):
                 pass
 
         try:

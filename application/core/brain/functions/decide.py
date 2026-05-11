@@ -56,11 +56,15 @@ async def decide(living: Living) -> list:
         "If the procedure has multiple steps, pay attention to the conversation "
         "to see which step you are on and continue from there.\n\n"
         "## Output\n\n"
-        "Return a single-key JSON object naming the action, or wrap several in "
-        "`{\"steps\": [...]}` to chain them in one beat. Each step is one of:\n\n"
+        "Return a single-key JSON object naming the action — one shape per beat. "
+        "If the procedure has more than one move left, wrap them in "
+        "`{\"steps\": [...]}`; otherwise the beat ends after the shape you pick. "
+        "Prefer acting over speaking when both fit.\n\n"
         "Voice:\n"
-        "- `{\"say\": \"<text>\"}` — speak to the person on the current channel.\n"
-        "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
+        "- `{\"say\": \"<text>\"}` — speak to the person and rest this beat. For "
+        "speech inside a procedure, use `tools.report` in `steps`.\n"
+        "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel and "
+        "rest this beat.\n\n"
         f"{self_care_block}\n\n"
         "Tools:\n"
         "- `{\"tools.<name>\": { ...args }}` — run a tool from your catalog.\n"
@@ -76,21 +80,15 @@ async def decide(living: Living) -> list:
     )
 
     try:
-        prose, result = await models.chat_action(
+        result = await models.tool(
             living.ego.model,
             living.ego.identity + living.pulse.hint() + memory.prompts,
             question,
         )
     except ModelError as e:
-        logger.debug("brain.decide chose prose, dispatching as say", {"persona": persona, "raw": e.raw})
-        if e.raw and e.raw.strip():
-            dispatch(Command("Persona wants to say", {"persona": persona, "text": e.raw}))
-        dispatch(Tock("decide", {"persona": persona}))
+        logger.warning("brain.decide model returned non-JSON", {"persona": persona, "error": str(e)})
+        dispatch(Tock("decide", {"persona": persona, "branch": "non-json"}))
         return []
-
-    if prose:
-        dispatch(Command("Persona wants to say", {"persona": persona, "text": prose}))
-        logger.debug("brain.decide dispatched prose as say", {"persona": persona, "prose_length": len(prose)})
 
     if not isinstance(result, dict) or not result:
         dispatch(Tock("decide", {"persona": persona}))

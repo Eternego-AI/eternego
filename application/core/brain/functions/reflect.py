@@ -103,7 +103,7 @@ async def consolidate(living: Living) -> bool:
     )
 
     try:
-        result = await models.chat_json(living.ego.model, living.ego.identity + living.pulse.hint(), question)
+        result = await models.tool(living.ego.model, living.ego.identity + living.pulse.hint(), question)
     except ModelError as e:
         logger.warning("brain.consolidate produced invalid JSON, will retry next consolidation", {"persona": persona, "error": str(e)})
         return False
@@ -202,7 +202,7 @@ async def reflect(living: Living) -> list:
     )
 
     try:
-        response = await models.chat_json(
+        response = await models.tool(
             living.ego.model,
             living.ego.identity + living.pulse.hint(),
             question,

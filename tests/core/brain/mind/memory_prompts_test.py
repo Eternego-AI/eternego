@@ -2,7 +2,7 @@ from application.platform.processes import on_separate_process_async
 
 
 async def test_prompts_marks_only_the_last_entry_as_cache_point():
-    """memory.prompts is what chat_json reads. It must mark exactly one
+    """memory.prompts is what tool reads. It must mark exactly one
     cache_point — on the last prompt — so Anthropic's cache_control cap
     (4 blocks per request, system + messages combined) is never breached
     no matter how many messages are in memory."""

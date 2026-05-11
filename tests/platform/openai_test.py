@@ -91,18 +91,18 @@ async def test_chat_passes_system_messages_in_messages():
     assert code == 0, error
 
 
-async def test_chat_json_sends_response_format():
+async def test_tool_sends_response_format():
     def isolated():
         from application.platform import openai
 
         async def consume(url):
-            async for _ in openai.chat_json(url, "key", "gpt-4", [{"role": "user", "content": "json"}]):
+            async for _ in openai.tool(url, "key", "gpt-4", [{"role": "user", "content": "json"}]):
                 pass
 
         def validate(r):
             assert r["body"]["response_format"] == {"type": "json_object"}, r["body"]
 
-        openai.assert_chat_json(
+        openai.assert_tool(
             run=lambda url: consume(url),
             validate=validate,
             response={"choices": [{"message": {"content": '{"ok": true}'}}]},
@@ -111,7 +111,7 @@ async def test_chat_json_sends_response_format():
     assert code == 0, error
 
 
-async def test_chat_json_yields_response_text():
+async def test_tool_yields_response_text():
     def isolated():
         import asyncio
         from application.platform import openai
@@ -119,11 +119,11 @@ async def test_chat_json_yields_response_text():
         result = {}
         async def consume(url):
             parts = []
-            async for chunk in openai.chat_json(url, "key", "gpt-4", []):
+            async for chunk in openai.tool(url, "key", "gpt-4", []):
                 parts.append(chunk)
             result["text"] = "".join(parts)
 
-        openai.assert_chat_json(
+        openai.assert_tool(
             run=lambda url: consume(url),
             response={"choices": [{"message": {"content": '{"result": true}'}}]},
         )

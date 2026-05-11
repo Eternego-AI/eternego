@@ -7,10 +7,11 @@ no-op worker), calls `recognize(living)`, and asserts on:
 - bus traffic (Tick/Tock signals, Command dispatches)
 
 Recognize emits a single-key JSON object naming the action — `{"say": ...}`,
-`{"done": null}`, `{"tools.X": {...}}`, or `{"steps": [...]}`. Free-form
-prose around the JSON is dispatched as a fallback say. Recognize gates on
-`memory.perception()` and `memory.comprehension()`: if there's a pending
-intention or a fresh impression, recognize skips so learn or decide runs.
+`{"done": null}`, `{"tools.X": {...}}`, or `{"steps": [...]}`. No prose
+fallback — non-JSON from the model raises `ModelError` and the beat is
+skipped. Recognize gates on `memory.perception()` and `memory.comprehension()`:
+if there's a pending intention or a fresh impression, recognize skips so
+learn or decide runs.
 """
 
 from application.platform.processes import on_separate_process_async
@@ -321,54 +322,6 @@ async def test_recognize_skips_when_impression_present():
     assert code == 0, error
 
 
-async def test_recognize_prose_dispatched_as_say():
-    """When the model returns prose with no JSON, recognize dispatches the prose
-    as a say (fallback for models that don't follow the schema). Returns []."""
-    def isolated():
-        import os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents
-            from application.core.brain import functions
-            from application.core.brain.pulse import Pulse
-            from application.core.data import Message, Model, Persona, Prompt
-            from application.platform import observer, ollama
-
-            class FakeWorker:
-                def run(self, *a): pass
-                def nudge(self): pass
-
-            async def consume(url):
-                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
-                ego = agents.Ego(persona)
-                eye = agents.Eye(persona)
-                consultant = agents.Consultant(persona)
-                teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-
-                said = []
-                async def capture(cmd: observer.Command):
-                    if cmd.title == "Persona wants to say":
-                        said.append(cmd.details.get("text", ""))
-                observer.subscribe(capture)
-
-                consequences = await functions.recognize(living)
-                import asyncio as _a
-                await _a.sleep(0)
-
-                assert consequences == []
-                assert any("just some prose" in t for t in said), \
-                    f"expected the prose dispatched as a say, got {said!r}"
-
-            ollama.assert_call(
-                run=lambda url: consume(url),
-                responses=[[{"message": {"content": "just some prose, no json here"}, "done": True}]],
-            )
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
 
 async def test_recognize_empty_stream_propagates_engine_error():
     """Empty model stream (OOM, load failure) raises EngineConnectionError —
@@ -412,58 +365,3 @@ async def test_recognize_empty_stream_propagates_engine_error():
     assert code == 0, error
 
 
-async def test_recognize_prose_alongside_json_dispatches_both():
-    """When the model returns prose AND a JSON action, the prose is dispatched as a
-    say and the action runs as its own step — if the model wrote prose alongside
-    the action, those words go to the person."""
-    def isolated():
-        import os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents
-            from application.core.brain import functions
-            from application.core.brain.pulse import Pulse
-            from application.core.data import Message, Model, Persona, Prompt
-            from application.platform import observer, ollama
-
-            class FakeWorker:
-                def run(self, *a): pass
-                def nudge(self): pass
-
-            async def consume(url):
-                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
-                ego = agents.Ego(persona)
-                eye = agents.Eye(persona)
-                consultant = agents.Consultant(persona)
-                teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-
-                said = []
-                async def capture(cmd: observer.Command):
-                    if cmd.title == "Persona wants to say":
-                        said.append(cmd.details.get("text", ""))
-                observer.subscribe(capture)
-
-                consequences = await functions.recognize(living)
-                import asyncio as _a
-                await _a.sleep(0)
-
-                assert consequences == []
-                # The prose lands as a say. Done is the action.
-                assert any("I'm sitting with this" in t for t in said), \
-                    f"expected the prose dispatched, got {said!r}"
-
-            raw = (
-                "I'm sitting with this. Nothing calls right now.\n\n"
-                "```json\n"
-                '{"done": null}\n'
-                "```"
-            )
-            ollama.assert_call(
-                run=lambda url: consume(url),
-                responses=[[{"message": {"content": raw}, "done": True}]],
-            )
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error

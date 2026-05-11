@@ -79,7 +79,7 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
         raise ConnectionError(str(e)) from e
 
 
-async def chat_json(base_url: str, api_key: str | None, model: str, messages: list[dict]):
+async def tool(base_url: str, api_key: str | None, model: str, messages: list[dict]):
     """Stream JSON chat response, yielding content chunks. Uses response_format constraint."""
     api_key = api_key or ""
     try:
@@ -175,8 +175,8 @@ def assert_chat(run, validate=None, response=None, status_code=200):
     assert_call(run, validate, text, status_code)
 
 
-def assert_chat_json(run, validate=None, response=None, status_code=200):
-    """Run chat_json against a local SSE server."""
+def assert_tool(run, validate=None, response=None, status_code=200):
+    """Run tool against a local SSE server."""
     text = response.get("choices", [{}])[0].get("message", {}).get("content", "") if response else ""
     assert_call(run, validate, text, status_code)
 

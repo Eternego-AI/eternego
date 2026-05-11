@@ -6,7 +6,7 @@ from application.core.data import Model, Prompt
 from application.core.exceptions import ModelError, EngineConnectionError
 from application.platform import logger
 
-from .chat_json import chat_json
+from .tool import tool
 
 
 async def generate_training_set(model: Model, character: str, traits: str) -> list[dict]:
@@ -65,7 +65,7 @@ async def generate_training_set(model: Model, character: str, traits: str) -> li
     )
 
     try:
-        result = await chat_json(model, [Prompt(role="system", content=identity_text)], question)
+        result = await tool(model, [Prompt(role="system", content=identity_text)], question)
         return result.get("training_pairs", [])
     except (ModelError, EngineConnectionError):
         return []

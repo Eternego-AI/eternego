@@ -104,7 +104,7 @@ async def consult_teacher_for_instruction(persona, intention: str) -> tuple[str,
     )
 
     try:
-        result = await models.chat_json(teacher.model, teacher.identity + reality, question)
+        result = await models.tool(teacher.model, teacher.identity + reality, question)
     except ModelError as e:
         logger.warning("brain.consult_teacher produced invalid JSON, skipping", {"persona": persona, "model": teacher.model.name, "error": str(e)})
         return None

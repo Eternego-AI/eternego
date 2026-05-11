@@ -90,14 +90,19 @@ async def run(living) -> None:
                     consequences = await worker.dispatch(step)
                 except (EngineConnectionError, BrainException) as e:
                     model = e.model
+                    details = getattr(e, "details", {}) or {}
                     dispatch(BrainFault(name, {
                         "persona": persona,
                         "provider": (model.provider or "ollama") if model else None,
                         "url": model.url if model else None,
                         "model_name": model.name if model else None,
                         "error": str(e),
+                        "details": details,
                     }))
-                    logger.warning("Run fault", {"function": name, "error": str(e)})
+                    log_payload = {"function": name, "error": str(e)}
+                    if details:
+                        log_payload["details"] = details
+                    logger.warning("Run fault", log_payload)
                     return
                 if worker.stopped:
                     return
