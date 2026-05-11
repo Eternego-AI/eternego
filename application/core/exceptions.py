@@ -17,12 +17,15 @@ class EngineConnectionError(Exception):
     re-prompting the model: the caller should back off, not retry in a loop.
 
     `model` carries the Model that was being used when the fault happened, so
-    health_check can correlate by provider (ollama/anthropic/openai).
+    health_check can correlate by provider (ollama/anthropic/openai). `details`
+    is an optional dict of provider-specific diagnostic context (e.g., Anthropic
+    stop_reason, event types seen, token usage) for downstream readers.
     """
 
-    def __init__(self, message: str = "", model=None):
+    def __init__(self, message: str = "", model=None, details: dict | None = None):
         super().__init__(message)
         self.model = model
+        self.details = details or {}
 
 
 class ModelError(Exception):

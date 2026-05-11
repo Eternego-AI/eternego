@@ -7,10 +7,11 @@ no-op worker), calls `recognize(living)`, and asserts on:
 - bus traffic (Tick/Tock signals, Command dispatches)
 
 Recognize emits a single-key JSON object naming the action — `{"say": ...}`,
-`{"done": null}`, `{"tools.X": {...}}`, or `{"steps": [...]}`. Free-form
-prose around the JSON is dispatched as a fallback say. Recognize gates on
-`memory.perception()` and `memory.comprehension()`: if there's a pending
-intention or a fresh impression, recognize skips so learn or decide runs.
+`{"done": null}`, `{"tools.X": {...}}`, or `{"steps": [...]}`. No prose
+fallback — non-JSON from the model raises `ModelError` and the beat is
+skipped. Recognize gates on `memory.perception()` and `memory.comprehension()`:
+if there's a pending intention or a fresh impression, recognize skips so
+learn or decide runs.
 """
 
 from application.platform.processes import on_separate_process_async

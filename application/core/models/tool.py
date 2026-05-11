@@ -7,13 +7,15 @@ prose fallback, no salvage — cognitive callers either get a dict or a
 failure they can handle.
 
 Provider dispatch routes to each platform module's `tool()`, which uses
-the provider's native structured-output mechanism:
+the provider's native JSON-enforcement mechanism:
 
 - Ollama → `format: "json"`
 - OpenAI / xAI → `response_format: {"type": "json_object"}`
-- Anthropic → no native constraint yet (caller relies on prompt
-  compliance; smaller Anthropic models may fail this contract — Sonnet/
-  Opus comply, Haiku does not until provider-native tool_use lands)
+- Anthropic → `tool_use` with a permissive `act` tool (no JSON-mode flag
+  on Anthropic, so the API-level way to force JSON is via tool_use).
+
+Shape compliance (which keys appear in the JSON) is the prompt's job
+on every provider — the platform layer only enforces "valid JSON object."
 """
 
 from application.core.data import Model, Prompt
@@ -133,4 +135,8 @@ async def tool(model: Model, prompts: list[Prompt], question: str, done=None) ->
     except ConnectionError as e:
         raise EngineConnectionError(f"Could not reach model service: {e}", model=model) from e
     except OSError as e:
-        raise EngineConnectionError(f"Model service returned an error: {e}", model=model) from e
+        raise EngineConnectionError(
+            f"Model service returned an error: {e}",
+            model=model,
+            details=getattr(e, "details", None),
+        ) from e

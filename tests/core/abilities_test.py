@@ -108,6 +108,58 @@ async def test_look_at_raises_when_source_missing_or_file_absent():
     assert code == 0, error
 
 
+async def test_report_dispatches_say_command():
+    """`report` dispatches a 'Persona wants to say' Command — same dispatch as
+    `say`, but called from inside a procedure (steps[]) to narrate progress
+    while the beat continues."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import abilities
+            from application.core.data import Model, Persona
+            from application.platform import observer
+
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+
+            captured = []
+            async def capture(cmd: observer.Command):
+                if cmd.title == "Persona wants to say":
+                    captured.append(cmd.details.get("text", ""))
+            observer.subscribe(capture)
+
+            async def run_it():
+                result = await abilities.call(persona, "report", text="halfway through")
+                await asyncio.sleep(0)
+                assert result == "reported", result
+                assert captured == ["halfway through"], captured
+            asyncio.run(run_it())
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_report_requires_text():
+    """Empty text is a programmer error — the ability raises ValueError so
+    the clock executor wraps it into a TOOL_RESULT with status=error."""
+    def isolated():
+        import asyncio, os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import abilities
+            from application.core.data import Model, Persona
+
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            try:
+                asyncio.run(abilities.call(persona, "report", text=""))
+                assert False, "expected ValueError"
+            except ValueError as e:
+                assert "text is required" in str(e)
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
 async def test_look_at_returns_eye_answer_for_real_image():
     """When source is valid and vision is configured, look_at calls the eye
     and returns its description as the ability's string result."""
