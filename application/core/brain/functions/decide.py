@@ -37,8 +37,8 @@ def _deciding(persona) -> Action:
         Action(name="say", type="string", description="speak to the person on the current channel"),
         Action(name="notify", type="string", description="broadcast to every connected channel"),
         Action(name="done", type="null", description="the procedure is complete"),
-        Action(name="clear_memory", type="null", description="wipe the current messages"),
-        Action(name="stop", type="null", description="stop until someone speaks"),
+        Action(name="clear_memory", type="null", description="wipe out your current running memory — for when memory crashes"),
+        Action(name="stop", type="null", description="stop your service until the person restarts you — for unexpected malfunctioning"),
         Action(
             name="remove_meaning",
             type="object",
@@ -81,9 +81,9 @@ async def decide(living: Living) -> list:
 
     self_care_block = (
         "Self-care:\n"
-        "- `{\"clear_memory\": null}` — wipe the current messages.\n"
+        "- `{\"clear_memory\": null}` — wipe out your current running memory; for when memory crashes.\n"
         "- `{\"remove_meaning\": {\"name\": \"<stem>\"}}` — delete a custom instruction.\n"
-        "- `{\"stop\": null}` — stop yourself until someone speaks."
+        "- `{\"stop\": null}` — stop your service until the person restarts you; for unexpected malfunctioning."
     )
 
     question = (

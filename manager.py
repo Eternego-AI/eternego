@@ -35,6 +35,7 @@ DEFAULT_COMMANDS = [
     {"command": "start", "description": "Pair this chat with the persona"},
     {"command": "stop", "description": "Stop the persona"},
     {"command": "restart", "description": "Restart the persona"},
+    {"command": "hello", "description": "Pull this chat as the active channel and echo the last message"},
 ]
 
 
@@ -248,6 +249,25 @@ class Agent:
                 return
             asyncio.create_task(remove(persona.id))
 
+        async def say_hello(gw):
+            """Pull this gateway as the active channel and echo the last
+            conversation entry back. Does not call hear/see — the persona's
+            worker keeps doing whatever it was doing."""
+            from application.business.persona.conversation import conversation
+            self.last_channel = gw["channel"]
+            outcome = await conversation(persona)
+            messages = outcome.data.messages if outcome.success and outcome.data else []
+            if messages:
+                last = messages[-1]
+                who = "your" if last.get("role") == "person" else f"{persona.name}'s"
+                text = f"Hi there, here is {who} last message: {last.get('content', '')}"
+            else:
+                text = "Hi there, no messages yet."
+            try:
+                await gw["connection"].send(gw["token"], gw["channel"].name, text)
+            except Exception:
+                pass
+
         async def on_telegram_message(signal: MessageSignal):
             if signal.title not in ("Telegram message received", "Telegram media received"):
                 return
@@ -281,6 +301,8 @@ class Agent:
                 await self.living.pulse.worker.stop()
             elif cmd == "restart":
                 asyncio.create_task(restart(persona.id))
+            elif cmd == "hello":
+                await say_hello(gw)
 
         async def on_discord_message(signal: MessageSignal):
             if signal.title != "Discord message received":
@@ -291,6 +313,10 @@ class Agent:
             if gw is None:
                 await try_claim("discord", token, channel_id)
                 return
+            content = signal.details.get("content", "")
+            if content.strip().lower() == "/hello":
+                await say_hello(gw)
+                return
             if gw["channel"].verified_at:
                 self.last_channel = gw["channel"]
             attachment_url = signal.details.get("attachment_url", "")
@@ -298,9 +324,9 @@ class Agent:
                 filename = signal.details.get("attachment_filename", "")
                 saved = await download_and_save(gw["channel"], attachment_url, filename)
                 if saved:
-                    await see(ego, self.living, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
+                    await see(ego, self.living, source=saved, caption=content, channel=gw["channel"])
             else:
-                await hear(ego, self.living, content=signal.details.get("content", ""), channel=gw["channel"])
+                await hear(ego, self.living, content=content, channel=gw["channel"])
 
         async def on_web_message(signal: MessageSignal):
             if signal.title not in ("Web message received", "Web media received"):
@@ -311,14 +337,18 @@ class Agent:
             gw = next((g for g in self.gateways if g["channel"].type == "web"), None)
             if gw is None:
                 return
+            content = signal.details.get("content", "")
+            if signal.title == "Web message received" and content.strip().lower() == "/hello":
+                await say_hello(gw)
+                return
             self.last_channel = gw["channel"]
             if signal.title == "Web message received":
-                await hear(ego, self.living, content=signal.details.get("content", ""), channel=gw["channel"])
+                await hear(ego, self.living, content=content, channel=gw["channel"])
             else:
                 path = signal.details.get("attachment_path", "")
                 saved = save_media(path, gw["channel"]) if path else ""
                 if saved:
-                    await see(ego, self.living, source=saved, caption=signal.details.get("content", ""), channel=gw["channel"])
+                    await see(ego, self.living, source=saved, caption=content, channel=gw["channel"])
 
         self._subscribers = [
             on_say, on_notify, on_typing, on_persona_stop, on_persona_sick,
