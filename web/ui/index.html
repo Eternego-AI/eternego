@@ -1,15 +1,23 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-theme="system">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Eternego</title>
     <link rel="icon" type="image/svg+xml" href="/assets/eternego-icon.svg">
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Spectral:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Spectral:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/ui/index.css">
+    <link rel="stylesheet" href="/ui/elements.css">
+    <link rel="stylesheet" href="/ui/widgets.css">
+    <link rel="stylesheet" href="/ui/pages.css">
 </head>
 <body>
     <div id="app"></div>
+    <script type="module" src="/ui/elements.js"></script>
+    <script type="module" src="/ui/widgets.js"></script>
+    <script type="module" src="/ui/pages.js"></script>
     <script type="module" src="/ui/index.js"></script>
 </body>
 </html>

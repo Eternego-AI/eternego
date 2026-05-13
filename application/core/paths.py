@@ -314,34 +314,6 @@ def lines(path: Path) -> list[str]:
     return [line for line in content.splitlines() if line.strip()]
 
 
-def delete_entry(path: Path, hash_part: str) -> None:
-    """Delete an entry from a file by its content hash."""
-    logger.info("Deleting entry from file", {"path": str(path), "hash": hash_part})
-    if not path.exists():
-        logger.warning("File not found", {"path": str(path)})
-        return
-    content = filesystem.read(path)
-    entry_lines = content.splitlines()
-    remaining = [line for line in entry_lines if crypto.generate_unique_id(line) != hash_part]
-    if len(remaining) == len(entry_lines):
-        logger.warning("Entry not found or already modified", {"path": str(path), "hash": hash_part})
-        return
-    filesystem.write(path, "\n".join(remaining) + "\n" if remaining else "")
-
-
-def find_and_delete_file(path: Path, hash_part: str) -> None:
-    """Delete a file in a directory by its name hash."""
-    logger.info("Finding and deleting file", {"path": str(path), "hash": hash_part})
-    if not path.exists():
-        logger.warning("Directory not found", {"path": str(path)})
-        return
-    for file in path.glob("*"):
-        if crypto.generate_unique_id(file.stem) == hash_part:
-            filesystem.delete(file)
-            return
-    logger.warning("File not found or already removed", {"path": str(path), "hash": hash_part})
-
-
 def md_files(directory: Path) -> list[Path]:
     """Return a list of markdown files in the given directory."""
     logger.info("Listing markdown files in directory", {"directory": str(directory)})

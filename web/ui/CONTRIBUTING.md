@@ -1,268 +1,222 @@
 # Contributing to the Web UI
 
-The frontend is built on the web platform — Web Components, ES modules, no framework. It follows Natural Architecture, the same shape as the backend, with one twist: every layer has two sides because the frontend has two substrates (visual matter and behavioral matter) where the backend has one.
+The frontend is vanilla — Web Components, ES modules, no framework, no build step. Three layers, one file per component. Refresh-and-it's-there development.
 
-Read this file before changing anything under `web/ui/`. Rules below are enforced. If code contradicts a rule, the code is wrong.
+Read this before touching anything under `web/ui/`. The rules below are enforced.
 
 ---
 
 ## The shape
 
-Three layers, dependencies flow down. Each layer has a UI side (paints content) and a Logic side (structures and coordinates).
-
-|   | UI side | Logic side |
-|---|---------|------------|
-| **Business** — what kind of moment this is | `business/worlds/`, `business/frame.js` | `index.js` |
-| **Core** — engineering | `core/widgets/` | `core/apps/` |
-| **Platform** — primitives | `platform/elements/` | `platform/layouts/`, `platform/network.js`, `platform/socket.js`, `platform/router.js` |
-
-Read each row top-to-bottom: this is what the persona shows, how it's composed, and what it's composed of.
-
-- **Business** is the persona's worlds. `worlds/` are full-screen states with URLs (outer-world, inner-world, status-world, chooser, create, migrate). `frame.js` is the chrome that holds them. `index.js` is the orchestrator — boots the app, owns session state, signals, and routing wiring.
-- **Core** is the engineering. `widgets/` are composite painted units (a conversation, a setup form, a pair flow). `apps/` are flows that coordinate widgets over time.
-- **Platform** is the primitives. `elements/` are DOM things (a button, a text input, a log line). `layouts/` compose what to draw — they pick which elements to use based on data shape, but don't paint themselves (forms, tail, composer, carousel, timeline). Non-visual primitives (`network.js`, `socket.js`, `router.js`, `markdown.js`) live alongside as **tools** — stateless utilities any layer may import. The shared HTMLElement base (`painted.js`) provides one-time CSS injection for everything that paints.
-
----
-
-## Folder structure
+Three layers. Each layer has one `.css` file and one `.js` aggregator at `web/ui/`. The components themselves live in same-named folders next to the aggregators.
 
 ```
 web/ui/
-  index.html                    starter — mounts the frame, loads index.js
-  index.js                      orchestrator (business/Logic)
-  index.css                     design tokens (semantic, OS-level)
+  index.html             tag soup — links the CSS files, scripts the JS files
+  index.css              design tokens (light + dark via [data-theme])
+  index.js               orchestrator — API surface, router, socket, session state, theme
 
-  business/
-    frame.js                    chrome — header, persona picker, world tabs
-    worlds/                     full-screen states with URLs
-      outer-world.js
-      inner-world.js
-      status-world.js
-      chooser-world.js
-      create-world.js
-      migrate-world.js
+  elements.css           styles for every element
+  elements.js            aggregator: `import './elements/<name>.js'` per file
+  elements/              primitives — DOM-level, project-agnostic shape
+    breath-dot.js
+    role-message.js
+    chat-input.js
+    pending-row.js
+    menu-link.js
+    field-input.js
+    field-select.js
+    power-button.js
+    theme-picker.js
 
-  core/
-    widgets/                    composite painted units (core/UI)
-    apps/                       coordinated flows (core/Logic)
+  widgets.css            styles for every widget
+  widgets.js             aggregator
+  widgets/               composites — compose elements, may know domain (persona)
+    sidebar-nav.js
+    chat-view.js
+    status-view.js
+    settings-view.js
+    memory-view.js       (top-level Memory tab; sub-tabs + body via prose-view)
+    prose-view.js        (renders one markdown body — composable, used by memory-view)
+    instructions-view.js (renders the meanings catalog as a list)
+    calendar-view.js     (month grid; dots per event, click-popovers)
+    onboarding-cold.js
+    create-form.js
+    migrate-form.js
+    provider-select.js
 
-  platform/
-    painted.js                  shared HTMLElement base (CSS injection)
-    elements/                   DOM primitives (platform/UI)
-    layouts/                    composition primitives (platform/Logic)
-    network.js                  fetch wrapper (platform/Logic)
-    socket.js                   WebSocket wrapper (platform/Logic)
-    router.js                   URL ↔ state (platform/Logic)
-    markdown.js                 markdown → HTML (platform/Logic)
+  pages.css              styles for every page
+  pages.js               aggregator
+  pages/                 full-screen views, mounted by index.js into #app
+    persona-page.js
+    onboarding-page.js
+
+  platform/              logic-only tools (no CSS, no DOM if avoidable)
+    network.js           fetch wrapper
+    socket.js            WebSocket wrapper with auto-reconnect
+    router.js            URL ↔ handler matching
+    markdown.js          markdown → HTML
+    escape.js            HTML-escape helper
 ```
 
-The 3-layer × 2-side shape is visible in the tree. New cells slot into the matching folder; if a cell can't decide which folder, it's doing two jobs — split.
-
----
-
-## Entry layer (index.*)
-
-`index.html`, `index.js`, `index.css` sit at the root because that's where the browser looks for entry points.
-
-`index.js` plays the role of the **business/Logic singleton** — it lives at the entry-point name because it IS the entry point. It owns:
-- The boot sequence
-- The session state (current persona, current world, persona cache)
-- The signals feed (cross-application events)
-- The wiring of platform primitives (`network.js`, `socket.js`, `router.js`) into a coherent application surface
-
-`index.css` holds **design tokens**, semantic not literal:
-
-- `--danger`, not `--red`
-- `--surface-recessed`, not `--bg-darker`
-- `--text-muted`, not `--text-gray-400`
-
-Cells make windows on top without thinking about color, spacing, or font. They reach for behavior (`--danger`), not pigment (`--red`).
+**Why this shape:**
+- One file per component means you grep for `cab` and find `cabinet-tabs.js` immediately.
+- Aggregators are pure manifest — adding a new component = one line in the manifest, one file in the folder.
+- Per-layer CSS files mean "where do button styles live?" has one answer (`elements.css`).
+- No `<base>` class ceremony. A custom element is just `class X extends HTMLElement` + `customElements.define`.
 
 ---
 
 ## Logic commands UI
 
-At every layer, the Logic side is the controller. The UI side is the body of each branch.
+The pattern is uniform at every layer:
 
-> Logic decides which UI to invoke and with what variable. UI knows how to draw given the variable. When Logic changes the variable, it re-invokes UI.
+> The upper layer creates the lower layer and feeds it data. Lower layer renders.
+> Upper layer never asks lower layer for behavior — it tells.
 
-Uniform across layers; the variable that drives differs:
+Concretely:
+- `index.js` mounts a `<persona-page>` and calls `page.setProps({persona, messages, ...})`.
+- `<persona-page>` chooses which widget to render based on `tab` and calls `widget.setProps({...})`.
+- Widgets compose elements via `document.createElement('x')` + `el.setProps({...})`.
+- Events flow upward via `CustomEvent`. Each layer can re-dispatch or handle.
 
-- **Business** — current world + current persona drives which world renders. The singleton commands `frame.js` and the worlds.
-- **Core** — app state drives which widget composition shows. An app commands its widgets.
-- **Platform** — data shape drives which elements compose. A simple-form sees `{ name: text, birthday: date, provider: options }` and chooses `input-text`, `input-text`, `input-options`. A step-form does the same plus back/next.
-
-**The full chain:** App → Widget (picks layout) → Layout (picks elements) → Elements (render). Each Logic level commands its UI based on what it received from above.
-
-UI never asks Logic for behavior. UI is invoked, not consulted.
-
----
-
-## Dependency rules
-
-**Vertical, between layers — strictly downward.**
-
-A widget never imports a world. An element never imports a widget. Imports up the stack are the wrong shape; if you feel one is needed, the cell is in the wrong layer.
-
-**Horizontal, within a layer.**
-
-- Same-side peers may import each other — sparingly.
-- Cross-side at the same layer flows **Logic → UI** *for control*. Logic instantiates UI and feeds it data; UI does not ask Logic for behavior. Stateless **tools** (pure transforms — markdown, formatters, escapers) are exempt — they're functions, not controllers; any layer may import them.
+UI never fetches. UI never reads `location`. UI never opens a WebSocket. Those go through `platform/`, called by `index.js`, with data passed down.
 
 ---
 
-## State and signals
+## State: arrays are passed, never shared
 
-Two paths, never confused.
+**Critical pitfall.** When a parent passes a list to a child via `setProps({messages: this._messages})`, the child must COPY:
 
-**Inter-layer state — plain programming.**
+```js
+setProps({ messages }) {
+    if (messages !== undefined) {
+        this._messages = messages.slice();   // copy, never assign directly
+    }
+}
+```
 
-- The upper layer owns the variable.
-- It hands a reference down to the lower layer.
-- The lower layer reads, mutates, or returns a result.
-- That's it. No reactive bus, no observable, no global manager.
+Otherwise the child's `push()` mutates the parent's array. We hit this exact bug with chat — every user message appeared twice.
 
-State lives where it's used: input draft text in the element, wizard step in the app, current persona in the singleton.
-
-**Mutation by reference is the form pattern.** When the parent passes a `values` object to a form layout (e.g., `simple-form`), the form mutates fields onto that same object as the user types. The parent reads from the same reference whenever it needs current values — on submit, on step change, on send. This avoids re-rendering on every keystroke and is the natural expression of "upper layer owns the object, lower layer modifies."
-
-**Cross-application — signals.**
-
-Signals are events propagated to anyone who's interested, with no contract between sender and receivers. Throw a stone; for the thrower the act is done; for the window that the stone hits, that means getting broken. The thrower doesn't track the window.
-
-- Only the **Logic side** dispatches signals. UI never throws.
-- The business/Logic singleton owns the Feed.
-- A signal is for *world has changed*, not *please update yourself*. Use a callback or a method call for direct asks.
-
-If you're dispatching a signal to update a sibling, you're using the wrong tool — pass the reference instead.
+Default rule: if you call `setProps` with a list, copy it on receipt.
 
 ---
 
-## URL is the source of truth for navigation
+## URL is the source of truth
 
-Every screen-changing event goes through the URL. Reload always reproduces the current view from URL alone.
+Every screen-changing event goes through the URL. Reload reproduces the view exactly.
 
-- Selecting a persona → URL.
-- Switching worlds → URL.
-- Step in a wizard → URL.
-- Open dialog, expanded panel, current archive in the carousel → URL.
+Routes are defined in `index.js` via `platform/router.js`:
 
-If a state isn't in the URL, the user can't link to it, can't bookmark it, can't reload it. The test — *can I copy this URL and get back here?*
+```js
+router.add('/persona/{id}/{tab}',  ({ id, tab }) => showPersona(id, tab));
+router.add('/persona/{id}',        ({ id })      => showPersona(id, 'chat'));
+router.add('/onboarding/create',   () => showOnboarding('create'));
+router.add('/onboarding/migrate',  () => showOnboarding('migrate'));
+router.add('/onboarding',          () => showOnboarding('cold'));
+router.add('/',                    () => ...redirect to first persona or onboarding);
+```
 
-The browser state and `index.js` together fully describe the view. There is no other source.
-
----
-
-## DRY: abstract by pruning, not by design
-
-The base rule: **do not DRY without pain.**
-
-- Duplicate freely on first write.
-- Don't extract helpers up front.
-- Don't introduce a base class because two cells happened to need the same line.
-
-Abstraction earns its place during the **prune phase**, after first delivery, when "obvious weirdness" surfaces — code that no one can read without flinching, a name that suggests itself naturally, three structural duplicates that mean the same thing.
-
-If you can't say what's painful about the duplication, the abstraction isn't ready.
+Open a dialog, expand a section, switch tab — if it's worth bookmarking, it lives in the URL. If the user can't reload and get back here, the URL is incomplete.
 
 ---
 
-## No client, no spec
+## CSS tokens, never literals
 
-If no URL or interaction reaches a screen, that screen doesn't exist.
+`index.css` defines semantic tokens like `--accent`, `--text-muted`, `--surface`, `--border`. Light and dark themes redefine the same tokens; everything else just reaches for them.
 
-- Don't build a widget that nothing renders.
-- Don't expose an API method nothing calls.
-- Don't add a world that has no entry point.
+Class prefixes are layer-scoped to avoid collisions:
+- `.el-*` — element internals (e.g. `.el-input`, `.el-trace-row`)
+- `.w-*` — widget internals (e.g. `.w-cold-card`, `.w-status-section`)
+- `.p-*` — page internals (e.g. `.p-main`, `.p-blank`)
 
-Dead UI is dead code. Remove it.
+If you reach for `--red` instead of `--danger`, fix it. If you reach for `#f0c868` instead of `--accent`, fix it.
 
----
-
-## Platform portability
-
-Platform code must be portable. It can use libraries, plugins, or vanilla code — whatever delivers. But it must not contain project-specific jargon.
-
-- ✅ `create_form(url, fields, onSubmit)`
-- ❌ `create_persona_form(...)`
-- ✅ A tooltip-input that shows a tooltip on hover
-- ❌ An input that knows about `persona.id`
-
-The implementation must work in any project. A specific input that happens to be used only here is fine — as long as nothing in its body references the persona, the daemon, or any business name.
+Phase tinting is currently NOT applied user-side. The persona experiences morning/day/night internally; the user only sees light vs dark. Don't add phase-tinted backgrounds without explicit design buy-in.
 
 ---
 
-## Naming
+## How to add things
 
-Each cell's naming reflects the cell's business.
+**A new primitive element** (e.g. a date input):
+1. `elements/<name>.js`: class extending `HTMLElement`, register with `customElements.define`.
+2. Append `import './elements/<name>.js';` to `elements.js`.
+3. Add its styles to `elements.css` under tag selector or `.el-...` classes.
+4. Use it via `document.createElement('<name>')` from any widget.
 
-- The **backend's** business is to *make* a persona — gerunds, verbs of process (recognizing, deciding, archiving).
-- The **frontend's** business is to *show* the persona — nouns of presentation (world, widget, layout, element).
+**A new widget** (composite, domain-aware):
+1. `widgets/<name>.js`: class with `connectedCallback` + `setProps` + `render`. Compose elements via createElement + setProps.
+2. Append `import './widgets/<name>.js';` to `widgets.js`.
+3. Styles in `widgets.css` (`.w-...`).
+4. Emits events upward via `dispatchEvent(new CustomEvent(...))`.
 
-A world is a place you are. A widget is a thing with a job. A layout is an arrangement. An element is a primitive.
+**A new page** (full-screen):
+1. `pages/<name>.js`: class composing widgets. Receives setProps from `index.js`.
+2. Append to `pages.js` aggregator.
+3. Add route in `index.js`.
+4. Styles in `pages.css`.
 
-Folders are plural nouns describing what they contain (`worlds/`, `widgets/`, `apps/`, `layouts/`, `elements/`). Files are kebab-case singular nouns naming the cell (`outer-world.js`, `simple-form.js`, `input-text.js`).
-
----
-
-## Where to add things
-
-| What you're adding | Where it goes |
-|---|---|
-| A full-screen state with a URL | `business/worlds/<name>.js`. Register the route in `index.js`. |
-| The chrome around worlds | `business/frame.js` |
-| Session/global state, signals, world routing wiring | `index.js` |
-| A coordinated flow (multi-step or stateful feature) | `core/apps/<name>.js`. Plain class with `init / start / activate / deactivate`. |
-| A composite painted unit | `core/widgets/<name>.js`. Extends `Widget`. |
-| A non-visual platform primitive | new file under `platform/` named for what it wraps |
-| A composition layout (form variant, tail, composer, carousel, timeline) | `platform/layouts/<name>.js`. Extends `Layout`. |
-| A DOM primitive (input variant, button variant, log line) | `platform/elements/<name>.js`. Extends `Element`. |
-| A design token | `index.css`, semantically named |
+**A platform tool** (project-agnostic logic):
+1. `platform/<name>.js`. Export functions or a class. No CSS, no DOM unless required.
+2. Import from `index.js` (or another platform tool).
+3. If it touches the network/storage/window, it goes here. Widgets shouldn't.
 
 ---
 
-## Base classes
+## A worked example: the chat vertical
 
-All custom-element bases follow the same pattern: `init(props)` then one verb method.
+To see the layered shape end-to-end, follow this trail:
 
-| Base | Verb | Lifecycle |
-|---|---|---|
-| `Element` (platform/UI) | `render()` | — |
-| `Layout` (platform/Logic) | `arrange()` | — |
-| `Widget` (core/UI) | `build()` | — |
-| `World` (business/UI) | `build()` | `activate() / deactivate()` |
-| `App` (core/Logic, plain class) | `start()` | `activate() / deactivate()` |
+1. **Page** — `pages/persona-page.js`: builds `<sidebar-nav>` + `<chat-view>`, forwards events.
+2. **Widget** — `widgets/chat-view.js`: builds `<chat-input>` and a list of `<role-message>` elements, manages messages array + pending state.
+3. **Elements** — `elements/chat-input.js` (composer), `elements/role-message.js` (bubble + optional trace fold), `elements/pending-row.js` (live "thinking" status + STOP).
+4. **Orchestrator** — `index.js` mounts `<persona-page>`, opens `Socket(/ws/{id})`, buffers signals into `pendingTrace`, attaches the trace to each persona message as it arrives, posts user messages via `POST /api/persona/{id}/hear`.
+5. **Platform** — `platform/socket.js` reconnects, `platform/network.js` wraps fetch.
 
-Style injection: each base owns its `_css` static and injects once via the `_styled` flag. Globals live in `index.css`.
+The pattern repeats for every page. If you internalize chat, the rest is the same shape.
 
 ---
 
 ## Conventions
 
-Enforced.
+Enforced. Code that violates these is wrong.
 
-- **One element per file.** Filename matches the custom element name (kebab-case).
-- **All imports at file level.** No dynamic imports inside methods.
-- **No helpers up front.** No `_helper` functions extracted to dedupe two lines. Wait for pain.
-- **No backwards-compat shims.** When you change something, update the callers.
-- **No project name in platform.** Platform code never references `persona`, `eternego`, the daemon, or any business concept by name.
-- **No fetch outside `platform/network.js`.** Widgets and worlds use the API surface exposed by `index.js`.
-- **No WebSocket outside `platform/socket.js`.** Same pattern.
-- **No history/location reads outside `platform/router.js`.** Same pattern.
-- **No markdown parsing outside `platform/markdown.js`.** Elements display markdown via this tool.
-- **No upward imports.** A widget importing a world is a bug.
-- **No DOM in Logic that doesn't need it.** Apps and the singleton hold no DOM. Layouts hold DOM only because arrangement requires it.
-- **No state in UI beyond what the cell renders.** A widget can hold input draft state; it cannot hold session state. Session state belongs in the singleton.
-- **Comments are rare and explain *why*, never *what*.** Names are the documentation.
-- **Style tokens are semantic.** `--danger`, not `--red`. If you reach for a literal name, find the behavior it represents.
+- **One component per file.** Filename matches custom element tag (kebab-case).
+- **No base class ceremony.** Components extend `HTMLElement` directly. The old `World` / `Widget` / `Layout` / `Element` bases are gone.
+- **No `static _css` + injection.** Styles live in the layer's CSS file.
+- **All imports at the top of the file.** No dynamic imports inside methods.
+- **Pages don't fetch.** API calls live in `index.js` (or platform). Pages emit events; orchestrator handles them.
+- **`setProps({messages: arr})` must copy the array.** Don't share references.
+- **Events bubble upward only.** A widget doesn't listen to its siblings; it doesn't reach into other widgets. It emits, parent routes.
+- **Comments are rare and explain *why*.** Names are the documentation.
+- **No project-name leaks in `platform/`.** Platform code never references "persona", "eternego", or any business concept.
+- **Theme tokens are semantic.** `--danger`, not `--red`. If you reach for a literal, find the behavior it represents.
+- **URL completeness.** Before merging anything that adds a screen-changing event, verify the URL reflects it.
 
 ---
 
 ## What to watch for
 
-- **The Logic-commands-UI flow is easy to invert.** Watch for UIs that subscribe to global state, ask Logic for behavior, or fetch on their own. Those are inversions; route them back through Logic.
-- **The 6-cell shape gets fuzzy at edges.** If a cell can't decide which layer it belongs to, it's probably doing two jobs. Split.
-- **The base-class pattern (`init` then verb) is the contract.** Don't override `connectedCallback` or other lifecycle methods unless you have a specific reason. The verb method is where work happens.
-- **URL completeness.** Before merging anything that adds a screen-changing event, verify the URL reflects it. If reload doesn't reproduce the view, the URL is incomplete.
-- **Signals are not a state mechanism.** If you're dispatching a signal to update a sibling, pass a reference instead.
-- **DRY drift.** A base class that started as a real abstraction can ossify into a place to dump shared lines. When you reach to add a method to a base, ask whether the base is still earning its place.
+- **Shared-array bug** (covered above) — `setProps` receivers must copy lists.
+- **Signal type vs title** — `msg.type` is the class name (`Plan` / `Event` / `Tick` / `CapabilityRun`); `msg.title` is the human label (`Hearing` / `Heard` / `realize` / `tools.http.oauth1_request`). Check the right one.
+- **The `Heard` / `Said` filter** — these signals can arrive with `channel = null` (broadcast-to-all). Filter both `!d.channel` and `d.channel.type === 'web'`, since `chat_message` already delivered the web copy.
+- **setProps before appendChild gets clobbered** — call `parent.appendChild(el)` *first*, then `el.setProps({...})`. Otherwise `connectedCallback` fires on attach and resets the fields setProps just set. Defensive guard in connectedCallback: `if (this._x === undefined) this._x = '';` rather than unconditional `this._x = ''`.
+- **Top-level chrome is `.p-main > X`, not bare `X`** — applying `flex:1; min-height:0; overflow-y:auto` to a tag selector affects nested instances too, collapsing them to 0 height. Scope the chrome to direct children of `.p-main`.
+- **WebSocket reconnect** — `socket.js` reconnects automatically every 3s after `onclose`. If you write code that creates a second Socket, close the first explicitly.
+- **DevTools focus** — when DevTools is open and the elements panel is focused, keyboard shortcuts (Ctrl+L, Ctrl+R) go there instead of the page. Manual testing surprise.
+- **Native select on dark mode** — declare `color-scheme: dark` on `[data-theme="dark"]` and style `option { background; color }`, otherwise Linux/KDE renders the dropdown white-on-white.
+
+---
+
+## Pull requests
+
+- Branch off `master` (or the active version branch).
+- Tests pass — but the frontend currently has none. When adding non-trivial logic to `platform/`, prefer a small isolated test (since platform is project-agnostic).
+- One logical change per PR.
+- PR body: a single `## Summary` section; no test plan section, no AI footer.
+
+---
+
+## License
+
+MIT.

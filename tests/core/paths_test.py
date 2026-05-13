@@ -54,51 +54,6 @@ async def test_md_list_returns_empty_for_missing_file():
     assert code == 0, error
 
 
-async def test_delete_entry_removes_matching_line():
-    def isolated():
-        import os
-        import tempfile
-        from application.core import paths
-        from application.platform.crypto import generate_unique_id
-
-        tmp = tempfile.mkdtemp()
-        os.environ["ETERNEGO_HOME"] = tmp
-        p = paths.home("test-paths")
-        p.mkdir(parents=True, exist_ok=True)
-        f = p / "entries.md"
-        f.write_text("first line\nsecond line\nthird line\n")
-        hash_id = generate_unique_id("second line")
-        paths.delete_entry(f, hash_id)
-        content = f.read_text()
-        assert "second line" not in content
-        assert "first line" in content
-        assert "third line" in content
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
-async def test_delete_entry_does_nothing_for_missing_hash():
-    def isolated():
-        import os
-        import tempfile
-        from application.core import paths
-
-        tmp = tempfile.mkdtemp()
-        os.environ["ETERNEGO_HOME"] = tmp
-        p = paths.home("test-paths")
-        p.mkdir(parents=True, exist_ok=True)
-        f = p / "entries.md"
-        f.write_text("first line\nsecond line\n")
-        paths.delete_entry(f, "nonexistent")
-        content = f.read_text()
-        assert "first line" in content
-        assert "second line" in content
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
 async def test_due_destiny_entries_returns_entries_before_time():
     def isolated():
         import os
