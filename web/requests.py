@@ -31,10 +31,6 @@ class PersonaCreateRequest(BaseModel):
     discord_token: str | None = None
 
 
-class PersonaControlRequest(BaseModel):
-    entry_ids: list[str]
-
-
 class HearRequest(BaseModel):
     message: str
 

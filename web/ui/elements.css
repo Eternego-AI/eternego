@@ -1,0 +1,464 @@
+/* Elements — primitives. Class prefix .el-* and tag selectors.
+   No domain knowledge. Anything goes here that's primitive enough to be in another project. */
+
+/* breath-dot — a small living indicator */
+breath-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    box-shadow: 0 0 0 3px var(--accent-bg);
+    animation: el-breath 4s ease-in-out infinite;
+}
+breath-dot[state="thinking"] { animation-duration: 1.6s; }
+breath-dot[state="resting"] { animation-duration: 9s; background: var(--text-dim); box-shadow: 0 0 0 3px var(--surface); }
+breath-dot[state="sleeping"] { animation: none; background: var(--text-dim); opacity: 0.5; box-shadow: none; }
+breath-dot[state="sick"]    { background: var(--danger); animation-duration: 1.5s; box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.15); }
+breath-dot[state="stopped"] { animation: none; background: var(--text-dim); opacity: 0.3; box-shadow: none; }
+
+@keyframes el-breath {
+    0%, 100% { box-shadow: 0 0 0 3px var(--accent-bg); }
+    50%      { box-shadow: 0 0 0 6px var(--accent-bg); }
+}
+
+/* role-message — visual asymmetry between you and her:
+   - her ("them") speaks in flowing serif prose, full width
+   - you ("me") appear as a small framed sans-serif card, left-aligned */
+role-message {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.55;
+}
+role-message .el-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin-bottom: var(--space-1);
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+role-message .el-head .who { color: var(--text-muted); }
+role-message[role="me"] .el-head .who { color: var(--accent-text); }
+role-message .el-body {
+    color: var(--text);
+    font-family: var(--font-serif);
+    font-size: var(--size-lg);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+role-message[role="me"] {
+    align-items: flex-end;     /* right-align both head and body */
+}
+role-message[role="me"] .el-body {
+    max-width: 88%;
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md) var(--radius-md) 4px var(--radius-md);
+    font-family: var(--font-sans);
+    font-size: var(--size-sm);
+    color: var(--text-body);
+}
+role-message[role="system"] .el-body {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: var(--size-sm);
+}
+role-message .el-image {
+    margin-top: var(--space-2);
+    max-width: 100%;
+    max-height: 320px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    display: block;
+    cursor: zoom-in;
+}
+role-message .el-trace-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-top: var(--space-2);
+    padding: 4px 10px;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+    letter-spacing: 0.04em;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: all var(--time-quick);
+}
+role-message .el-trace-toggle:hover {
+    color: var(--accent-text);
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+role-message .el-trace-count {
+    color: var(--accent-text);
+    background: var(--accent-bg);
+    padding: 1px 7px;
+    border-radius: var(--radius-full);
+    font-size: 10px;
+    font-weight: 600;
+}
+role-message .el-trace {
+    margin-top: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-recessed);
+    border-left: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+role-message .el-trace-row {
+    display: grid;
+    grid-template-columns: 50px 100px minmax(0, 1fr) minmax(0, auto);
+    gap: var(--space-2);
+    align-items: baseline;
+    line-height: 1.4;
+}
+role-message .el-trace-time {
+    color: var(--text-dim);
+    font-size: 10px;
+}
+role-message .el-trace-type {
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+role-message .el-trace-type-event { color: var(--accent); }
+role-message .el-trace-type-command { color: var(--accent); }
+role-message .el-trace-type-capabilityrun { color: var(--accent); font-weight: 500; }
+role-message .el-trace-type-plan { color: var(--text-muted); }
+role-message .el-trace-type-tick { color: var(--text-dim); }
+role-message .el-trace-type-tock { color: var(--text-dim); }
+role-message .el-trace-type-message { color: var(--text-dim); }
+role-message .el-trace-title {
+    color: var(--text-body);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+role-message .el-trace-detail {
+    color: var(--text-muted);
+    font-size: 10px;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+}
+
+/* chat-input — the composer input. Emits 'send' event with detail = { text, file } */
+chat-input {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+chat-input .el-pending {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: var(--size-sm);
+    color: var(--text-muted);
+}
+chat-input .el-pending img {
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+}
+chat-input .el-pending .el-pending-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--accent-text);
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+}
+chat-input .el-pending .el-pending-clear {
+    color: var(--text-dim);
+    font-size: var(--size-lg);
+    padding: 0 var(--space-2);
+}
+chat-input .el-pending .el-pending-clear:hover { color: var(--danger); }
+chat-input .el-row {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-2);
+}
+chat-input .el-input {
+    flex: 1;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--size-md);
+    line-height: 1.5;
+    resize: none;
+    min-height: 42px;
+    max-height: 200px;
+    transition: border-color var(--time-quick);
+}
+chat-input .el-input:focus {
+    border-color: var(--border-hover);
+}
+chat-input .el-input::placeholder {
+    color: var(--text-dim);
+}
+chat-input .el-attach,
+chat-input .el-send {
+    height: 42px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--size-md);
+    transition: background var(--time-quick), border-color var(--time-quick), color var(--time-quick), opacity var(--time-quick);
+}
+chat-input .el-attach { width: 42px; display: flex; align-items: center; justify-content: center; }
+chat-input .el-attach:hover { border-color: var(--border-hover); color: var(--text); }
+chat-input .el-send {
+    padding: 0 var(--space-4);
+    background: var(--accent-bg);
+    border-color: transparent;
+    color: var(--accent-text);
+    font-size: var(--size-sm);
+    letter-spacing: 0.04em;
+}
+chat-input .el-send:hover { background: var(--surface-hover); }
+chat-input .el-send:disabled { opacity: 0.35; cursor: not-allowed; }
+chat-input input[type="file"] { display: none; }
+
+/* pending-row — live activity indicator. Two modes:
+   'replying' (default after onSend): full presence with STOP.
+   'active'   (autonomous): lighter, no STOP — she's just alive. */
+pending-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--size-sm);
+    color: var(--text-muted);
+    border-radius: var(--radius-md);
+    transition: opacity var(--time-quick);
+}
+pending-row[mode="replying"] {
+    background: var(--surface);
+    border: 1px dashed var(--border);
+    padding: var(--space-3) var(--space-4);
+}
+pending-row[mode="active"] {
+    background: transparent;
+    border: none;
+    opacity: 0.7;
+}
+pending-row[mode="active"] .el-elapsed { display: none; }
+pending-row breath-dot { animation-duration: 1.6s; }
+pending-row .el-detail { color: var(--text-muted); flex: 1; font-family: var(--font-mono); font-size: var(--size-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+pending-row .el-elapsed { font-family: var(--font-mono); font-size: var(--size-xs); color: var(--text-dim); }
+pending-row .el-stop {
+    padding: var(--space-1) var(--space-3);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: all var(--time-quick);
+}
+pending-row .el-stop:hover { border-color: var(--danger); color: var(--danger); }
+
+/* menu-link — a sidebar nav item. Attributes: active */
+menu-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: var(--size-base);
+    cursor: pointer;
+    transition: background var(--time-quick), color var(--time-quick);
+}
+menu-link:hover {
+    background: var(--surface-hover);
+    color: var(--text-body);
+}
+menu-link[active] {
+    background: var(--surface-hover);
+    color: var(--text);
+    font-weight: 500;
+}
+menu-link .el-count {
+    margin-left: auto;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+}
+
+/* power-button — the hard "Off" control */
+power-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all var(--time-quick);
+}
+power-button:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+power-button .el-ring {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+}
+
+/* theme-picker — light / dark / system toggle */
+theme-picker {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+theme-picker button {
+    padding: 4px 10px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-radius: var(--radius-sm);
+    transition: all var(--time-quick);
+}
+theme-picker button:hover { color: var(--text); }
+theme-picker button[active] {
+    background: var(--bg-elev);
+    color: var(--text);
+}
+
+/* field-input / field-select — labelled form fields with help + error */
+field-input,
+field-select {
+    display: block;
+    margin-bottom: var(--space-4);
+}
+field-input label,
+field-select label {
+    display: block;
+}
+field-input .el-label,
+field-select .el-label {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: var(--space-2);
+}
+field-input .el-req,
+field-select .el-req {
+    color: var(--accent-text);
+    font-size: 9px;
+    letter-spacing: 0.10em;
+}
+field-input .el-opt,
+field-select .el-opt {
+    color: var(--text-dim);
+    font-size: 9px;
+    letter-spacing: 0.10em;
+}
+field-input .el-err,
+field-select .el-err {
+    margin-left: auto;
+    color: var(--danger);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: none;
+}
+field-input .el-input,
+field-select .el-select {
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--size-md);
+    transition: border-color var(--time-quick);
+}
+/* Force option list to themed colours; browsers ignore most option styling,
+   but background+color do work and rescue Linux/KDE dark mode. */
+field-select .el-select option {
+    background: var(--bg-elev);
+    color: var(--text);
+}
+field-input .el-input:focus,
+field-select .el-select:focus {
+    border-color: var(--border-hover);
+    outline: none;
+}
+field-input[error] .el-input,
+field-select[error] .el-select {
+    border-color: var(--danger);
+}
+field-input .el-help,
+field-select .el-help {
+    display: block;
+    margin-top: var(--space-2);
+    color: var(--text-dim);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: var(--size-sm);
+    text-transform: none;
+    letter-spacing: 0;
+    line-height: 1.4;
+}
+

@@ -30,14 +30,6 @@ async def execute(tool_calls: list[dict]) -> str:
     return "\n".join(results)
 
 
-def make_rows_traceable(rows: list[str], prefix: str) -> list[dict]:
-    """Tag each row with a trackable ID using its content hash."""
-    return [
-        {"id": f"{prefix}-{crypto.generate_unique_id(row)}", "content": row}
-        for row in rows
-    ]
-
-
 async def is_installed(program: str) -> bool:
     """Check if a program is installed on the current OS."""
     logger.info("Checking if program is installed", {"program": program})

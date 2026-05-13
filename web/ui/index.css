@@ -1,122 +1,162 @@
+/* Design tokens. Semantic names. Light + dark via [data-theme] on <html>.
+   data-theme="system" follows prefers-color-scheme. */
+
 :root {
-    /* Type — the persona's voice (serif italic) speaks differently from the system (mono) */
-    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
     --font-serif: 'Spectral', 'Iowan Old Style', Georgia, serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-    --text-xs: 11px;
-    --text-sm: 12px;
-    --text-base: 14px;
-    --text-md: 15px;
-    --text-lg: 19px;
-    --text-xl: 24px;
-    --text-2xl: 32px;
-    --text-3xl: 48px;
+    --size-xs: 11px;
+    --size-sm: 12px;
+    --size-base: 14px;
+    --size-md: 15px;
+    --size-lg: 18px;
+    --size-xl: 24px;
+    --size-2xl: 32px;
 
-    /* Ground */
-    --bg: #0b0b14;
-    --bg-deep: #07070d;
-    --bg-deeper: #050509;
-
-    /* Ink */
-    --text-primary: rgba(255, 255, 255, 0.96);
-    --text-body: rgba(255, 255, 255, 0.85);
-    --text-secondary: rgba(255, 255, 255, 0.70);
-    --text-muted: rgba(255, 255, 255, 0.55);
-    --text-dim: rgba(255, 255, 255, 0.32);
-    --text-faint: rgba(255, 255, 255, 0.18);
-
-    /* Surface */
-    --surface: rgba(255, 255, 255, 0.04);
-    --surface-recessed: rgba(0, 0, 0, 0.25);
-    --surface-hover: rgba(255, 255, 255, 0.06);
-    --surface-active: rgba(255, 255, 255, 0.08);
-    --surface-overlay: rgba(15, 15, 24, 0.95);
-
-    /* Border */
-    --border-subtle: rgba(255, 255, 255, 0.10);
-    --border-default: rgba(255, 255, 255, 0.18);
-    --border-hover: rgba(255, 255, 255, 0.28);
-
-    /* Persona warmth — the gold consciousness node */
-    --warm: #F0C868;
-    --warm-bg: rgba(240, 200, 104, 0.10);
-    --warm-border: rgba(240, 200, 104, 0.40);
-    --warm-text: rgba(255, 215, 160, 0.95);
-
-    /* System / consultant — the cool blue loop */
-    --cool: #6BA0CC;
-    --cool-bg: rgba(107, 160, 204, 0.10);
-    --cool-border: rgba(107, 160, 204, 0.40);
-    --cool-text: rgba(170, 200, 230, 0.95);
-
-    /* Accent (primary action) */
-    --accent: #6BA0CC;
-    --accent-bg: rgba(107, 160, 204, 0.12);
-    --accent-border: rgba(107, 160, 204, 0.40);
-    --accent-text: rgba(170, 200, 230, 0.95);
-
-    /* Vital state */
-    --vital: rgba(80, 220, 140, 1);
-    --vital-bg: rgba(80, 220, 140, 0.12);
-    --vital-border: rgba(80, 220, 140, 0.35);
-    --vital-text: rgba(120, 230, 160, 0.95);
-
-    /* Danger */
-    --danger: rgba(255, 110, 110, 1);
-    --danger-bg: rgba(255, 110, 110, 0.12);
-    --danger-border: rgba(255, 110, 110, 0.35);
-    --danger-text: rgba(255, 160, 150, 0.95);
-
-    /* Rhythm */
-    --space-xs: 4px;
-    --space-sm: 8px;
-    --space-md: 12px;
-    --space-lg: 16px;
-    --space-xl: 24px;
-    --space-2xl: 32px;
-    --space-3xl: 48px;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
 
     --radius-sm: 4px;
     --radius-md: 8px;
     --radius-lg: 12px;
     --radius-full: 9999px;
 
-    /* Time */
-    --easing: cubic-bezier(0.22, 1, 0.36, 1);
     --time-quick: 150ms;
     --time-medium: 350ms;
     --time-slow: 1200ms;
+    --easing: cubic-bezier(0.22, 1, 0.36, 1);
+}
 
-    /* Phase tints — applied as ground overlays at the world level */
-    --phase-morning: radial-gradient(ellipse 70% 80% at 50% 100%, rgba(240,200,130,0.12) 0%, rgba(180,120,80,0.05) 35%, rgba(7,7,13,1) 80%);
-    --phase-day: radial-gradient(ellipse 80% 90% at 50% 110%, rgba(110,140,200,0.07) 0%, rgba(40,50,80,0.03) 40%, rgba(7,7,13,1) 80%);
-    --phase-night: radial-gradient(ellipse 80% 90% at 50% 110%, rgba(110,90,200,0.14) 0%, rgba(40,30,80,0.06) 40%, rgba(5,4,10,1) 80%);
+/* Tell the browser which color scheme each theme uses so native form
+   controls (select option lists, date pickers, scrollbars) render correctly. */
+[data-theme="light"]  { color-scheme: light; }
+[data-theme="dark"]   { color-scheme: dark; }
+[data-theme="system"] { color-scheme: light dark; }
+
+/* Light theme (default for data-theme=light or system+light preference) */
+:root,
+[data-theme="light"] {
+    --bg: #f6f4ef;
+    --bg-elev: #ffffff;
+    --bg-recessed: #efece5;
+    --surface: rgba(0, 0, 0, 0.03);
+    --surface-hover: rgba(0, 0, 0, 0.05);
+
+    --text: #1a1a1a;
+    --text-body: rgba(26, 26, 26, 0.85);
+    --text-muted: rgba(26, 26, 26, 0.55);
+    --text-dim: rgba(26, 26, 26, 0.35);
+
+    --border: rgba(0, 0, 0, 0.10);
+    --border-hover: rgba(0, 0, 0, 0.22);
+
+    --accent: #c45a1e;
+    --accent-bg: rgba(196, 90, 30, 0.10);
+    --accent-text: #c45a1e;
+
+    --warn: #b8860b;
+    --danger: #c0392b;
+
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] {
+    --bg: #0b0b14;
+    --bg-elev: #14141d;
+    --bg-recessed: #07070d;
+    --surface: rgba(255, 255, 255, 0.04);
+    --surface-hover: rgba(255, 255, 255, 0.07);
+
+    --text: rgba(255, 255, 255, 0.96);
+    --text-body: rgba(255, 255, 255, 0.85);
+    --text-muted: rgba(255, 255, 255, 0.55);
+    --text-dim: rgba(255, 255, 255, 0.32);
+
+    --border: rgba(255, 255, 255, 0.10);
+    --border-hover: rgba(255, 255, 255, 0.22);
+
+    --accent: #f0c868;
+    --accent-bg: rgba(240, 200, 104, 0.12);
+    --accent-text: rgba(255, 215, 160, 0.95);
+
+    --warn: #f0c868;
+    --danger: #ff6e6e;
+
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.30), 0 8px 24px rgba(0, 0, 0, 0.20);
+}
+
+@media (prefers-color-scheme: dark) {
+    [data-theme="system"] {
+        --bg: #0b0b14;
+        --bg-elev: #14141d;
+        --bg-recessed: #07070d;
+        --surface: rgba(255, 255, 255, 0.04);
+        --surface-hover: rgba(255, 255, 255, 0.07);
+
+        --text: rgba(255, 255, 255, 0.96);
+        --text-body: rgba(255, 255, 255, 0.85);
+        --text-muted: rgba(255, 255, 255, 0.55);
+        --text-dim: rgba(255, 255, 255, 0.32);
+
+        --border: rgba(255, 255, 255, 0.10);
+        --border-hover: rgba(255, 255, 255, 0.22);
+
+        --accent: #f0c868;
+        --accent-bg: rgba(240, 200, 104, 0.12);
+        --accent-text: rgba(255, 215, 160, 0.95);
+
+        --warn: #f0c868;
+        --danger: #ff6e6e;
+
+        --shadow: 0 2px 8px rgba(0, 0, 0, 0.30), 0 8px 24px rgba(0, 0, 0, 0.20);
+    }
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
 
 html, body {
-    background: var(--bg-deeper);
+    background: var(--bg);
     color: var(--text-body);
-    font-family: var(--font-mono);
-    font-size: var(--text-base);
+    font-family: var(--font-sans);
+    font-size: var(--size-base);
     line-height: 1.55;
     width: 100vw;
     height: 100vh;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
+    transition: background var(--time-medium) var(--easing), color var(--time-medium) var(--easing);
 }
 
 * {
     scrollbar-width: thin;
-    scrollbar-color: var(--border-default) transparent;
+    scrollbar-color: var(--border-hover) transparent;
 }
 *::-webkit-scrollbar { width: 6px; height: 6px; }
-*::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+*::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
 *::-webkit-scrollbar-track { background: transparent; }
 
-button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
-input, textarea { font: inherit; color: inherit; background: none; border: none; outline: none; }
+button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
 
-#app { width: 100vw; height: 100vh; position: relative; }
+input, textarea {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    outline: none;
+}
+
+#app { width: 100vw; height: 100vh; position: relative; display: flex; }

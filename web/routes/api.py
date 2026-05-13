@@ -17,7 +17,7 @@ from application.business import environment, persona as persona_spec
 from application.core import paths
 import manager
 from web import health as health_view
-from web.requests import PersonaCreateRequest, HearRequest, PersonaControlRequest, PairRequest
+from web.requests import PersonaCreateRequest, HearRequest, PairRequest
 
 
 router = APIRouter(prefix="/api")
@@ -314,17 +314,6 @@ async def update_persona(persona_id: str, request: dict):
     return {"status": persona.status, "running": manager.find(persona_id) is not None}
 
 
-@router.get("/persona/{persona_id}/oversee")
-async def oversee_persona(persona_id: str):
-    find = await persona_spec.find(persona_id)
-    if not find.success or not find.data:
-        raise HTTPException(status_code=404, detail=find.message)
-    outcome = await persona_spec.oversee(find.data.persona)
-    if not outcome.success or not outcome.data:
-        raise HTTPException(status_code=400, detail=outcome.message)
-    return outcome.data
-
-
 @router.get("/persona/{persona_id}/conversation")
 async def get_conversation(persona_id: str):
     find = await persona_spec.find(persona_id)
@@ -336,15 +325,32 @@ async def get_conversation(persona_id: str):
     return outcome.data
 
 
-@router.post("/persona/{persona_id}/control")
-async def control_persona(persona_id: str, request: PersonaControlRequest):
+@router.get("/persona/{persona_id}/knowledge")
+async def get_knowledge(persona_id: str):
     find = await persona_spec.find(persona_id)
     if not find.success or not find.data:
         raise HTTPException(status_code=404, detail=find.message)
-    outcome = await persona_spec.control(find.data.persona, request.entry_ids)
+    outcome = await persona_spec.knowledge(find.data.persona)
     if not outcome.success or not outcome.data:
         raise HTTPException(status_code=400, detail=outcome.message)
     return outcome.data
+
+
+@router.get("/persona/{persona_id}/calendar")
+async def get_calendar(persona_id: str, start: str, end: str):
+    from datetime import datetime as _dt
+    find = await persona_spec.find(persona_id)
+    if not find.success or not find.data:
+        raise HTTPException(status_code=404, detail=find.message)
+    try:
+        start_dt = _dt.fromisoformat(start)
+        end_dt = _dt.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start and end must be ISO dates")
+    outcome = await persona_spec.calendar(find.data.persona, start_dt, end_dt)
+    if not outcome.success or not outcome.data:
+        raise HTTPException(status_code=400, detail=outcome.message)
+    return {"start": start, "end": end, **outcome.data.__dict__}
 
 
 @router.get("/persona/{persona_id}/media/{filename}")
