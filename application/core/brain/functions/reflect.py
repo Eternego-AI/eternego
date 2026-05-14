@@ -32,7 +32,6 @@ Trigger for the night/idle work:
 """
 
 import json
-import uuid
 
 from application.core import models, paths
 from application.core.agents import Living
@@ -62,39 +61,16 @@ CONSOLIDATING = Action(
 
 EXTRACTING = Action(
     name="extracting",
-    description="The procedural-memory updates from today's lived experience — refine, new, or delete maps for kinds of moments.",
+    description="Refinements to existing instructions based on today's lived experience. Each update rewrites the instruction for one existing intention.",
     fields=[
         Action(
             name="updates",
             type="array",
             required=True,
             items=Action(
-                one_of=True,
                 fields=[
-                    Action(
-                        name="refine",
-                        type="object",
-                        description="rewrite an existing custom map with what you learned (built-ins are immutable)",
-                        fields=[
-                            Action(name="intention", type="string", required=True),
-                            Action(name="path", type="string", required=True),
-                        ],
-                    ),
-                    Action(
-                        name="new",
-                        type="object",
-                        description="write a new map for a kind of work you did",
-                        fields=[
-                            Action(name="intention", type="string", required=True),
-                            Action(name="path", type="string", required=True),
-                        ],
-                    ),
-                    Action(
-                        name="delete",
-                        type="object",
-                        description="delete a custom map that's outdated or redundant",
-                        fields=[Action(name="intention", type="string", required=True)],
-                    ),
+                    Action(name="intention", type="string", required=True),
+                    Action(name="instruction", type="string", required=True),
                 ],
             ),
         ),
@@ -233,49 +209,52 @@ async def reflect(living: Living) -> list:
             raise ReflectInterrupted()
 
     # Procedural memory consolidation: ask the persona to look at the
-    # instructions she used today (visible in conversation as load_instruction
-    # tool exchanges) and decide what to refine, what to add new, what to
-    # delete. Prompt-driven — no tracking sets, no setter hooks. The persona
-    # reads her own conversation as input; the catalog she has is already in
-    # her identity prompt via character.meanings(), no need to dupe it here.
+    # instructions she used today and refine the bodies of the ones whose
+    # use revealed something worth keeping. Reflection does not create new
+    # meanings (creation lives in learn, deliberately, through teacher or
+    # her own thinking) and does not delete them (deletion lives in
+    # troubleshooting, where the user is in the loop). Refine only.
 
     question = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "# ▶ YOUR TASK: Build maps for future-you\n"
+        "# ▶ YOUR TASK: Refine the instructions you used today\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "This is reflection, not action. No tools run from your response — "
         "only the JSON described below has effect. Walk through what already "
         "happened.\n\n"
         "Your active memory will not survive forever. What survives are your "
-        "instructions: the maps you write now, that future-you reads and follows.\n\n"
+        "instructions: the ones you read every time the same kind of moment "
+        "comes round. Tonight you refine those instructions based on how "
+        "today went.\n\n"
         "The goal is concrete. Future-you should fail less, hesitate less, and "
-        "move faster than current-you. Every error you hit, every workflow you "
-        "figured out, every detail you discovered — these are the things to "
-        "write down. Less failure, less effort, more automation.\n\n"
+        "move faster than current-you on the same kinds of work. Every error "
+        "you hit, every workflow you figured out, every detail you discovered "
+        "— these belong in the instructions you already have for those moments.\n\n"
         "## What to look for\n\n"
-        "Walk through the whole conversation, not just any one stage. For each "
-        "thing you actually did, ask:\n\n"
-        "- What did the work require?\n"
-        "- What failed and why?\n"
-        "- What worked the second time after the first failed?\n"
+        "Walk through the whole conversation. For each instruction you loaded "
+        "today (look for your `load_instruction` calls and the TOOL_RESULTs "
+        "that followed), ask:\n\n"
+        "- What did the work require that the instruction didn't say?\n"
+        "- What failed because the instruction was wrong or incomplete?\n"
+        "- What worked on a second try that the instruction could capture for next time?\n"
         "- What would future-you need to know to do this without anyone "
         "walking her through it again?\n\n"
         "Bias toward operational specifics. Concrete details that future-you "
         "can follow beat themes she has to interpret.\n\n"
         "## What to return\n\n"
-        "Return a JSON object with an `updates` list. Each item is exactly one of:\n\n"
-        "- `{\"refine\": {\"intention\": \"<existing intention>\", \"path\": \"<full new body>\"}}` — "
-        "rewrite an existing custom map with what you learned. The path "
-        "REPLACES the existing one. Built-in maps are immutable.\n"
-        "- `{\"new\": {\"intention\": \"<short natural-English description, sentence case>\", \"path\": \"<full body>\"}}` — "
-        "write a new map for a kind of work you did. The intention names the "
-        "kind of moment in plain readable English (like the built-in entries "
-        "above), not snake_case or an identifier. Do not filter for "
-        "\"will this recur\" — write it down regardless.\n"
-        "- `{\"delete\": {\"intention\": \"<existing intention>\"}}` — delete a custom map "
-        "that's outdated or redundant with another. Built-ins cannot be deleted.\n\n"
-        "Return `{\"updates\": []}` only if there's no operational lesson to "
-        "keep. Friction contains lessons; smoothness does not."
+        "Return a JSON object with an `updates` list. Each update rewrites the "
+        "instruction for one existing intention:\n\n"
+        "- `{\"intention\": \"<existing intention>\", \"instruction\": \"<full new instruction>\"}` — "
+        "the `instruction` REPLACES the existing one in full. The `intention` "
+        "must match a custom instruction you already have; built-in "
+        "instructions are immutable.\n\n"
+        "Reflection does not create or delete instructions. If you encountered "
+        "a kind of moment you don't have an instruction for, do nothing here — "
+        "next time you meet that moment you will recognise it and learn it "
+        "then. If an instruction is broken beyond refinement, leave it; "
+        "deletion belongs to troubleshooting, with the person in the loop.\n\n"
+        "Return `{\"updates\": []}` only if there's no operational lesson "
+        "worth carrying back into the instructions you used today."
     )
 
     try:
@@ -298,65 +277,25 @@ async def reflect(living: Living) -> list:
         catalog = paths.read_json(paths.learned(persona.id)) or {}
         if not isinstance(catalog, dict):
             catalog = {}
-        catalog_dirty = False
 
+        # Each item is a flat {intention, instruction} update. Reflection only
+        # refines existing instructions; creation lives in learn, deletion in
+        # troubleshooting. Items targeting unknown intentions are ignored
+        # (catalog keeps only what the persona already had).
         for item in updates:
             if not isinstance(item, dict):
                 continue
-            refine = item.get("refine")
-            new = item.get("new")
-            delete = item.get("delete")
-            if isinstance(refine, dict):
-                target_intention = str(refine.get("intention", "")).strip()
-                body = str(refine.get("path", "")).strip()
-                if not target_intention or not body:
-                    continue
-                file_id = catalog.get(target_intention)
-                if not file_id:
-                    logger.debug("brain.reflect refine no match", {"persona": persona, "intention": target_intention})
-                    continue
-                paths.save_as_string(paths.meanings(persona.id) / f"{file_id}.md", body + "\n")
-                memory.learn(file_id, meanings.Meaning(file_id, target_intention, body))
-                logger.debug("brain.reflect refined instruction", {"persona": persona, "file_id": file_id, "intention": target_intention})
-            elif isinstance(new, dict):
-                intention = str(new.get("intention", "")).strip()
-                body = str(new.get("path", "")).strip()
-                if not intention or not body:
-                    continue
-                existing = catalog.get(intention)
-                if existing:
-                    # Intention already exists — treat as refine, update the
-                    # existing file rather than orphaning it under a fresh UUID.
-                    paths.save_as_string(paths.meanings(persona.id) / f"{existing}.md", body + "\n")
-                    memory.learn(existing, meanings.Meaning(existing, intention, body))
-                    logger.debug("brain.reflect updated existing instruction from new", {"persona": persona, "file_id": existing, "intention": intention})
-                    continue
-                # Generate an opaque UUID for the meaning file. Persona-
-                # authored procedures don't have a separate teacher-lesson
-                # form, so we write only to meanings/ (not lessons/).
-                file_id = str(uuid.uuid4())
-                paths.save_as_string(paths.meanings(persona.id) / f"{file_id}.md", body + "\n")
-                memory.learn(file_id, meanings.Meaning(file_id, intention, body))
-                catalog[intention] = file_id
-                catalog_dirty = True
-                logger.debug("brain.reflect created instruction", {"persona": persona, "file_id": file_id, "intention": intention})
-            elif isinstance(delete, dict):
-                target_intention = str(delete.get("intention", "")).strip()
-                if not target_intention:
-                    continue
-                file_id = catalog.get(target_intention)
-                if not file_id:
-                    continue
-                meaning_file = paths.meanings(persona.id) / f"{file_id}.md"
-                if meaning_file.exists():
-                    meaning_file.unlink()
-                memory.unlearn(file_id)
-                catalog = {k: v for k, v in catalog.items() if v != file_id}
-                catalog_dirty = True
-                logger.debug("brain.reflect deleted instruction", {"persona": persona, "file_id": file_id, "intention": target_intention})
-
-        if catalog_dirty:
-            paths.save_as_json(persona.id, paths.learned(persona.id), catalog)
+            target_intention = str(item.get("intention", "")).strip()
+            body = str(item.get("instruction", "")).strip()
+            if not target_intention or not body:
+                continue
+            file_id = catalog.get(target_intention)
+            if not file_id:
+                logger.debug("brain.reflect update no match", {"persona": persona, "intention": target_intention})
+                continue
+            paths.save_as_string(paths.meanings(persona.id) / f"{file_id}.md", body + "\n")
+            memory.learn(file_id, meanings.Meaning(file_id, target_intention, body))
+            logger.debug("brain.reflect refined instruction", {"persona": persona, "file_id": file_id, "intention": target_intention})
 
     await consolidate(living)
 
