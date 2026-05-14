@@ -4,7 +4,7 @@
    instruction → one Instructions tab).
 
    setProps({ persona, personas, messages, tab, diagnose, knowledge, calendar }).
-   Emits: send, stop, poweroff, restart, delete, refresh-diagnose,
+   Emits: send, stop, poweroff, restart, sleep, delete, refresh-diagnose,
           select (tab), switch (persona), add (open onboarding),
           calendar-navigate, update-status, update-model, clear-model, pair-channel. */
 
@@ -156,6 +156,7 @@ class PersonaPage extends HTMLElement {
             widget.addEventListener('poweroff', () => this.dispatchEvent(new CustomEvent('poweroff')));
             widget.addEventListener('restart',  () => this.dispatchEvent(new CustomEvent('restart')));
             widget.addEventListener('delete',   () => this.dispatchEvent(new CustomEvent('delete')));
+            widget.addEventListener('sleep',    () => this.dispatchEvent(new CustomEvent('sleep')));
             widget.addEventListener('update-status', (e) => this.dispatchEvent(new CustomEvent('update-status', { detail: e.detail })));
             widget.addEventListener('update-model',  (e) => this.dispatchEvent(new CustomEvent('update-model',  { detail: e.detail })));
             widget.addEventListener('clear-model',   (e) => this.dispatchEvent(new CustomEvent('clear-model',   { detail: e.detail })));
