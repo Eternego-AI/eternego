@@ -8,6 +8,8 @@ Pure observation: no input, no side effect on the screen. Use when the
 person asks the persona to look at what's on screen.
 """
 
+from PIL import Image
+
 from application.core import paths
 from application.core.abilities import ability
 from application.core.data import Media
@@ -26,4 +28,14 @@ async def take_screenshot(persona) -> Media:
     filesystem.ensure_dir(directory)
     target = str(directory / f"{datetimes.stamp(datetimes.now())}.png")
     await OS.screenshot(path=target)
+
+    # Cap the longest dimension at 1280 so the image stays under Anthropic's
+    # many-image limit (2000px each when 3+ images are in a request).
+    # Resize in place; native-resolution screenshots from HiDPI/4K displays
+    # otherwise blow up the conversation and trigger 400s on later beats.
+    with Image.open(target) as img:
+        if max(img.width, img.height) > 1280:
+            img.thumbnail((1280, 1280), Image.LANCZOS)
+            img.save(target)
+
     return Media(source=target, caption="screenshot")
