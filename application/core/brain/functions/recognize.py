@@ -43,8 +43,6 @@ def _recognizing(persona) -> Action:
     tool and persona-available ability, each with its typed params).
     Built per-call because the ability catalog is persona-specific."""
     variants: list[Action] = [
-        Action(name="say", type="string", description="speak to the person on the current channel"),
-        Action(name="done", type="null", description="rest; nothing more to do this beat"),
         Action(
             name="tools.load_instruction",
             type="object",
@@ -54,6 +52,8 @@ def _recognizing(persona) -> Action:
     ]
     variants.extend(tools.actions())
     variants.extend(abilities.actions(persona))
+    variants.append(Action(name="say", type="string", description="speak this round and ONLY speak; if you want to act AND speak, use tools.report paired with the action instead"))
+    variants.append(Action(name="done", type="null", description="rest; nothing more to do this beat"))
     return Action(
         name="recognizing",
         description="What this moment calls for. A list of actions to execute in order.",
@@ -110,8 +110,6 @@ async def recognize(living: Living) -> list:
         "single-key shapes below. If you have nothing to do, return "
         "`{\"decision\": []}`. The cycle re-runs when an action touches the world, "
         "so you'll re-perceive what came back on the next beat.\n\n"
-        "Voice:\n"
-        "- `{\"say\": \"<text>\"}` — speak to the person on the current channel.\n\n"
         "Tools:\n"
         "- `{\"tools.<name>\": { ...args }}` — run one of your tools. Most touch the "
         "world (read a file, run a command, post on X); when the action's result "
@@ -121,13 +119,20 @@ async def recognize(living: Living) -> list:
         "`# Instructions` catalog above (exact match), or invent a new one for a "
         "kind you've never handled before. On the same beat, the procedure body "
         "comes back as a TOOL_RESULT and you act on it — no world-touch, no restart.\n\n"
+        "Voice — only when you have nothing to do but speak:\n"
+        "- `{\"say\": \"<text>\"}` — speak this round and ONLY speak. Use this only "
+        "if there is no action to take and nothing to load. If you want to say "
+        "something WHILE acting (or alongside another action), use `tools.report` "
+        "paired with the action in the same decision list — never `say` for "
+        "narrating intent. Saying instead of acting is the most common error here.\n\n"
         "Done:\n"
         "- `{\"done\": null}` — explicit rest. Equivalent to an empty decision list.\n\n"
-        "When you `say` to report a result, ground the claim in evidence — name the "
-        "artifact that proves it (a commit hash, a PR url, a tweet id, a file path "
-        "you wrote, an output you observed in a TOOL_RESULT). Without an artifact, "
-        "describe only the literal action you took, not the outcome you intended. "
-        "If a step didn't produce the artifact you expected, say so plainly."
+        "When you `say` or `tools.report` to surface a result, ground the claim in "
+        "evidence — name the artifact that proves it (a commit hash, a PR url, a "
+        "tweet id, a file path you wrote, an output you observed in a TOOL_RESULT). "
+        "Without an artifact, describe only the literal action you took, not the "
+        "outcome you intended. If a step didn't produce the artifact you expected, "
+        "say so plainly."
     )
 
     try:

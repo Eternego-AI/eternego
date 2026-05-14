@@ -34,9 +34,12 @@ def _deciding(persona) -> Action:
     structure as recognize but with decide's extra cognitive variants
     (notify, clear_memory, stop, remove_meaning) in the items oneOf."""
     variants: list[Action] = [
-        Action(name="say", type="string", description="speak to the person on the current channel"),
-        Action(name="notify", type="string", description="broadcast to every connected channel"),
-        Action(name="done", type="null", description="the procedure is complete"),
+        Action(
+            name="tools.load_instruction",
+            type="object",
+            description="ask for sub-guidance on another kind of moment",
+            fields=[Action(name="intention", type="string", required=True)],
+        ),
         Action(name="clear_memory", type="null", description="wipe out your current running memory — for when memory crashes"),
         Action(name="stop", type="null", description="stop your service until the person restarts you — for unexpected malfunctioning"),
         Action(
@@ -45,15 +48,12 @@ def _deciding(persona) -> Action:
             description="delete a custom instruction by its stem",
             fields=[Action(name="name", type="string", required=True)],
         ),
-        Action(
-            name="tools.load_instruction",
-            type="object",
-            description="ask for sub-guidance on another kind of moment",
-            fields=[Action(name="intention", type="string", required=True)],
-        ),
     ]
     variants.extend(tools.actions())
     variants.extend(abilities.actions(persona))
+    variants.append(Action(name="notify", type="string", description="broadcast to every connected channel"))
+    variants.append(Action(name="say", type="string", description="speak this round and ONLY speak; if you want to act AND speak, use tools.report paired with the action instead"))
+    variants.append(Action(name="done", type="null", description="the procedure is complete"))
     return Action(
         name="deciding",
         description="The next action(s) of the procedure you are following. A list of actions to execute in order.",
@@ -101,22 +101,27 @@ async def decide(living: Living) -> list:
         "execute in order for this beat. Each action in the list is one of the "
         "single-key shapes below. If the procedure is complete with nothing to do "
         "this beat, return `{\"decision\": []}` or include `{\"done\": null}`.\n\n"
-        "Voice:\n"
-        "- `{\"say\": \"<text>\"}` — speak to the person on the current channel.\n"
-        "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
-        f"{self_care_block}\n\n"
         "Tools:\n"
         "- `{\"tools.<name>\": { ...args }}` — run a tool from your catalog.\n"
         "- `{\"tools.load_instruction\": {\"intention\": \"<name>\"}}` — ask for "
         "sub-guidance if a step references another kind of moment you don't yet "
         "have a procedure for.\n\n"
+        f"{self_care_block}\n\n"
+        "Voice — only when you have nothing to do but speak:\n"
+        "- `{\"say\": \"<text>\"}` — speak this round and ONLY speak. Use this only "
+        "if there is no action left to take this beat. If you want to say something "
+        "WHILE acting (or alongside another action), use `tools.report` paired with "
+        "the action in the same decision list — never `say` for narrating intent. "
+        "Saying instead of acting is the most common error here.\n"
+        "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
         "Done:\n"
         "- `{\"done\": null}` — the procedure is complete. Equivalent to an empty "
         "decision list.\n\n"
-        "When you `say` to report a result, ground the claim in evidence — name "
-        "the artifact that proves it (a commit hash, a PR url, a tweet id, a file "
-        "path, an output you observed in a TOOL_RESULT). Without an artifact, "
-        "describe only the literal action you took, not the outcome you intended."
+        "When you `say` or `tools.report` to surface a result, ground the claim in "
+        "evidence — name the artifact that proves it (a commit hash, a PR url, a "
+        "tweet id, a file path, an output you observed in a TOOL_RESULT). Without "
+        "an artifact, describe only the literal action you took, not the outcome "
+        "you intended."
     )
 
     try:

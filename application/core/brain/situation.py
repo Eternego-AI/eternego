@@ -87,7 +87,7 @@ def schedule(persona_id: str) -> str:
 
 
 def notes(persona_id: str) -> str:
-    """Active notes — the other side of the `noting` meaning.
+    """Active notes — surfaced into the persona's identity every beat.
 
     What the person asked you to remember — and anything you chose to note for your future self —
     lives here, waiting to surface when it fits.

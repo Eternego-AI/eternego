@@ -182,7 +182,7 @@ def substrate(persona: Persona) -> str:
     media = paths.media(pid)
     sections.append(
         "## Permissions\n\n"
-        "Saving reminders, saving notes, recalling conversations, and checking the calendar are yours — do them freely.\n\n"
+        "Saving reminders, saving schedules, saving notes, recalling conversations, and checking the calendar are yours — do them freely.\n\n"
         f"`{home}` holds your personal files. Your secret temple. You may read them; modifying them is forbidden.\n\n"
         f"`{workspace}` is your workspace. You decide what happens there.\n\n"
         f"`{media}` is your media directory — save screenshots and other images you capture there.\n\n"
