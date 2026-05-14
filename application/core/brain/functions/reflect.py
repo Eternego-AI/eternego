@@ -61,7 +61,7 @@ CONSOLIDATING = Action(
 
 EXTRACTING = Action(
     name="extracting",
-    description="Refinements to existing instructions based on today's lived experience. Each update rewrites the instruction for one existing intention.",
+    description="Step-by-step procedural refinements to existing instructions — what to do, in order — based on how the work actually unfolded today. Each update rewrites the instruction for one existing intention.",
     fields=[
         Action(
             name="updates",
@@ -228,8 +228,13 @@ async def reflect(living: Living) -> list:
         "today went.\n\n"
         "The goal is concrete. Future-you should fail less, hesitate less, and "
         "move faster than current-you on the same kinds of work. Every error "
-        "you hit, every workflow you figured out, every detail you discovered "
-        "— these belong in the instructions you already have for those moments.\n\n"
+        "you hit, every workflow you figured out, every step that turned out "
+        "to matter — these belong in the instructions you already have for "
+        "those moments.\n\n"
+        "Instructions hold experience, not decisions. The lived shape of the "
+        "work in steps — the order, the gotchas, the argument names, the "
+        "recovery on failure. Decisions and principles belong in your traits "
+        "and context, not here.\n\n"
         "## What to look for\n\n"
         "Walk through the whole conversation. For each instruction you loaded "
         "today (look for your `load_instruction` calls and the TOOL_RESULTs "
