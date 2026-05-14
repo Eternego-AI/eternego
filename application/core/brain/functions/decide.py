@@ -75,7 +75,8 @@ async def decide(living: Living) -> list:
     persona = living.ego.persona
     memory = living.ego.memory
 
-    if memory.comprehension() is None:
+    comprehension = memory.comprehension()
+    if comprehension is None:
         dispatch(Tock("decide", {"persona": persona, "branch": "skipped"}))
         return []
 
@@ -127,21 +128,21 @@ async def decide(living: Living) -> list:
         )
     except ModelError as e:
         logger.warning("brain.decide model returned non-JSON", {"persona": persona, "error": str(e)})
-        dispatch(Tock("decide", {"persona": persona, "branch": "non-json"}))
+        dispatch(Tock("decide", {"persona": persona, "branch": "non-json", "comprehension": comprehension}))
         return []
 
     if result is None:
         # Model returned {} — gave up. Treat as rest.
-        dispatch(Tock("decide", {"persona": persona, "branch": "empty"}))
+        dispatch(Tock("decide", {"persona": persona, "branch": "empty", "comprehension": comprehension}))
         return []
 
     if not isinstance(result, dict):
-        dispatch(Tock("decide", {"persona": persona}))
+        dispatch(Tock("decide", {"persona": persona, "comprehension": comprehension}))
         return []
 
     items = result.get("decision")
     if not isinstance(items, list):
-        dispatch(Tock("decide", {"persona": persona, "branch": "no-decision"}))
+        dispatch(Tock("decide", {"persona": persona, "branch": "no-decision", "comprehension": comprehension}))
         return []
 
     consequences: list = []
@@ -214,5 +215,5 @@ async def decide(living: Living) -> list:
         else:
             logger.warning("brain.decide unknown selector", {"persona": persona, "selector": selector})
 
-    dispatch(Tock("decide", {"persona": persona}))
+    dispatch(Tock("decide", {"persona": persona, "comprehension": comprehension}))
     return consequences
