@@ -102,7 +102,7 @@ async def consolidate(living: Living) -> bool:
 
     question = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "# ▶ YOUR TASK: What do you want to keep?\n"
+        "# ▶ YOUR TASK: What do you want to keep as your memory?\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"{situation.time()}\n\n"
         "Here is the conversation that happened:\n\n"
