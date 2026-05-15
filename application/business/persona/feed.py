@@ -97,7 +97,7 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
             past_living.phase(Phase.NIGHT)
 
             try:
-                await consolidate(past_living.pulse, past_living.memory, past_living.ego)
+                await consolidate(past_living.memory, past_living.ego)
                 past_context = (past_memory.context or "").strip()
                 if past_context:
                     intro = (

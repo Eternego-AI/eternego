@@ -168,24 +168,23 @@ class Living:
         match phase:
             case Phase.MORNING:
                 self.mind = [
-                    ("realize",    lambda: functions.realize(self.pulse, self.memory, self.ego, self.eye, self.consultant)),
+                    ("realize",    lambda: functions.realize(self.memory, self.ego, self.eye, self.consultant)),
                     ("recognize",  lambda: functions.recognize(self.pulse, self.memory, self.ego)),
-                    ("learn",      lambda: functions.learn(self.pulse, self.memory, self.ego, self.teacher)),
-                    ("decide",     lambda: functions.decide(self.pulse, self.memory, self.ego)),
+                    ("learn",      lambda: functions.learn(self.memory, self.ego, self.teacher)),
+                    ("decide",     lambda: functions.decide(self.memory, self.ego)),
                 ]
             case Phase.DAY:
                 self.mind = [
-                    ("realize",    lambda: functions.realize(self.pulse, self.memory, self.ego, self.eye, self.consultant)),
+                    ("realize",    lambda: functions.realize(self.memory, self.ego, self.eye, self.consultant)),
                     ("recognize",  lambda: functions.recognize(self.pulse, self.memory, self.ego)),
-                    ("learn",      lambda: functions.learn(self.pulse, self.memory, self.ego, self.teacher)),
-                    ("decide",     lambda: functions.decide(self.pulse, self.memory, self.ego)),
+                    ("learn",      lambda: functions.learn(self.memory, self.ego, self.teacher)),
+                    ("decide",     lambda: functions.decide(self.memory, self.ego)),
                     ("reflect",    lambda: functions.reflect(self.pulse, self.memory, self.ego)),
-                    ("archive",    lambda: functions.archive(self.pulse, self.memory, self.ego)),
                 ]
             case Phase.NIGHT:
                 self.mind = [
                     ("reflect",    lambda: functions.reflect(self.pulse, self.memory, self.ego)),
-                    ("archive",    lambda: functions.archive(self.pulse, self.memory, self.ego)),
+                    ("archive",    lambda: functions.archive(self.memory, self.ego)),
                 ]
         self.pulse.phase = phase
         self.pulse.signals = []

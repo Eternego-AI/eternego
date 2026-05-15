@@ -42,7 +42,7 @@ async def test_learn_skips_when_no_pending_call():
             living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
             msgs_before = len(living.memory.messages)
-            consequences = asyncio.run(functions.learn(living.pulse, living.memory, living.ego, living.teacher))
+            consequences = asyncio.run(functions.learn(living.memory, living.ego, living.teacher))
             assert consequences == []
             assert len(living.memory.messages) == msgs_before
 
@@ -77,7 +77,7 @@ async def test_learn_skips_when_last_signal_is_result():
             living.memory.impression("talk simply")
 
             msgs_before = len(living.memory.messages)
-            consequences = asyncio.run(functions.learn(living.pulse, living.memory, living.ego, living.teacher))
+            consequences = asyncio.run(functions.learn(living.memory, living.ego, living.teacher))
             assert consequences == []
             assert len(living.memory.messages) == msgs_before
 
@@ -113,7 +113,7 @@ async def test_learn_matches_existing_intention():
             living.memory.learn("posting_to_x", meanings.Meaning("posting_to_x", "Posting To X", "Draft. Ask. Post."))
             living.memory.intention("Posting To X")
 
-            consequences = asyncio.run(functions.learn(living.pulse, living.memory, living.ego, living.teacher))
+            consequences = asyncio.run(functions.learn(living.memory, living.ego, living.teacher))
             assert consequences == []
 
             # Last message is the TOOL_RESULT carrying the meaning's body.
@@ -160,7 +160,7 @@ async def test_learn_consults_teacher_on_no_match():
                 living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.intention("Checking disk space")
 
-                consequences = await functions.learn(living.pulse, living.memory, living.ego, living.teacher)
+                consequences = await functions.learn(living.memory, living.ego, living.teacher)
                 assert consequences == []
 
                 # Teacher → translate produces a saved lesson and meaning.
@@ -229,7 +229,7 @@ async def test_learn_teacher_falls_back_to_thinking_when_no_frontier():
                 living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.intention("Greeting the person")
 
-                consequences = await functions.learn(living.pulse, living.memory, living.ego, living.teacher)
+                consequences = await functions.learn(living.memory, living.ego, living.teacher)
                 assert consequences == []
                 assert paths.learned(persona.id).exists()
 
@@ -288,7 +288,7 @@ async def test_learn_records_failure_impression_when_lesson_missing_fields():
                 living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.intention("doing something")
 
-                consequences = await functions.learn(living.pulse, living.memory, living.ego, living.teacher)
+                consequences = await functions.learn(living.memory, living.ego, living.teacher)
                 assert consequences == []
 
                 # Last message is the failure impression (round-trip closed).
@@ -337,7 +337,7 @@ async def test_learn_records_failure_impression_when_teacher_invalid_json():
                 living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.intention("something")
 
-                consequences = await functions.learn(living.pulse, living.memory, living.ego, living.teacher)
+                consequences = await functions.learn(living.memory, living.ego, living.teacher)
                 assert consequences == []
 
                 last = living.memory.messages[-1]
@@ -383,7 +383,7 @@ async def test_learn_skips_when_intention_is_empty():
             living.memory.remember(Message(content=empty, prompt=Prompt(role="assistant", content=empty)))
 
             msgs_before = len(living.memory.messages)
-            consequences = asyncio.run(functions.learn(living.pulse, living.memory, living.ego, living.teacher))
+            consequences = asyncio.run(functions.learn(living.memory, living.ego, living.teacher))
             assert consequences == []
             assert len(living.memory.messages) == msgs_before, "learn should skip without writing"
             assert living.memory.perception() is None, "empty intention surfaces as None"

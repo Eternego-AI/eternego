@@ -41,7 +41,7 @@ CONSULTING = Action(
 )
 
 
-async def realize(pulse, memory, ego, eye, consultant) -> list:
+async def realize(memory, ego, eye, consultant) -> list:
     """realize OVER living — survey what just landed, take it in."""
     dispatch(Tick("realize", {"persona": ego.persona}))
 

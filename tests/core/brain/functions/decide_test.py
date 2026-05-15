@@ -39,7 +39,7 @@ async def test_decide_no_impression_passes_through():
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
-            consequences = asyncio.run(functions.decide(living.pulse, living.memory, living.ego))
+            consequences = asyncio.run(functions.decide(living.memory, living.ego))
             assert consequences == []
 
     code, error = await on_separate_process_async(isolated)
@@ -80,7 +80,7 @@ async def test_decide_say_dispatches_command():
                         said.append(cmd.details.get("text", ""))
                 observer.subscribe(capture)
 
-                consequences = await functions.decide(living.pulse, living.memory, living.ego)
+                consequences = await functions.decide(living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -124,7 +124,7 @@ async def test_decide_done_returns_empty():
                 living.memory.intention("chatting")
                 living.memory.impression("rest is fine")
 
-                consequences = await functions.decide(living.pulse, living.memory, living.ego)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert consequences == []
 
             ollama.assert_call(
@@ -172,7 +172,7 @@ async def test_decide_notify_remembers_and_dispatches():
                 observer.subscribe(capture)
 
                 msgs_before = len(living.memory.messages)
-                consequences = await functions.decide(living.pulse, living.memory, living.ego)
+                consequences = await functions.decide(living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -221,7 +221,7 @@ async def test_decide_clear_memory_forgets_and_records():
                 living.memory.intention("resetting")
                 living.memory.impression("wipe and start fresh")
 
-                consequences = await functions.decide(living.pulse, living.memory, living.ego)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert consequences == []
                 # forget() then add_tool_result writes 2 messages → 2 messages total.
                 assert len(living.memory.messages) == 2
@@ -271,7 +271,7 @@ async def test_decide_remove_meaning_unlearns_existing():
                 living.memory.intention("pruning")
                 living.memory.impression("drop the stale meaning")
 
-                consequences = await functions.decide(living.pulse, living.memory, living.ego)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert consequences == []
                 meaning_file = paths.meanings(persona.id) / "temp_meaning.md"
                 assert not meaning_file.exists(), "meaning file should be deleted"
@@ -323,7 +323,7 @@ async def test_decide_stop_dispatches_command():
                         stops.append(cmd)
                 observer.subscribe(capture)
 
-                consequences = await functions.decide(living.pulse, living.memory, living.ego)
+                consequences = await functions.decide(living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -368,7 +368,7 @@ async def test_decide_tool_returns_capability():
                 living.memory.intention("listing")
                 living.memory.impression("run ls -la")
 
-                consequences = await functions.decide(living.pulse, living.memory, living.ego)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert len(consequences) == 1
                 assert consequences[0] == {"tools.OS.execute": {"command": "ls"}}
 
@@ -416,7 +416,7 @@ async def test_decide_steps_returns_list_of_capabilities():
                         said.append(cmd.details.get("text", ""))
                 observer.subscribe(capture)
 
-                consequences = await functions.decide(living.pulse, living.memory, living.ego)
+                consequences = await functions.decide(living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -477,7 +477,7 @@ async def test_decide_remove_meaning_clears_learned_entry():
                 living.memory.intention("pruning")
                 living.memory.impression("drop it")
 
-                consequences = await functions.decide(living.pulse, living.memory, living.ego)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert consequences == []
                 assert paths.read_json(paths.learned(persona.id)) == {}
 

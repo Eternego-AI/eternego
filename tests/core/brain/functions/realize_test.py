@@ -34,7 +34,7 @@ async def test_realize_plain_text_sets_user_prompt():
             living.memory.remember(Message(content="hello"))
             messages_before = len(living.memory.messages)
 
-            consequences = asyncio.run(functions.realize(living.pulse, living.memory, living.ego, living.eye, living.consultant))
+            consequences = asyncio.run(functions.realize(living.memory, living.ego, living.eye, living.consultant))
 
             assert consequences == []
             assert len(living.memory.messages) == messages_before
@@ -71,7 +71,7 @@ async def test_realize_skips_already_realized_messages():
             existing = Prompt(role="user", content="already there")
             living.memory.remember(Message(content="hi", prompt=existing))
 
-            consequences = asyncio.run(functions.realize(living.pulse, living.memory, living.ego, living.eye, living.consultant))
+            consequences = asyncio.run(functions.realize(living.memory, living.ego, living.eye, living.consultant))
 
             assert consequences == []
             assert living.memory.messages[-1].prompt is existing
@@ -113,7 +113,7 @@ async def test_realize_image_without_vision_inlines_content_blocks():
             ))
             messages_before = len(living.memory.messages)
 
-            consequences = asyncio.run(functions.realize(living.pulse, living.memory, living.ego, living.eye, living.consultant))
+            consequences = asyncio.run(functions.realize(living.memory, living.ego, living.eye, living.consultant))
 
             assert consequences == []
             assert len(living.memory.messages) == messages_before
@@ -162,7 +162,7 @@ async def test_realize_image_missing_path_records_error_tool_result():
             ))
             messages_before = len(living.memory.messages)
 
-            consequences = asyncio.run(functions.realize(living.pulse, living.memory, living.ego, living.eye, living.consultant))
+            consequences = asyncio.run(functions.realize(living.memory, living.ego, living.eye, living.consultant))
 
             assert consequences == []
             assert len(living.memory.messages) == messages_before + 2
@@ -220,7 +220,7 @@ async def test_realize_image_with_vision_records_call_and_result():
                 ))
                 msgs_before = len(living.memory.messages)
 
-                consequences = await functions.realize(living.pulse, living.memory, living.ego, living.eye, living.consultant)
+                consequences = await functions.realize(living.memory, living.ego, living.eye, living.consultant)
 
                 assert consequences == []
                 assert len(living.memory.messages) == msgs_before + 2
@@ -283,7 +283,7 @@ async def test_realize_question_formulation_failure_uses_default():
                     media=Media(source=str(image_path), caption="caption"),
                 ))
 
-                await functions.realize(living.pulse, living.memory, living.ego, living.eye, living.consultant)
+                await functions.realize(living.memory, living.ego, living.eye, living.consultant)
                 call = living.memory.messages[-2]
                 assert "Describe what you see" in call.content
 

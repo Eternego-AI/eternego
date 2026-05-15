@@ -11,7 +11,6 @@ the context of the conversation.
 """
 
 from application.core import models, paths
-from application.core.brain.pulse import Phase
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Action, Prompt
 from application.core.exceptions import ModelError
@@ -29,16 +28,12 @@ ARCHIVING = Action(
 )
 
 
-async def archive(pulse, memory, ego) -> list:
+async def archive(memory, ego) -> list:
     """archive INTO living — file the residue into deeper storage."""
     dispatch(Tick("archive", {"persona": ego.persona}))
 
     persona = ego.persona
     logger.debug("brain.archive", {"persona": persona, "archive_": memory.archive})
-
-    if pulse.phase != Phase.NIGHT:
-        dispatch(Tock("archive", {"persona": persona}))
-        return []
 
     gallery_file = paths.gallery(persona.id)
     gallery_file.parent.mkdir(parents=True, exist_ok=True)
@@ -112,7 +107,7 @@ async def archive(pulse, memory, ego) -> list:
                 "```"
             )
             try:
-                result = await models.tool(ego.model, ego.identity + memory.context_prompt + pulse.hint() + prompts, question, ARCHIVING)
+                result = await models.tool(ego.model, ego.identity + memory.context_prompt + prompts, question, ARCHIVING)
                 description = str(result.get("description", "")).strip() if isinstance(result, dict) else ""
             except ModelError as e:
                 logger.warning("brain.archive description failed", {"persona": persona, "source": m.media.source, "error": str(e)})

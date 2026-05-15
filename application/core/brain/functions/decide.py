@@ -67,7 +67,7 @@ def _deciding(persona) -> Action:
     )
 
 
-async def decide(pulse, memory, ego) -> list:
+async def decide(memory, ego) -> list:
     """decide FOR living — focus on the just-arrived instruction."""
     dispatch(Tick("decide", {"persona": ego.persona}))
 
@@ -125,7 +125,7 @@ async def decide(pulse, memory, ego) -> list:
     try:
         result = await models.tool(
             ego.model,
-            ego.identity + memory.context_prompt + pulse.hint() + memory.prompts,
+            ego.identity + memory.context_prompt + memory.prompts,
             question,
             _deciding(persona),
         )

@@ -169,7 +169,7 @@ async def consult_teacher_for_instruction(ego, teacher, intention: str) -> tuple
     return (meaning_name, intention, translated)
 
 
-async def learn(pulse, memory, ego, teacher) -> list:
+async def learn(memory, ego, teacher) -> list:
     """learn FROM living — fulfill a pending intention with an impression.
 
     Gates on memory: only fires when `memory.perception()` returns an

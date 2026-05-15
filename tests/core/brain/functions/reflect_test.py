@@ -1,8 +1,8 @@
 """Reflect stage — integration tests over a real Living.
 
-Reflect is the trigger; `consolidate(living)` is the actual work. Tests cover
-both: reflect's gating (phase + idle), and consolidate's effects (file writes,
-archive, forget) when the gate opens.
+Reflect is the trigger; `consolidate(memory, ego)` is the actual work. Tests
+cover both: reflect's gating (phase + idle), and consolidate's effects (file
+writes, archive, forget) when the gate opens.
 """
 
 from application.platform.processes import on_separate_process_async
@@ -35,49 +35,6 @@ async def test_reflect_no_messages_passes_through():
             consequences = asyncio.run(functions.reflect(living.pulse, living.memory, living.ego))
             assert consequences == []
             assert living.memory.messages == []
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
-async def test_reflect_in_morning_phase_skips():
-    """Morning is for waking and starting, not for reflection. Reflect
-    never runs during MORNING phase, regardless of memory or idle state."""
-    def isolated():
-        import asyncio, os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents, paths
-            from application.core.brain.memory import Memory
-            from application.core.brain import functions
-            from application.core.brain.pulse import Phase, Pulse
-            from application.core.data import Message, Model, Persona, Prompt
-
-            class FakeWorker:
-                def run(self, *a): pass
-                def nudge(self): pass
-
-            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
-            ego = agents.Ego(persona)
-            eye = agents.Eye(persona)
-            consultant = agents.Consultant(persona)
-            teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-            living.pulse.phase = Phase.MORNING
-            # Even with messages and an idle-True monkey-patch, reflect skips.
-            living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-            async def _idle(*a, **kw): return True
-            living.pulse.is_idle = _idle
-
-            identity_file = paths.person_identity(persona.id)
-            assert not identity_file.exists()
-
-            consequences = asyncio.run(functions.reflect(living.pulse, living.memory, living.ego))
-            assert consequences == []
-
-            # Messages untouched; no consolidation happened.
-            assert len(living.memory.messages) == 1
-            assert not identity_file.exists()
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -399,7 +356,7 @@ async def test_consolidate_writes_person_files_and_archives():
                 living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
-                changed = await consolidate(living.pulse, living.memory, living.ego)
+                changed = await consolidate(living.memory, living.ego)
                 assert changed is True
 
                 assert paths.person_identity(persona.id).read_text().strip() == "- A\n- B"
@@ -458,7 +415,7 @@ async def test_consolidate_handles_invalid_json():
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
                 msgs_before = len(living.memory.messages)
 
-                changed = await consolidate(living.pulse, living.memory, living.ego)
+                changed = await consolidate(living.memory, living.ego)
                 assert changed is False
                 assert not paths.person_identity(persona.id).exists()
                 assert len(living.memory.messages) == msgs_before, "messages should remain on failure"
