@@ -29,7 +29,7 @@ async def test_archive_skips_during_day():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.DAY
             living.memory.remember(Message(
                 content='{"tools.vision": {"source": "/x.png", "question": "?"}}',
@@ -68,7 +68,7 @@ async def test_archive_records_vision_call_in_gallery():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.NIGHT
 
             living.memory.add_tool_result(
@@ -116,7 +116,7 @@ async def test_archive_records_look_at_call_in_gallery():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.NIGHT
 
             living.memory.add_tool_result(
@@ -160,7 +160,7 @@ async def test_archive_skips_failed_vision_call():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.NIGHT
 
             living.memory.add_tool_result(
@@ -208,7 +208,7 @@ async def test_archive_describes_inline_image_at_night():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
 
                 inline_blocks = [
@@ -266,7 +266,7 @@ async def test_archive_skips_screenshots_taken_by_persona():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
 
                 screenshots_dir = paths.screenshots(persona.id)

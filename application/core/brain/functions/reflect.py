@@ -25,7 +25,7 @@ gates.
 Trigger for the night/idle work:
 - If memory has nothing to consolidate, pass through.
 - If phase is night, do the work immediately.
-- Otherwise, await `living.is_idle()`. It sleeps the remaining-to-idle
+- Otherwise, await `living.pulse.is_idle()`. It sleeps the remaining-to-idle
   window; returns True if uninterrupted (idle confirmed → do the work),
   False if a nudge cancelled the wait (activity arrived → raise
   ReflectInterrupted).
@@ -139,7 +139,7 @@ async def consolidate(living: Living) -> bool:
     )
 
     try:
-        result = await models.tool(living.ego.model, living.identity + living.pulse.hint(), question, CONSOLIDATING)
+        result = await models.tool(living.ego.model, living.ego.identity + memory.context_prompt + living.pulse.hint(), question, CONSOLIDATING)
     except ModelError as e:
         logger.warning("brain.consolidate produced invalid JSON, will retry next consolidation", {"persona": persona, "error": str(e)})
         return False
@@ -204,7 +204,7 @@ async def reflect(living: Living) -> list:
         return []
 
     if living.pulse.phase != Phase.NIGHT:
-        if not await living.is_idle():
+        if not await living.pulse.is_idle():
             dispatch(Tock("reflect", {"persona": persona, "branch": "not-idle"}))
             raise ReflectInterrupted()
 
@@ -265,7 +265,7 @@ async def reflect(living: Living) -> list:
     try:
         response = await models.tool(
             living.ego.model,
-            living.identity + living.pulse.hint(),
+            living.ego.identity + memory.context_prompt + living.pulse.hint(),
             question,
             EXTRACTING,
         )

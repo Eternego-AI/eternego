@@ -50,7 +50,7 @@ async def sleep(ego, living) -> Outcome[None]:
             logger.error("Writing diary on sleep failed", {"persona": persona, "error": diary_outcome.message})
 
         living.memory.clear_archive()
-        living.signals.clear()
+        living.pulse.signals.clear()
 
         # Strip the heavy per-minute `signals` field from older health-log
         # entries so the file stays small across days. The day's detail
@@ -74,7 +74,7 @@ async def sleep(ego, living) -> Outcome[None]:
 
         await living.pulse.worker.stop()
 
-        living.pulse = Pulse(Worker())
+        living.pulse = Pulse(Worker(), persona)
 
         await wake(ego, living)
 

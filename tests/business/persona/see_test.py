@@ -35,8 +35,8 @@ async def test_see_succeeds_with_media():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        pulse = Pulse(FakeWorker())
         ego = agents.Ego(p)
+        pulse = Pulse(FakeWorker(), ego.persona)
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
@@ -72,8 +72,8 @@ async def test_see_rejects_unverified_channel():
             def run(self, *args): pass
             def nudge(self): pass
 
-        pulse = Pulse(FakeWorker())
         ego = agents.Ego(p)
+        pulse = Pulse(FakeWorker(), ego.persona)
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)

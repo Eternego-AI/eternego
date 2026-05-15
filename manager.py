@@ -56,7 +56,7 @@ class Agent:
         self._subscribers: list = []
 
         worker = Worker()
-        pulse = Pulse(worker)
+        pulse = Pulse(worker, persona)
         self.ego = Ego(persona)
         self.memory = Memory(persona)
         self.eye = Eye(persona)
@@ -379,7 +379,7 @@ class Agent:
         self.gateways.clear()
 
         await self.living.pulse.worker.stop()
-        self.living.dispose()
+        self.living.pulse.dispose()
 
     async def heartbeat_tick(self) -> None:
         from application.business.persona import heartbeat

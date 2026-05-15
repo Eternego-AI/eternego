@@ -34,7 +34,7 @@ async def test_clean_cycle_runs_every_step():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.mind = [
                 ("realize", lambda: step("realize")),
                 ("recognize", lambda: step("recognize")),
@@ -85,7 +85,7 @@ async def test_engine_connection_error_dispatches_brain_fault_and_halts():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.mind = [
                 ("realize", lambda: ok()),
                 ("recognize", lambda: faulty()),
@@ -138,7 +138,7 @@ async def test_run_exits_immediately_when_worker_stopped():
             teacher = agents.Teacher(persona)
             worker = Worker()
             worker._stopped = True
-            living = agents.Living(pulse=Pulse(worker), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(worker, ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.mind = [("realize", lambda: step())]
 
             asyncio.run(clock.run(living))
@@ -178,7 +178,7 @@ async def test_executor_runs_ability_consequence_and_records():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.mind = [("decide", lambda: step())]
 
             runs = []
@@ -237,7 +237,7 @@ async def test_executor_records_error_when_ability_raises():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.mind = [("decide", lambda: step())]
 
             runs = []
@@ -287,7 +287,7 @@ async def test_executor_runs_tool_consequence_and_records():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.mind = [("decide", lambda: step())]
 
             runs = []
@@ -338,7 +338,7 @@ async def test_run_re_loops_when_consequences_executed():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.mind = [("decide", lambda: step())]
 
             asyncio.run(clock.run(living))

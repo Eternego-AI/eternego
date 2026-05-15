@@ -30,7 +30,7 @@ async def test_reflect_no_messages_passes_through():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
             consequences = asyncio.run(functions.reflect(living))
             assert consequences == []
@@ -62,12 +62,12 @@ async def test_reflect_in_morning_phase_skips():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.MORNING
             # Even with messages and an idle-True monkey-patch, reflect skips.
             living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
             async def _idle(*a, **kw): return True
-            living.is_idle = _idle
+            living.pulse.is_idle = _idle
 
             identity_file = paths.person_identity(persona.id)
             assert not identity_file.exists()
@@ -107,10 +107,10 @@ async def test_reflect_during_day_when_not_idle_raises_interrupted():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.DAY
             async def _not_idle(*a, **kw): return False
-            living.is_idle = _not_idle
+            living.pulse.is_idle = _not_idle
             living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
             identity_file = paths.person_identity(persona.id)
@@ -154,7 +154,7 @@ async def test_reflect_at_night_consolidates():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
                 living.memory.remember(Message(content="we talked about X", prompt=Prompt(role="user", content="we talked about X")))
 
@@ -211,10 +211,10 @@ async def test_reflect_when_idle_consolidates():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.DAY
                 async def _idle(*a, **kw): return True
-                living.is_idle = _idle
+                living.pulse.is_idle = _idle
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
                 consequences = await functions.reflect(living)
@@ -269,7 +269,7 @@ async def test_reflect_at_night_refines_used_instructions():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
@@ -344,7 +344,7 @@ async def test_reflect_at_night_empty_updates_still_consolidates():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
@@ -396,7 +396,7 @@ async def test_consolidate_writes_person_files_and_archives():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
                 changed = await consolidate(living)
@@ -454,7 +454,7 @@ async def test_consolidate_handles_invalid_json():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
                 msgs_before = len(living.memory.messages)
 

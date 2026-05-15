@@ -32,14 +32,10 @@ seven stages, each bound to the voices it needs.
 a rhythm of action (cycle) together, which the Agent serves for a Persona.
 """
 
-import time
-
 from application.core.brain import character, situation
 from application.core.brain.memory import Memory
 from application.core.brain.pulse import Pulse
-from application.core.brain.signals import CapabilityRun
 from application.core.data import Persona, Prompt
-from application.platform.observer import Signal, subscribe, unsubscribe
 
 
 class Ego:
@@ -127,17 +123,17 @@ class Teacher:
 
 
 class Living:
-    """The persona being-alive — the runtime state.
+    """The persona being-alive — the runtime state. The glue that holds
+    her parts together while she's alive.
 
-    Holds the rhythm (pulse), the memory (what she remembers), the alive
-    voices (ego, eye, consultant, teacher), her mind (the cycle of
-    cognitive functions for the current phase), and the signal stream
-    (signals — the felt sense of what's happening, captured from the
-    bus). Dies when Agent.stop() calls `dispose()`.
+    Holds the rhythm (pulse — phase, worker, signal history, idle
+    detection), the memory (what she remembers), the alive voices (ego,
+    eye, consultant, teacher), and her mind (the cycle of cognitive
+    functions for the current phase).
 
     Functions in the mind reach into Living for everything they need:
         living.ego, living.memory, living.teacher, living.eye,
-        living.consultant, living.pulse, living.signals.
+        living.consultant, living.pulse.
     """
 
     def __init__(
@@ -155,74 +151,7 @@ class Living:
         self.eye = eye
         self.consultant = consultant
         self.teacher = teacher
-        self.signals: list[Signal] = []
-        self.created_at: int = time.time_ns()
-        self._subscribed = False
         # Lazy import to break the agents↔mind cycle (mind imports Living
         # for the type hint).
         from application.core.brain.mind import mind
         self.mind = mind(self)
-        self._on_construct()
-
-    @property
-    def identity(self) -> list[Prompt]:
-        """The full identity prefix: ego's stable voice + current Recent Context.
-
-        Ego owns the stable blocks (character, situation, meanings). Memory
-        owns the dynamic context. Living composes them — the way she shows
-        up to the model right now."""
-        blocks = list(self.ego.identity)
-        context = (self.memory.context or "").strip()
-        if context:
-            blocks.append(Prompt(role="system", content="## Recent Context\n\n" + context))
-        return blocks
-
-    def _on_construct(self) -> None:
-        """Construction hook. Default: subscribe to the bus so the persona's
-        signal stream populates `living.signals`. Subclasses override to
-        skip (PastLiving does)."""
-        subscribe(self._on_signal)
-        self._subscribed = True
-
-    async def _on_signal(self, signal: Signal) -> None:
-        """Capture signals dispatched on this persona's behalf into the felt
-        stream. Filters by persona id so multi-persona daemons don't cross
-        their streams."""
-        details = signal.details if isinstance(signal.details, dict) else {}
-        p = details.get("persona")
-        signal_pid = getattr(p, "id", None) if p is not None else None
-        if signal_pid == self.ego.persona.id:
-            self.signals.append(signal)
-
-    async def is_idle(self, seconds: int | None = None) -> bool:
-        """True if no real conversation activity in the given window.
-
-        If `seconds` is omitted, reads `self.ego.persona.idle_timeout`. If the
-        last activity is already older than that, returns True immediately.
-        Otherwise sleeps the remaining time via `worker.can_sleep` and returns
-        True if the wait completed uninterrupted, or False if a nudge fired
-        during the wait (activity arrived).
-
-        Activity is a CapabilityRun signal (tool/ability fired by Clock's
-        executor). Routine cycle ticks/tocks and heartbeat noise don't count.
-        If no activity has been captured yet (fresh restart), Living's birth
-        time is the reference."""
-        if seconds is None:
-            seconds = self.ego.persona.idle_timeout
-        latest = self.created_at
-        for signal in reversed(self.signals):
-            if isinstance(signal, CapabilityRun):
-                latest = signal.time
-                break
-        elapsed_ns = time.time_ns() - latest
-        if elapsed_ns >= seconds * 1_000_000_000:
-            return True
-        remaining = seconds - elapsed_ns / 1_000_000_000
-        return await self.pulse.worker.can_sleep(remaining)
-
-    def dispose(self) -> None:
-        """Tear down. Unsubscribes from the bus so signals stop landing on a
-        Living that is no longer running."""
-        if self._subscribed:
-            unsubscribe(self._on_signal)
-            self._subscribed = False

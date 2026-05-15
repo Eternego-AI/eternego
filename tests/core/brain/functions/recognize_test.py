@@ -43,7 +43,7 @@ async def test_recognize_say_dispatches_command():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
                 said = []
@@ -91,7 +91,7 @@ async def test_recognize_done_returns_empty():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
                 said = []
@@ -144,7 +144,7 @@ async def test_recognize_load_instruction_records_intention():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
                 consequences = await functions.recognize(living)
@@ -187,7 +187,7 @@ async def test_recognize_tool_returns_capability():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
 
                 consequences = await functions.recognize(living)
@@ -229,7 +229,7 @@ async def test_recognize_steps_returns_list():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
 
                 said = []
@@ -285,7 +285,7 @@ async def test_recognize_skips_when_intention_pending():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
             living.memory.intention("chatting")
 
@@ -319,7 +319,7 @@ async def test_recognize_skips_when_impression_present():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
             living.memory.intention("chatting")
             living.memory.impression("talk simply")
@@ -357,7 +357,7 @@ async def test_recognize_empty_stream_propagates_engine_error():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
                 try:

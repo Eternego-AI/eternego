@@ -24,7 +24,7 @@ async def query(ego, living, messages) -> Outcome[QueryData]:
             return Outcome(success=True, message="", data=QueryData(response=f"{persona.name} is sleeping."))
 
         question = messages.get("content", "") if isinstance(messages, dict) else str(messages)
-        response = await models.chat(ego.model, living.identity + living.pulse.hint(), question)
+        response = await models.chat(ego.model, ego.identity + living.memory.context_prompt + living.pulse.hint(), question)
 
         bus.broadcast("Queried", {"persona": persona})
         return Outcome(success=True, message="", data=QueryData(response=response))

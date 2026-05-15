@@ -1,4 +1,4 @@
-"""Persona — periodic self-check: read recent faults from living.signals,
+"""Persona — periodic self-check: read recent faults from living.pulse.signals,
 disable unhealthy services, shut down if thinking is compromised, recover
 the worker if it crashed, process due destiny entries."""
 
@@ -28,8 +28,8 @@ class HealthCheckData:
 async def health_check(ego, living, dt) -> Outcome[HealthCheckData]:
     """Every minute, check how the persona's body has been feeling.
 
-    Reads recent BrainFault signals from living.signals (the felt stream)
-    in a one-minute window. Per field:
+    Reads recent BrainFault signals from living.pulse.signals (the felt
+    stream) in a one-minute window. Per field:
     - thinking faulted → sick + shutdown (returns early, no recovery)
     - frontier faulted → null persona.frontier, tell person, persist
     - vision faulted → same, for persona.vision
@@ -47,7 +47,7 @@ async def health_check(ego, living, dt) -> Outcome[HealthCheckData]:
     bus.propose("Health check", {"persona": persona})
 
     cutoff_ns = time.time_ns() - _FAULT_WINDOW_NS
-    window = [s for s in living.signals if s.time >= cutoff_ns]
+    window = [s for s in living.pulse.signals if s.time >= cutoff_ns]
     faults = [s for s in window if isinstance(s, BrainFault)]
     signals_record = []
     for s in window:

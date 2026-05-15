@@ -35,8 +35,8 @@ async def test_heartbeat_calls_health_check():
             def events(self): return list(self._events)
             def clear_events(self): self._events = []
 
-        pulse = Pulse(FakeWorker())
         ego = agents.Ego(p)
+        pulse = Pulse(FakeWorker(), ego.persona)
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)

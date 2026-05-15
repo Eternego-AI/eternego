@@ -30,7 +30,7 @@ async def test_realize_plain_text_sets_user_prompt():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.memory.remember(Message(content="hello"))
             messages_before = len(living.memory.messages)
 
@@ -67,7 +67,7 @@ async def test_realize_skips_already_realized_messages():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             existing = Prompt(role="user", content="already there")
             living.memory.remember(Message(content="hi", prompt=existing))
 
@@ -106,7 +106,7 @@ async def test_realize_image_without_vision_inlines_content_blocks():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.memory.remember(Message(
                 content="caption!",
                 media=Media(source=str(image_path), caption="caption!"),
@@ -155,7 +155,7 @@ async def test_realize_image_missing_path_records_error_tool_result():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.memory.remember(Message(
                 content="caption",
                 media=Media(source="/no/such/file.png", caption="caption"),
@@ -213,7 +213,7 @@ async def test_realize_image_with_vision_records_call_and_result():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(
                     content="what's on screen?",
                     media=Media(source=str(image_path), caption="what's on screen?"),
@@ -277,7 +277,7 @@ async def test_realize_question_formulation_failure_uses_default():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(
                     content="caption",
                     media=Media(source=str(image_path), caption="caption"),

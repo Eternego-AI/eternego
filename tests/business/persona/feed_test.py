@@ -31,8 +31,8 @@ async def test_feed_succeeds_with_anthropic_data():
                 def run(self, *args): pass
                 def nudge(self): pass
                 async def stop(self): pass
-            pulse = Pulse(FakeWorker())
             ego = agents.Ego(persona)
+            pulse = Pulse(FakeWorker(), persona)
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)

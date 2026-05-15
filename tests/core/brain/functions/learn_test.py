@@ -38,7 +38,7 @@ async def test_learn_skips_when_no_pending_call():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
             msgs_before = len(living.memory.messages)
@@ -72,7 +72,7 @@ async def test_learn_skips_when_last_signal_is_result():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.memory.intention("chatting")
             living.memory.impression("talk simply")
 
@@ -108,7 +108,7 @@ async def test_learn_matches_existing_intention():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             # Plant a custom meaning the persona will reach for.
             living.memory.learn("posting_to_x", meanings.Meaning("posting_to_x", "Posting To X", "Draft. Ask. Post."))
             living.memory.intention("Posting To X")
@@ -157,7 +157,7 @@ async def test_learn_consults_teacher_on_no_match():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.intention("Checking disk space")
 
                 consequences = await functions.learn(living)
@@ -226,7 +226,7 @@ async def test_learn_teacher_falls_back_to_thinking_when_no_frontier():
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
                 assert teacher.model is persona.thinking, "teacher must fall back to thinking"
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.intention("Greeting the person")
 
                 consequences = await functions.learn(living)
@@ -285,7 +285,7 @@ async def test_learn_records_failure_impression_when_lesson_missing_fields():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.intention("doing something")
 
                 consequences = await functions.learn(living)
@@ -334,7 +334,7 @@ async def test_learn_records_failure_impression_when_teacher_invalid_json():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.intention("something")
 
                 consequences = await functions.learn(living)
@@ -376,7 +376,7 @@ async def test_learn_skips_when_intention_is_empty():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             # Manually plant an empty-intention call (intention() filters
             # empty strings, so we write the wire shape directly).
             empty = '{"tools.load_instruction": {}}'

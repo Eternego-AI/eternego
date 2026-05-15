@@ -114,7 +114,7 @@ async def archive(living: Living) -> list:
                 "```"
             )
             try:
-                result = await models.tool(living.ego.model, living.identity + living.pulse.hint() + prompts, question, ARCHIVING)
+                result = await models.tool(living.ego.model, living.ego.identity + memory.context_prompt + living.pulse.hint() + prompts, question, ARCHIVING)
                 description = str(result.get("description", "")).strip() if isinstance(result, dict) else ""
             except ModelError as e:
                 logger.warning("brain.archive description failed", {"persona": persona, "source": m.media.source, "error": str(e)})

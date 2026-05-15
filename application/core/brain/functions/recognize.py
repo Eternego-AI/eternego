@@ -130,7 +130,7 @@ async def recognize(living: Living) -> list:
     try:
         result = await models.tool(
             living.ego.model,
-            living.identity + living.pulse.hint() + memory.prompts,
+            living.ego.identity + memory.context_prompt + living.pulse.hint() + memory.prompts,
             question,
             _recognizing(persona),
         )

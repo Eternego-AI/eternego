@@ -52,8 +52,8 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
         def _persist(self) -> None:
             pass
 
-    class PastLiving(Living):
-        """A Living that does not subscribe to the bus — its signal stream is
+    class PastPulse(Pulse):
+        """A Pulse that does not subscribe to the bus — its signal stream is
         isolated from the live persona's."""
 
         def _on_construct(self) -> None:
@@ -84,10 +84,10 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
 
             past_ego = Ego(persona)
 
-            past_pulse = Pulse(Worker())
+            past_pulse = PastPulse(Worker(), persona)
             past_pulse.phase = Phase.NIGHT
 
-            past_living = PastLiving(
+            past_living = Living(
                 pulse=past_pulse,
                 ego=past_ego,
                 memory=past_memory,
@@ -109,7 +109,7 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
                         prompt=Prompt(role="user", content=intro),
                     ))
             finally:
-                past_living.dispose()
+                past_living.pulse.dispose()
 
         bus.broadcast("Persona fed", {"persona": persona, "source": source})
         return Outcome(success=True, message="Persona fed successfully", data=FeedData(persona=persona))

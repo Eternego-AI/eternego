@@ -18,7 +18,7 @@ impression and acts on it. Learn is a cognitive function — no cycle
 restart, no consequence emitted; it just completes the round-trip
 between intention and impression.
 
-`consult_teacher_for_instruction(persona, intention)` is the work of writing
+`consult_teacher_for_instruction(living, intention)` is the work of writing
 a new lesson + translating, exposed so other paths (like reflect) can call
 it directly.
 """
@@ -43,7 +43,7 @@ LECTURING = Action(
 )
 
 
-async def consult_teacher_for_instruction(persona, intention: str) -> tuple[str, str, str] | None:
+async def consult_teacher_for_instruction(living: Living, intention: str) -> tuple[str, str, str] | None:
     """Ask teacher for a procedure for this kind of moment, have the persona
     translate it into her own voice, save both lesson and meaning to disk,
     return the result.
@@ -56,12 +56,9 @@ async def consult_teacher_for_instruction(persona, intention: str) -> tuple[str,
     if not intention:
         return None
 
-    # Lazy import to avoid module-load-time circularity: learn → character →
-    # abilities (auto-discovery loads ability files that may import learn).
-    from application.core import agents
-
-    teacher = agents.Teacher(persona)
-    ego = agents.Ego(persona)
+    persona = living.ego.persona
+    teacher = living.teacher
+    ego = living.ego
 
     catalog_text = (
         "# The persona's tools and instructions\n\n"
@@ -211,7 +208,7 @@ async def learn(living: Living) -> list:
             return []
 
     # No match — consult teacher to write a new procedure, persona translates.
-    result = await consult_teacher_for_instruction(persona, intention)
+    result = await consult_teacher_for_instruction(living, intention)
     if result is None:
         memory.impression("could not produce a procedure for this intention")
         dispatch(Tock("learn", {"persona": persona, "branch": "teacher-failed"}))

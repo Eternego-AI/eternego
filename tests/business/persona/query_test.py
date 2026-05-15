@@ -30,8 +30,8 @@ async def test_query_returns_response():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        pulse = Pulse(FakeWorker())
         ego = agents.Ego(p)
+        pulse = Pulse(FakeWorker(), ego.persona)
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
