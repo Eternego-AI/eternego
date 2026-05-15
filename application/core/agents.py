@@ -130,11 +130,12 @@ class Living:
     """The persona being-alive — the runtime state.
 
     Holds the rhythm (pulse), the memory (what she remembers), the alive
-    voices (ego, eye, consultant, teacher), the work-shape (cycle), and the
-    signal stream (signals — the felt sense of what's happening, captured
-    from the bus). Dies when Agent.stop() calls `dispose()`.
+    voices (ego, eye, consultant, teacher), her mind (the cycle of
+    cognitive functions for the current phase), and the signal stream
+    (signals — the felt sense of what's happening, captured from the
+    bus). Dies when Agent.stop() calls `dispose()`.
 
-    Functions in the cycle reach into Living for everything they need:
+    Functions in the mind reach into Living for everything they need:
         living.ego, living.memory, living.teacher, living.eye,
         living.consultant, living.pulse, living.signals.
     """
@@ -147,7 +148,6 @@ class Living:
         eye: "Eye",
         consultant: "Consultant",
         teacher: "Teacher",
-        cycle: list | None = None,
     ):
         self.pulse = pulse
         self.ego = ego
@@ -155,10 +155,13 @@ class Living:
         self.eye = eye
         self.consultant = consultant
         self.teacher = teacher
-        self.cycle = cycle if cycle is not None else []
         self.signals: list[Signal] = []
         self.created_at: int = time.time_ns()
         self._subscribed = False
+        # Lazy import to break the agents↔mind cycle (mind imports Living
+        # for the type hint).
+        from application.core.brain.mind import mind
+        self.mind = mind(self)
         self._on_construct()
 
     @property

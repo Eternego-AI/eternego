@@ -35,7 +35,7 @@ async def test_clean_cycle_runs_every_step():
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-            living.cycle = [
+            living.mind = [
                 ("realize", lambda: step("realize")),
                 ("recognize", lambda: step("recognize")),
                 ("decide", lambda: step("decide")),
@@ -86,7 +86,7 @@ async def test_engine_connection_error_dispatches_brain_fault_and_halts():
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-            living.cycle = [
+            living.mind = [
                 ("realize", lambda: ok()),
                 ("recognize", lambda: faulty()),
                 ("decide", lambda: should_not_run()),
@@ -139,7 +139,7 @@ async def test_run_exits_immediately_when_worker_stopped():
             worker = Worker()
             worker._stopped = True
             living = agents.Living(pulse=Pulse(worker), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-            living.cycle = [("realize", lambda: step())]
+            living.mind = [("realize", lambda: step())]
 
             asyncio.run(clock.run(living))
             assert ran == []
@@ -179,7 +179,7 @@ async def test_executor_runs_ability_consequence_and_records():
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-            living.cycle = [("decide", lambda: step())]
+            living.mind = [("decide", lambda: step())]
 
             runs = []
             def capture(signal: CapabilityRun):
@@ -238,7 +238,7 @@ async def test_executor_records_error_when_ability_raises():
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-            living.cycle = [("decide", lambda: step())]
+            living.mind = [("decide", lambda: step())]
 
             runs = []
             def capture(signal: CapabilityRun):
@@ -288,7 +288,7 @@ async def test_executor_runs_tool_consequence_and_records():
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-            living.cycle = [("decide", lambda: step())]
+            living.mind = [("decide", lambda: step())]
 
             runs = []
             def capture(signal: CapabilityRun):
@@ -339,7 +339,7 @@ async def test_run_re_loops_when_consequences_executed():
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-            living.cycle = [("decide", lambda: step())]
+            living.mind = [("decide", lambda: step())]
 
             asyncio.run(clock.run(living))
 

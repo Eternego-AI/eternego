@@ -12,7 +12,6 @@ from application.business.outcome import Outcome
 from application.core import bus, paths
 from application.core.agents import Consultant, Ego, Eye, Living, Teacher
 from application.core.brain.memory import Memory
-from application.core.brain.mind import mind
 from application.core.brain.pulse import Pulse
 from application.core.data import Channel, Message, Persona, Prompt
 from application.platform import datetimes
@@ -71,7 +70,6 @@ class Agent:
             consultant=self.consultant,
             teacher=self.teacher,
         )
-        self.living.cycle = mind(self.living)
 
     async def start(self) -> None:
         """Wake the brain, connect nerves, wire reflexes."""
