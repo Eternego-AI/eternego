@@ -131,7 +131,7 @@ async def health_check(ego, living, dt) -> Outcome[HealthCheckData]:
                 filesystem.delete(filepath)
                 notifications.append(content)
             due_text = "due for:\n" + "\n---\n".join(notifications)
-            ego.memory.remember(Message(content=due_text, prompt=Prompt(role="user", content=due_text)))
+            living.memory.remember(Message(content=due_text, prompt=Prompt(role="user", content=due_text)))
             living.pulse.worker.nudge()
 
         bus.broadcast("Health checked", {"persona": persona, "log_entry": log_entry})

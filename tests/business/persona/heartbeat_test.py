@@ -8,6 +8,7 @@ async def test_heartbeat_calls_health_check():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.data import Model, Persona
         from application.platform import objects, filesystem
@@ -39,7 +40,7 @@ async def test_heartbeat_calls_health_check():
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
         outcome = asyncio.run(spec.heartbeat(ego, living, sleep_fn=lambda: None))
         assert outcome.success, outcome.message

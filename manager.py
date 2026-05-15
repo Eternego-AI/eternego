@@ -11,6 +11,7 @@ import threading
 from application.business.outcome import Outcome
 from application.core import bus, paths
 from application.core.agents import Consultant, Ego, Eye, Living, Teacher
+from application.core.brain.memory import Memory
 from application.core.brain.mind import mind
 from application.core.brain.pulse import Pulse
 from application.core.data import Channel, Message, Persona, Prompt
@@ -58,12 +59,14 @@ class Agent:
         worker = Worker()
         pulse = Pulse(worker)
         self.ego = Ego(persona)
+        self.memory = Memory(persona)
         self.eye = Eye(persona)
         self.consultant = Consultant(persona)
         self.teacher = Teacher(persona)
         self.living = Living(
             pulse=pulse,
             ego=self.ego,
+            memory=self.memory,
             eye=self.eye,
             consultant=self.consultant,
             teacher=self.teacher,
@@ -164,7 +167,7 @@ class Agent:
             text = command.details.get("text", "")
             if not text:
                 return
-            self.ego.memory.remember(Message(
+            self.memory.remember(Message(
                 content=text,
                 prompt=Prompt(role="assistant", content=text),
             ))

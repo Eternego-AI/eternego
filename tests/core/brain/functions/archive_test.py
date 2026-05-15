@@ -15,6 +15,7 @@ async def test_archive_skips_during_day():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -28,14 +29,14 @@ async def test_archive_skips_during_day():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.DAY
-            ego.memory.remember(Message(
+            living.memory.remember(Message(
                 content='{"tools.vision": {"source": "/x.png", "question": "?"}}',
                 prompt=Prompt(role="assistant", content='{"tools.vision": {"source": "/x.png", "question": "?"}}'),
             ))
-            ego.memory.archive_messages()
-            ego.memory.forget()
+            living.memory.archive_messages()
+            living.memory.forget()
 
             consequences = asyncio.run(functions.archive(living))
             assert consequences == []
@@ -53,6 +54,7 @@ async def test_archive_records_vision_call_in_gallery():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Model, Persona
@@ -66,17 +68,17 @@ async def test_archive_records_vision_call_in_gallery():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.NIGHT
 
-            ego.memory.add_tool_result(
+            living.memory.add_tool_result(
                 "tools.vision",
                 {"source": "/path/to/screen.png", "question": "What's open?"},
                 "ok",
                 "VS Code with the brain folder",
             )
-            ego.memory.archive_messages()
-            ego.memory.forget()
+            living.memory.archive_messages()
+            living.memory.forget()
 
             consequences = asyncio.run(functions.archive(living))
             assert consequences == []
@@ -100,6 +102,7 @@ async def test_archive_records_look_at_call_in_gallery():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Model, Persona
@@ -113,17 +116,17 @@ async def test_archive_records_look_at_call_in_gallery():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.NIGHT
 
-            ego.memory.add_tool_result(
+            living.memory.add_tool_result(
                 "tools.look_at",
                 {"source": "/screenshots/8am.png", "question": "what app?"},
                 "ok",
                 "browser tab",
             )
-            ego.memory.archive_messages()
-            ego.memory.forget()
+            living.memory.archive_messages()
+            living.memory.forget()
 
             asyncio.run(functions.archive(living))
 
@@ -143,6 +146,7 @@ async def test_archive_skips_failed_vision_call():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Model, Persona
@@ -156,17 +160,17 @@ async def test_archive_skips_failed_vision_call():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.NIGHT
 
-            ego.memory.add_tool_result(
+            living.memory.add_tool_result(
                 "tools.vision",
                 {"source": "/missing.png"},
                 "error",
                 "",
             )
-            ego.memory.archive_messages()
-            ego.memory.forget()
+            living.memory.archive_messages()
+            living.memory.forget()
 
             asyncio.run(functions.archive(living))
             assert not paths.gallery(persona.id).exists(), "no gallery entry on empty answer"
@@ -185,6 +189,7 @@ async def test_archive_describes_inline_image_at_night():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Media, Message, Model, Persona, Prompt
@@ -203,20 +208,20 @@ async def test_archive_describes_inline_image_at_night():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
 
                 inline_blocks = [
                     {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "FAKE=="}},
                     {"type": "text", "text": "what is here?"},
                 ]
-                ego.memory.remember(Message(
+                living.memory.remember(Message(
                     content="what is here?",
                     media=Media(source=str(image_path), caption="what is here?"),
                     prompt=Prompt(role="user", content=inline_blocks),
                 ))
-                ego.memory.archive_messages()
-                ego.memory.forget()
+                living.memory.archive_messages()
+                living.memory.forget()
 
                 await functions.archive(living)
 
@@ -246,6 +251,7 @@ async def test_archive_skips_screenshots_taken_by_persona():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Media, Message, Model, Persona, Prompt
@@ -260,7 +266,7 @@ async def test_archive_skips_screenshots_taken_by_persona():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
 
                 screenshots_dir = paths.screenshots(persona.id)
@@ -272,13 +278,13 @@ async def test_archive_skips_screenshots_taken_by_persona():
                     {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "FAKE=="}},
                     {"type": "text", "text": "screenshot"},
                 ]
-                ego.memory.remember(Message(
+                living.memory.remember(Message(
                     content="screenshot",
                     media=Media(source=str(shot), caption="screenshot"),
                     prompt=Prompt(role="user", content=inline_blocks),
                 ))
-                ego.memory.archive_messages()
-                ego.memory.forget()
+                living.memory.archive_messages()
+                living.memory.forget()
 
                 await functions.archive(living)
 

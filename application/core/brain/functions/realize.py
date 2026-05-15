@@ -1,12 +1,12 @@
 """Brain — realize over living.
 
-Surveys what just landed in living.ego.memory and brings it in. Text messages get a
+Surveys what just landed in living.memory and brings it in. Text messages get a
 simple string prompt. Image messages take one of two paths:
 
 - **living.eye has a vision model**: the living.consultant formulates questions based on
   the conversation, the living.eye sees the image and answers, and the result
-  becomes a vision tool-call + TOOL_RESULT pair in living.ego.memory. The original
-  message gets the caption as its prompt. No image data persisted in living.ego.memory.
+  becomes a vision tool-call + TOOL_RESULT pair in living.memory. The original
+  message gets the caption as its prompt. No image data persisted in living.memory.
 
 - **No vision model**: encode the image as base64 content blocks directly
   in the prompt. The thinking model sees the image inline in subsequent
@@ -46,7 +46,7 @@ async def realize(living: Living) -> list:
     """realize OVER living — survey what just landed, take it in."""
     dispatch(Tick("realize", {"persona": living.ego.persona}))
 
-    for m in living.ego.memory.messages:
+    for m in living.memory.messages:
         if m.prompt is not None:
             continue
 
@@ -57,7 +57,7 @@ async def realize(living: Living) -> list:
         image_path = Path(m.media.source)
         if not image_path.exists():
             m.prompt = Prompt(role="user", content=m.media.caption or "")
-            living.ego.memory.add_tool_result(
+            living.memory.add_tool_result(
                 "tools.vision",
                 {"source": m.media.source},
                 "error",
@@ -79,7 +79,7 @@ async def realize(living: Living) -> list:
 
         m.prompt = Prompt(role="user", content=m.media.caption or "")
         image_prompt = Prompt(role="user", content=image_content)
-        reality = living.ego.memory.prompts + [image_prompt]
+        reality = living.memory.prompts + [image_prompt]
         question_prompt = (
             f"The persona {living.ego.persona.name} just received an image. A vision model "
             "will look at it next. Based on the conversation, what observable things in the "
@@ -102,7 +102,7 @@ async def realize(living: Living) -> list:
             question = "Describe what you see."
 
         answer = await models.chat(living.eye.model, living.eye.identity + [image_prompt], question)
-        living.ego.memory.add_tool_result(
+        living.memory.add_tool_result(
             "tools.vision",
             {"question": question, "source": m.media.source},
             "ok",

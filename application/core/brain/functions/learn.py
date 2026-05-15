@@ -191,7 +191,7 @@ async def learn(living: Living) -> list:
     dispatch(Tick("learn", {"persona": living.ego.persona}))
 
     persona = living.ego.persona
-    memory = living.ego.memory
+    memory = living.memory
 
     intention = memory.perception()
     if intention is None:

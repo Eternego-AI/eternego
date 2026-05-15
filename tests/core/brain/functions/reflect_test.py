@@ -16,6 +16,7 @@ async def test_reflect_no_messages_passes_through():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Model, Persona
@@ -29,11 +30,11 @@ async def test_reflect_no_messages_passes_through():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
             consequences = asyncio.run(functions.reflect(living))
             assert consequences == []
-            assert ego.memory.messages == []
+            assert living.memory.messages == []
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -47,6 +48,7 @@ async def test_reflect_in_morning_phase_skips():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -60,10 +62,10 @@ async def test_reflect_in_morning_phase_skips():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.MORNING
             # Even with messages and an idle-True monkey-patch, reflect skips.
-            ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+            living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
             async def _idle(*a, **kw): return True
             living.is_idle = _idle
 
@@ -74,7 +76,7 @@ async def test_reflect_in_morning_phase_skips():
             assert consequences == []
 
             # Messages untouched; no consolidation happened.
-            assert len(ego.memory.messages) == 1
+            assert len(living.memory.messages) == 1
             assert not identity_file.exists()
 
     code, error = await on_separate_process_async(isolated)
@@ -90,6 +92,7 @@ async def test_reflect_during_day_when_not_idle_raises_interrupted():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -104,11 +107,11 @@ async def test_reflect_during_day_when_not_idle_raises_interrupted():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.pulse.phase = Phase.DAY
             async def _not_idle(*a, **kw): return False
             living.is_idle = _not_idle
-            ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+            living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
             identity_file = paths.person_identity(persona.id)
             assert not identity_file.exists(), "test premise: identity file should not exist yet"
@@ -119,7 +122,7 @@ async def test_reflect_during_day_when_not_idle_raises_interrupted():
             except ReflectInterrupted:
                 pass
 
-            assert len(ego.memory.messages) == 1, "messages stay during the day"
+            assert len(living.memory.messages) == 1, "messages stay during the day"
             assert not identity_file.exists(), "no person file should be written"
 
     code, error = await on_separate_process_async(isolated)
@@ -134,6 +137,7 @@ async def test_reflect_at_night_consolidates():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -150,16 +154,16 @@ async def test_reflect_at_night_consolidates():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
-                ego.memory.remember(Message(content="we talked about X", prompt=Prompt(role="user", content="we talked about X")))
+                living.memory.remember(Message(content="we talked about X", prompt=Prompt(role="user", content="we talked about X")))
 
                 consequences = await functions.reflect(living)
 
                 assert consequences == []
-                assert ego.memory.messages == [], "messages should be archived after consolidate"
-                assert len(ego.memory.archive) == 1, "one batch in archive"
-                assert ego.memory.context == "we covered X today, easy"
+                assert living.memory.messages == [], "messages should be archived after consolidate"
+                assert len(living.memory.archive) == 1, "one batch in archive"
+                assert living.memory.context == "we covered X today, easy"
                 assert paths.person_identity(persona.id).read_text().strip() == "- Likes X"
                 assert paths.persona_trait(persona.id).read_text().strip() == "- Be present"
                 assert paths.permissions(persona.id).read_text().strip() == "- Allowed to use X"
@@ -190,6 +194,7 @@ async def test_reflect_when_idle_consolidates():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -206,16 +211,16 @@ async def test_reflect_when_idle_consolidates():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.DAY
                 async def _idle(*a, **kw): return True
                 living.is_idle = _idle
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
                 consequences = await functions.reflect(living)
 
                 assert consequences == []
-                assert ego.memory.messages == [], "consolidated → archived → forgotten"
+                assert living.memory.messages == [], "consolidated → archived → forgotten"
                 assert paths.person_identity(persona.id).exists()
 
             response = json.dumps({
@@ -243,6 +248,7 @@ async def test_reflect_at_night_refines_used_instructions():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions, meanings
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -263,9 +269,9 @@ async def test_reflect_at_night_refines_used_instructions():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
                 consequences = await functions.reflect(living)
                 assert consequences == []
@@ -287,7 +293,7 @@ async def test_reflect_at_night_refines_used_instructions():
 
                 # Long-term consolidation also happened.
                 assert paths.person_identity(persona.id).exists()
-                assert ego.memory.messages == []
+                assert living.memory.messages == []
 
             updates = json.dumps({
                 "updates": [
@@ -321,6 +327,7 @@ async def test_reflect_at_night_empty_updates_still_consolidates():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -337,14 +344,14 @@ async def test_reflect_at_night_empty_updates_still_consolidates():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.pulse.phase = Phase.NIGHT
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
                 consequences = await functions.reflect(living)
                 assert consequences == []
                 # Consolidation still ran — context written.
-                assert ego.memory.context == "quiet day"
+                assert living.memory.context == "quiet day"
 
             empty_updates = json.dumps({"updates": []})
             consolidation = json.dumps({
@@ -372,6 +379,7 @@ async def test_consolidate_writes_person_files_and_archives():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain.functions.reflect import consolidate
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -388,8 +396,8 @@ async def test_consolidate_writes_person_files_and_archives():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
                 changed = await consolidate(living)
                 assert changed is True
@@ -400,9 +408,9 @@ async def test_consolidate_writes_person_files_and_archives():
                 assert paths.struggles(persona.id).read_text().strip() == "- noise"
                 assert paths.persona_trait(persona.id).read_text().strip() == "- be quiet"
                 assert paths.permissions(persona.id).read_text().strip() == "- yes"
-                assert ego.memory.context == "first day together"
-                assert ego.memory.messages == []
-                assert len(ego.memory.archive) == 1
+                assert living.memory.context == "first day together"
+                assert living.memory.messages == []
+                assert len(living.memory.archive) == 1
 
             response = json.dumps({
                 "context": "first day together",
@@ -430,6 +438,7 @@ async def test_consolidate_handles_invalid_json():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain.functions.reflect import consolidate
             from application.core.brain.pulse import Phase, Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -445,14 +454,14 @@ async def test_consolidate_handles_invalid_json():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                msgs_before = len(ego.memory.messages)
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                msgs_before = len(living.memory.messages)
 
                 changed = await consolidate(living)
                 assert changed is False
                 assert not paths.person_identity(persona.id).exists()
-                assert len(ego.memory.messages) == msgs_before, "messages should remain on failure"
+                assert len(living.memory.messages) == msgs_before, "messages should remain on failure"
 
             ollama.assert_call(
                 run=lambda url: consume(url),

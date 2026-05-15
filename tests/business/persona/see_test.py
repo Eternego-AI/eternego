@@ -9,6 +9,7 @@ async def test_see_succeeds_with_media():
 
         from application.business.persona.see import see
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.data import Channel, Model, Persona
         from application.platform import objects, filesystem
@@ -39,11 +40,11 @@ async def test_see_succeeds_with_media():
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
         channel = Channel(type="telegram", name="123", verified_at="2026-04-17T00:00:00")
         result = asyncio.run(see(ego, living, source=image_path, caption="What is in this image?", channel=channel))
         assert result.success, result.message
-        msg = ego.memory.messages[-1]
+        msg = living.memory.messages[-1]
         assert msg.media is not None
         assert msg.media.caption == "What is in this image?"
 
@@ -59,6 +60,7 @@ async def test_see_rejects_unverified_channel():
 
         from application.business.persona.see import see
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.data import Channel, Model, Persona
 
@@ -75,7 +77,7 @@ async def test_see_rejects_unverified_channel():
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
         channel = Channel(type="telegram", name="123")
         result = asyncio.run(see(ego, living, source="/tmp/img.png", caption="test", channel=channel))
         assert result.success

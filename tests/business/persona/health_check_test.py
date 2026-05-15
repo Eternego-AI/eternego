@@ -8,6 +8,7 @@ async def test_healthy_tick_writes_health_log_and_nudges():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.brain.signals import BrainFault
         from application.core.data import Model, Persona
@@ -37,7 +38,7 @@ async def test_healthy_tick_writes_health_log_and_nudges():
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
         outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
         assert outcome.success, outcome.message
@@ -61,6 +62,7 @@ async def test_frontier_fault_disables_frontier_and_persists_config():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.brain.signals import BrainFault
         from application.core.data import Model, Persona
@@ -97,7 +99,7 @@ async def test_frontier_fault_disables_frontier_and_persists_config():
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
         living.signals.append(BrainFault("recognize", {"persona": p, "provider": "anthropic", "url": "https://api.anthropic.com", "model_name": "claude-opus-4-6", "error": "HTTP 429"}))
 
         outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
@@ -126,6 +128,7 @@ async def test_vision_only_fault_disables_vision_leaves_frontier_alone():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.brain.signals import BrainFault
         from application.core.data import Model, Persona
@@ -162,7 +165,7 @@ async def test_vision_only_fault_disables_vision_leaves_frontier_alone():
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
         living.signals.append(BrainFault("realize", {"persona": p, "provider": "anthropic", "url": "...", "model_name": "claude-haiku-4-5", "error": "empty"}))
 
         outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
@@ -182,6 +185,7 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.brain.signals import BrainFault
         from application.core.data import Model, Persona
@@ -217,7 +221,7 @@ async def test_thinking_fault_marks_sick_and_fires_shutdown_command():
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
         living.signals.append(BrainFault("realize", {"persona": p, "provider": "anthropic", "url": "...", "model_name": "claude-haiku-4-5", "error": "HTTP 401"}))
 
         commands = []
@@ -262,6 +266,7 @@ async def test_unexpected_worker_error_recovers_with_apology():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects
@@ -290,7 +295,7 @@ async def test_unexpected_worker_error_recovers_with_apology():
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
         outcome = asyncio.run(spec.health_check(ego, living, datetimes.now()))
         assert outcome.success
@@ -308,6 +313,7 @@ async def test_due_destiny_entries_are_processed_after_health():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.data import Model, Persona
         from application.platform import datetimes, filesystem, objects
@@ -335,7 +341,7 @@ async def test_due_destiny_entries_are_processed_after_health():
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
         past = datetimes.now().replace(microsecond=0)
         trigger = past.strftime("%Y-%m-%d %H:%M")
@@ -349,7 +355,7 @@ async def test_due_destiny_entries_are_processed_after_health():
         history_files = list(paths.history(p.id).glob("*.md"))
         assert len(history_files) == 1
 
-        assert any("drink water" in (m.content or "") for m in ego.memory.messages)
+        assert any("drink water" in (m.content or "") for m in living.memory.messages)
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

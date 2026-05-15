@@ -73,7 +73,7 @@ async def decide(living: Living) -> list:
     dispatch(Tick("decide", {"persona": living.ego.persona}))
 
     persona = living.ego.persona
-    memory = living.ego.memory
+    memory = living.memory
 
     comprehension = memory.comprehension()
     if comprehension is None:
@@ -127,7 +127,7 @@ async def decide(living: Living) -> list:
     try:
         result = await models.tool(
             living.ego.model,
-            living.ego.identity + living.pulse.hint() + memory.prompts,
+            living.identity + living.pulse.hint() + memory.prompts,
             question,
             _deciding(persona),
         )

@@ -18,6 +18,7 @@ async def test_clean_cycle_runs_every_step():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import clock
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
@@ -33,7 +34,7 @@ async def test_clean_cycle_runs_every_step():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.cycle = [
                 ("realize", lambda: step("realize")),
                 ("recognize", lambda: step("recognize")),
@@ -55,6 +56,7 @@ async def test_engine_connection_error_dispatches_brain_fault_and_halts():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import clock
             from application.core.brain.pulse import Pulse
             from application.core.brain.signals import BrainFault
@@ -83,7 +85,7 @@ async def test_engine_connection_error_dispatches_brain_fault_and_halts():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.cycle = [
                 ("realize", lambda: ok()),
                 ("recognize", lambda: faulty()),
@@ -118,6 +120,7 @@ async def test_run_exits_immediately_when_worker_stopped():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import clock
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
@@ -135,7 +138,7 @@ async def test_run_exits_immediately_when_worker_stopped():
             teacher = agents.Teacher(persona)
             worker = Worker()
             worker._stopped = True
-            living = agents.Living(pulse=Pulse(worker), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(worker), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.cycle = [("realize", lambda: step())]
 
             asyncio.run(clock.run(living))
@@ -155,6 +158,7 @@ async def test_executor_runs_ability_consequence_and_records():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import clock
             from application.core.brain.pulse import Pulse
             from application.core.brain.signals import CapabilityRun
@@ -174,7 +178,7 @@ async def test_executor_runs_ability_consequence_and_records():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.cycle = [("decide", lambda: step())]
 
             runs = []
@@ -187,7 +191,7 @@ async def test_executor_runs_ability_consequence_and_records():
             # Notes file got written
             assert paths.notes(persona.id).read_text().strip() == "remember this"
             # Memory has the call/result pair
-            msgs = ego.memory.messages
+            msgs = living.memory.messages
             assert len(msgs) == 2
             assert msgs[0].prompt.role == "assistant"
             assert "tools.save_notes" in msgs[0].content
@@ -212,6 +216,7 @@ async def test_executor_records_error_when_ability_raises():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import clock
             from application.core.brain.pulse import Pulse
             from application.core.brain.signals import CapabilityRun
@@ -232,7 +237,7 @@ async def test_executor_records_error_when_ability_raises():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.cycle = [("decide", lambda: step())]
 
             runs = []
@@ -242,7 +247,7 @@ async def test_executor_records_error_when_ability_raises():
 
             asyncio.run(clock.run(living))
 
-            msgs = ego.memory.messages
+            msgs = living.memory.messages
             assert len(msgs) == 2
             assert "TOOL_RESULT" in msgs[1].content
             assert "status: error" in msgs[1].content
@@ -262,6 +267,7 @@ async def test_executor_runs_tool_consequence_and_records():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import clock
             from application.core.brain.pulse import Pulse
             from application.core.brain.signals import CapabilityRun
@@ -281,7 +287,7 @@ async def test_executor_runs_tool_consequence_and_records():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.cycle = [("decide", lambda: step())]
 
             runs = []
@@ -291,7 +297,7 @@ async def test_executor_runs_tool_consequence_and_records():
 
             asyncio.run(clock.run(living))
 
-            msgs = ego.memory.messages
+            msgs = living.memory.messages
             assert len(msgs) == 2
             assert "tools.OS.execute" in msgs[0].content
             assert "TOOL_RESULT" in msgs[1].content
@@ -314,6 +320,7 @@ async def test_run_re_loops_when_consequences_executed():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import clock
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
@@ -331,14 +338,14 @@ async def test_run_re_loops_when_consequences_executed():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(Worker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(Worker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             living.cycle = [("decide", lambda: step())]
 
             asyncio.run(clock.run(living))
 
             assert calls[0] == 2, f"expected 2 passes (one with consequence, one settling), got {calls[0]}"
             # Memory now has the call+result pair from the first pass.
-            assert len(ego.memory.messages) == 2
+            assert len(living.memory.messages) == 2
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

@@ -73,7 +73,7 @@ async def recognize(living: Living) -> list:
     dispatch(Tick("recognize", {"persona": living.ego.persona}))
 
     persona = living.ego.persona
-    memory = living.ego.memory
+    memory = living.memory
 
     # Gate: if there's a pending intention or a fresh impression, the
     # corresponding stage (learn or decide) should run, not recognize.
@@ -130,7 +130,7 @@ async def recognize(living: Living) -> list:
     try:
         result = await models.tool(
             living.ego.model,
-            living.ego.identity + living.pulse.hint() + memory.prompts,
+            living.identity + living.pulse.hint() + memory.prompts,
             question,
             _recognizing(persona),
         )

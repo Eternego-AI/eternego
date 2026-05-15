@@ -27,6 +27,7 @@ async def test_recognize_say_dispatches_command():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -42,8 +43,8 @@ async def test_recognize_say_dispatches_command():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
                 said = []
                 async def capture(cmd: observer.Command):
@@ -74,6 +75,7 @@ async def test_recognize_done_returns_empty():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -89,8 +91,8 @@ async def test_recognize_done_returns_empty():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
                 said = []
                 async def capture(cmd: observer.Command):
@@ -98,14 +100,14 @@ async def test_recognize_done_returns_empty():
                         said.append(cmd.details.get("text", ""))
                 observer.subscribe(capture)
 
-                msgs_before = len(ego.memory.messages)
+                msgs_before = len(living.memory.messages)
                 consequences = await functions.recognize(living)
                 import asyncio as _a
                 await _a.sleep(0)
 
                 assert consequences == []
                 assert said == [], f"done should not dispatch a say, got {said!r}"
-                assert len(ego.memory.messages) == msgs_before
+                assert len(living.memory.messages) == msgs_before
 
             ollama.assert_call(
                 run=lambda url: consume(url),
@@ -126,6 +128,7 @@ async def test_recognize_load_instruction_records_intention():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -141,14 +144,14 @@ async def test_recognize_load_instruction_records_intention():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
                 consequences = await functions.recognize(living)
 
                 assert consequences == [], "load_instruction is cognitive — no consequence"
                 # Perception should report the pending intention.
-                assert ego.memory.perception() == "chatting"
+                assert living.memory.perception() == "chatting"
 
             payload = '{"decision": [{"tools.load_instruction": {"intention": "chatting"}}]}'
             ollama.assert_call(
@@ -168,6 +171,7 @@ async def test_recognize_tool_returns_capability():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -183,8 +187,8 @@ async def test_recognize_tool_returns_capability():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
 
                 consequences = await functions.recognize(living)
 
@@ -209,6 +213,7 @@ async def test_recognize_steps_returns_list():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -224,8 +229,8 @@ async def test_recognize_steps_returns_list():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
 
                 said = []
                 async def capture(cmd: observer.Command):
@@ -266,6 +271,7 @@ async def test_recognize_skips_when_intention_pending():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -279,9 +285,9 @@ async def test_recognize_skips_when_intention_pending():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-            ego.memory.intention("chatting")
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+            living.memory.intention("chatting")
 
             # No model call should be made — recognize gates and returns [].
             consequences = asyncio.run(functions.recognize(living))
@@ -299,6 +305,7 @@ async def test_recognize_skips_when_impression_present():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -312,10 +319,10 @@ async def test_recognize_skips_when_impression_present():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-            ego.memory.intention("chatting")
-            ego.memory.impression("talk simply")
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+            living.memory.intention("chatting")
+            living.memory.impression("talk simply")
 
             consequences = asyncio.run(functions.recognize(living))
             assert consequences == []
@@ -333,6 +340,7 @@ async def test_recognize_empty_stream_propagates_engine_error():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -349,8 +357,8 @@ async def test_recognize_empty_stream_propagates_engine_error():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
                 try:
                     await functions.recognize(living)

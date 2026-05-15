@@ -24,6 +24,7 @@ async def test_learn_skips_when_no_pending_call():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -37,13 +38,13 @@ async def test_learn_skips_when_no_pending_call():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
-            msgs_before = len(ego.memory.messages)
+            msgs_before = len(living.memory.messages)
             consequences = asyncio.run(functions.learn(living))
             assert consequences == []
-            assert len(ego.memory.messages) == msgs_before
+            assert len(living.memory.messages) == msgs_before
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -57,6 +58,7 @@ async def test_learn_skips_when_last_signal_is_result():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -70,14 +72,14 @@ async def test_learn_skips_when_last_signal_is_result():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.intention("chatting")
-            ego.memory.impression("talk simply")
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living.memory.intention("chatting")
+            living.memory.impression("talk simply")
 
-            msgs_before = len(ego.memory.messages)
+            msgs_before = len(living.memory.messages)
             consequences = asyncio.run(functions.learn(living))
             assert consequences == []
-            assert len(ego.memory.messages) == msgs_before
+            assert len(living.memory.messages) == msgs_before
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -92,6 +94,7 @@ async def test_learn_matches_existing_intention():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions, meanings
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -105,16 +108,16 @@ async def test_learn_matches_existing_intention():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             # Plant a custom meaning the persona will reach for.
-            ego.memory.learn("posting_to_x", meanings.Meaning("posting_to_x", "Posting To X", "Draft. Ask. Post."))
-            ego.memory.intention("Posting To X")
+            living.memory.learn("posting_to_x", meanings.Meaning("posting_to_x", "Posting To X", "Draft. Ask. Post."))
+            living.memory.intention("Posting To X")
 
             consequences = asyncio.run(functions.learn(living))
             assert consequences == []
 
             # Last message is the TOOL_RESULT carrying the meaning's body.
-            last = ego.memory.messages[-1]
+            last = living.memory.messages[-1]
             assert "TOOL_RESULT" in last.content
             assert "tool: load_instruction" in last.content
             assert "status: ok" in last.content
@@ -133,6 +136,7 @@ async def test_learn_consults_teacher_on_no_match():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
@@ -153,8 +157,8 @@ async def test_learn_consults_teacher_on_no_match():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.intention("Checking disk space")
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.intention("Checking disk space")
 
                 consequences = await functions.learn(living)
                 assert consequences == []
@@ -168,11 +172,11 @@ async def test_learn_consults_teacher_on_no_match():
                 meaning_file = paths.meanings(persona.id) / f"{file_id}.md"
                 assert lesson_file.exists(), f"lesson should be saved at {lesson_file}"
                 assert meaning_file.exists(), f"meaning should be saved at {meaning_file}"
-                assert file_id in ego.memory.custom_meanings
+                assert file_id in living.memory.custom_meanings
                 assert "df -h" in meaning_file.read_text()
 
                 # Last message is the TOOL_RESULT with the translated body.
-                last = ego.memory.messages[-1]
+                last = living.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content
                 assert "tool: load_instruction" in last.content
                 assert "status: ok" in last.content
@@ -203,6 +207,7 @@ async def test_learn_teacher_falls_back_to_thinking_when_no_frontier():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
@@ -221,15 +226,15 @@ async def test_learn_teacher_falls_back_to_thinking_when_no_frontier():
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
                 assert teacher.model is persona.thinking, "teacher must fall back to thinking"
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.intention("Greeting the person")
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.intention("Greeting the person")
 
                 consequences = await functions.learn(living)
                 assert consequences == []
                 assert paths.learned(persona.id).exists()
 
                 # TOOL_RESULT got written.
-                last = ego.memory.messages[-1]
+                last = living.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content
                 assert "status: ok" in last.content
 
@@ -259,6 +264,7 @@ async def test_learn_records_failure_impression_when_lesson_missing_fields():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
@@ -279,14 +285,14 @@ async def test_learn_records_failure_impression_when_lesson_missing_fields():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.intention("doing something")
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.intention("doing something")
 
                 consequences = await functions.learn(living)
                 assert consequences == []
 
                 # Last message is the failure impression (round-trip closed).
-                last = ego.memory.messages[-1]
+                last = living.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content
                 assert "could not produce a procedure" in last.content
 
@@ -308,6 +314,7 @@ async def test_learn_records_failure_impression_when_teacher_invalid_json():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
@@ -327,13 +334,13 @@ async def test_learn_records_failure_impression_when_teacher_invalid_json():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.intention("something")
+                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.intention("something")
 
                 consequences = await functions.learn(living)
                 assert consequences == []
 
-                last = ego.memory.messages[-1]
+                last = living.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content
                 assert "could not produce a procedure" in last.content
 
@@ -355,6 +362,7 @@ async def test_learn_skips_when_intention_is_empty():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -368,17 +376,17 @@ async def test_learn_skips_when_intention_is_empty():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             # Manually plant an empty-intention call (intention() filters
             # empty strings, so we write the wire shape directly).
             empty = '{"tools.load_instruction": {}}'
-            ego.memory.remember(Message(content=empty, prompt=Prompt(role="assistant", content=empty)))
+            living.memory.remember(Message(content=empty, prompt=Prompt(role="assistant", content=empty)))
 
-            msgs_before = len(ego.memory.messages)
+            msgs_before = len(living.memory.messages)
             consequences = asyncio.run(functions.learn(living))
             assert consequences == []
-            assert len(ego.memory.messages) == msgs_before, "learn should skip without writing"
-            assert ego.memory.perception() is None, "empty intention surfaces as None"
+            assert len(living.memory.messages) == msgs_before, "learn should skip without writing"
+            assert living.memory.perception() is None, "empty intention surfaces as None"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

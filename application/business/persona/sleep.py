@@ -49,7 +49,7 @@ async def sleep(ego, living) -> Outcome[None]:
         if not diary_outcome.success:
             logger.error("Writing diary on sleep failed", {"persona": persona, "error": diary_outcome.message})
 
-        ego.memory.clear_archive()
+        living.memory.clear_archive()
         living.signals.clear()
 
         # Strip the heavy per-minute `signals` field from older health-log

@@ -83,7 +83,6 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
                 past_memory.remember(m)
 
             past_ego = Ego(persona)
-            past_ego.memory = past_memory
 
             past_pulse = Pulse(Worker())
             past_pulse.phase = Phase.NIGHT
@@ -91,6 +90,7 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
             past_living = PastLiving(
                 pulse=past_pulse,
                 ego=past_ego,
+                memory=past_memory,
                 eye=Eye(persona),
                 consultant=Consultant(persona),
                 teacher=Teacher(persona),
@@ -104,7 +104,7 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
                         f"Here is fed data from {source} that seems to be useful for you. "
                         f"You can use it: {past_context}"
                     )
-                    living.ego.memory.remember(Message(
+                    living.memory.remember(Message(
                         content=intro,
                         prompt=Prompt(role="user", content=intro),
                     ))

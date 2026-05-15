@@ -79,14 +79,14 @@ EXTRACTING = Action(
 
 
 async def consolidate(living: Living) -> bool:
-    """Distill the conversation in `living.ego.memory` into context + person
+    """Distill the conversation in `living.memory` into context + person
     files, then archive messages and forget. No trigger checks, no Tick/Tock
     dispatch — pure work.
 
     Returns True if consolidation happened, False if there was nothing to do
     or the model failed."""
     persona = living.ego.persona
-    memory = living.ego.memory
+    memory = living.memory
 
     if not memory.messages:
         return False
@@ -139,7 +139,7 @@ async def consolidate(living: Living) -> bool:
     )
 
     try:
-        result = await models.tool(living.ego.model, living.ego.identity + living.pulse.hint(), question, CONSOLIDATING)
+        result = await models.tool(living.ego.model, living.identity + living.pulse.hint(), question, CONSOLIDATING)
     except ModelError as e:
         logger.warning("brain.consolidate produced invalid JSON, will retry next consolidation", {"persona": persona, "error": str(e)})
         return False
@@ -189,7 +189,7 @@ async def reflect(living: Living) -> list:
     dispatch(Tick("reflect", {"persona": living.ego.persona}))
 
     persona = living.ego.persona
-    memory = living.ego.memory
+    memory = living.memory
     logger.debug("brain.reflect", {"persona": persona, "messages_count": len(memory.messages)})
 
     if not memory.messages:
@@ -265,7 +265,7 @@ async def reflect(living: Living) -> list:
     try:
         response = await models.tool(
             living.ego.model,
-            living.ego.identity + living.pulse.hint(),
+            living.identity + living.pulse.hint(),
             question,
             EXTRACTING,
         )

@@ -7,6 +7,7 @@ async def test_sleep_succeeds():
         import tempfile
         from application.business import persona as spec
         from application.core import agents
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.brain.signals import Tick
         from application.platform import ollama
@@ -35,7 +36,7 @@ async def test_sleep_succeeds():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
             # Plant a signal that represents the day's felt sense — sleep should
             # close it out so the new day starts on a fresh stream.

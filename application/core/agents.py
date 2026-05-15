@@ -43,9 +43,13 @@ from application.platform.observer import Signal, subscribe, unsubscribe
 
 
 class Ego:
+    """The persona's personality — her voice. Carries the stable identity
+    prompts (character, awareness, capabilities, situation, meanings,
+    substrate). Memory and Recent Context live on Living now; her identity
+    here is the stable prefix that doesn't change between beats."""
+
     def __init__(self, persona: Persona):
         self.persona = persona
-        self.memory = Memory(persona)
 
     @property
     def model(self):
@@ -53,9 +57,8 @@ class Ego:
 
     @property
     def identity(self) -> list[Prompt]:
-        # Persona's stable identity (cache breakpoint); situation and context
-        # are dynamic and added separately so they don't invalidate the cache
-        # of the stable prefix.
+        # Stable identity blocks only — each gets a cache breakpoint. Dynamic
+        # state (Recent Context, conversation) is composed by Living.identity.
         blocks = [
             Prompt(role="system", content="\n\n".join([
                 character.identity(self.persona),
@@ -76,10 +79,6 @@ class Ego:
             ]),
            cache_point=True)
         )
-
-        context = (self.memory.context or "").strip()
-        if context:
-            blocks.append(Prompt(role="system", content="## Recent Context\n\n" + context))
 
         return blocks
 
@@ -130,20 +129,21 @@ class Teacher:
 class Living:
     """The persona being-alive — the runtime state.
 
-    Holds the rhythm (pulse), the alive voices (ego, eye, consultant, teacher),
-    the work-shape (cycle), and the signal stream (signals — the felt sense of
-    what's happening, captured from the bus). Dies when Agent.stop() calls
-    `dispose()`.
+    Holds the rhythm (pulse), the memory (what she remembers), the alive
+    voices (ego, eye, consultant, teacher), the work-shape (cycle), and the
+    signal stream (signals — the felt sense of what's happening, captured
+    from the bus). Dies when Agent.stop() calls `dispose()`.
 
     Functions in the cycle reach into Living for everything they need:
-        living.ego, living.teacher, living.eye, living.consultant,
-        living.pulse, living.signals.
+        living.ego, living.memory, living.teacher, living.eye,
+        living.consultant, living.pulse, living.signals.
     """
 
     def __init__(
         self,
         pulse: Pulse,
         ego: "Ego",
+        memory: Memory,
         eye: "Eye",
         consultant: "Consultant",
         teacher: "Teacher",
@@ -151,6 +151,7 @@ class Living:
     ):
         self.pulse = pulse
         self.ego = ego
+        self.memory = memory
         self.eye = eye
         self.consultant = consultant
         self.teacher = teacher
@@ -159,6 +160,19 @@ class Living:
         self.created_at: int = time.time_ns()
         self._subscribed = False
         self._on_construct()
+
+    @property
+    def identity(self) -> list[Prompt]:
+        """The full identity prefix: ego's stable voice + current Recent Context.
+
+        Ego owns the stable blocks (character, situation, meanings). Memory
+        owns the dynamic context. Living composes them — the way she shows
+        up to the model right now."""
+        blocks = list(self.ego.identity)
+        context = (self.memory.context or "").strip()
+        if context:
+            blocks.append(Prompt(role="system", content="## Recent Context\n\n" + context))
+        return blocks
 
     def _on_construct(self) -> None:
         """Construction hook. Default: subscribe to the bus so the persona's
