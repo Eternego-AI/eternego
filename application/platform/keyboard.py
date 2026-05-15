@@ -70,7 +70,7 @@ def resolve(os: str, part: str):
         "home": Key.home, "end": Key.end,
         "pageup": Key.page_up, "page_up": Key.page_up,
         "pagedown": Key.page_down, "page_down": Key.page_down,
-        "insert": Key.insert,
+        **({"insert": Key.insert} if hasattr(Key, "insert") else {}),
         "ctrl": Key.ctrl, "control": Key.ctrl,
         "shift": Key.shift,
         "alt": Key.alt, "option": Key.alt,

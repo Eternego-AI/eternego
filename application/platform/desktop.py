@@ -42,8 +42,7 @@ from application.platform.tool import tool
 uinput_device = None
 
 
-@tool("Move the mouse cursor to absolute screen coordinates (x, y in pixels). "
-      "Use the screenshot's pixel space — top-left is (0, 0).")
+@tool("Move the mouse cursor to absolute screen coordinates. Top-left is (0, 0).")
 def mouse_move(x: int, y: int) -> str:
     if get_supported() == "linux":
         from evdev import UInput, ecodes as e

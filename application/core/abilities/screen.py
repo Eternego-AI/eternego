@@ -19,18 +19,18 @@ from application.platform import OS, datetimes, filesystem, logger
 
 
 @ability(
-    "Act on your screen and see the result. action is one of the desktop "
-    "input verbs (mouse_move, mouse_click, mouse_drag, mouse_press, "
+    "Interact with the system UI — clicks, drags, types, keypresses, scrolls. "
+    "You name the action; the ability does it and returns a screenshot of "
+    "the result, so you see the consequence on the next cycle. Cause, "
+    "effect, see — that is the loop this ability closes. "
+    "Shape: `{\"tools.screen\": {\"action\": \"<verb>\", <verb's kwargs>}}` "
+    "where action is one of mouse_move, mouse_click, mouse_drag, mouse_press, "
     "mouse_release, mouse_scroll, keyboard_type, keyboard_tap, keyboard_press, "
-    "keyboard_release); pass the verb's own kwargs flat alongside action — "
-    "shape is `{\"tools.screen\": {\"action\": \"<verb>\", <verb's kwargs>}}`. "
-    "Coordinates are in screenshot-pixel space (the image you last saw); "
-    "this ability translates them into display-pixel space before dispatching. "
-    "See each `tools.desktop.<verb>` entry above for that verb's parameters. "
-    "Returns a screenshot — you see the screen after the action on the next "
-    "cycle. Your environment notes whether a display is currently available; "
-    "if it is not, this ability will fail and you should tell the person "
-    "rather than retry."
+    "keyboard_release. See each `tools.desktop.<verb>` entry above for that "
+    "verb's parameters. "
+    "Your environment notes whether a display is currently available; if it "
+    "is not, this ability will fail and you should tell the person rather "
+    "than retry."
 )
 async def screen(persona, action: str = "", **args) -> Media:
     logger.debug("ability.screen", {"persona": persona, "action": action, "args": args})
@@ -38,13 +38,13 @@ async def screen(persona, action: str = "", **args) -> Media:
         raise ValueError("action is required")
     action = action.removeprefix("desktop.")
 
-    # Translate screenshot-pixel coordinates into display-pixel coordinates.
+    # Translate screenshot coordinates into cursor coordinates.
     # The persona sees the screen at 1280px longest dim (downscaled below);
     # she gives clicks in that space. We scale every kwarg whose name starts
-    # with `x` or `y` — that's the desktop module's convention for pixel
-    # positions. Scroll deltas (`dx`, `dy`) and everything else pass through.
-    display_w, display_h = await OS.default_screen_size()
-    scale = max(display_w, display_h) / 1280 if max(display_w, display_h) > 1280 else 1.0
+    # with `x` or `y` — that's the desktop module's convention for positions.
+    # Scroll deltas (`dx`, `dy`) and everything else pass through.
+    screen_w, screen_h = await OS.default_screen_size()
+    scale = max(screen_w, screen_h) / 1280 if max(screen_w, screen_h) > 1280 else 1.0
     scaled = {
         k: (int(v * scale) if (k.startswith("x") or k.startswith("y")) and isinstance(v, (int, float)) else v)
         for k, v in args.items()
