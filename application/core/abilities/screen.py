@@ -19,10 +19,15 @@ from application.platform import OS, datetimes, filesystem, logger
 
 
 @ability(
-    "Interact with the system UI — clicks, drags, types, keypresses, scrolls. "
-    "You name the action; the ability does it and returns a screenshot of "
-    "the result, so you see the consequence on the next cycle. Cause, "
-    "effect, see — that is the loop this ability closes. "
+    "For any system or desktop UI work that needs the cause-and-effect loop "
+    "— when your next move depends on what just appeared on screen. You name "
+    "one desktop action (a click, a type, a keypress, a drag, a scroll); the "
+    "ability runs it and returns a screenshot of the resulting state. You "
+    "read the screenshot on the next cycle and decide what comes next. Use "
+    "this whenever you're driving the UI step by step — opening an app, "
+    "filling a form, navigating a page, picking through a menu — anywhere "
+    "the screen changes between steps. The raw `tools.desktop.<verb>` "
+    "entries below act blind; this one closes the loop. "
     "Shape: `{\"tools.screen\": {\"action\": \"<verb>\", <verb's kwargs>}}` "
     "where action is one of mouse_move, mouse_click, mouse_drag, mouse_press, "
     "mouse_release, mouse_scroll, keyboard_type, keyboard_tap, keyboard_press, "

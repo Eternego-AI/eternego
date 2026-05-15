@@ -15,24 +15,26 @@ BASE_URL = "https://api.anthropic.com"
 async def chat(base_url: str, api_key: str | None, model: str, messages: list[dict]):
     """Stream chat response, yielding content chunks."""
     api_key = api_key or ""
-    system_parts = []
+    system_blocks = []
     chat_messages = []
     for m in messages:
         if m.get("role") == "system":
-            system_parts.append(m.get("content", ""))
+            system_blocks.append(m)
         else:
             chat_messages.append(m)
 
     body = {"model": model, "messages": chat_messages, "max_tokens": 4096, "stream": True}
     has_cache = False
-    if system_parts:
-        text = "\n".join(system_parts)
-        cache_type = next((m.get("cache_control") for m in messages if m.get("role") == "system" and m.get("cache_control")), None)
-        if cache_type:
-            has_cache = True
-            body["system"] = [{"type": "text", "text": text, "cache_control": {"type": cache_type, "ttl": "1h"}}]
-        else:
-            body["system"] = text
+    if system_blocks:
+        blocks = []
+        for sys_msg in system_blocks:
+            block = {"type": "text", "text": sys_msg.get("content", "")}
+            cache_type = sys_msg.get("cache_control")
+            if cache_type:
+                has_cache = True
+                block["cache_control"] = {"type": cache_type, "ttl": "1h"}
+            blocks.append(block)
+        body["system"] = blocks
 
     for msg in chat_messages:
         cache_type = msg.pop("cache_control", None)
@@ -127,11 +129,11 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
     without structured-output constraints.
     """
     api_key = api_key or ""
-    system_parts = []
+    system_blocks = []
     chat_messages = []
     for m in messages:
         if m.get("role") == "system":
-            system_parts.append(m.get("content", ""))
+            system_blocks.append(m)
         else:
             chat_messages.append(m)
 
@@ -146,14 +148,16 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
         if tool_choice is not None:
             body["tool_choice"] = tool_choice
     has_cache = False
-    if system_parts:
-        text = "\n".join(system_parts)
-        cache_type = next((m.get("cache_control") for m in messages if m.get("role") == "system" and m.get("cache_control")), None)
-        if cache_type:
-            has_cache = True
-            body["system"] = [{"type": "text", "text": text, "cache_control": {"type": cache_type, "ttl": "1h"}}]
-        else:
-            body["system"] = text
+    if system_blocks:
+        blocks = []
+        for sys_msg in system_blocks:
+            block = {"type": "text", "text": sys_msg.get("content", "")}
+            cache_type = sys_msg.get("cache_control")
+            if cache_type:
+                has_cache = True
+                block["cache_control"] = {"type": cache_type, "ttl": "1h"}
+            blocks.append(block)
+        body["system"] = blocks
 
     for msg in chat_messages:
         cache_type = msg.pop("cache_control", None)

@@ -255,17 +255,17 @@ async def test_learn_teacher_falls_back_to_thinking_when_no_frontier():
     assert code == 0, error
 
 
-async def test_learn_records_failure_impression_when_lesson_missing_fields():
-    """Teacher returns a partial lesson (no path). Learn records a failure
-    impression so the persona's next read sees that the round-trip closed
-    without producing a usable procedure."""
+async def test_learn_falls_back_to_chatting_when_lesson_missing_fields():
+    """Teacher returns a partial lesson (no path). Learn falls back to the
+    chatting meaning's body so the persona's next read has guidance to speak
+    or say done — not a dead-end."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain import functions, meanings
             from application.core.brain.memory import Memory
-            from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
             from application.platform import ollama
@@ -291,10 +291,10 @@ async def test_learn_records_failure_impression_when_lesson_missing_fields():
                 consequences = await functions.learn(living.memory, living.ego, living.teacher)
                 assert consequences == []
 
-                # Last message is the failure impression (round-trip closed).
+                chatting_body = meanings.builtin(persona)["chatting"].path()
                 last = living.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content
-                assert "could not produce a procedure" in last.content
+                assert chatting_body in last.content, last.content
 
             partial = json.dumps({"intention": "doing something", "path": ""})
             ollama.assert_call(
@@ -306,16 +306,70 @@ async def test_learn_records_failure_impression_when_lesson_missing_fields():
     assert code == 0, error
 
 
-async def test_learn_records_failure_impression_when_teacher_invalid_json():
+async def test_learn_falls_back_to_chatting_when_teacher_judges_not_actionable():
+    """Teacher returns `{}` — judged the intention as not a kind of moment
+    that calls for a procedure. Learn writes the chatting meaning's body as
+    the impression (so decide speaks rather than acting out a non-procedure)
+    and does NOT register a learned meaning for this intention."""
+    def isolated():
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents, paths
+            from application.core.brain import functions, meanings
+            from application.core.brain.memory import Memory
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Model, Persona
+            from application.platform import ollama
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            async def consume(url):
+                persona = Persona(
+                    id="t", name="T",
+                    thinking=Model(name="m", url=url),
+                    frontier=Model(name="m", url=url),
+                )
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.intention("wondering about the weather")
+
+                consequences = await functions.learn(living.memory, living.ego, living.teacher)
+                assert consequences == []
+
+                chatting_body = meanings.builtin(persona)["chatting"].path()
+                last = living.memory.messages[-1]
+                assert "TOOL_RESULT" in last.content
+                assert chatting_body in last.content, last.content
+
+                # No learned meaning registered for this non-actionable intention.
+                assert not paths.learned(persona.id).exists() or \
+                    "wondering about the weather" not in (paths.read_json(paths.learned(persona.id)) or {})
+
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[[{"message": {"content": "{}"}, "done": True}]],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_learn_falls_back_to_chatting_when_teacher_invalid_json():
     """Teacher returns prose — extract_json fails. Learn catches the
-    ModelError, records a failure impression to close the exchange."""
+    ModelError and falls back to the chatting meaning's body."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain import functions, meanings
             from application.core.brain.memory import Memory
-            from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
             from application.platform import ollama
@@ -340,9 +394,10 @@ async def test_learn_records_failure_impression_when_teacher_invalid_json():
                 consequences = await functions.learn(living.memory, living.ego, living.teacher)
                 assert consequences == []
 
+                chatting_body = meanings.builtin(persona)["chatting"].path()
                 last = living.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content
-                assert "could not produce a procedure" in last.content
+                assert chatting_body in last.content, last.content
 
             ollama.assert_call(
                 run=lambda url: consume(url),
