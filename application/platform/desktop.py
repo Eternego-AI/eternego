@@ -19,6 +19,14 @@ either be in the `input` group, or a udev rule must grant access.
 Imports are lazy inside each function — instantiating pynput on Linux
 crashes on a Wayland session, and importing evdev on macOS/Windows
 would fail at module-load time.
+
+Positional-argument convention: every pixel-position kwarg on these
+verbs starts with `x` or `y` (e.g. `x`, `y`, `x_from`, `y_from`,
+`x_to`, `y_to`). The screen ability one layer up uses this prefix to
+decide which kwargs to scale from screenshot-pixel space to display-
+pixel space. Non-position kwargs (`button`, `count`, `dx`, `dy` for
+scroll ticks, `text`, `key`) must NOT start with `x` or `y` so they
+pass through untouched. Add new verbs with this convention.
 """
 
 import time
@@ -100,9 +108,9 @@ def mouse_click(button: str = "left", count: int = 1) -> str:
     return f"{button} click x{count}"
 
 
-@tool("Drag the mouse from (from_x, from_y) to (to_x, to_y) while holding a button. "
+@tool("Drag the mouse from (x_from, y_from) to (x_to, y_to) while holding a button. "
       "button is 'left', 'right', or 'middle' (default 'left').")
-def mouse_drag(from_x: int, from_y: int, to_x: int, to_y: int, button: str = "left") -> str:
+def mouse_drag(x_from: int, y_from: int, x_to: int, y_to: int, button: str = "left") -> str:
     name = (button or "left").strip().lower()
     if get_supported() == "linux":
         from evdev import UInput, ecodes as e
@@ -121,14 +129,14 @@ def mouse_drag(from_x: int, from_y: int, to_x: int, to_y: int, button: str = "le
         # Move to start
         ui.write(e.EV_REL, e.REL_X, -10000)
         ui.write(e.EV_REL, e.REL_Y, -10000)
-        ui.write(e.EV_REL, e.REL_X, int(from_x))
-        ui.write(e.EV_REL, e.REL_Y, int(from_y))
+        ui.write(e.EV_REL, e.REL_X, int(x_from))
+        ui.write(e.EV_REL, e.REL_Y, int(y_from))
         ui.syn()
         # Press button, drag, release
         ui.write(e.EV_KEY, code, 1)
         ui.syn()
-        ui.write(e.EV_REL, e.REL_X, int(to_x) - int(from_x))
-        ui.write(e.EV_REL, e.REL_Y, int(to_y) - int(from_y))
+        ui.write(e.EV_REL, e.REL_X, int(x_to) - int(x_from))
+        ui.write(e.EV_REL, e.REL_Y, int(y_to) - int(y_from))
         ui.syn()
         ui.write(e.EV_KEY, code, 0)
         ui.syn()
@@ -138,11 +146,11 @@ def mouse_drag(from_x: int, from_y: int, to_x: int, to_y: int, button: str = "le
         if btn is None:
             raise ValueError(f"unknown mouse button: {button!r}; expected left, right, or middle")
         mouse = Controller()
-        mouse.position = (int(from_x), int(from_y))
+        mouse.position = (int(x_from), int(y_from))
         mouse.press(btn)
-        mouse.position = (int(to_x), int(to_y))
+        mouse.position = (int(x_to), int(y_to))
         mouse.release(btn)
-    return f"dragged ({from_x}, {from_y}) → ({to_x}, {to_y}) with {button}"
+    return f"dragged ({x_from}, {y_from}) → ({x_to}, {y_to}) with {button}"
 
 
 @tool("Press a mouse button without releasing it. Pair with mouse_release; in between, "

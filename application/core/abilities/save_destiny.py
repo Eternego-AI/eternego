@@ -5,7 +5,12 @@ from application.core.abilities import ability
 from application.platform import logger
 
 
-@ability("Save a reminder or scheduled event. type: reminder|schedule. trigger: YYYY-MM-DD HH:MM. recurrence: daily|weekly|monthly|hourly or empty.")
+@ability(
+    "Save anything time-based to fire later — a reminder for the person, a "
+    "scheduled action for yourself, a recurring beat. Use for any time-based "
+    "trigger. type: reminder|schedule. trigger: YYYY-MM-DD HH:MM. "
+    "recurrence: daily|weekly|monthly|hourly or empty."
+)
 async def save_destiny(
     persona,
     type: str = "reminder",

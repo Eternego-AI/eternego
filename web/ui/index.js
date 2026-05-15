@@ -98,6 +98,11 @@ async function deletePersona(id) {
     catch (e) { return { ok: false, error: e.message }; }
 }
 
+async function sleepPersona(id) {
+    try { await post(`/api/persona/${id}/sleep`); return { ok: true }; }
+    catch (e) { return { ok: false, error: e.message }; }
+}
+
 async function pairChannel(id, code) {
     try { await post(`/api/persona/${id}/pair`, { code }); return { ok: true }; }
     catch (e) { return { ok: false, error: e.message }; }
@@ -281,6 +286,7 @@ async function showPersona(id, tab = 'chat') {
         page.addEventListener('poweroff', () => onPowerOff(id));
         page.addEventListener('restart',  () => onRestart(id));
         page.addEventListener('delete',   () => onDelete(id));
+        page.addEventListener('sleep',    () => onSleep(id));
         page.addEventListener('refresh-diagnose', () => refreshDiagnose(id));
         page.addEventListener('update-status', (e) => onUpdateStatus(id, e.detail.status));
         page.addEventListener('update-model',  (e) => onUpdateModel(id, e.detail));
@@ -387,6 +393,12 @@ async function onPowerOff(id) {
     if (!confirm('Turn her off? She goes silent until you wake her.')) return;
     const result = await stopPersona(id);
     if (!result.ok) alert(`Could not stop: ${result.error}`);
+}
+
+async function onSleep(id) {
+    if (!confirm("Send her to sleep? She'll reflect on today and archive what's worth keeping.")) return;
+    const result = await sleepPersona(id);
+    if (!result.ok) alert(`Could not sleep: ${result.error}`);
 }
 
 async function onRestart(id) {

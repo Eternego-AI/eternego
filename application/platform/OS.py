@@ -1,10 +1,12 @@
 """OS — system-agnostic operating system operations."""
 
 import asyncio
+import json
 import platform
 import shutil
 import socket
 
+from application.platform import logger
 from application.platform.tool import tool
 
 
@@ -358,6 +360,100 @@ async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 
         raise NotImplementedError(f"screenshot not supported on this OS")
 
     return f"Screenshot saved to {path}"
+
+
+async def default_screen_size() -> tuple[int, int]:
+    """Width and height of the default screen in physical pixels.
+
+    One responsibility: tell the caller how big the default screen is so
+    callers (the screen ability, for instance) can compute a scale factor
+    between a captured-and-resized image and the live display.
+
+    Linux: tries `xrandr` first — works under both X11 and XWayland, which
+    most KDE Wayland sessions provide by default. Falls back to
+    `kscreen-doctor -j` (KDE pure Wayland). Final fallback takes one
+    screenshot via the existing portal path and reads its dimensions.
+
+    macOS: parses `system_profiler SPDisplaysDataType -json`.
+    Windows: GetSystemMetrics via ctypes.
+    """
+    target_os = get_supported()
+
+    if target_os == "linux":
+        import re
+        import shutil
+
+        if shutil.which("xrandr"):
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "xrandr", "-q",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                out, _ = await proc.communicate()
+                m = re.search(rb"current\s+(\d+)\s*x\s*(\d+)", out)
+                if m:
+                    return int(m.group(1)), int(m.group(2))
+            except Exception as e:
+                logger.debug("xrandr probe failed", {"error": str(e)})
+
+        if shutil.which("kscreen-doctor"):
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "kscreen-doctor", "-j",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                out, _ = await proc.communicate()
+                data = json.loads(out.decode())
+                primary = next((o for o in data.get("outputs", []) if o.get("primary")), None)
+                if primary is None:
+                    primary = next((o for o in data.get("outputs", []) if o.get("enabled")), None)
+                if primary:
+                    sz = primary.get("currentModeSize", {})
+                    if sz.get("width") and sz.get("height"):
+                        return int(sz["width"]), int(sz["height"])
+            except Exception as e:
+                logger.debug("kscreen-doctor probe failed", {"error": str(e)})
+
+        # Last resort: take a screenshot and measure it.
+        import os as _os
+        import tempfile
+        from PIL import Image
+        fd, tmp = tempfile.mkstemp(suffix=".png")
+        _os.close(fd)
+        try:
+            await screenshot(path=tmp)
+            with Image.open(tmp) as img:
+                return img.width, img.height
+        finally:
+            try:
+                _os.unlink(tmp)
+            except OSError:
+                pass
+
+    if target_os == "macos":
+        proc = await asyncio.create_subprocess_exec(
+            "system_profiler", "SPDisplaysDataType", "-json",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await proc.communicate()
+        import re
+        data = json.loads(out.decode())
+        for display in data.get("SPDisplaysDataType", []):
+            for d in display.get("spdisplays_ndrvs", []):
+                m = re.search(r"(\d+)\s*x\s*(\d+)", d.get("_spdisplays_pixels", ""))
+                if m:
+                    return int(m.group(1)), int(m.group(2))
+        raise RuntimeError("could not determine screen size from system_profiler")
+
+    if target_os == "windows":
+        import ctypes
+        u = ctypes.windll.user32
+        return u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+
+    raise NotImplementedError("default_screen_size not supported on this OS")
 
 
 @tool("Execute a command that completes on its own and return its output. "

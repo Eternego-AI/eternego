@@ -16,7 +16,12 @@ from application.platform import logger
 from application.platform.observer import Command, dispatch
 
 
-@ability("Speak from inside `steps` — say something mid-procedure without ending the beat.")
+@ability(
+    "Narrate while acting in the same beat. Pair with another action in your "
+    "decision list to speak AND do in one step. After reporting, the next "
+    "action in your decision list runs immediately — no waiting for a reply "
+    "(use `tools.ask` for that)."
+)
 async def report(persona, text: str = "") -> str:
     logger.debug("ability.report", {"persona": persona, "text": text})
     if not text:

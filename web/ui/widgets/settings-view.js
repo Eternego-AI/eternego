@@ -92,6 +92,7 @@ class SettingsView extends HTMLElement {
             <section class="w-set-section">
                 <h3>Actions</h3>
                 <div class="w-set-buttons">
+                    <button class="w-set-btn" data-act="sleep">SEND HER TO SLEEP</button>
                     <button class="w-set-btn" data-act="restart">RESTART HER</button>
                     <button class="w-set-btn" data-act="poweroff">TURN HER OFF</button>
                     <button class="w-set-btn is-danger" data-act="delete">DELETE PERMANENTLY</button>

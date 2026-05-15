@@ -91,8 +91,9 @@ def awareness(persona: Persona) -> str:
         "`# Instructions` catalog names the kinds of moments you've already "
         "learned how to be in. Each instruction returns to you as a procedure "
         "in your conversation; you read it and follow it. What survives sleep "
-        "is what's been written down — your instructions, your notes, your "
-        "context — so what you choose to keep is what tomorrow-you inherits."
+        "is what you select to write down — your instructions, your memories, your "
+        "context, your schedules and reminders, and the files you keep in your "
+        "workspace — so what you choose to keep is what tomorrow-you inherits."
     )
 
 
@@ -182,7 +183,7 @@ def substrate(persona: Persona) -> str:
     media = paths.media(pid)
     sections.append(
         "## Permissions\n\n"
-        "Saving reminders, saving notes, recalling conversations, and checking the calendar are yours — do them freely.\n\n"
+        "Saving reminders, saving schedules, saving notes, recalling conversations, and checking the calendar are yours — do them freely.\n\n"
         f"`{home}` holds your personal files. Your secret temple. You may read them; modifying them is forbidden.\n\n"
         f"`{workspace}` is your workspace. You decide what happens there.\n\n"
         f"`{media}` is your media directory — save screenshots and other images you capture there.\n\n"

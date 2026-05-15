@@ -55,7 +55,6 @@ def builtin(persona) -> dict[str, Meaning]:
     _BUILTIN: dict[str, str] = {
         "Any type of conversation, there is nothing to do but talk": "chatting",
         "Working with files and directories on the machine": "exploring_filesystem",
-        "Noticing something worth keeping that does not belong in another file": "noting",
         "Looking back at past conversations or scheduled events": "recalling",
         "Saving a reminder or event for a future moment, or responding when one has come due": "scheduling",
         "Something is wrong in software or the machine": "troubleshooting",

@@ -233,11 +233,11 @@ async def test_reflect_when_idle_consolidates():
     assert code == 0, error
 
 
-async def test_reflect_at_night_refines_and_creates_instructions():
-    """At night, reflect first asks the persona to update instructions based
-    on today's lived experience (refine existing, create new, delete stale),
-    then calls consolidate. Two model calls: one for instruction updates,
-    one for long-term files."""
+async def test_reflect_at_night_refines_used_instructions():
+    """At night, reflect asks the persona to refine the bodies of maps she
+    used today, then calls consolidate. Two model calls: one for refinements,
+    one for long-term files. Reflection only refines — creation lives in
+    learn, deletion in troubleshooting."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -276,31 +276,22 @@ async def test_reflect_at_night_refines_and_creates_instructions():
                 assert "specific updated body" in refined_body
                 assert "Old vague body" not in refined_body
 
-                # learned.json: refine kept existing file_id; new entry was
-                # written under a fresh UUID for the new intention.
+                # learned.json unchanged: refine kept the existing intention/file_id mapping.
                 learned = paths.read_json(paths.learned(persona.id)) or {}
-                assert learned.get("asking for keys") == "asking_for_keys"
-                assert "publishing via PR" in learned, f"new intention missing: {learned!r}"
-                new_file_id = learned["publishing via PR"]
+                assert learned == {"asking for keys": "asking_for_keys"}, f"got {learned!r}"
 
-                # New meaning file exists under the UUID, only in meanings/
-                # (no lesson side-effect — persona-authored procedures don't
-                # produce separate teacher lessons).
-                new_meaning = paths.meanings(persona.id) / f"{new_file_id}.md"
-                assert new_meaning.exists()
-                assert "gh pr create" in new_meaning.read_text()
-                assert not (paths.lessons(persona.id) / f"{new_file_id}.md").exists(), \
-                    "reflect.new should not write to lessons/"
+                # No new meaning files were created — reflection refines only.
+                meaning_files = list(paths.meanings(persona.id).glob("*.md"))
+                assert [f.name for f in meaning_files] == ["asking_for_keys.md"], \
+                    f"unexpected meaning files: {[f.name for f in meaning_files]}"
 
                 # Long-term consolidation also happened.
                 assert paths.person_identity(persona.id).exists()
                 assert ego.memory.messages == []
 
-            # Refine matches by intention text ("asking for keys"), not stem.
             updates = json.dumps({
                 "updates": [
-                    {"refine": {"intention": "asking for keys", "path": "specific updated body with steps"}},
-                    {"new": {"intention": "publishing via PR", "path": "Run gh pr create with the right base and head."}},
+                    {"intention": "asking for keys", "instruction": "specific updated body with steps"},
                 ]
             })
             consolidation = json.dumps({
@@ -365,140 +356,6 @@ async def test_reflect_at_night_empty_updates_still_consolidates():
                 run=lambda url: consume(url),
                 responses=[
                     [{"message": {"content": empty_updates}, "done": True}],
-                    [{"message": {"content": consolidation}, "done": True}],
-                ],
-            )
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
-async def test_reflect_new_with_existing_intention_updates_existing_file():
-    """When reflect emits `new` with an intention that's already in the
-    catalog, the existing file is updated in place (no orphan UUID file
-    created). This prevents catalog bloat when the model mis-uses `new`
-    instead of `refine`."""
-    def isolated():
-        import os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents, paths
-            from application.core.brain import functions, meanings
-            from application.core.brain.pulse import Phase, Pulse
-            from application.core.data import Message, Model, Persona, Prompt
-            from application.platform import ollama
-            import json
-
-            class FakeWorker:
-                def run(self, *a): pass
-                def nudge(self): pass
-
-            async def consume(url):
-                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
-                # Seed a meaning the persona already has.
-                paths.save_as_string(paths.meanings(persona.id) / "existing-file-id.md", "Old body.\n")
-                paths.save_as_json(persona.id, paths.learned(persona.id), {"X engagement": "existing-file-id"})
-
-                ego = agents.Ego(persona)
-                eye = agents.Eye(persona)
-                consultant = agents.Consultant(persona)
-                teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                living.pulse.phase = Phase.NIGHT
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-
-                consequences = await functions.reflect(living)
-                assert consequences == []
-
-                # Existing file was updated in place.
-                updated = paths.read(paths.meanings(persona.id) / "existing-file-id.md")
-                assert "New body for X engagement" in updated
-                assert "Old body" not in updated
-
-                # learned.json still has exactly one entry for this intention.
-                learned = paths.read_json(paths.learned(persona.id)) or {}
-                assert learned == {"X engagement": "existing-file-id"}, f"got {learned!r}"
-
-                # No orphan file was created (no other .md in meanings/).
-                meaning_files = list(paths.meanings(persona.id).glob("*.md"))
-                assert len(meaning_files) == 1, f"expected 1 meaning file, got {[f.name for f in meaning_files]}"
-
-            updates = json.dumps({
-                "updates": [
-                    {"new": {"intention": "X engagement", "path": "New body for X engagement"}},
-                ]
-            })
-            consolidation = json.dumps({
-                "context": "today",
-                "identity": [], "traits": [], "wishes": [], "struggles": [],
-                "persona_traits": [], "permissions": [],
-            })
-            ollama.assert_call(
-                run=lambda url: consume(url),
-                responses=[
-                    [{"message": {"content": updates}, "done": True}],
-                    [{"message": {"content": consolidation}, "done": True}],
-                ],
-            )
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
-async def test_reflect_at_night_delete_unlearns_custom_instruction():
-    """`{"delete": "<intention>"}` removes a custom instruction's file,
-    drops it from learned.json, and unlearns it from memory."""
-    def isolated():
-        import os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents, paths
-            from application.core.brain import functions, meanings
-            from application.core.brain.pulse import Phase, Pulse
-            from application.core.data import Message, Model, Persona, Prompt
-            from application.platform import ollama
-            import json
-
-            class FakeWorker:
-                def run(self, *a): pass
-                def nudge(self): pass
-
-            async def consume(url):
-                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
-                paths.save_as_string(paths.meanings(persona.id) / "outdated.md", "stale procedure\n")
-                paths.save_as_json(persona.id, paths.learned(persona.id), {"outdated thing": "outdated"})
-
-                ego = agents.Ego(persona)
-                eye = agents.Eye(persona)
-                consultant = agents.Consultant(persona)
-                teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                living.pulse.phase = Phase.NIGHT
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                # Force the seeded meaning into memory's custom catalog.
-                ego.memory.learn("outdated", meanings.Meaning("outdated", "outdated thing", "stale procedure"))
-
-                consequences = await functions.reflect(living)
-                assert consequences == []
-
-                # File deleted.
-                assert not (paths.meanings(persona.id) / "outdated.md").exists()
-                # learned.json no longer has the intention.
-                learned = paths.read_json(paths.learned(persona.id)) or {}
-                assert "outdated thing" not in learned
-                # Memory's custom catalog forgot it.
-                assert "outdated" not in ego.memory.custom_meanings
-
-            updates = json.dumps({"updates": [{"delete": {"intention": "outdated thing"}}]})
-            consolidation = json.dumps({
-                "context": "pruned",
-                "identity": [], "traits": [], "wishes": [], "struggles": [],
-                "persona_traits": [], "permissions": [],
-            })
-            ollama.assert_call(
-                run=lambda url: consume(url),
-                responses=[
-                    [{"message": {"content": updates}, "done": True}],
                     [{"message": {"content": consolidation}, "done": True}],
                 ],
             )
