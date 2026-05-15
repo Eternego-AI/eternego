@@ -25,16 +25,14 @@ per-block cache_control for Anthropic later).
   meets a moment without an ability. Static identity. Uses the persona's
   frontier model.
 
-`mind(ego, consultant, eye, teacher, living)` returns the cognitive cycle —
-seven stages, each bound to the voices it needs.
-
-`Living(pulse, cycle)` is the persona's runtime — a heartbeat (Pulse) and
-a rhythm of action (cycle) together, which the Agent serves for a Persona.
+`Living` is the persona's runtime — pulse, memory, voices, and a mind
+(the cycle of cognitive functions for the current phase). The Agent
+serves a Living for a Persona.
 """
 
 from application.core.brain import character, situation
 from application.core.brain.memory import Memory
-from application.core.brain.pulse import Pulse
+from application.core.brain.pulse import Phase, Pulse
 from application.core.data import Persona, Prompt
 
 
@@ -151,7 +149,43 @@ class Living:
         self.eye = eye
         self.consultant = consultant
         self.teacher = teacher
-        # Lazy import to break the agents↔mind cycle (mind imports Living
-        # for the type hint).
-        from application.core.brain.mind import mind
-        self.mind = mind(self)
+        self.mind: list = []
+
+    def phase(self, phase: Phase) -> None:
+        """Shift into a phase: rebuild the mind's cycle for that phase,
+        mark the pulse, and reset the felt stream. No-op if already in
+        that phase. Callers that need the worker nudged do it themselves.
+
+        Each phase has its own cycle — Morning starts the day's work,
+        Day adds reflection and archiving once the work runs, Night
+        stops perceiving and only closes out. Each cycle item is a
+        `(name, callable)` pair — Clock walks this list every beat,
+        invoking each callable with no args."""
+        if self.pulse.phase == phase:
+            return
+        # Lazy import to break the agents↔functions cycle.
+        from application.core.brain import functions
+        match phase:
+            case Phase.MORNING:
+                self.mind = [
+                    ("realize",    lambda: functions.realize(self.pulse, self.memory, self.ego, self.eye, self.consultant)),
+                    ("recognize",  lambda: functions.recognize(self.pulse, self.memory, self.ego)),
+                    ("learn",      lambda: functions.learn(self.pulse, self.memory, self.ego, self.teacher)),
+                    ("decide",     lambda: functions.decide(self.pulse, self.memory, self.ego)),
+                ]
+            case Phase.DAY:
+                self.mind = [
+                    ("realize",    lambda: functions.realize(self.pulse, self.memory, self.ego, self.eye, self.consultant)),
+                    ("recognize",  lambda: functions.recognize(self.pulse, self.memory, self.ego)),
+                    ("learn",      lambda: functions.learn(self.pulse, self.memory, self.ego, self.teacher)),
+                    ("decide",     lambda: functions.decide(self.pulse, self.memory, self.ego)),
+                    ("reflect",    lambda: functions.reflect(self.pulse, self.memory, self.ego)),
+                    ("archive",    lambda: functions.archive(self.pulse, self.memory, self.ego)),
+                ]
+            case Phase.NIGHT:
+                self.mind = [
+                    ("reflect",    lambda: functions.reflect(self.pulse, self.memory, self.ego)),
+                    ("archive",    lambda: functions.archive(self.pulse, self.memory, self.ego)),
+                ]
+        self.pulse.phase = phase
+        self.pulse.signals = []

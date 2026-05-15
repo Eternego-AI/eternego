@@ -32,7 +32,7 @@ async def test_reflect_no_messages_passes_through():
             teacher = agents.Teacher(persona)
             living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
-            consequences = asyncio.run(functions.reflect(living))
+            consequences = asyncio.run(functions.reflect(living.pulse, living.memory, living.ego))
             assert consequences == []
             assert living.memory.messages == []
 
@@ -72,7 +72,7 @@ async def test_reflect_in_morning_phase_skips():
             identity_file = paths.person_identity(persona.id)
             assert not identity_file.exists()
 
-            consequences = asyncio.run(functions.reflect(living))
+            consequences = asyncio.run(functions.reflect(living.pulse, living.memory, living.ego))
             assert consequences == []
 
             # Messages untouched; no consolidation happened.
@@ -117,7 +117,7 @@ async def test_reflect_during_day_when_not_idle_raises_interrupted():
             assert not identity_file.exists(), "test premise: identity file should not exist yet"
 
             try:
-                asyncio.run(functions.reflect(living))
+                asyncio.run(functions.reflect(living.pulse, living.memory, living.ego))
                 assert False, "reflect should have raised ReflectInterrupted"
             except ReflectInterrupted:
                 pass
@@ -158,7 +158,7 @@ async def test_reflect_at_night_consolidates():
                 living.pulse.phase = Phase.NIGHT
                 living.memory.remember(Message(content="we talked about X", prompt=Prompt(role="user", content="we talked about X")))
 
-                consequences = await functions.reflect(living)
+                consequences = await functions.reflect(living.pulse, living.memory, living.ego)
 
                 assert consequences == []
                 assert living.memory.messages == [], "messages should be archived after consolidate"
@@ -217,7 +217,7 @@ async def test_reflect_when_idle_consolidates():
                 living.pulse.is_idle = _idle
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
-                consequences = await functions.reflect(living)
+                consequences = await functions.reflect(living.pulse, living.memory, living.ego)
 
                 assert consequences == []
                 assert living.memory.messages == [], "consolidated → archived → forgotten"
@@ -273,7 +273,7 @@ async def test_reflect_at_night_refines_used_instructions():
                 living.pulse.phase = Phase.NIGHT
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
-                consequences = await functions.reflect(living)
+                consequences = await functions.reflect(living.pulse, living.memory, living.ego)
                 assert consequences == []
 
                 # Refined body persisted at the existing file (matched via
@@ -348,7 +348,7 @@ async def test_reflect_at_night_empty_updates_still_consolidates():
                 living.pulse.phase = Phase.NIGHT
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
-                consequences = await functions.reflect(living)
+                consequences = await functions.reflect(living.pulse, living.memory, living.ego)
                 assert consequences == []
                 # Consolidation still ran — context written.
                 assert living.memory.context == "quiet day"
@@ -399,7 +399,7 @@ async def test_consolidate_writes_person_files_and_archives():
                 living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
 
-                changed = await consolidate(living)
+                changed = await consolidate(living.pulse, living.memory, living.ego)
                 assert changed is True
 
                 assert paths.person_identity(persona.id).read_text().strip() == "- A\n- B"
@@ -458,7 +458,7 @@ async def test_consolidate_handles_invalid_json():
                 living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
                 msgs_before = len(living.memory.messages)
 
-                changed = await consolidate(living)
+                changed = await consolidate(living.pulse, living.memory, living.ego)
                 assert changed is False
                 assert not paths.person_identity(persona.id).exists()
                 assert len(living.memory.messages) == msgs_before, "messages should remain on failure"

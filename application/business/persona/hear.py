@@ -41,7 +41,7 @@ async def hear(ego, living, content: str, channel=None) -> Outcome[HearData]:
             prompt=Prompt(role="user", content=content),
         )
         living.memory.remember(message)
-        living.pulse.phase = Phase.DAY
+        living.phase(Phase.DAY)
         living.pulse.worker.nudge()
 
         bus.broadcast("Heard", {

@@ -18,13 +18,12 @@ impression and acts on it. Learn is a cognitive function — no cycle
 restart, no consequence emitted; it just completes the round-trip
 between intention and impression.
 
-`consult_teacher_for_instruction(living, intention)` is the work of writing
-a new lesson + translating, exposed so other paths (like reflect) can call
-it directly.
+`consult_teacher_for_instruction(ego, teacher, intention)` is the work of
+writing a new lesson + translating, exposed so other paths (like reflect)
+can call it directly.
 """
 
 from application.core import models, paths
-from application.core.agents import Living
 from application.core.brain import character, meanings
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Action, Prompt
@@ -43,7 +42,7 @@ LECTURING = Action(
 )
 
 
-async def consult_teacher_for_instruction(living: Living, intention: str) -> tuple[str, str, str] | None:
+async def consult_teacher_for_instruction(ego, teacher, intention: str) -> tuple[str, str, str] | None:
     """Ask teacher for a procedure for this kind of moment, have the persona
     translate it into her own voice, save both lesson and meaning to disk,
     return the result.
@@ -56,9 +55,7 @@ async def consult_teacher_for_instruction(living: Living, intention: str) -> tup
     if not intention:
         return None
 
-    persona = living.ego.persona
-    teacher = living.teacher
-    ego = living.ego
+    persona = ego.persona
 
     catalog_text = (
         "# The persona's tools and instructions\n\n"
@@ -172,7 +169,7 @@ async def consult_teacher_for_instruction(living: Living, intention: str) -> tup
     return (meaning_name, intention, translated)
 
 
-async def learn(living: Living) -> list:
+async def learn(pulse, memory, ego, teacher) -> list:
     """learn FROM living — fulfill a pending intention with an impression.
 
     Gates on memory: only fires when `memory.perception()` returns an
@@ -185,10 +182,9 @@ async def learn(living: Living) -> list:
     between intention and impression; cycle continues to decide on the
     same iteration.
     """
-    dispatch(Tick("learn", {"persona": living.ego.persona}))
+    dispatch(Tick("learn", {"persona": ego.persona}))
 
-    persona = living.ego.persona
-    memory = living.memory
+    persona = ego.persona
 
     intention = memory.perception()
     if intention is None:
@@ -208,7 +204,7 @@ async def learn(living: Living) -> list:
             return []
 
     # No match — consult teacher to write a new procedure, persona translates.
-    result = await consult_teacher_for_instruction(living, intention)
+    result = await consult_teacher_for_instruction(ego, teacher, intention)
     if result is None:
         memory.impression("could not produce a procedure for this intention")
         dispatch(Tock("learn", {"persona": persona, "branch": "teacher-failed"}))

@@ -18,14 +18,14 @@ jobs that both belong to "growing" rather than acting:
    context that should bridge to the next beat. Then the conversation
    archives and clears.
 
-`consolidate(living)` is exposed so feed (importing past chat data) can
-call it directly on a sandboxed past Living without reflect's trigger
-gates.
+`consolidate(pulse, memory, ego)` is exposed so feed (importing past chat
+data) can call it directly on a sandboxed past Living without reflect's
+trigger gates.
 
 Trigger for the night/idle work:
 - If memory has nothing to consolidate, pass through.
 - If phase is night, do the work immediately.
-- Otherwise, await `living.pulse.is_idle()`. It sleeps the remaining-to-idle
+- Otherwise, await `pulse.is_idle()`. It sleeps the remaining-to-idle
   window; returns True if uninterrupted (idle confirmed → do the work),
   False if a nudge cancelled the wait (activity arrived → raise
   ReflectInterrupted).
@@ -34,7 +34,6 @@ Trigger for the night/idle work:
 import json
 
 from application.core import models, paths
-from application.core.agents import Living
 from application.core.brain import meanings, situation
 from application.core.brain.pulse import Phase
 from application.core.brain.signals import Tick, Tock
@@ -78,15 +77,14 @@ EXTRACTING = Action(
 )
 
 
-async def consolidate(living: Living) -> bool:
-    """Distill the conversation in `living.memory` into context + person
-    files, then archive messages and forget. No trigger checks, no Tick/Tock
+async def consolidate(pulse, memory, ego) -> bool:
+    """Distill the conversation in `memory` into context + person files,
+    then archive messages and forget. No trigger checks, no Tick/Tock
     dispatch — pure work.
 
     Returns True if consolidation happened, False if there was nothing to do
     or the model failed."""
-    persona = living.ego.persona
-    memory = living.memory
+    persona = ego.persona
 
     if not memory.messages:
         return False
@@ -139,7 +137,7 @@ async def consolidate(living: Living) -> bool:
     )
 
     try:
-        result = await models.tool(living.ego.model, living.ego.identity + memory.context_prompt + living.pulse.hint(), question, CONSOLIDATING)
+        result = await models.tool(ego.model, ego.identity + memory.context_prompt + pulse.hint(), question, CONSOLIDATING)
     except ModelError as e:
         logger.warning("brain.consolidate produced invalid JSON, will retry next consolidation", {"persona": persona, "error": str(e)})
         return False
@@ -184,12 +182,11 @@ async def consolidate(living: Living) -> bool:
     return True
 
 
-async def reflect(living: Living) -> list:
+async def reflect(pulse, memory, ego) -> list:
     """reflect ON living — look back upon what was."""
-    dispatch(Tick("reflect", {"persona": living.ego.persona}))
+    dispatch(Tick("reflect", {"persona": ego.persona}))
 
-    persona = living.ego.persona
-    memory = living.memory
+    persona = ego.persona
     logger.debug("brain.reflect", {"persona": persona, "messages_count": len(memory.messages)})
 
     if not memory.messages:
@@ -199,12 +196,12 @@ async def reflect(living: Living) -> list:
     # Morning is for waking and starting, not for reflection. Reflect runs
     # during NIGHT (consolidating the day) or when the persona is idle
     # during DAY (a natural pause). Never during MORNING.
-    if living.pulse.phase == Phase.MORNING:
+    if pulse.phase == Phase.MORNING:
         dispatch(Tock("reflect", {"persona": persona, "branch": "morning-skip"}))
         return []
 
-    if living.pulse.phase != Phase.NIGHT:
-        if not await living.pulse.is_idle():
+    if pulse.phase != Phase.NIGHT:
+        if not await pulse.is_idle():
             dispatch(Tock("reflect", {"persona": persona, "branch": "not-idle"}))
             raise ReflectInterrupted()
 
@@ -264,8 +261,8 @@ async def reflect(living: Living) -> list:
 
     try:
         response = await models.tool(
-            living.ego.model,
-            living.ego.identity + memory.context_prompt + living.pulse.hint(),
+            ego.model,
+            ego.identity + memory.context_prompt + pulse.hint(),
             question,
             EXTRACTING,
         )
@@ -302,7 +299,7 @@ async def reflect(living: Living) -> list:
             memory.learn(file_id, meanings.Meaning(file_id, target_intention, body))
             logger.debug("brain.reflect refined instruction", {"persona": persona, "file_id": file_id, "intention": target_intention})
 
-    await consolidate(living)
+    await consolidate(pulse, memory, ego)
 
     dispatch(Tock("reflect", {"persona": persona, "branch": "consolidated"}))
     return []

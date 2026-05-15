@@ -20,7 +20,6 @@ with the body still in memory) until the procedure completes.
 """
 
 from application.core import abilities, models, paths, tools
-from application.core.agents import Living
 from application.core.brain import situation
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Action, Message, Prompt
@@ -68,12 +67,11 @@ def _deciding(persona) -> Action:
     )
 
 
-async def decide(living: Living) -> list:
+async def decide(pulse, memory, ego) -> list:
     """decide FOR living — focus on the just-arrived instruction."""
-    dispatch(Tick("decide", {"persona": living.ego.persona}))
+    dispatch(Tick("decide", {"persona": ego.persona}))
 
-    persona = living.ego.persona
-    memory = living.memory
+    persona = ego.persona
 
     comprehension = memory.comprehension()
     if comprehension is None:
@@ -126,8 +124,8 @@ async def decide(living: Living) -> list:
 
     try:
         result = await models.tool(
-            living.ego.model,
-            living.ego.identity + memory.context_prompt + living.pulse.hint() + memory.prompts,
+            ego.model,
+            ego.identity + memory.context_prompt + pulse.hint() + memory.prompts,
             question,
             _deciding(persona),
         )

@@ -17,7 +17,7 @@ async def wake(ego, living) -> Outcome[None]:
     bus.propose("Waking", {"persona": persona})
     logger.info("Waking", {"persona": persona})
 
-    living.pulse.phase = Phase.MORNING
+    living.phase(Phase.MORNING)
     living.pulse.worker.run(clock.run, living)
 
     bus.broadcast("Awake", {"persona": persona})

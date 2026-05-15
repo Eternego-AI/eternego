@@ -85,7 +85,6 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
             past_ego = Ego(persona)
 
             past_pulse = PastPulse(Worker(), persona)
-            past_pulse.phase = Phase.NIGHT
 
             past_living = Living(
                 pulse=past_pulse,
@@ -95,9 +94,10 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
                 consultant=Consultant(persona),
                 teacher=Teacher(persona),
             )
+            past_living.phase(Phase.NIGHT)
 
             try:
-                await consolidate(past_living)
+                await consolidate(past_living.pulse, past_living.memory, past_living.ego)
                 past_context = (past_memory.context or "").strip()
                 if past_context:
                     intro = (

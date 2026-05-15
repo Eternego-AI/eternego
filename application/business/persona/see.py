@@ -43,7 +43,7 @@ async def see(ego, living, source: str, caption: str = "", channel=None) -> Outc
         media = Media(source=source, caption=caption)
         message = Message(channel=channel, content=caption, media=media)
         living.memory.remember(message)
-        living.pulse.phase = Phase.DAY
+        living.phase(Phase.DAY)
         living.pulse.worker.nudge()
 
         bus.broadcast("Seen", {

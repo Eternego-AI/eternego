@@ -38,7 +38,7 @@ async def test_archive_skips_during_day():
             living.memory.archive_messages()
             living.memory.forget()
 
-            consequences = asyncio.run(functions.archive(living))
+            consequences = asyncio.run(functions.archive(living.pulse, living.memory, living.ego))
             assert consequences == []
             assert not paths.gallery(persona.id).exists(), "gallery should not be written during day"
 
@@ -80,7 +80,7 @@ async def test_archive_records_vision_call_in_gallery():
             living.memory.archive_messages()
             living.memory.forget()
 
-            consequences = asyncio.run(functions.archive(living))
+            consequences = asyncio.run(functions.archive(living.pulse, living.memory, living.ego))
             assert consequences == []
 
             gallery_file = paths.gallery(persona.id)
@@ -128,7 +128,7 @@ async def test_archive_records_look_at_call_in_gallery():
             living.memory.archive_messages()
             living.memory.forget()
 
-            asyncio.run(functions.archive(living))
+            asyncio.run(functions.archive(living.pulse, living.memory, living.ego))
 
             entry = json.loads(paths.gallery(persona.id).read_text().strip().splitlines()[0])
             assert entry["source"] == "/screenshots/8am.png"
@@ -172,7 +172,7 @@ async def test_archive_skips_failed_vision_call():
             living.memory.archive_messages()
             living.memory.forget()
 
-            asyncio.run(functions.archive(living))
+            asyncio.run(functions.archive(living.pulse, living.memory, living.ego))
             assert not paths.gallery(persona.id).exists(), "no gallery entry on empty answer"
 
     code, error = await on_separate_process_async(isolated)
@@ -223,7 +223,7 @@ async def test_archive_describes_inline_image_at_night():
                 living.memory.archive_messages()
                 living.memory.forget()
 
-                await functions.archive(living)
+                await functions.archive(living.pulse, living.memory, living.ego)
 
                 gallery_file = paths.gallery(persona.id)
                 assert gallery_file.exists()
@@ -286,7 +286,7 @@ async def test_archive_skips_screenshots_taken_by_persona():
                 living.memory.archive_messages()
                 living.memory.forget()
 
-                await functions.archive(living)
+                await functions.archive(living.pulse, living.memory, living.ego)
 
                 assert not paths.gallery(persona.id).exists(), \
                     "gallery should not be written for self-taken screenshots"

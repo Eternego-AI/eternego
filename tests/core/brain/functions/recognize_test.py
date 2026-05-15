@@ -52,7 +52,7 @@ async def test_recognize_say_dispatches_command():
                         said.append(cmd.details.get("text", ""))
                 observer.subscribe(capture)
 
-                consequences = await functions.recognize(living)
+                consequences = await functions.recognize(living.pulse, living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -101,7 +101,7 @@ async def test_recognize_done_returns_empty():
                 observer.subscribe(capture)
 
                 msgs_before = len(living.memory.messages)
-                consequences = await functions.recognize(living)
+                consequences = await functions.recognize(living.pulse, living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -147,7 +147,7 @@ async def test_recognize_load_instruction_records_intention():
                 living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
-                consequences = await functions.recognize(living)
+                consequences = await functions.recognize(living.pulse, living.memory, living.ego)
 
                 assert consequences == [], "load_instruction is cognitive — no consequence"
                 # Perception should report the pending intention.
@@ -190,7 +190,7 @@ async def test_recognize_tool_returns_capability():
                 living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
                 living.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
 
-                consequences = await functions.recognize(living)
+                consequences = await functions.recognize(living.pulse, living.memory, living.ego)
 
                 assert len(consequences) == 1
                 assert consequences[0] == {"tools.OS.execute": {"command": "ls"}}
@@ -238,7 +238,7 @@ async def test_recognize_steps_returns_list():
                         said.append(cmd.details.get("text", ""))
                 observer.subscribe(capture)
 
-                consequences = await functions.recognize(living)
+                consequences = await functions.recognize(living.pulse, living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -290,7 +290,7 @@ async def test_recognize_skips_when_intention_pending():
             living.memory.intention("chatting")
 
             # No model call should be made — recognize gates and returns [].
-            consequences = asyncio.run(functions.recognize(living))
+            consequences = asyncio.run(functions.recognize(living.pulse, living.memory, living.ego))
             assert consequences == []
 
     code, error = await on_separate_process_async(isolated)
@@ -324,7 +324,7 @@ async def test_recognize_skips_when_impression_present():
             living.memory.intention("chatting")
             living.memory.impression("talk simply")
 
-            consequences = asyncio.run(functions.recognize(living))
+            consequences = asyncio.run(functions.recognize(living.pulse, living.memory, living.ego))
             assert consequences == []
 
     code, error = await on_separate_process_async(isolated)
@@ -361,7 +361,7 @@ async def test_recognize_empty_stream_propagates_engine_error():
                 living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
 
                 try:
-                    await functions.recognize(living)
+                    await functions.recognize(living.pulse, living.memory, living.ego)
                     assert False, "expected EngineConnectionError"
                 except EngineConnectionError:
                     pass

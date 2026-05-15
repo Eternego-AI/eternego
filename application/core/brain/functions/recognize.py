@@ -27,7 +27,6 @@ the cycle moves on.
 """
 
 from application.core import abilities, models, tools
-from application.core.agents import Living
 from application.core.brain import situation
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Action
@@ -68,12 +67,11 @@ def _recognizing(persona) -> Action:
     )
 
 
-async def recognize(living: Living) -> list:
+async def recognize(pulse, memory, ego) -> list:
     """recognize IN living — immersed inside the moment, name what it is."""
-    dispatch(Tick("recognize", {"persona": living.ego.persona}))
+    dispatch(Tick("recognize", {"persona": ego.persona}))
 
-    persona = living.ego.persona
-    memory = living.memory
+    persona = ego.persona
 
     # Gate: if there's a pending intention or a fresh impression, the
     # corresponding stage (learn or decide) should run, not recognize.
@@ -129,8 +127,8 @@ async def recognize(living: Living) -> list:
 
     try:
         result = await models.tool(
-            living.ego.model,
-            living.ego.identity + memory.context_prompt + living.pulse.hint() + memory.prompts,
+            ego.model,
+            ego.identity + memory.context_prompt + pulse.hint() + memory.prompts,
             question,
             _recognizing(persona),
         )

@@ -1,18 +1,18 @@
 """Brain — realize over living.
 
-Surveys what just landed in living.memory and brings it in. Text messages get a
+Surveys what just landed in memory and brings it in. Text messages get a
 simple string prompt. Image messages take one of two paths:
 
-- **living.eye has a vision model**: the living.consultant formulates questions based on
-  the conversation, the living.eye sees the image and answers, and the result
-  becomes a vision tool-call + TOOL_RESULT pair in living.memory. The original
-  message gets the caption as its prompt. No image data persisted in living.memory.
+- **eye has a vision model**: the consultant formulates questions based on
+  the conversation, the eye sees the image and answers, and the result
+  becomes a vision tool-call + TOOL_RESULT pair in memory. The original
+  message gets the caption as its prompt. No image data persisted in memory.
 
 - **No vision model**: encode the image as base64 content blocks directly
   in the prompt. The thinking model sees the image inline in subsequent
   stages.
 
-Realize is the entry point of every tick — what the living.ego.persona perceives from
+Realize is the entry point of every tick — what the persona perceives from
 outside (person words, images, system notifications) becomes part of its
 inner conversation here.
 """
@@ -20,7 +20,6 @@ inner conversation here.
 from pathlib import Path
 
 from application.core import models
-from application.core.agents import Living
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Action, Prompt
 from application.core.exceptions import ModelError
@@ -42,11 +41,11 @@ CONSULTING = Action(
 )
 
 
-async def realize(living: Living) -> list:
+async def realize(pulse, memory, ego, eye, consultant) -> list:
     """realize OVER living — survey what just landed, take it in."""
-    dispatch(Tick("realize", {"persona": living.ego.persona}))
+    dispatch(Tick("realize", {"persona": ego.persona}))
 
-    for m in living.memory.messages:
+    for m in memory.messages:
         if m.prompt is not None:
             continue
 
@@ -57,7 +56,7 @@ async def realize(living: Living) -> list:
         image_path = Path(m.media.source)
         if not image_path.exists():
             m.prompt = Prompt(role="user", content=m.media.caption or "")
-            living.memory.add_tool_result(
+            memory.add_tool_result(
                 "tools.vision",
                 {"source": m.media.source},
                 "error",
@@ -73,15 +72,15 @@ async def realize(living: Living) -> list:
         if m.media.caption:
             image_content.append({"type": "text", "text": m.media.caption})
 
-        if not living.eye.model:
+        if not eye.model:
             m.prompt = Prompt(role="user", content=image_content)
             continue
 
         m.prompt = Prompt(role="user", content=m.media.caption or "")
         image_prompt = Prompt(role="user", content=image_content)
-        reality = living.memory.prompts + [image_prompt]
+        reality = memory.prompts + [image_prompt]
         question_prompt = (
-            f"The persona {living.ego.persona.name} just received an image. A vision model "
+            f"The persona {ego.persona.name} just received an image. A vision model "
             "will look at it next. Based on the conversation, what observable things in the "
             "image would best serve the persona? Produce questions that can be answered by "
             "looking at the image itself.\n\n"
@@ -91,23 +90,23 @@ async def realize(living: Living) -> list:
             "```"
         )
         try:
-            question_result = await models.tool(living.consultant.model, living.consultant.identity + reality, question_prompt, CONSULTING)
+            question_result = await models.tool(consultant.model, consultant.identity + reality, question_prompt, CONSULTING)
             questions = question_result.get("questions", []) if isinstance(question_result, dict) else []
         except ModelError as formulation_error:
-            logger.warning("brain.realize question formulation failed, defaulting", {"persona": living.ego.persona, "error": str(formulation_error)})
+            logger.warning("brain.realize question formulation failed, defaulting", {"persona": ego.persona, "error": str(formulation_error)})
             questions = []
         if questions:
             question = "\n".join(f"- {q}" for q in questions)
         else:
             question = "Describe what you see."
 
-        answer = await models.chat(living.eye.model, living.eye.identity + [image_prompt], question)
-        living.memory.add_tool_result(
+        answer = await models.chat(eye.model, eye.identity + [image_prompt], question)
+        memory.add_tool_result(
             "tools.vision",
             {"question": question, "source": m.media.source},
             "ok",
             answer,
         )
 
-    dispatch(Tock("realize", {"persona": living.ego.persona}))
+    dispatch(Tock("realize", {"persona": ego.persona}))
     return []

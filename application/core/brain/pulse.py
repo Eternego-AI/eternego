@@ -53,7 +53,6 @@ class Pulse:
         self.persona = persona
         self.phase: Phase | None = None
         self.signals: list[Signal] = []
-        self.created_at: int = time.time_ns()
         self._subscribed = False
         self._on_construct()
 
@@ -78,25 +77,30 @@ class Pulse:
         return self.phase.hint() if self.phase else []
 
     async def is_idle(self, seconds: int | None = None) -> bool:
-        """True if no real conversation activity in the given window.
-
-        If `seconds` is omitted, reads `self.persona.idle_timeout`. If the
-        last activity is already older than that, returns True immediately.
-        Otherwise sleeps the remaining time via `worker.can_sleep` and returns
-        True if the wait completed uninterrupted, or False if a nudge fired
-        during the wait (activity arrived).
+        """True if no real conversation activity in the current phase's window.
 
         Activity is a CapabilityRun signal (tool/ability fired by Clock's
         executor). Routine cycle ticks/tocks and heartbeat noise don't count.
-        If no activity has been captured yet (fresh restart), the pulse's
-        birth time is the reference."""
+        Signals reset on every phase transition (`Living.phase()`), so the
+        latest CapabilityRun in `self.signals` is necessarily the last one
+        in the current phase.
+
+        - No CapabilityRun in this phase → worker hasn't been used → idle is
+          meaningless → return False.
+        - Latest CapabilityRun older than `seconds` (default
+          `persona.idle_timeout`) → return True immediately.
+        - Otherwise sleep the remaining time via `worker.can_sleep` and
+          return True if uninterrupted, False if a nudge fires (activity
+          arrived)."""
         if seconds is None:
             seconds = self.persona.idle_timeout
-        latest = self.created_at
+        latest = None
         for signal in reversed(self.signals):
             if isinstance(signal, CapabilityRun):
                 latest = signal.time
                 break
+        if latest is None:
+            return False
         elapsed_ns = time.time_ns() - latest
         if elapsed_ns >= seconds * 1_000_000_000:
             return True
