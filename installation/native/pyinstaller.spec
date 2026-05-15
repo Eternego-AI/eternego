@@ -90,7 +90,9 @@ a = Analysis(
     ] + (
         # Tray launcher is darwin/win32 only — keep its imports out of the
         # Linux AppImage so PyInstaller doesn't fail trying to resolve pystray.
-        ['desktop', 'pystray', 'PIL'] if sys.platform not in ('darwin', 'win32') else []
+        # PIL stays in the bundle on Linux because the `screen` ability uses it
+        # to downscale screenshots.
+        ['desktop', 'pystray'] if sys.platform not in ('darwin', 'win32') else []
     ),
 )
 
