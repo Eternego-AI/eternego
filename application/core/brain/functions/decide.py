@@ -108,7 +108,7 @@ async def decide(memory, ego) -> list:
         "Voice — when speech is the move:\n"
         "- `{\"say\": \"<text>\"}` — just speaking. Replying, sharing a thought, "
         "naming what's in you. When speech is the whole move, this is it.\n"
-        "- Narrating while doing something? Use `tools.report` *paired with* the "
+        "- Speaking while doing something? Use `tools.report` *paired with* the "
         "action in the same decision list. `tools.report` alone is misuse — "
         "that's just `say` wearing a tool wrapper.\n"
         "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
