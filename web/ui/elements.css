@@ -119,14 +119,15 @@ role-message .el-trace {
     flex-direction: column;
     gap: 2px;
     max-height: 320px;
-    overflow-y: auto;
+    overflow: auto;
 }
 role-message .el-trace-row {
     display: grid;
-    grid-template-columns: 50px 100px minmax(0, 1fr) minmax(0, auto);
+    grid-template-columns: 50px 100px auto auto;
     gap: var(--space-2);
     align-items: baseline;
     line-height: 1.4;
+    flex-shrink: 0;
 }
 role-message .el-trace-time {
     color: var(--text-dim);
@@ -150,16 +151,11 @@ role-message .el-trace-type-tock { color: var(--text-dim); }
 role-message .el-trace-type-message { color: var(--text-dim); }
 role-message .el-trace-title {
     color: var(--text-body);
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 role-message .el-trace-detail {
     color: var(--text-muted);
     font-size: 10px;
-    max-width: 320px;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
     text-align: right;
 }
