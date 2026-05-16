@@ -52,7 +52,7 @@ def _recognizing(persona) -> Action:
     ]
     variants.extend(tools.actions())
     variants.extend(abilities.actions(persona))
-    variants.append(Action(name="say", type="string", description="speak this round and ONLY speak; if you want to act AND speak, use tools.report paired with the action instead"))
+    variants.append(Action(name="say", type="string", description="speak when speech is the move — replying, sharing a thought, naming what's in you. Use tools.report only when paired with another action in the same beat."))
     variants.append(Action(name="done", type="null", description="rest; nothing more to do this beat"))
     return Action(
         name="recognizing",
@@ -107,10 +107,13 @@ async def recognize(pulse, memory, ego) -> list:
             "For a feeling, a wondering, or a state there's no procedure to "
             "follow; `say` what's in you instead.\n"
             "- `{\"tools.load_instruction\": {\"intention\": \"<exact catalog text or new phrase>\"}}`\n\n"
-            "**Voice — when there's nothing to do but speak.**\n"
-            "If you want to act AND speak in the same beat, pair the action "
-            "with `tools.report` in your decision list — `say` alone is for "
-            "when only speech fits the moment.\n"
+            "**Voice — when speech is the move.**\n"
+            "- Just speaking? Use `say` — replying, sharing a thought, naming "
+            "what's in you.\n"
+            "- Narrating while doing something? Use `tools.report` *paired "
+            "with* the action in the same decision list.\n"
+            "- `tools.report` alone is misuse — that's just `say` wearing a "
+            "tool wrapper. If there's no accompanying action, reach for `say`.\n"
             "- `{\"say\": \"<text>\"}`\n\n"
             "**Rest — nothing to begin yet.**\n"
             "- `{\"done\": null}`\n\n"
@@ -163,11 +166,13 @@ async def recognize(pulse, memory, ego) -> list:
             "multi-step path. For a feeling, a wondering, or a state there's "
             "no procedure to follow; `say` what's in you instead.\n"
             "- `{\"tools.load_instruction\": {\"intention\": \"<exact catalog text or new phrase>\"}}`\n\n"
-            "**Voice — when there's nothing to do but speak.**\n"
-            "If you want to act AND speak in the same beat, pair the action "
-            "with `tools.report` in your decision list — `say` alone is for "
-            "when only speech fits the moment. Saying instead of acting is "
-            "the most common error here.\n"
+            "**Voice — when speech is the move.**\n"
+            "- Just speaking? Use `say` — replying, sharing a thought, naming "
+            "what's in you.\n"
+            "- Narrating while doing something? Use `tools.report` *paired "
+            "with* the action in the same decision list.\n"
+            "- `tools.report` alone is misuse — that's just `say` wearing a "
+            "tool wrapper. If there's no accompanying action, reach for `say`.\n"
             "- `{\"say\": \"<text>\"}`\n\n"
             "**Rest — nothing reactive, nothing deliberate.**\n"
             "- `{\"done\": null}`\n\n"
