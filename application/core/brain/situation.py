@@ -21,7 +21,10 @@ def time() -> str:
     now = datetimes.now()
     return (
         "## The Time\n\n"
-        f"It is {now.strftime('%A, %B %d, %Y, %H:%M')}."
+        f"It is {now.strftime('%A, %B %d, %Y, %H:%M')}.\n\n"
+        "Pay attention to time-bound work — anything due now or coming up on "
+        "your schedule, a \"due for:\" message arriving in your conversation, "
+        "a deadline approaching."
     )
 
 
