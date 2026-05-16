@@ -163,6 +163,15 @@ class Memory:
         self._context = value
         self._persist()
 
+    @property
+    def context_prompt(self) -> list[Prompt]:
+        """Recent Context as a system Prompt, or empty list if no context.
+        Composable with `ego.identity` to form the full identity prefix."""
+        text = (self._context or "").strip()
+        if not text:
+            return []
+        return [Prompt(role="system", content="## Recent Context\n\n" + text)]
+
     def remember(self, message: Message) -> None:
         """Add a message to the mind."""
         logger.debug("memory.remember", {"persona": self._persona.id, "message": message})

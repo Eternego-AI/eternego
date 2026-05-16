@@ -47,9 +47,7 @@ async def chat(model: Model, prompts: list[Prompt], question: str) -> str:
                 parts.append(chunk)
         elif model.provider == "anthropic":
             for msg in messages:
-                if msg.get("role") == "system":
-                    msg["cache_control"] = "ephemeral"
-                elif msg.pop("cache_point", False):
+                if msg.pop("cache_point", False):
                     msg["cache_control"] = "ephemeral"
             async for chunk in anthropic.chat(model.url, model.api_key, model.name, messages):
                 parts.append(chunk)

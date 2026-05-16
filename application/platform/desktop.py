@@ -42,8 +42,8 @@ from application.platform.tool import tool
 uinput_device = None
 
 
-@tool("Move the mouse cursor to absolute screen coordinates (x, y in pixels). "
-      "Use the screenshot's pixel space — top-left is (0, 0).")
+@tool("Move the mouse cursor to absolute screen coordinates. Top-left is (0, 0). "
+      "Returns 'moved to (x, y)' — confirmation only, no view of the result.")
 def mouse_move(x: int, y: int) -> str:
     if get_supported() == "linux":
         from evdev import UInput, ecodes as e
@@ -77,7 +77,8 @@ def mouse_move(x: int, y: int) -> str:
 
 
 @tool("Click the mouse at the cursor's current position. button is 'left', 'right', or 'middle' "
-      "(default 'left'). count is 1 for single click, 2 for double-click.")
+      "(default 'left'). count is 1 for single click, 2 for double-click. "
+      "Returns '{button} click x{count}' — confirmation only, no view of what the click hit.")
 def mouse_click(button: str = "left", count: int = 1) -> str:
     name = (button or "left").strip().lower()
     if get_supported() == "linux":
@@ -109,7 +110,8 @@ def mouse_click(button: str = "left", count: int = 1) -> str:
 
 
 @tool("Drag the mouse from (x_from, y_from) to (x_to, y_to) while holding a button. "
-      "button is 'left', 'right', or 'middle' (default 'left').")
+      "button is 'left', 'right', or 'middle' (default 'left'). "
+      "Returns 'dragged (x_from, y_from) → (x_to, y_to) with {button}' — confirmation only.")
 def mouse_drag(x_from: int, y_from: int, x_to: int, y_to: int, button: str = "left") -> str:
     name = (button or "left").strip().lower()
     if get_supported() == "linux":
@@ -154,7 +156,8 @@ def mouse_drag(x_from: int, y_from: int, x_to: int, y_to: int, button: str = "le
 
 
 @tool("Press a mouse button without releasing it. Pair with mouse_release; in between, "
-      "use mouse_move to drive the held-button movement. button: 'left', 'right', 'middle'.")
+      "use mouse_move to drive the held-button movement. button: 'left', 'right', 'middle'. "
+      "Returns '{button} button down' — confirmation only.")
 def mouse_press(button: str = "left") -> str:
     name = (button or "left").strip().lower()
     if get_supported() == "linux":
@@ -182,7 +185,8 @@ def mouse_press(button: str = "left") -> str:
     return f"{button} button down"
 
 
-@tool("Release a previously held mouse button. button: 'left', 'right', 'middle'.")
+@tool("Release a previously held mouse button. button: 'left', 'right', 'middle'. "
+      "Returns '{button} button up' — confirmation only.")
 def mouse_release(button: str = "left") -> str:
     name = (button or "left").strip().lower()
     if get_supported() == "linux":
@@ -211,7 +215,8 @@ def mouse_release(button: str = "left") -> str:
 
 
 @tool("Scroll at the cursor's current position. dx and dy are wheel units — "
-      "positive dy scrolls up, negative dy scrolls down; dx scrolls horizontally.")
+      "positive dy scrolls up, negative dy scrolls down; dx scrolls horizontally. "
+      "Returns 'scrolled (dx, dy)' — confirmation only, no view of what scrolled.")
 def mouse_scroll(dx: int = 0, dy: int = 0) -> str:
     if get_supported() == "linux":
         from evdev import UInput, ecodes as e
@@ -234,7 +239,9 @@ def mouse_scroll(dx: int = 0, dy: int = 0) -> str:
     return f"scrolled ({dx}, {dy})"
 
 
-@tool("Type a string of text at the focused input. Sends one keystroke per character.")
+@tool("Type a string of text at the focused input. Sends one keystroke per character. "
+      "Returns 'typed N chars' — confirmation only. No check of which window had focus, "
+      "no view of where the characters actually landed.")
 def keyboard_type(text: str) -> str:
     text = text or ""
     if get_supported() == "linux":
@@ -271,7 +278,9 @@ def keyboard_type(text: str) -> str:
 
 
 @tool("Press and release a single key or chord. Examples: 'enter', 'tab', 'esc', "
-      "'a', 'f5', 'ctrl+c', 'ctrl+shift+t'. Chord parts are joined with '+'.")
+      "'a', 'f5', 'ctrl+c', 'ctrl+shift+t'. Chord parts are joined with '+'. "
+      "Returns 'tapped {key}' — confirmation only. No check of which window had focus, "
+      "no view of what the key triggered.")
 def keyboard_tap(key: str) -> str:
     parts = [p.strip() for p in (key or "").split("+") if p.strip()]
     if not parts:
@@ -312,7 +321,8 @@ def keyboard_tap(key: str) -> str:
 
 @tool("Press a key without releasing it. Pair with keyboard_release. Use for held-modifier "
       "patterns (e.g. shift held while clicking multiple items). key: same syntax as keyboard_tap "
-      "(but a single key, not a chord).")
+      "(but a single key, not a chord). "
+      "Returns '{key} down' — confirmation only.")
 def keyboard_press(key: str) -> str:
     raw = (key or "").strip()
     if not raw:
@@ -337,7 +347,8 @@ def keyboard_press(key: str) -> str:
     return f"{key} down"
 
 
-@tool("Release a previously held key.")
+@tool("Release a previously held key. "
+      "Returns '{key} up' — confirmation only.")
 def keyboard_release(key: str) -> str:
     raw = (key or "").strip()
     if not raw:

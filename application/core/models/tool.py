@@ -77,9 +77,7 @@ async def tool(model: Model, prompts: list[Prompt], question: str, action: Actio
             gen = ollama.chat_json(model.url, model.name, messages)
         elif model.provider == "anthropic":
             for msg in messages:
-                if msg.get("role") == "system":
-                    msg["cache_control"] = "ephemeral"
-                elif msg.pop("cache_point", False):
+                if msg.pop("cache_point", False):
                     msg["cache_control"] = "ephemeral"
             gen = anthropic.chat_json(
                 model.url, model.api_key, model.name, messages,

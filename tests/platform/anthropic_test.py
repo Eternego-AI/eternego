@@ -93,7 +93,10 @@ async def test_chat_extracts_system_message():
     assert code == 0, error
 
 
-async def test_chat_joins_multiple_system_messages():
+async def test_chat_sends_system_messages_as_separate_blocks():
+    """Each source system message becomes its own text block, with its own
+    cache_control if any. Anthropic's prompt cache allows multiple
+    breakpoints; joining into one string would collapse them all to one."""
     def isolated():
         from application.platform import anthropic
 
@@ -107,7 +110,8 @@ async def test_chat_joins_multiple_system_messages():
 
         def validate(r):
             assert r["body"]["system"] == [
-                {"type": "text", "text": "First.\nSecond.", "cache_control": {"type": "ephemeral", "ttl": "1h"}},
+                {"type": "text", "text": "First.", "cache_control": {"type": "ephemeral", "ttl": "1h"}},
+                {"type": "text", "text": "Second."},
             ], r["body"]
             assert r["headers"].get("anthropic-beta") == "extended-cache-ttl-2025-04-11", r["headers"]
 

@@ -20,7 +20,6 @@ with the body still in memory) until the procedure completes.
 """
 
 from application.core import abilities, models, paths, tools
-from application.core.agents import Living
 from application.core.brain import situation
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Action, Message, Prompt
@@ -52,7 +51,7 @@ def _deciding(persona) -> Action:
     variants.extend(tools.actions())
     variants.extend(abilities.actions(persona))
     variants.append(Action(name="notify", type="string", description="broadcast to every connected channel"))
-    variants.append(Action(name="say", type="string", description="speak this round and ONLY speak; if you want to act AND speak, use tools.report paired with the action instead"))
+    variants.append(Action(name="say", type="string", description="speak when speech is the move — replying, sharing a thought, naming what's in you. Use tools.report only when paired with another action in the same beat."))
     variants.append(Action(name="done", type="null", description="the procedure is complete"))
     return Action(
         name="deciding",
@@ -68,12 +67,11 @@ def _deciding(persona) -> Action:
     )
 
 
-async def decide(living: Living) -> list:
+async def decide(memory, ego) -> list:
     """decide FOR living — focus on the just-arrived instruction."""
-    dispatch(Tick("decide", {"persona": living.ego.persona}))
+    dispatch(Tick("decide", {"persona": ego.persona}))
 
-    persona = living.ego.persona
-    memory = living.ego.memory
+    persona = ego.persona
 
     comprehension = memory.comprehension()
     if comprehension is None:
@@ -107,12 +105,12 @@ async def decide(living: Living) -> list:
         "sub-guidance if a step references another kind of moment you don't yet "
         "have a procedure for.\n\n"
         f"{self_care_block}\n\n"
-        "Voice — only when you have nothing to do but speak:\n"
-        "- `{\"say\": \"<text>\"}` — speak this round and ONLY speak. Use this only "
-        "if there is no action left to take this beat. If you want to say something "
-        "WHILE acting (or alongside another action), use `tools.report` paired with "
-        "the action in the same decision list — never `say` for narrating intent. "
-        "Saying instead of acting is the most common error here.\n"
+        "Voice — when speech is the move:\n"
+        "- `{\"say\": \"<text>\"}` — just speaking. Replying, sharing a thought, "
+        "naming what's in you. When speech is the whole move, this is it.\n"
+        "- Speaking while doing something? Use `tools.report` *paired with* the "
+        "action in the same decision list. `tools.report` alone is misuse — "
+        "that's just `say` wearing a tool wrapper.\n"
         "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
         "Done:\n"
         "- `{\"done\": null}` — the procedure is complete. Equivalent to an empty "
@@ -126,8 +124,8 @@ async def decide(living: Living) -> list:
 
     try:
         result = await models.tool(
-            living.ego.model,
-            living.ego.identity + living.pulse.hint() + memory.prompts,
+            ego.model,
+            ego.identity + memory.context_prompt + memory.prompts,
             question,
             _deciding(persona),
         )

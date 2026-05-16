@@ -52,8 +52,8 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
         def _persist(self) -> None:
             pass
 
-    class PastLiving(Living):
-        """A Living that does not subscribe to the bus — its signal stream is
+    class PastPulse(Pulse):
+        """A Pulse that does not subscribe to the bus — its signal stream is
         isolated from the live persona's."""
 
         def _on_construct(self) -> None:
@@ -83,33 +83,33 @@ async def feed(living: Living, data: str, source: str) -> Outcome[FeedData]:
                 past_memory.remember(m)
 
             past_ego = Ego(persona)
-            past_ego.memory = past_memory
 
-            past_pulse = Pulse(Worker())
-            past_pulse.phase = Phase.NIGHT
+            past_pulse = PastPulse(Worker(), persona)
 
-            past_living = PastLiving(
+            past_living = Living(
                 pulse=past_pulse,
                 ego=past_ego,
+                memory=past_memory,
                 eye=Eye(persona),
                 consultant=Consultant(persona),
                 teacher=Teacher(persona),
             )
+            past_living.phase(Phase.NIGHT)
 
             try:
-                await consolidate(past_living)
+                await consolidate(past_living.memory, past_living.ego)
                 past_context = (past_memory.context or "").strip()
                 if past_context:
                     intro = (
                         f"Here is fed data from {source} that seems to be useful for you. "
                         f"You can use it: {past_context}"
                     )
-                    living.ego.memory.remember(Message(
+                    living.memory.remember(Message(
                         content=intro,
                         prompt=Prompt(role="user", content=intro),
                     ))
             finally:
-                past_living.dispose()
+                past_living.pulse.dispose()
 
         bus.broadcast("Persona fed", {"persona": persona, "source": source})
         return Outcome(success=True, message="Persona fed successfully", data=FeedData(persona=persona))

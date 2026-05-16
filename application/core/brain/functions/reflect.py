@@ -3,8 +3,8 @@
 Reflect runs on every beat that reaches it (mid-procedure beats restart on
 tool dispatch and never reach here). Most beats it skips through quickly.
 
-When the moment is right — night, or confirmed idle — reflect does two
-jobs that both belong to "growing" rather than acting:
+When the moment is right — night, or confirmed idle during day — reflect
+does two jobs that both belong to "growing" rather than acting:
 
 1. **Update procedural memory from the day's lived experience.** The persona
    looks at her conversation — the `tools.load_instruction` exchanges she
@@ -18,23 +18,20 @@ jobs that both belong to "growing" rather than acting:
    context that should bridge to the next beat. Then the conversation
    archives and clears.
 
-`consolidate(living)` is exposed so feed (importing past chat data) can
-call it directly on a sandboxed past Living without reflect's trigger
+`consolidate(memory, ego)` is exposed so feed (importing past chat data)
+can call it directly on a sandboxed past Living without reflect's trigger
 gates.
 
-Trigger for the night/idle work:
+Trigger:
 - If memory has nothing to consolidate, pass through.
-- If phase is night, do the work immediately.
-- Otherwise, await `living.is_idle()`. It sleeps the remaining-to-idle
-  window; returns True if uninterrupted (idle confirmed → do the work),
-  False if a nudge cancelled the wait (activity arrived → raise
-  ReflectInterrupted).
+- If phase is NIGHT, do the work.
+- If phase is DAY, await `pulse.is_idle()` — sleeps the remaining-to-idle
+  window. True if idle confirmed (do the work); False if a nudge cancelled
+  the wait (activity arrived → raise ReflectInterrupted so clock restarts
+  the cycle from realize).
 """
 
-import json
-
 from application.core import models, paths
-from application.core.agents import Living
 from application.core.brain import meanings, situation
 from application.core.brain.pulse import Phase
 from application.core.brain.signals import Tick, Tock
@@ -78,38 +75,24 @@ EXTRACTING = Action(
 )
 
 
-async def consolidate(living: Living) -> bool:
-    """Distill the conversation in `living.ego.memory` into context + person
-    files, then archive messages and forget. No trigger checks, no Tick/Tock
+async def consolidate(memory, ego) -> bool:
+    """Distill the conversation in `memory` into context + person files,
+    then archive messages and forget. No trigger checks, no Tick/Tock
     dispatch — pure work.
 
     Returns True if consolidation happened, False if there was nothing to do
     or the model failed."""
-    persona = living.ego.persona
-    memory = living.ego.memory
+    persona = ego.persona
 
     if not memory.messages:
         return False
-
-    conversation = []
-    for m in memory.messages:
-        if not m.prompt:
-            continue
-        content = m.prompt.content
-        if isinstance(content, list):
-            content = "[multimodal]"
-        conversation.append({"role": m.prompt.role, "content": content})
 
     question = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "# ▶ YOUR TASK: What do you want to keep as your memory?\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"{situation.time()}\n\n"
-        "Here is the conversation that happened:\n\n"
-        "```json\n"
-        f"{json.dumps(conversation, ensure_ascii=False, indent=2)}\n"
-        "```\n\n"
-        "You're closing this stretch. You already hold these files. Walk back through what they say and through what happened today; decide what should still be true tomorrow.\n\n"
+        "You're closing this stretch. Walk back through the conversation above and through what your files currently say; decide what should still be true tomorrow.\n\n"
         "You are curating, not stacking. Every line earns its place by changing how future-you acts — if removing it changes nothing, cut it. If today gave you something sharper than what's there, replace; don't append. If nothing changed in an area, return what's there exactly.\n\n"
         "What you keep splits into two kinds of memory.\n\n"
         "## Long-term — your stable knowledge\n\n"
@@ -121,14 +104,14 @@ async def consolidate(living: Living) -> bool:
         "- `struggles` — what holds them back. Recurring patterns of difficulty, places they get stuck. Stable shapes, not today's frustration.\n"
         "- `persona_traits` — how they want you to be with them. Your tone, what's worked between you. Stable.\n"
         "- `permissions` — what they've granted you and what they haven't. The boundary of your agency. Updates only on explicit grants, takes, or refusals.\n\n"
-        "## Short-term — your context\n\n"
-        "This is your WORKING memory: what you're carrying across loops right now that isn't a stable fact. The thread you're following. The decisions you're holding mid-flight. What you'd brief your next loop on so nothing drops. For now or today — not for forever.\n\n"
-        "Anything that belongs in the long-term files goes there, not here. Context is what's left: what's active, what's in motion, what you don't want to lose between this loop and the next.\n\n"
-        "Keep it short. A few sentences in your own voice. If nothing's actively in flight, return an empty string — that's honest, better than padding.\n\n"
+        "## Short-term — your handoff to tomorrow morning\n\n"
+        "This is the brief tomorrow-you reads on her first beat to know where to pick up. The day ended; sleep is between. What was in motion when this stretch closed? What's half-done and needs to continue? What did you commit to that hasn't been delivered yet? What's the next concrete step that would close an open thread?\n\n"
+        "Write it as a brief for tomorrow-you, not a recap of today. Lead with the thread to resume; name the next move that would advance it. If a task is finished, it doesn't belong here. If a fact about the person emerged, it belongs in `identity`/`traits`/etc, not here. Procedural lessons (what worked, what failed about how you carry out a kind of moment) are refined separately in your instructions and don't belong here either.\n\n"
+        "Keep it short. A few sentences in your own voice. If nothing's in flight, return an empty string — that's honest, better than padding tomorrow with yesterday's noise.\n\n"
         "## Output\n\n"
         "Return a JSON object with these fields — every field is a string in your own voice. Markdown is fine: use bullets, sections, or short paragraphs as fits each area. No item cap — every line you keep is one future-you reads on every beat, so each one must matter. An empty string is honest when there's nothing for that area.\n\n"
         "```json\n"
-        "{\"context\": \"<short prose, your working memory>\",\n"
+        "{\"context\": \"<short prose, your handoff to tomorrow morning — threads in flight + next concrete step>\",\n"
         " \"identity\": \"<discrete facts about the person — markdown bullets work well>\",\n"
         " \"traits\": \"<your understanding of how they behave — synthesized prose>\",\n"
         " \"wishes\": \"<what they reach for — prose>\",\n"
@@ -139,7 +122,7 @@ async def consolidate(living: Living) -> bool:
     )
 
     try:
-        result = await models.tool(living.ego.model, living.ego.identity + living.pulse.hint(), question, CONSOLIDATING)
+        result = await models.tool(ego.model, ego.identity + memory.context_prompt + memory.prompts, question, CONSOLIDATING)
     except ModelError as e:
         logger.warning("brain.consolidate produced invalid JSON, will retry next consolidation", {"persona": persona, "error": str(e)})
         return False
@@ -184,29 +167,24 @@ async def consolidate(living: Living) -> bool:
     return True
 
 
-async def reflect(living: Living) -> list:
+async def reflect(pulse, memory, ego) -> list:
     """reflect ON living — look back upon what was."""
-    dispatch(Tick("reflect", {"persona": living.ego.persona}))
+    dispatch(Tick("reflect", {"persona": ego.persona}))
 
-    persona = living.ego.persona
-    memory = living.ego.memory
+    persona = ego.persona
     logger.debug("brain.reflect", {"persona": persona, "messages_count": len(memory.messages)})
 
     if not memory.messages:
         dispatch(Tock("reflect", {"persona": persona, "branch": "no-messages"}))
         return []
 
-    # Morning is for waking and starting, not for reflection. Reflect runs
-    # during NIGHT (consolidating the day) or when the persona is idle
-    # during DAY (a natural pause). Never during MORNING.
-    if living.pulse.phase == Phase.MORNING:
-        dispatch(Tock("reflect", {"persona": persona, "branch": "morning-skip"}))
-        return []
-
-    if living.pulse.phase != Phase.NIGHT:
-        if not await living.is_idle():
-            dispatch(Tock("reflect", {"persona": persona, "branch": "not-idle"}))
-            raise ReflectInterrupted()
+    # Reflect runs during NIGHT (consolidating the day) or when the persona
+    # is idle during DAY (a natural pause). Morning is not in this cycle so
+    # never reaches here. During DAY, if a nudge cancels the idle wait,
+    # raise so clock restarts the cycle and the new message gets perceived.
+    if pulse.phase != Phase.NIGHT and not await pulse.is_idle():
+        dispatch(Tock("reflect", {"persona": persona, "branch": "not-idle"}))
+        raise ReflectInterrupted()
 
     # Procedural memory consolidation: ask the persona to look at the
     # instructions she used today and refine the bodies of the ones whose
@@ -264,8 +242,8 @@ async def reflect(living: Living) -> list:
 
     try:
         response = await models.tool(
-            living.ego.model,
-            living.ego.identity + living.pulse.hint(),
+            ego.model,
+            ego.identity + memory.context_prompt + memory.prompts,
             question,
             EXTRACTING,
         )
@@ -302,7 +280,7 @@ async def reflect(living: Living) -> list:
             memory.learn(file_id, meanings.Meaning(file_id, target_intention, body))
             logger.debug("brain.reflect refined instruction", {"persona": persona, "file_id": file_id, "intention": target_intention})
 
-    await consolidate(living)
+    await consolidate(memory, ego)
 
     dispatch(Tock("reflect", {"persona": persona, "branch": "consolidated"}))
     return []

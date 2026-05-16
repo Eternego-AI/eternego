@@ -7,6 +7,7 @@ async def test_feed_succeeds_with_anthropic_data():
         import json
         import asyncio
         from application.core import agents
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.business import persona as spec
         from application.platform import ollama
@@ -30,12 +31,12 @@ async def test_feed_succeeds_with_anthropic_data():
                 def run(self, *args): pass
                 def nudge(self): pass
                 async def stop(self): pass
-            pulse = Pulse(FakeWorker())
             ego = agents.Ego(persona)
+            pulse = Pulse(FakeWorker(), persona)
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
             data = json.dumps([
                 {"chat_messages": [
@@ -43,12 +44,12 @@ async def test_feed_succeeds_with_anthropic_data():
                     {"sender": "assistant", "text": "Great choice"},
                 ]}
             ])
-            messages_before = len(living.ego.memory.messages)
+            messages_before = len(living.memory.messages)
             outcome = asyncio.run(spec.feed(living, data, "claude"))
             assert outcome.success, outcome.message
             # The fed-data intro should have landed on the live persona's memory
             # as a user-role message, framed with the source label.
-            new_messages = living.ego.memory.messages[messages_before:]
+            new_messages = living.memory.messages[messages_before:]
             fed_intro = [m for m in new_messages if "fed data from claude" in (m.content or "")]
             assert fed_intro, f"expected fed-data intro in memory, got {[m.content for m in new_messages]!r}"
 

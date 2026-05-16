@@ -16,6 +16,7 @@ async def test_realize_plain_text_sets_user_prompt():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona
@@ -29,17 +30,17 @@ async def test_realize_plain_text_sets_user_prompt():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.remember(Message(content="hello"))
-            messages_before = len(ego.memory.messages)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living.memory.remember(Message(content="hello"))
+            messages_before = len(living.memory.messages)
 
-            consequences = asyncio.run(functions.realize(living))
+            consequences = asyncio.run(functions.realize(living.memory, living.ego, living.eye, living.consultant))
 
             assert consequences == []
-            assert len(ego.memory.messages) == messages_before
-            assert ego.memory.messages[-1].prompt is not None
-            assert ego.memory.messages[-1].prompt.role == "user"
-            assert ego.memory.messages[-1].prompt.content == "hello"
+            assert len(living.memory.messages) == messages_before
+            assert living.memory.messages[-1].prompt is not None
+            assert living.memory.messages[-1].prompt.role == "user"
+            assert living.memory.messages[-1].prompt.content == "hello"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -52,6 +53,7 @@ async def test_realize_skips_already_realized_messages():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -65,14 +67,14 @@ async def test_realize_skips_already_realized_messages():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
             existing = Prompt(role="user", content="already there")
-            ego.memory.remember(Message(content="hi", prompt=existing))
+            living.memory.remember(Message(content="hi", prompt=existing))
 
-            consequences = asyncio.run(functions.realize(living))
+            consequences = asyncio.run(functions.realize(living.memory, living.ego, living.eye, living.consultant))
 
             assert consequences == []
-            assert ego.memory.messages[-1].prompt is existing
+            assert living.memory.messages[-1].prompt is existing
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -87,6 +89,7 @@ async def test_realize_image_without_vision_inlines_content_blocks():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Media, Message, Model, Persona
@@ -103,18 +106,18 @@ async def test_realize_image_without_vision_inlines_content_blocks():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.remember(Message(
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living.memory.remember(Message(
                 content="caption!",
                 media=Media(source=str(image_path), caption="caption!"),
             ))
-            messages_before = len(ego.memory.messages)
+            messages_before = len(living.memory.messages)
 
-            consequences = asyncio.run(functions.realize(living))
+            consequences = asyncio.run(functions.realize(living.memory, living.ego, living.eye, living.consultant))
 
             assert consequences == []
-            assert len(ego.memory.messages) == messages_before
-            prompt = ego.memory.messages[-1].prompt
+            assert len(living.memory.messages) == messages_before
+            prompt = living.memory.messages[-1].prompt
             assert prompt is not None
             assert isinstance(prompt.content, list)
             kinds = [b.get("type") for b in prompt.content]
@@ -134,6 +137,7 @@ async def test_realize_image_missing_path_records_error_tool_result():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Media, Message, Model, Persona
@@ -151,25 +155,25 @@ async def test_realize_image_missing_path_records_error_tool_result():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-            ego.memory.remember(Message(
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living.memory.remember(Message(
                 content="caption",
                 media=Media(source="/no/such/file.png", caption="caption"),
             ))
-            messages_before = len(ego.memory.messages)
+            messages_before = len(living.memory.messages)
 
-            consequences = asyncio.run(functions.realize(living))
+            consequences = asyncio.run(functions.realize(living.memory, living.ego, living.eye, living.consultant))
 
             assert consequences == []
-            assert len(ego.memory.messages) == messages_before + 2
-            call_msg = ego.memory.messages[-2]
+            assert len(living.memory.messages) == messages_before + 2
+            call_msg = living.memory.messages[-2]
             assert call_msg.prompt.role == "assistant"
             assert "tools.vision" in call_msg.content
-            error_msg = ego.memory.messages[-1].content
+            error_msg = living.memory.messages[-1].content
             assert "TOOL_RESULT" in error_msg
             assert "vision" in error_msg
             assert "error" in error_msg
-            original_prompt = ego.memory.messages[-3].prompt
+            original_prompt = living.memory.messages[-3].prompt
             assert original_prompt is not None
             assert original_prompt.content == "caption"
 
@@ -186,6 +190,7 @@ async def test_realize_image_with_vision_records_call_and_result():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Media, Message, Model, Persona
@@ -208,22 +213,22 @@ async def test_realize_image_with_vision_records_call_and_result():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(
                     content="what's on screen?",
                     media=Media(source=str(image_path), caption="what's on screen?"),
                 ))
-                msgs_before = len(ego.memory.messages)
+                msgs_before = len(living.memory.messages)
 
-                consequences = await functions.realize(living)
+                consequences = await functions.realize(living.memory, living.ego, living.eye, living.consultant)
 
                 assert consequences == []
-                assert len(ego.memory.messages) == msgs_before + 2
-                call = ego.memory.messages[-2]
+                assert len(living.memory.messages) == msgs_before + 2
+                call = living.memory.messages[-2]
                 assert call.prompt.role == "assistant"
                 assert "tools.vision" in call.content
                 assert "what is here" in call.content.lower() or "describe" in call.content.lower()
-                result = ego.memory.messages[-1]
+                result = living.memory.messages[-1]
                 assert result.prompt.role == "user"
                 assert "TOOL_RESULT" in result.content
                 assert "a green square" in result.content
@@ -249,6 +254,7 @@ async def test_realize_question_formulation_failure_uses_default():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Media, Message, Model, Persona
@@ -271,14 +277,14 @@ async def test_realize_question_formulation_failure_uses_default():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(
                     content="caption",
                     media=Media(source=str(image_path), caption="caption"),
                 ))
 
-                await functions.realize(living)
-                call = ego.memory.messages[-2]
+                await functions.realize(living.memory, living.ego, living.eye, living.consultant)
+                call = living.memory.messages[-2]
                 assert "Describe what you see" in call.content
 
             ollama.assert_call(

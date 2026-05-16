@@ -33,7 +33,7 @@ from application.platform.observer import dispatch
 async def run(living) -> None:
     logger.debug("Running")
     worker = living.pulse.worker
-    memory = living.ego.memory
+    memory = living.memory
     persona = living.ego.persona
 
     async def execute(item: dict) -> str | None:
@@ -85,7 +85,7 @@ async def run(living) -> None:
         executed_any = False
 
         try:
-            for name, step in living.cycle:
+            for name, step in living.mind:
                 try:
                     consequences = await worker.dispatch(step)
                 except (EngineConnectionError, BrainException) as e:

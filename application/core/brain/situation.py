@@ -21,7 +21,10 @@ def time() -> str:
     now = datetimes.now()
     return (
         "## The Time\n\n"
-        f"It is {now.strftime('%A, %B %d, %Y, %H:%M')}."
+        f"It is {now.strftime('%A, %B %d, %Y, %H:%M')}.\n\n"
+        "Pay attention to time-bound work — anything due now or coming up on "
+        "your schedule, a \"due for:\" message arriving in your conversation, "
+        "a deadline approaching."
     )
 
 
@@ -35,12 +38,18 @@ def environment() -> str:
         if os_name == "mac":
             modifiers = "`cmd`, `ctrl`, `alt` (Option), `shift`"
             shortcut_examples = "`cmd+c`, `cmd+v`, `cmd+s`, `cmd+space`"
+            navigation_extra = ""
+            fkey_top = 20
         elif os_name == "windows":
             modifiers = "`ctrl`, `alt`, `shift`, `win`"
             shortcut_examples = "`ctrl+c`, `ctrl+v`, `ctrl+s`, `win+e`"
+            navigation_extra = ", `insert`"
+            fkey_top = 24
         else:
             modifiers = "`ctrl`, `alt`, `shift`, `super`"
             shortcut_examples = "`ctrl+c`, `ctrl+v`, `ctrl+s`, `super+space`"
+            navigation_extra = ", `insert`"
+            fkey_top = 24
         body += (
             "\n\n### Screen Control\n\n"
             "A display is available right now — `screen` and `take_screenshot` will work. "
@@ -48,9 +57,9 @@ def environment() -> str:
             "- Mouse buttons: `left`, `right`, `middle`.\n"
             f"- Modifiers: {modifiers}.\n"
             "- Whitespace and control: `enter`, `tab`, `space`, `esc`, `backspace`, `delete`.\n"
-            "- Navigation: `up`, `down`, `left`, `right`, `home`, `end`, `page_up`, `page_down`, `insert`.\n"
+            f"- Navigation: `up`, `down`, `left`, `right`, `home`, `end`, `page_up`, `page_down`{navigation_extra}.\n"
             "- Locks: `caps_lock`.\n"
-            "- Function keys: `f1` through `f24`.\n"
+            f"- Function keys: `f1` through `f{fkey_top}`.\n"
             "- Characters: type the literal character (`a`, `1`, `;`).\n"
             "- Chords: join with `+`. "
             f"Common shortcuts on this system: {shortcut_examples}."

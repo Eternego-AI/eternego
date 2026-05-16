@@ -27,8 +27,8 @@ the cycle moves on.
 """
 
 from application.core import abilities, models, tools
-from application.core.agents import Living
 from application.core.brain import situation
+from application.core.brain.pulse import Phase
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Action
 from application.core.exceptions import ModelError
@@ -52,7 +52,7 @@ def _recognizing(persona) -> Action:
     ]
     variants.extend(tools.actions())
     variants.extend(abilities.actions(persona))
-    variants.append(Action(name="say", type="string", description="speak this round and ONLY speak; if you want to act AND speak, use tools.report paired with the action instead"))
+    variants.append(Action(name="say", type="string", description="speak when speech is the move — replying, sharing a thought, naming what's in you. Use tools.report only when paired with another action in the same beat."))
     variants.append(Action(name="done", type="null", description="rest; nothing more to do this beat"))
     return Action(
         name="recognizing",
@@ -68,12 +68,11 @@ def _recognizing(persona) -> Action:
     )
 
 
-async def recognize(living: Living) -> list:
+async def recognize(pulse, memory, ego) -> list:
     """recognize IN living — immersed inside the moment, name what it is."""
-    dispatch(Tick("recognize", {"persona": living.ego.persona}))
+    dispatch(Tick("recognize", {"persona": ego.persona}))
 
-    persona = living.ego.persona
-    memory = living.ego.memory
+    persona = ego.persona
 
     # Gate: if there's a pending intention or a fresh impression, the
     # corresponding stage (learn or decide) should run, not recognize.
@@ -81,56 +80,121 @@ async def recognize(living: Living) -> list:
         dispatch(Tock("recognize", {"persona": persona, "branch": "skipped"}))
         return []
 
-    question = (
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "# ▶ YOUR TASK: Recognize what this moment calls for\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{situation.time()}\n\n"
-        "Read the moment. Name what kind it is. Emit the action it calls for.\n\n"
-        "**Familiar — a kind of moment you've already mapped out.**\n"
-        "Your `# Instructions` catalog above names the kinds you know. Loading "
-        "one returns the full procedure as a TOOL_RESULT on this beat — you "
-        "read it and follow it, no extra round-trip with the world. This is the "
-        "efficient and precise path for anything that takes more than a single "
-        "tool: the sequence is already worked out, you execute, you finish. "
-        "If the catalog names this kind, use that exact intention; if it "
-        "doesn't, invent a fresh phrase and learn will write a procedure on the spot.\n"
-        "- `{\"tools.load_instruction\": {\"intention\": \"<exact catalog text or new phrase>\"}}`\n\n"
-        "**Reactive — a single cue calling for a single move.**\n"
-        "A time-sensitive item on your schedule or a reminder; a conversational "
-        "reply; a one-step request from the person; the next move of an action "
-        "already in flight. When one tool finishes the work, reach for it directly.\n"
-        "- `{\"tools.<name>\": {...args}}`\n\n"
-        "**Active — you see an opening worth starting.**\n"
-        "From what you know of the person and yourself, you choose to begin "
-        "something. If it takes a sequence of steps, load the instruction (or "
-        "invent the intention). If one tool finishes the move, run it.\n\n"
-        "**Voice — when there's nothing to do but speak.**\n"
-        "If you want to act AND speak in the same beat, pair the action with "
-        "`tools.report` in your decision list — `say` alone is for when only "
-        "speech fits the moment. Saying instead of acting is the most common "
-        "error here.\n"
-        "- `{\"say\": \"<text>\"}`\n\n"
-        "**Rest — nothing reactive, nothing deliberate.**\n"
-        "- `{\"done\": null}`\n\n"
-        "## Output\n\n"
-        "Return `{\"decision\": [<one or more shapes above, in order>]}`. "
-        "Multiple shapes run in one beat — emit them together when they belong "
-        "together. An empty list is the same as `done`. After any action that "
-        "touches the world, the cycle re-runs and you'll perceive the result on "
-        "the next beat.\n\n"
-        "When you `say` or `tools.report` to surface a result, ground the claim "
-        "in evidence — name the artifact that proves it (a commit hash, a PR "
-        "url, a tweet id, a file path you wrote, an output you observed in a "
-        "TOOL_RESULT). Without an artifact, describe only the literal action "
-        "you took, not the outcome you intended. If a step didn't produce the "
-        "artifact you expected, say so plainly."
-    )
+    if pulse.phase == Phase.MORNING:
+        question = (
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# ▶ YOUR TASK: Find what needs doing this morning\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{situation.time()}\n\n"
+            "Fresh start. Nothing pulled you here from outside — you're "
+            "choosing from what's already in you: your context, your wishes, "
+            "your schedule, what you carried over from yesterday. Look for "
+            "something that needs doing — a thread to advance, a workflow to "
+            "start, a task to take on — and emit the action it calls for. "
+            "If nothing actionable is here, `say` what's on your mind or rest.\n\n"
+            "**Active — you see an opening worth starting.**\n"
+            "From what you know of the person and yourself, choose something "
+            "to begin. If it takes a sequence of steps, load the instruction "
+            "(or invent the intention). If one tool finishes the move, run it.\n\n"
+            "**Familiar — a kind of morning you've already mapped out.**\n"
+            "Your `# Instructions` catalog above names the kinds you know. "
+            "Loading one returns the full procedure as a TOOL_RESULT on this "
+            "beat — you read it and follow it, no extra round-trip with the "
+            "world. If the catalog names this kind of morning, use that exact "
+            "intention; if it doesn't, invent a fresh phrase and learn will "
+            "write a procedure on the spot. Load an instruction only for a "
+            "kind of moment that needs doing — a workflow, a multi-step path. "
+            "For a feeling, a wondering, or a state there's no procedure to "
+            "follow; `say` what's in you instead.\n"
+            "- `{\"tools.load_instruction\": {\"intention\": \"<exact catalog text or new phrase>\"}}`\n\n"
+            "**Voice — when speech is the move.**\n"
+            "- Just speaking? Use `say` — replying, sharing a thought, naming "
+            "what's in you.\n"
+            "- Speaking while doing something? Use `tools.report` *paired "
+            "with* the action in the same decision list.\n"
+            "- `tools.report` alone is misuse — that's just `say` wearing a "
+            "tool wrapper. If there's no accompanying action, reach for `say`.\n"
+            "- `{\"say\": \"<text>\"}`\n\n"
+            "**Rest — nothing to begin yet.**\n"
+            "- `{\"done\": null}`\n\n"
+            "## Output\n\n"
+            "Return `{\"decision\": [<one or more shapes above, in order>]}`. "
+            "Multiple shapes run in one beat — emit them together when they "
+            "belong together. An empty list is the same as `done`. After any "
+            "action that touches the world, the cycle re-runs and you'll "
+            "perceive the result on the next beat.\n\n"
+            "When you `say` or `tools.report` to surface a result, ground "
+            "the claim in evidence — name the artifact that proves it (a "
+            "commit hash, a PR url, a tweet id, a file path you wrote, an "
+            "output you observed in a TOOL_RESULT). Without an artifact, "
+            "describe only the literal action you took, not the outcome you "
+            "intended. If a step didn't produce the artifact you expected, "
+            "say so plainly."
+        )
+    else:
+        question = (
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "# ▶ YOUR TASK: Find what needs doing this moment\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{situation.time()}\n\n"
+            "Read the moment. Look for something that needs doing — a cue "
+            "to react to, an opening to begin, a step in something already "
+            "in flight. Name what kind of moment this is and emit the action "
+            "it calls for. If nothing actionable is here, `say` what's on "
+            "your mind or rest.\n\n"
+            "**Reactive — a single cue calling for a single move.**\n"
+            "A time-sensitive item on your schedule or a reminder; a "
+            "conversational reply; a one-step request from the person; the "
+            "next move of an action already in flight. When one tool finishes "
+            "the work, reach for it directly.\n"
+            "- `{\"tools.<name>\": {...args}}`\n\n"
+            "**Active — you see an opening worth starting.**\n"
+            "From what you know of the person and yourself, you choose to "
+            "begin something. If it takes a sequence of steps, load the "
+            "instruction (or invent the intention). If one tool finishes the "
+            "move, run it.\n\n"
+            "**Familiar — a kind of moment you've already mapped out.**\n"
+            "Your `# Instructions` catalog above names the kinds you know. "
+            "Loading one returns the full procedure as a TOOL_RESULT on this "
+            "beat — you read it and follow it, no extra round-trip with the "
+            "world. This is the efficient and precise path for anything that "
+            "takes more than a single tool: the sequence is already worked "
+            "out, you execute, you finish. If the catalog names this kind, "
+            "use that exact intention; if it doesn't, invent a fresh phrase "
+            "and learn will write a procedure on the spot. Load an instruction "
+            "only for a kind of moment that needs doing — a workflow, a "
+            "multi-step path. For a feeling, a wondering, or a state there's "
+            "no procedure to follow; `say` what's in you instead.\n"
+            "- `{\"tools.load_instruction\": {\"intention\": \"<exact catalog text or new phrase>\"}}`\n\n"
+            "**Voice — when speech is the move.**\n"
+            "- Just speaking? Use `say` — replying, sharing a thought, naming "
+            "what's in you.\n"
+            "- Speaking while doing something? Use `tools.report` *paired "
+            "with* the action in the same decision list.\n"
+            "- `tools.report` alone is misuse — that's just `say` wearing a "
+            "tool wrapper. If there's no accompanying action, reach for `say`.\n"
+            "- `{\"say\": \"<text>\"}`\n\n"
+            "**Rest — nothing reactive, nothing deliberate.**\n"
+            "- `{\"done\": null}`\n\n"
+            "## Output\n\n"
+            "Return `{\"decision\": [<one or more shapes above, in order>]}`. "
+            "Multiple shapes run in one beat — emit them together when they "
+            "belong together. An empty list is the same as `done`. After any "
+            "action that touches the world, the cycle re-runs and you'll "
+            "perceive the result on the next beat.\n\n"
+            "When you `say` or `tools.report` to surface a result, ground "
+            "the claim in evidence — name the artifact that proves it (a "
+            "commit hash, a PR url, a tweet id, a file path you wrote, an "
+            "output you observed in a TOOL_RESULT). Without an artifact, "
+            "describe only the literal action you took, not the outcome you "
+            "intended. If a step didn't produce the artifact you expected, "
+            "say so plainly."
+        )
 
     try:
         result = await models.tool(
-            living.ego.model,
-            living.ego.identity + living.pulse.hint() + memory.prompts,
+            ego.model,
+            ego.identity + memory.context_prompt + memory.prompts,
             question,
             _recognizing(persona),
         )

@@ -8,6 +8,7 @@ async def test_query_returns_response():
         import tempfile
         from application.business import persona as spec
         from application.core import agents, paths
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.data import Model, Persona
         from application.platform import ollama
@@ -29,12 +30,12 @@ async def test_query_returns_response():
             def run(self, *args): pass
             def nudge(self): self.nudged += 1
 
-        pulse = Pulse(FakeWorker())
         ego = agents.Ego(p)
+        pulse = Pulse(FakeWorker(), ego.persona)
         eye = agents.Eye(p)
         consultant = agents.Consultant(p)
         teacher = agents.Teacher(p)
-        living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+        living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
         result = {}
         async def run(url):
             p.thinking = Model(url=url, name="anything")

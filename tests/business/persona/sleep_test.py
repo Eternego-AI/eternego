@@ -7,6 +7,7 @@ async def test_sleep_succeeds():
         import tempfile
         from application.business import persona as spec
         from application.core import agents
+        from application.core.brain.memory import Memory
         from application.core.brain.pulse import Pulse
         from application.core.brain.signals import Tick
         from application.platform import ollama
@@ -30,22 +31,22 @@ async def test_sleep_succeeds():
                 def nudge(self): pass
                 async def settle(self, timeout=None): pass
                 async def stop(self): pass
-            pulse = Pulse(FakeWorker())
             ego = agents.Ego(persona)
+            pulse = Pulse(FakeWorker(), ego.persona)
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=pulse, ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=pulse, ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
             # Plant a signal that represents the day's felt sense — sleep should
             # close it out so the new day starts on a fresh stream.
             day_signal = Tick("realize", {"persona": persona})
-            living.signals.append(day_signal)
-            assert day_signal in living.signals, "marker signal should be present before sleep"
+            living.pulse.signals.append(day_signal)
+            assert day_signal in living.pulse.signals, "marker signal should be present before sleep"
 
             outcome = asyncio.run(spec.sleep(ego, living))
             assert outcome.success, outcome.message
-            assert day_signal not in living.signals, \
+            assert day_signal not in living.pulse.signals, \
                 "sleep should clear the day's signals from living"
 
         ollama.assert_call(

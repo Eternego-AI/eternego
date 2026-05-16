@@ -18,13 +18,12 @@ impression and acts on it. Learn is a cognitive function — no cycle
 restart, no consequence emitted; it just completes the round-trip
 between intention and impression.
 
-`consult_teacher_for_instruction(persona, intention)` is the work of writing
-a new lesson + translating, exposed so other paths (like reflect) can call
-it directly.
+`consult_teacher_for_instruction(ego, teacher, intention)` is the work of
+writing a new lesson + translating, exposed so other paths (like reflect)
+can call it directly.
 """
 
 from application.core import models, paths
-from application.core.agents import Living
 from application.core.brain import character, meanings
 from application.core.brain.signals import Tick, Tock
 from application.core.data import Action, Prompt
@@ -43,25 +42,24 @@ LECTURING = Action(
 )
 
 
-async def consult_teacher_for_instruction(persona, intention: str) -> tuple[str, str, str] | None:
+async def consult_teacher_for_instruction(ego, teacher, intention: str) -> tuple[str, str, str] | None:
     """Ask teacher for a procedure for this kind of moment, have the persona
     translate it into her own voice, save both lesson and meaning to disk,
     return the result.
 
-    Returns `(meaning_stem, intention, body)` on success, or `None` if the
-    teacher couldn't produce a usable lesson. Pure work — no memory mutation.
-    Callers decide what to do with the result.
+    Returns `(meaning_stem, intention, body)` on success, or `None` for any
+    non-success — teacher judged the intention non-actionable (returned
+    `{}`), teacher errored, response was malformed. Callers fall back to
+    a chatting response on None; the persona doesn't need to distinguish
+    the failure modes.
+
+    Pure work — no memory mutation. Callers decide what to do with the result.
     """
     intention = (intention or "").strip()
     if not intention:
         return None
 
-    # Lazy import to avoid module-load-time circularity: learn → character →
-    # abilities (auto-discovery loads ability files that may import learn).
-    from application.core import agents
-
-    teacher = agents.Teacher(persona)
-    ego = agents.Ego(persona)
+    persona = ego.persona
 
     catalog_text = (
         "# The persona's tools and instructions\n\n"
@@ -81,17 +79,24 @@ async def consult_teacher_for_instruction(persona, intention: str) -> tuple[str,
         "captures what kind of moment they're in:\n\n"
         f"## The intention\n\n{intention}\n\n"
         "## Your job\n\n"
-        "Write a procedure the persona will carry forward — a map for handling this "
-        "kind of moment, not just this single instance. Compose around the tools "
-        "and existing instructions listed above (you can borrow their content; you "
-        "cannot route to them at runtime).\n\n"
+        "First, judge whether this intention names a kind of moment that actually calls "
+        "for a procedure. Some intentions name states the persona just has to live or "
+        "feel — a wondering, an unease, a passing thought, a question about themselves "
+        "— not a kind of doing. If the intention doesn't map to a repeatable kind of "
+        "work the persona can act out with the tools above, return an empty JSON object "
+        "`{}` and stop. Do not invent a procedure to fill the slot.\n\n"
+        "If the intention IS actionable, write a procedure the persona will carry "
+        "forward — a map for handling this kind of moment, not just this single "
+        "instance. Compose around the tools and existing instructions listed above "
+        "(you can borrow their content; you cannot route to them at runtime).\n\n"
         "Each procedure is self-contained. The persona stays inside one procedure "
         "from start to `done`; the system has no mechanism to switch into another "
         "procedure mid-flight. If a step would naturally use what another instruction "
         "knows (a URL, credentials, a phrasing), inline those details directly into "
         "your steps — name the tool and its arguments.\n\n"
         "## Output\n\n"
-        "Return JSON with two fields:\n\n"
+        "If the intention is not actionable, return `{}`.\n\n"
+        "Otherwise return JSON with two fields:\n\n"
         "- `\"intention\"`: the same intention the persona named (or a slightly "
         "refined version — keep it close to what they wrote).\n"
         "- `\"path\"`: the procedure body in Markdown — a comprehensive map the "
@@ -120,6 +125,10 @@ async def consult_teacher_for_instruction(persona, intention: str) -> tuple[str,
         return None
 
     if not isinstance(result, dict):
+        # `None` from models.tool means the teacher returned `{}` — judged
+        # the intention as not actionable. Same outcome as a parse failure
+        # from the persona's view: she falls back to chatting.
+        logger.debug("brain.consult_teacher no lesson produced", {"persona": persona, "intention": intention})
         return None
 
     intention = str(result.get("intention", "")).strip()
@@ -175,7 +184,7 @@ async def consult_teacher_for_instruction(persona, intention: str) -> tuple[str,
     return (meaning_name, intention, translated)
 
 
-async def learn(living: Living) -> list:
+async def learn(memory, ego, teacher) -> list:
     """learn FROM living — fulfill a pending intention with an impression.
 
     Gates on memory: only fires when `memory.perception()` returns an
@@ -188,10 +197,9 @@ async def learn(living: Living) -> list:
     between intention and impression; cycle continues to decide on the
     same iteration.
     """
-    dispatch(Tick("learn", {"persona": living.ego.persona}))
+    dispatch(Tick("learn", {"persona": ego.persona}))
 
-    persona = living.ego.persona
-    memory = living.ego.memory
+    persona = ego.persona
 
     intention = memory.perception()
     if intention is None:
@@ -211,10 +219,15 @@ async def learn(living: Living) -> list:
             return []
 
     # No match — consult teacher to write a new procedure, persona translates.
-    result = await consult_teacher_for_instruction(persona, intention)
+    result = await consult_teacher_for_instruction(ego, teacher, intention)
     if result is None:
-        memory.impression("could not produce a procedure for this intention")
-        dispatch(Tock("learn", {"persona": persona, "branch": "teacher-failed"}))
+        # Teacher couldn't produce a usable procedure — either judged the
+        # intention non-actionable, errored, or returned malformed output.
+        # Hand the persona the chatting meaning's body so decide speaks
+        # (or says done) rather than facing a dead-end.
+        chatting = meanings.builtin(persona).get("chatting")
+        memory.impression(chatting.path() if chatting else "")
+        dispatch(Tock("learn", {"persona": persona, "branch": "no-procedure"}))
         return []
 
     meaning_name, _intention, translated = result

@@ -23,6 +23,7 @@ async def test_decide_no_impression_passes_through():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Model, Persona
@@ -36,9 +37,9 @@ async def test_decide_no_impression_passes_through():
             eye = agents.Eye(persona)
             consultant = agents.Consultant(persona)
             teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
 
-            consequences = asyncio.run(functions.decide(living))
+            consequences = asyncio.run(functions.decide(living.memory, living.ego))
             assert consequences == []
 
     code, error = await on_separate_process_async(isolated)
@@ -52,6 +53,7 @@ async def test_decide_say_dispatches_command():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -67,10 +69,10 @@ async def test_decide_say_dispatches_command():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-                ego.memory.intention("chatting")
-                ego.memory.impression("talk simply")
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+                living.memory.intention("chatting")
+                living.memory.impression("talk simply")
 
                 said = []
                 async def capture(cmd: observer.Command):
@@ -78,7 +80,7 @@ async def test_decide_say_dispatches_command():
                         said.append(cmd.details.get("text", ""))
                 observer.subscribe(capture)
 
-                consequences = await functions.decide(living)
+                consequences = await functions.decide(living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -101,6 +103,7 @@ async def test_decide_done_returns_empty():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -116,12 +119,12 @@ async def test_decide_done_returns_empty():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-                ego.memory.intention("chatting")
-                ego.memory.impression("rest is fine")
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+                living.memory.intention("chatting")
+                living.memory.impression("rest is fine")
 
-                consequences = await functions.decide(living)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert consequences == []
 
             ollama.assert_call(
@@ -141,6 +144,7 @@ async def test_decide_notify_remembers_and_dispatches():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -156,10 +160,10 @@ async def test_decide_notify_remembers_and_dispatches():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
-                ego.memory.intention("broadcasting")
-                ego.memory.impression("broadcast on every channel")
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="Hi", prompt=Prompt(role="user", content="Hi")))
+                living.memory.intention("broadcasting")
+                living.memory.impression("broadcast on every channel")
 
                 notified = []
                 async def capture(cmd: observer.Command):
@@ -167,15 +171,15 @@ async def test_decide_notify_remembers_and_dispatches():
                         notified.append(cmd.details.get("text", ""))
                 observer.subscribe(capture)
 
-                msgs_before = len(ego.memory.messages)
-                consequences = await functions.decide(living)
+                msgs_before = len(living.memory.messages)
+                consequences = await functions.decide(living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
                 assert consequences == []
                 assert notified == ["broadcast this"]
-                assert len(ego.memory.messages) == msgs_before + 1
-                last = ego.memory.messages[-1]
+                assert len(living.memory.messages) == msgs_before + 1
+                last = living.memory.messages[-1]
                 assert last.prompt.role == "assistant"
                 assert last.content == "broadcast this"
 
@@ -196,6 +200,7 @@ async def test_decide_clear_memory_forgets_and_records():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -211,16 +216,16 @@ async def test_decide_clear_memory_forgets_and_records():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="old chatter", prompt=Prompt(role="user", content="old chatter")))
-                ego.memory.intention("resetting")
-                ego.memory.impression("wipe and start fresh")
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="old chatter", prompt=Prompt(role="user", content="old chatter")))
+                living.memory.intention("resetting")
+                living.memory.impression("wipe and start fresh")
 
-                consequences = await functions.decide(living)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert consequences == []
                 # forget() then add_tool_result writes 2 messages → 2 messages total.
-                assert len(ego.memory.messages) == 2
-                call_msg, result_msg = ego.memory.messages
+                assert len(living.memory.messages) == 2
+                call_msg, result_msg = living.memory.messages
                 assert call_msg.prompt.role == "assistant"
                 assert "clear_memory" in call_msg.content
                 assert "TOOL_RESULT" in result_msg.content
@@ -243,6 +248,7 @@ async def test_decide_remove_meaning_unlearns_existing():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
+            from application.core.brain.memory import Memory
             from application.core.brain import functions, meanings
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -259,18 +265,18 @@ async def test_decide_remove_meaning_unlearns_existing():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.learn("temp_meaning", meanings.Meaning("temp_meaning", "Temp", "stub"))
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                ego.memory.intention("pruning")
-                ego.memory.impression("drop the stale meaning")
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.learn("temp_meaning", meanings.Meaning("temp_meaning", "Temp", "stub"))
+                living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                living.memory.intention("pruning")
+                living.memory.impression("drop the stale meaning")
 
-                consequences = await functions.decide(living)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert consequences == []
                 meaning_file = paths.meanings(persona.id) / "temp_meaning.md"
                 assert not meaning_file.exists(), "meaning file should be deleted"
-                assert "temp_meaning" not in ego.memory.custom_meanings
-                last = ego.memory.messages[-1]
+                assert "temp_meaning" not in living.memory.custom_meanings
+                last = living.memory.messages[-1]
                 assert "TOOL_RESULT" in last.content
                 assert "removed instruction: temp_meaning" in last.content
 
@@ -290,6 +296,7 @@ async def test_decide_stop_dispatches_command():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -305,10 +312,10 @@ async def test_decide_stop_dispatches_command():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                ego.memory.intention("stopping")
-                ego.memory.impression("stop here")
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                living.memory.intention("stopping")
+                living.memory.impression("stop here")
 
                 stops = []
                 async def capture(cmd: observer.Command):
@@ -316,7 +323,7 @@ async def test_decide_stop_dispatches_command():
                         stops.append(cmd)
                 observer.subscribe(capture)
 
-                consequences = await functions.decide(living)
+                consequences = await functions.decide(living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -340,6 +347,7 @@ async def test_decide_tool_returns_capability():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -355,12 +363,12 @@ async def test_decide_tool_returns_capability():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
-                ego.memory.intention("listing")
-                ego.memory.impression("run ls -la")
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
+                living.memory.intention("listing")
+                living.memory.impression("run ls -la")
 
-                consequences = await functions.decide(living)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert len(consequences) == 1
                 assert consequences[0] == {"tools.OS.execute": {"command": "ls"}}
 
@@ -381,6 +389,7 @@ async def test_decide_steps_returns_list_of_capabilities():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -396,10 +405,10 @@ async def test_decide_steps_returns_list_of_capabilities():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
-                ego.memory.intention("exploring")
-                ego.memory.impression("describe then list")
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(content="ls", prompt=Prompt(role="user", content="ls")))
+                living.memory.intention("exploring")
+                living.memory.impression("describe then list")
 
                 said = []
                 async def capture(cmd: observer.Command):
@@ -407,7 +416,7 @@ async def test_decide_steps_returns_list_of_capabilities():
                         said.append(cmd.details.get("text", ""))
                 observer.subscribe(capture)
 
-                consequences = await functions.decide(living)
+                consequences = await functions.decide(living.memory, living.ego)
                 import asyncio as _a
                 await _a.sleep(0)
 
@@ -442,6 +451,7 @@ async def test_decide_remove_meaning_clears_learned_entry():
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents
+            from application.core.brain.memory import Memory
             from application.core.brain import functions, meanings
             from application.core.brain.pulse import Pulse
             from application.core.data import Message, Model, Persona, Prompt
@@ -461,13 +471,13 @@ async def test_decide_remove_meaning_clears_learned_entry():
                 eye = agents.Eye(persona)
                 consultant = agents.Consultant(persona)
                 teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker()), ego=ego, eye=eye, consultant=consultant, teacher=teacher)
-                ego.memory.learn("temp_meaning", meanings.Meaning("temp_meaning", "Temp", "stub"))
-                ego.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
-                ego.memory.intention("pruning")
-                ego.memory.impression("drop it")
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.learn("temp_meaning", meanings.Meaning("temp_meaning", "Temp", "stub"))
+                living.memory.remember(Message(content="hi", prompt=Prompt(role="user", content="hi")))
+                living.memory.intention("pruning")
+                living.memory.impression("drop it")
 
-                consequences = await functions.decide(living)
+                consequences = await functions.decide(living.memory, living.ego)
                 assert consequences == []
                 assert paths.read_json(paths.learned(persona.id)) == {}
 

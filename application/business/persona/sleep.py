@@ -25,7 +25,7 @@ async def sleep(ego, living) -> Outcome[None]:
     bus.propose("Sleeping", {"persona": persona})
     logger.info("Sleeping", {"persona": persona})
 
-    living.pulse.phase = Phase.NIGHT
+    living.phase(Phase.NIGHT)
     living.pulse.worker.nudge()
     await living.pulse.worker.settle()
 
@@ -49,8 +49,7 @@ async def sleep(ego, living) -> Outcome[None]:
         if not diary_outcome.success:
             logger.error("Writing diary on sleep failed", {"persona": persona, "error": diary_outcome.message})
 
-        ego.memory.clear_archive()
-        living.signals.clear()
+        living.memory.clear_archive()
 
         # Strip the heavy per-minute `signals` field from older health-log
         # entries so the file stays small across days. The day's detail
@@ -74,7 +73,7 @@ async def sleep(ego, living) -> Outcome[None]:
 
         await living.pulse.worker.stop()
 
-        living.pulse = Pulse(Worker())
+        living.pulse = Pulse(Worker(), persona)
 
         await wake(ego, living)
 

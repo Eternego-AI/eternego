@@ -225,7 +225,8 @@ async def install(program: str) -> None:
 
 
 @tool("Take a screenshot of the screen or a specific region. "
-      "Captures the full screen by default. Pass left, top, width, height to zoom into a specific area. "
+      "Captures the full screen by default at the display's native resolution. "
+      "Pass left, top, width, height to zoom into a specific area. "
       "path: where to save the image.")
 async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 0, path: str = "") -> str:
     """Capture a screenshot and return the file path.
@@ -363,19 +364,24 @@ async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 
 
 
 async def default_screen_size() -> tuple[int, int]:
-    """Width and height of the default screen in physical pixels.
+    """Width and height of the default screen in the unit the cursor uses.
 
-    One responsibility: tell the caller how big the default screen is so
-    callers (the screen ability, for instance) can compute a scale factor
-    between a captured-and-resized image and the live display.
+    Whatever `desktop.mouse_move` accepts on this OS is what this returns.
+    On macOS that's points; on Linux/Windows it's pixels (logical pixels
+    under DPI awareness on Windows).
 
     Linux: tries `xrandr` first — works under both X11 and XWayland, which
     most KDE Wayland sessions provide by default. Falls back to
     `kscreen-doctor -j` (KDE pure Wayland). Final fallback takes one
     screenshot via the existing portal path and reads its dimensions.
 
-    macOS: parses `system_profiler SPDisplaysDataType -json`.
-    Windows: GetSystemMetrics via ctypes.
+    macOS: Quartz `CGDisplayBounds(CGMainDisplayID())` — returns points,
+    matching pynput's `Controller.position`. Native pixels (what
+    `screencapture` produces) are 2× this on Retina; we deliberately don't
+    return those.
+
+    Windows: `GetSystemMetrics` via ctypes — returns logical pixels,
+    matching pynput's `SetCursorPos`.
     """
     target_os = get_supported()
 
@@ -432,21 +438,10 @@ async def default_screen_size() -> tuple[int, int]:
             except OSError:
                 pass
 
-    if target_os == "macos":
-        proc = await asyncio.create_subprocess_exec(
-            "system_profiler", "SPDisplaysDataType", "-json",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        out, _ = await proc.communicate()
-        import re
-        data = json.loads(out.decode())
-        for display in data.get("SPDisplaysDataType", []):
-            for d in display.get("spdisplays_ndrvs", []):
-                m = re.search(r"(\d+)\s*x\s*(\d+)", d.get("_spdisplays_pixels", ""))
-                if m:
-                    return int(m.group(1)), int(m.group(2))
-        raise RuntimeError("could not determine screen size from system_profiler")
+    if target_os == "mac":
+        from Quartz import CGMainDisplayID, CGDisplayBounds
+        bounds = CGDisplayBounds(CGMainDisplayID())
+        return int(bounds.size.width), int(bounds.size.height)
 
     if target_os == "windows":
         import ctypes

@@ -25,27 +25,25 @@ per-block cache_control for Anthropic later).
   meets a moment without an ability. Static identity. Uses the persona's
   frontier model.
 
-`mind(ego, consultant, eye, teacher, living)` returns the cognitive cycle —
-seven stages, each bound to the voices it needs.
-
-`Living(pulse, cycle)` is the persona's runtime — a heartbeat (Pulse) and
-a rhythm of action (cycle) together, which the Agent serves for a Persona.
+`Living` is the persona's runtime — pulse, memory, voices, and a mind
+(the cycle of cognitive functions for the current phase). The Agent
+serves a Living for a Persona.
 """
-
-import time
 
 from application.core.brain import character, situation
 from application.core.brain.memory import Memory
-from application.core.brain.pulse import Pulse
-from application.core.brain.signals import CapabilityRun
+from application.core.brain.pulse import Phase, Pulse
 from application.core.data import Persona, Prompt
-from application.platform.observer import Signal, subscribe, unsubscribe
 
 
 class Ego:
+    """The persona's personality — her voice. Carries the stable identity
+    prompts (character, awareness, capabilities, situation, meanings,
+    substrate). Memory and Recent Context live on Living now; her identity
+    here is the stable prefix that doesn't change between beats."""
+
     def __init__(self, persona: Persona):
         self.persona = persona
-        self.memory = Memory(persona)
 
     @property
     def model(self):
@@ -53,9 +51,8 @@ class Ego:
 
     @property
     def identity(self) -> list[Prompt]:
-        # Persona's stable identity (cache breakpoint); situation and context
-        # are dynamic and added separately so they don't invalidate the cache
-        # of the stable prefix.
+        # Stable identity blocks only — each gets a cache breakpoint. Dynamic
+        # state (Recent Context, conversation) is composed by Living.identity.
         blocks = [
             Prompt(role="system", content="\n\n".join([
                 character.identity(self.persona),
@@ -76,10 +73,6 @@ class Ego:
             ]),
            cache_point=True)
         )
-
-        context = (self.memory.context or "").strip()
-        if context:
-            blocks.append(Prompt(role="system", content="## Recent Context\n\n" + context))
 
         return blocks
 
@@ -128,84 +121,70 @@ class Teacher:
 
 
 class Living:
-    """The persona being-alive — the runtime state.
+    """The persona being-alive — the runtime state. The glue that holds
+    her parts together while she's alive.
 
-    Holds the rhythm (pulse), the alive voices (ego, eye, consultant, teacher),
-    the work-shape (cycle), and the signal stream (signals — the felt sense of
-    what's happening, captured from the bus). Dies when Agent.stop() calls
-    `dispose()`.
+    Holds the rhythm (pulse — phase, worker, signal history, idle
+    detection), the memory (what she remembers), the alive voices (ego,
+    eye, consultant, teacher), and her mind (the cycle of cognitive
+    functions for the current phase).
 
-    Functions in the cycle reach into Living for everything they need:
-        living.ego, living.teacher, living.eye, living.consultant,
-        living.pulse, living.signals.
+    Functions in the mind reach into Living for everything they need:
+        living.ego, living.memory, living.teacher, living.eye,
+        living.consultant, living.pulse.
     """
 
     def __init__(
         self,
         pulse: Pulse,
         ego: "Ego",
+        memory: Memory,
         eye: "Eye",
         consultant: "Consultant",
         teacher: "Teacher",
-        cycle: list | None = None,
     ):
         self.pulse = pulse
         self.ego = ego
+        self.memory = memory
         self.eye = eye
         self.consultant = consultant
         self.teacher = teacher
-        self.cycle = cycle if cycle is not None else []
-        self.signals: list[Signal] = []
-        self.created_at: int = time.time_ns()
-        self._subscribed = False
-        self._on_construct()
+        self.mind: list = []
 
-    def _on_construct(self) -> None:
-        """Construction hook. Default: subscribe to the bus so the persona's
-        signal stream populates `living.signals`. Subclasses override to
-        skip (PastLiving does)."""
-        subscribe(self._on_signal)
-        self._subscribed = True
+    def phase(self, phase: Phase) -> None:
+        """Shift into a phase: rebuild the mind's cycle for that phase,
+        mark the pulse, and reset the felt stream. No-op if already in
+        that phase. Callers that need the worker nudged do it themselves.
 
-    async def _on_signal(self, signal: Signal) -> None:
-        """Capture signals dispatched on this persona's behalf into the felt
-        stream. Filters by persona id so multi-persona daemons don't cross
-        their streams."""
-        details = signal.details if isinstance(signal.details, dict) else {}
-        p = details.get("persona")
-        signal_pid = getattr(p, "id", None) if p is not None else None
-        if signal_pid == self.ego.persona.id:
-            self.signals.append(signal)
-
-    async def is_idle(self, seconds: int | None = None) -> bool:
-        """True if no real conversation activity in the given window.
-
-        If `seconds` is omitted, reads `self.ego.persona.idle_timeout`. If the
-        last activity is already older than that, returns True immediately.
-        Otherwise sleeps the remaining time via `worker.can_sleep` and returns
-        True if the wait completed uninterrupted, or False if a nudge fired
-        during the wait (activity arrived).
-
-        Activity is a CapabilityRun signal (tool/ability fired by Clock's
-        executor). Routine cycle ticks/tocks and heartbeat noise don't count.
-        If no activity has been captured yet (fresh restart), Living's birth
-        time is the reference."""
-        if seconds is None:
-            seconds = self.ego.persona.idle_timeout
-        latest = self.created_at
-        for signal in reversed(self.signals):
-            if isinstance(signal, CapabilityRun):
-                latest = signal.time
-                break
-        elapsed_ns = time.time_ns() - latest
-        if elapsed_ns >= seconds * 1_000_000_000:
-            return True
-        remaining = seconds - elapsed_ns / 1_000_000_000
-        return await self.pulse.worker.can_sleep(remaining)
-
-    def dispose(self) -> None:
-        """Tear down. Unsubscribes from the bus so signals stop landing on a
-        Living that is no longer running."""
-        if self._subscribed:
-            unsubscribe(self._on_signal)
-            self._subscribed = False
+        Each phase has its own cycle — Morning starts the day's work,
+        Day adds reflection and archiving once the work runs, Night
+        stops perceiving and only closes out. Each cycle item is a
+        `(name, callable)` pair — Clock walks this list every beat,
+        invoking each callable with no args."""
+        if self.pulse.phase == phase:
+            return
+        # Lazy import to break the agents↔functions cycle.
+        from application.core.brain import functions
+        match phase:
+            case Phase.MORNING:
+                self.mind = [
+                    ("realize",    lambda: functions.realize(self.memory, self.ego, self.eye, self.consultant)),
+                    ("recognize",  lambda: functions.recognize(self.pulse, self.memory, self.ego)),
+                    ("learn",      lambda: functions.learn(self.memory, self.ego, self.teacher)),
+                    ("decide",     lambda: functions.decide(self.memory, self.ego)),
+                ]
+            case Phase.DAY:
+                self.mind = [
+                    ("realize",    lambda: functions.realize(self.memory, self.ego, self.eye, self.consultant)),
+                    ("recognize",  lambda: functions.recognize(self.pulse, self.memory, self.ego)),
+                    ("learn",      lambda: functions.learn(self.memory, self.ego, self.teacher)),
+                    ("decide",     lambda: functions.decide(self.memory, self.ego)),
+                    ("reflect",    lambda: functions.reflect(self.pulse, self.memory, self.ego)),
+                ]
+            case Phase.NIGHT:
+                self.mind = [
+                    ("reflect",    lambda: functions.reflect(self.pulse, self.memory, self.ego)),
+                    ("archive",    lambda: functions.archive(self.memory, self.ego)),
+                ]
+        self.pulse.phase = phase
+        self.pulse.signals = []
