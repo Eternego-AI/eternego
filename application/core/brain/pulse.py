@@ -67,13 +67,18 @@ class Pulse:
         latest CapabilityRun in `self.signals` is necessarily the last one
         in the current phase.
 
-        - No CapabilityRun in this phase → worker hasn't been used → idle is
-          meaningless → return False.
+        - No CapabilityRun in this phase yet → wait the full window via
+          `worker.can_sleep`. True if uninterrupted (window elapsed without
+          activity → idle); False if a nudge fires during the wait.
         - Latest CapabilityRun older than `seconds` (default
           `persona.idle_timeout`) → return True immediately.
         - Otherwise sleep the remaining time via `worker.can_sleep` and
           return True if uninterrupted, False if a nudge fires (activity
-          arrived)."""
+          arrived).
+
+        Returning False without waiting would create a tight loop with
+        reflect (raises ReflectInterrupted → clock restarts cycle → reflect
+        runs again → raises again, with no chance for a nudge to land)."""
         if seconds is None:
             seconds = self.persona.idle_timeout
         latest = None
@@ -82,7 +87,7 @@ class Pulse:
                 latest = signal.time
                 break
         if latest is None:
-            return False
+            return await self.worker.can_sleep(seconds)
         elapsed_ns = time.time_ns() - latest
         if elapsed_ns >= seconds * 1_000_000_000:
             return True
