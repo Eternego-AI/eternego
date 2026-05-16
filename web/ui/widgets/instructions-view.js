@@ -30,8 +30,8 @@ class InstructionsView extends HTMLElement {
                     <p class="w-instr-sub">When she meets a moment she recognizes, she loads its path. Built-in meanings ship with her; she writes the rest as she lives.</p>
                 </div>
 
-                ${this._section('Hers — written from living', custom, true)}
-                ${this._section('Built-in — shipped with her', builtin, false)}
+                ${this._section('Hers — written from living', custom)}
+                ${this._section('Built-in — shipped with her', builtin)}
             </div>
         `;
         for (const det of this.querySelectorAll('details.w-instr-item')) {
@@ -40,14 +40,14 @@ class InstructionsView extends HTMLElement {
             });
         }
     }
-    _section(title, list, openFirst) {
+    _section(title, list) {
         if (!list.length) return '';
         return `
             <section class="w-instr-section">
                 <h3 class="w-instr-section-h">${escapeHtml(title)}</h3>
                 <div class="w-instr-list">
-                    ${list.map((m, i) => `
-                        <details class="w-instr-item"${openFirst && i === 0 ? ' open' : ''}>
+                    ${list.map(m => `
+                        <details class="w-instr-item">
                             <summary class="w-instr-item-h">${escapeHtml(m.intention)}</summary>
                             <div class="w-instr-item-body">${toHTML(m.body || '')}</div>
                         </details>

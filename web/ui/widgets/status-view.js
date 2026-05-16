@@ -8,6 +8,7 @@ class StatusView extends HTMLElement {
         this._built = true;
         this._persona = null;
         this._diagnose = null;
+        this._signals = [];
         this.innerHTML = `
             <div class="w-status">
                 <div class="w-status-head">
@@ -20,9 +21,10 @@ class StatusView extends HTMLElement {
         this.querySelector('.w-status-refresh').onclick = () =>
             this.dispatchEvent(new CustomEvent('refresh'));
     }
-    setProps({ persona, diagnose }) {
+    setProps({ persona, diagnose, signals }) {
         if (persona !== undefined) this._persona = persona;
         if (diagnose !== undefined) this._diagnose = diagnose;
+        if (signals !== undefined) this._signals = signals;
         this.render();
     }
     render() {
@@ -81,6 +83,21 @@ class StatusView extends HTMLElement {
                         `;
                     }).join('')}
                 </div>
+            </section>
+            <section class="w-status-section">
+                <h3>Recent signals <span class="w-dim">— last 50, newest first</span></h3>
+                ${this._signals && this._signals.length ? `
+                    <div class="w-signals">
+                        ${[...this._signals].reverse().map(s => `
+                            <div class="w-signals-row">
+                                <span class="w-signals-time">${escapeHtml(s.time || '')}</span>
+                                <span class="w-signals-type">${escapeHtml(s.type || '')}</span>
+                                <span class="w-signals-title">${escapeHtml(s.title || '')}</span>
+                                <span class="w-signals-detail">${escapeHtml(s.detail || '')}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : '<p class="w-dim">No signals yet.</p>'}
             </section>
         `;
     }

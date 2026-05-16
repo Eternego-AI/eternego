@@ -315,8 +315,15 @@ class Agent:
                 await try_claim("discord", token, channel_id)
                 return
             content = signal.details.get("content", "")
-            if content.strip().lower() == "/hello":
+            cmd = content.strip().lower()
+            if cmd == "/hello":
                 await say_hello(gw)
+                return
+            if cmd == "/stop":
+                await self.living.pulse.worker.stop()
+                return
+            if cmd == "/restart":
+                asyncio.create_task(restart(persona.id))
                 return
             if gw["channel"].verified_at:
                 self.last_channel = gw["channel"]

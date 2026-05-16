@@ -33,43 +33,46 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                     raise OSError(f"OpenAI HTTP {response.status_code}: {body_text}")
                 yielded = False
                 usage = {}
-                async for line in response.aiter_lines():
-                    line = line.strip()
-                    if not line.startswith("data: "):
-                        continue
-                    data = line[6:].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        event = json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-                    if event.get("error"):
-                        err = event["error"]
-                        message = err.get("message", "unknown error") if isinstance(err, dict) else str(err)
-                        logger.warning("OpenAI stream error event", {"model": model, "error": err})
-                        raise OSError(f"OpenAI stream error: {message}")
-                    if event.get("usage"):
-                        usage = event["usage"]
-                    choices = event.get("choices", [])
-                    if not choices:
-                        continue
-                    content = choices[0].get("delta", {}).get("content", "")
-                    if content:
-                        yielded = True
-                        await send(Message("OpenAI stream chunk received", {"chunk": content}))
-                        yield content
+                try:
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:].strip()
+                        if data == "[DONE]":
+                            break
+                        try:
+                            event = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        if event.get("error"):
+                            err = event["error"]
+                            message = err.get("message", "unknown error") if isinstance(err, dict) else str(err)
+                            logger.warning("OpenAI stream error event", {"model": model, "error": err})
+                            raise OSError(f"OpenAI stream error: {message}")
+                        if event.get("usage"):
+                            usage = event["usage"]
+                        choices = event.get("choices", [])
+                        if not choices:
+                            continue
+                        content = choices[0].get("delta", {}).get("content", "")
+                        if content:
+                            yielded = True
+                            await send(Message("OpenAI stream chunk received", {"chunk": content}))
+                            yield content
+                finally:
+                    if yielded:
+                        cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if usage else 0
+                        dispatch(Message("Model usage", {
+                            "provider": "openai",
+                            "model": model,
+                            "input_tokens": usage.get("prompt_tokens", 0),
+                            "output_tokens": usage.get("completion_tokens", 0),
+                            "cache_read_tokens": cached,
+                            "cache_write_tokens": 0,
+                        }))
                 if not yielded:
                     raise OSError("OpenAI returned empty response")
-                cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if usage else 0
-                dispatch(Message("Model usage", {
-                    "provider": "openai",
-                    "model": model,
-                    "input_tokens": usage.get("prompt_tokens", 0),
-                    "output_tokens": usage.get("completion_tokens", 0),
-                    "cache_read_tokens": cached,
-                    "cache_write_tokens": 0,
-                }))
     except httpx.RequestError as e:
         logger.warning("OpenAI transport error", {"model": model, "error": str(e)})
         raise ConnectionError(str(e)) from e
@@ -118,48 +121,51 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
                     raise OSError(f"OpenAI HTTP {response.status_code}: {body_text}")
                 yielded = False
                 usage = {}
-                async for line in response.aiter_lines():
-                    line = line.strip()
-                    if not line.startswith("data: "):
-                        continue
-                    data = line[6:].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        event = json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-                    if event.get("error"):
-                        err = event["error"]
-                        message = err.get("message", "unknown error") if isinstance(err, dict) else str(err)
-                        logger.warning("OpenAI stream error event", {"model": model, "error": err})
-                        raise OSError(f"OpenAI stream error: {message}")
-                    if event.get("usage"):
-                        usage = event["usage"]
-                    choices = event.get("choices", [])
-                    if not choices:
-                        continue
-                    delta = choices[0].get("delta", {})
-                    tool_calls = delta.get("tool_calls", [])
-                    if tool_calls:
-                        chunk = tool_calls[0].get("function", {}).get("arguments", "")
-                    else:
-                        chunk = delta.get("content", "")
-                    if chunk:
-                        yielded = True
-                        await send(Message("OpenAI stream chunk received", {"chunk": chunk}))
-                        yield chunk
+                try:
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:].strip()
+                        if data == "[DONE]":
+                            break
+                        try:
+                            event = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        if event.get("error"):
+                            err = event["error"]
+                            message = err.get("message", "unknown error") if isinstance(err, dict) else str(err)
+                            logger.warning("OpenAI stream error event", {"model": model, "error": err})
+                            raise OSError(f"OpenAI stream error: {message}")
+                        if event.get("usage"):
+                            usage = event["usage"]
+                        choices = event.get("choices", [])
+                        if not choices:
+                            continue
+                        delta = choices[0].get("delta", {})
+                        tool_calls = delta.get("tool_calls", [])
+                        if tool_calls:
+                            chunk = tool_calls[0].get("function", {}).get("arguments", "")
+                        else:
+                            chunk = delta.get("content", "")
+                        if chunk:
+                            yielded = True
+                            await send(Message("OpenAI stream chunk received", {"chunk": chunk}))
+                            yield chunk
+                finally:
+                    if yielded:
+                        cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if usage else 0
+                        dispatch(Message("Model usage", {
+                            "provider": "openai",
+                            "model": model,
+                            "input_tokens": usage.get("prompt_tokens", 0),
+                            "output_tokens": usage.get("completion_tokens", 0),
+                            "cache_read_tokens": cached,
+                            "cache_write_tokens": 0,
+                        }))
                 if not yielded:
                     raise OSError("OpenAI returned empty response")
-                cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if usage else 0
-                dispatch(Message("Model usage", {
-                    "provider": "openai",
-                    "model": model,
-                    "input_tokens": usage.get("prompt_tokens", 0),
-                    "output_tokens": usage.get("completion_tokens", 0),
-                    "cache_read_tokens": cached,
-                    "cache_write_tokens": 0,
-                }))
     except httpx.RequestError as e:
         logger.warning("OpenAI transport error", {"model": model, "error": str(e)})
         raise ConnectionError(str(e)) from e

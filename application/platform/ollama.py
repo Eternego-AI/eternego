@@ -100,24 +100,27 @@ async def chat(base_url: str, model: str, messages: list[dict]):
     dispatch(Plan("Sending Ollama Request", {"url": f"{base_url}/api/chat", "headers": {"Content-Type": "application/json"}, "body": body}))
     yielded = False
     usage = {}
-    async for chunk in stream(base_url, "/api/chat", body):
-        if chunk.get("done"):
-            usage = chunk
-        content = chunk.get("message", {}).get("content", "")
-        if content:
-            yielded = True
-            await send(Message("Ollama stream chunk received", {"chunk": content}))
-            yield content
+    try:
+        async for chunk in stream(base_url, "/api/chat", body):
+            if chunk.get("done"):
+                usage = chunk
+            content = chunk.get("message", {}).get("content", "")
+            if content:
+                yielded = True
+                await send(Message("Ollama stream chunk received", {"chunk": content}))
+                yield content
+    finally:
+        if yielded:
+            dispatch(Message("Model usage", {
+                "provider": "ollama",
+                "model": model,
+                "input_tokens": usage.get("prompt_eval_count", 0),
+                "output_tokens": usage.get("eval_count", 0),
+                "cache_read_tokens": 0,
+                "cache_write_tokens": 0,
+            }))
     if not yielded:
         raise OllamaError("empty response from ollama (model may have failed to load)")
-    dispatch(Message("Model usage", {
-        "provider": "ollama",
-        "model": model,
-        "input_tokens": usage.get("prompt_eval_count", 0),
-        "output_tokens": usage.get("eval_count", 0),
-        "cache_read_tokens": 0,
-        "cache_write_tokens": 0,
-    }))
 
 
 async def chat_json(base_url: str, model: str, messages: list[dict]):
@@ -129,24 +132,27 @@ async def chat_json(base_url: str, model: str, messages: list[dict]):
     dispatch(Plan("Sending Ollama Request", {"url": f"{base_url}/api/chat", "headers": {"Content-Type": "application/json"}, "body": body}))
     yielded = False
     usage = {}
-    async for chunk in stream(base_url, "/api/chat", body):
-        if chunk.get("done"):
-            usage = chunk
-        content = chunk.get("message", {}).get("content", "")
-        if content:
-            yielded = True
-            await send(Message("Ollama stream chunk received", {"chunk": content}))
-            yield content
+    try:
+        async for chunk in stream(base_url, "/api/chat", body):
+            if chunk.get("done"):
+                usage = chunk
+            content = chunk.get("message", {}).get("content", "")
+            if content:
+                yielded = True
+                await send(Message("Ollama stream chunk received", {"chunk": content}))
+                yield content
+    finally:
+        if yielded:
+            dispatch(Message("Model usage", {
+                "provider": "ollama",
+                "model": model,
+                "input_tokens": usage.get("prompt_eval_count", 0),
+                "output_tokens": usage.get("eval_count", 0),
+                "cache_read_tokens": 0,
+                "cache_write_tokens": 0,
+            }))
     if not yielded:
         raise OllamaError("empty response from ollama (model may have failed to load)")
-    dispatch(Message("Model usage", {
-        "provider": "ollama",
-        "model": model,
-        "input_tokens": usage.get("prompt_eval_count", 0),
-        "output_tokens": usage.get("eval_count", 0),
-        "cache_read_tokens": 0,
-        "cache_write_tokens": 0,
-    }))
 
 
 # ── Assertions ───────────────────────────────────────────────────────────────

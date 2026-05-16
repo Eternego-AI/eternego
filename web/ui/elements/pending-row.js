@@ -1,8 +1,9 @@
 /* <pending-row> — live activity indicator.
-   Two modes via setProps({ mode }):
-     'replying' — she's working on a reply to your last message. Shows STOP.
-     'active'   — she's living on her own. No STOP, dimmer style.
-   Emits 'stop' (only meaningful in 'replying' mode). */
+   Two modes via setProps({ mode }) — style only:
+     'replying' — she's working on a reply to your last message. Solid card.
+     'active'   — she's living on her own. Dimmer style.
+   STOP is always shown. The button sends 'stop' as a chat message to the
+   persona — useful in either mode. Emits 'stop' when clicked. */
 
 class PendingRow extends HTMLElement {
     connectedCallback() {
@@ -37,7 +38,6 @@ class PendingRow extends HTMLElement {
     }
     _applyMode() {
         this.setAttribute('mode', this._mode);
-        this._stop.hidden = this._mode !== 'replying';
     }
     setProps({ detail, mode }) {
         if (detail !== undefined && detail !== '') this._detail.textContent = detail;
