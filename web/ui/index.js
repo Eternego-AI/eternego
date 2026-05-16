@@ -13,6 +13,7 @@ const state = {
     socketPersonaId: null,
     page: null,
     pendingTrace: [],   /* signals accumulated since the last persona message */
+    signalHistory: [],  /* last 50 signals for status-view; never drained */
 };
 
 /* ── Theme ───────────────────────────────────────────────────────── */
@@ -140,6 +141,8 @@ function connectPersonaSocket(id) {
     if (state.socketPersonaId === id && state.socket) return;
     if (state.socket) state.socket.close();
     state.socketPersonaId = id;
+    state.pendingTrace = [];
+    state.signalHistory = [];
     state.socket = new Socket(`/ws/${id}`);
     state.socket.on(handleSocketMessage);
     state.socket.open();
@@ -202,12 +205,16 @@ function bufferTrace(msg) {
     let title = msg.title || '';
     if (msg.type === 'CapabilityRun' && title.startsWith('tools.')) title = title.slice(6);
 
-    state.pendingTrace.push({
+    const entry = {
         type: msg.type || '',
         title,
         time: formatTime(new Date()),
         detail: extractTraceDetail(msg),
-    });
+    };
+    state.pendingTrace.push(entry);
+    state.signalHistory.push(entry);
+    if (state.signalHistory.length > 50) state.signalHistory.shift();
+    state.page?.setSignals?.(state.signalHistory.slice());
 }
 
 function extractTraceDetail(msg) {

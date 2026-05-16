@@ -32,6 +32,7 @@ class PersonaPage extends HTMLElement {
         this._diagnose = null;
         this._knowledge = null;
         this._calendar = null;
+        this._signals = [];
         this.innerHTML = `
             <sidebar-nav></sidebar-nav>
             <div class="p-main"></div>
@@ -50,13 +51,14 @@ class PersonaPage extends HTMLElement {
         widget?.showPairResult?.(ok, message);
     }
 
-    setProps({ persona, personas, messages, tab, diagnose, knowledge, calendar }) {
+    setProps({ persona, personas, messages, tab, diagnose, knowledge, calendar, signals }) {
         if (persona !== undefined) this._persona = persona;
         if (personas !== undefined) this._personas = personas;
         if (messages !== undefined) this._messages = messages;
         if (diagnose !== undefined) this._diagnose = diagnose;
         if (knowledge !== undefined) this._knowledge = knowledge;
         if (calendar !== undefined) this._calendar = calendar;
+        if (signals !== undefined) this._signals = signals;
 
         const oldTop = (this._tab || '').split('/')[0];
         if (tab) this._tab = tab;
@@ -80,6 +82,13 @@ class PersonaPage extends HTMLElement {
     setPending(on, detail, mode) {
         if (this._tab === 'chat') {
             this._main.firstElementChild?.setPending?.(on, detail, mode);
+        }
+    }
+
+    setSignals(signals) {
+        this._signals = signals;
+        if (this._tab === 'status') {
+            this._main.firstElementChild?.setProps?.({ signals });
         }
     }
 
@@ -191,7 +200,7 @@ class PersonaPage extends HTMLElement {
                 widget.setProps({ items: k?.instruction || [] });
                 break;
             case 'status':
-                widget.setProps({ persona: p, diagnose: this._diagnose });
+                widget.setProps({ persona: p, diagnose: this._diagnose, signals: this._signals });
                 break;
             case 'settings':
                 widget.setProps({ persona: p });

@@ -277,6 +277,32 @@ chat-view .w-messages.is-empty {
 .w-uptime-cell[data-state="bad"]  { background: #d44545; }
 .w-uptime-cell[data-state="gap"]  { background: var(--surface-hover); border: 1px solid var(--border); }
 
+.w-signals {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-family: var(--font-mono);
+    font-size: var(--size-xs);
+    max-height: 480px;
+    overflow: auto;
+    background: var(--bg-recessed);
+    border-left: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-3) var(--space-4);
+}
+.w-signals-row {
+    display: grid;
+    grid-template-columns: 60px 120px auto auto;
+    gap: var(--space-2);
+    align-items: baseline;
+    line-height: 1.4;
+    flex-shrink: 0;
+}
+.w-signals-time { color: var(--text-dim); font-size: 10px; }
+.w-signals-type { color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; white-space: nowrap; }
+.w-signals-title { color: var(--text-body); white-space: nowrap; }
+.w-signals-detail { color: var(--text-muted); font-size: 10px; white-space: nowrap; text-align: right; }
+
 /* settings-view */
 .w-settings {
     padding: var(--space-6) var(--space-7);
