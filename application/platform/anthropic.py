@@ -76,43 +76,46 @@ async def chat(base_url: str, api_key: str | None, model: str, messages: list[di
                     raise OSError(f"Anthropic HTTP {response.status_code}: {body_text}")
                 yielded = False
                 usage = {}
-                async for line in response.aiter_lines():
-                    line = line.strip()
-                    if not line.startswith("data: "):
-                        continue
-                    try:
-                        event = json.loads(line[6:].strip())
-                    except json.JSONDecodeError:
-                        continue
-                    if event.get("type") == "error":
-                        err = event.get("error", {})
-                        message = err.get("message", "unknown error")
-                        logger.warning("Anthropic stream error event", {"model": model, "error": err})
-                        raise OSError(f"Anthropic stream error: {message}")
-                    if event.get("type") == "message_start":
-                        msg_usage = event.get("message", {}).get("usage", {})
-                        usage.update(msg_usage)
-                    if event.get("type") == "message_delta":
-                        delta_usage = event.get("usage", {})
-                        usage.update(delta_usage)
-                    if event.get("type") == "content_block_delta":
-                        text = event.get("delta", {}).get("text", "")
-                        if text:
-                            yielded = True
-                            await send(Message("Anthropic stream chunk received", {"chunk": text}))
-                            yield text
-                    if event.get("type") == "message_stop":
-                        break
+                try:
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if not line.startswith("data: "):
+                            continue
+                        try:
+                            event = json.loads(line[6:].strip())
+                        except json.JSONDecodeError:
+                            continue
+                        if event.get("type") == "error":
+                            err = event.get("error", {})
+                            message = err.get("message", "unknown error")
+                            logger.warning("Anthropic stream error event", {"model": model, "error": err})
+                            raise OSError(f"Anthropic stream error: {message}")
+                        if event.get("type") == "message_start":
+                            msg_usage = event.get("message", {}).get("usage", {})
+                            usage.update(msg_usage)
+                        if event.get("type") == "message_delta":
+                            delta_usage = event.get("usage", {})
+                            usage.update(delta_usage)
+                        if event.get("type") == "content_block_delta":
+                            text = event.get("delta", {}).get("text", "")
+                            if text:
+                                yielded = True
+                                await send(Message("Anthropic stream chunk received", {"chunk": text}))
+                                yield text
+                        if event.get("type") == "message_stop":
+                            break
+                finally:
+                    if yielded:
+                        dispatch(Message("Model usage", {
+                            "provider": "anthropic",
+                            "model": model,
+                            "input_tokens": usage.get("input_tokens", 0),
+                            "output_tokens": usage.get("output_tokens", 0),
+                            "cache_read_tokens": usage.get("cache_read_input_tokens", 0),
+                            "cache_write_tokens": usage.get("cache_creation_input_tokens", 0),
+                        }))
                 if not yielded:
                     raise OSError("Anthropic returned empty response")
-                dispatch(Message("Model usage", {
-                    "provider": "anthropic",
-                    "model": model,
-                    "input_tokens": usage.get("input_tokens", 0),
-                    "output_tokens": usage.get("output_tokens", 0),
-                    "cache_read_tokens": usage.get("cache_read_input_tokens", 0),
-                    "cache_write_tokens": usage.get("cache_creation_input_tokens", 0),
-                }))
     except httpx.RequestError as e:
         logger.warning("Anthropic transport error", {"model": model, "error": str(e)})
         raise ConnectionError(str(e)) from e
@@ -204,62 +207,73 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
                 delta_types: list[str] = []
                 content_block_types: list[str] = []
                 first_tool_input = None
-                async for line in response.aiter_lines():
-                    line = line.strip()
-                    if not line.startswith("data: "):
-                        continue
-                    try:
-                        event = json.loads(line[6:].strip())
-                    except json.JSONDecodeError:
-                        continue
-                    etype = event.get("type")
-                    if etype and (not event_types or event_types[-1] != etype):
-                        event_types.append(etype)
-                    if etype == "error":
-                        err = event.get("error", {})
-                        message = err.get("message", "unknown error")
-                        logger.warning("Anthropic stream error event", {"model": model, "error": err})
-                        raise OSError(f"Anthropic stream error: {message}")
-                    if etype == "message_start":
-                        msg_usage = event.get("message", {}).get("usage", {})
-                        usage.update(msg_usage)
-                    if etype == "message_delta":
-                        delta_usage = event.get("usage", {})
-                        usage.update(delta_usage)
-                        new_stop = event.get("delta", {}).get("stop_reason")
-                        if new_stop:
-                            stop_reason = new_stop
-                    if etype == "content_block_start":
-                        block = event.get("content_block", {})
-                        ctype = block.get("type")
-                        if ctype and (not content_block_types or content_block_types[-1] != ctype):
-                            content_block_types.append(ctype)
-                        if ctype == "tool_use" and first_tool_input is None:
-                            first_tool_input = block.get("input")
-                    if etype == "content_block_delta":
-                        delta = event.get("delta", {})
-                        dtype = delta.get("type")
-                        if dtype and (not delta_types or delta_types[-1] != dtype):
-                            delta_types.append(dtype)
-                        chunk = delta.get("partial_json") or delta.get("text", "")
-                        if chunk:
-                            yielded = True
-                            await send(Message("Anthropic stream chunk received", {"chunk": chunk}))
-                            yield chunk
-                    if etype == "message_stop":
-                        break
-                if not yielded and "tool_use" in content_block_types and first_tool_input is not None:
-                    # When the model commits to a small or empty tool input,
-                    # Anthropic ships the full input in `content_block_start`
-                    # and emits empty `input_json_delta` heartbeats. Surface
-                    # the upfront input as the JSON chunk so the caller parses
-                    # normally. An empty `{}` is a valid no-action response;
-                    # recognize/decide handle empty dicts as "rest this beat."
-                    fallback = json.dumps(first_tool_input)
-                    yielded = True
-                    logger.debug("Anthropic tool input from content_block_start", {"model": model, "input": first_tool_input})
-                    await send(Message("Anthropic stream chunk received", {"chunk": fallback}))
-                    yield fallback
+                try:
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if not line.startswith("data: "):
+                            continue
+                        try:
+                            event = json.loads(line[6:].strip())
+                        except json.JSONDecodeError:
+                            continue
+                        etype = event.get("type")
+                        if etype and (not event_types or event_types[-1] != etype):
+                            event_types.append(etype)
+                        if etype == "error":
+                            err = event.get("error", {})
+                            message = err.get("message", "unknown error")
+                            logger.warning("Anthropic stream error event", {"model": model, "error": err})
+                            raise OSError(f"Anthropic stream error: {message}")
+                        if etype == "message_start":
+                            msg_usage = event.get("message", {}).get("usage", {})
+                            usage.update(msg_usage)
+                        if etype == "message_delta":
+                            delta_usage = event.get("usage", {})
+                            usage.update(delta_usage)
+                            new_stop = event.get("delta", {}).get("stop_reason")
+                            if new_stop:
+                                stop_reason = new_stop
+                        if etype == "content_block_start":
+                            block = event.get("content_block", {})
+                            ctype = block.get("type")
+                            if ctype and (not content_block_types or content_block_types[-1] != ctype):
+                                content_block_types.append(ctype)
+                            if ctype == "tool_use" and first_tool_input is None:
+                                first_tool_input = block.get("input")
+                        if etype == "content_block_delta":
+                            delta = event.get("delta", {})
+                            dtype = delta.get("type")
+                            if dtype and (not delta_types or delta_types[-1] != dtype):
+                                delta_types.append(dtype)
+                            chunk = delta.get("partial_json") or delta.get("text", "")
+                            if chunk:
+                                yielded = True
+                                await send(Message("Anthropic stream chunk received", {"chunk": chunk}))
+                                yield chunk
+                        if etype == "message_stop":
+                            break
+                    if not yielded and "tool_use" in content_block_types and first_tool_input is not None:
+                        # When the model commits to a small or empty tool input,
+                        # Anthropic ships the full input in `content_block_start`
+                        # and emits empty `input_json_delta` heartbeats. Surface
+                        # the upfront input as the JSON chunk so the caller parses
+                        # normally. An empty `{}` is a valid no-action response;
+                        # recognize/decide handle empty dicts as "rest this beat."
+                        fallback = json.dumps(first_tool_input)
+                        yielded = True
+                        logger.debug("Anthropic tool input from content_block_start", {"model": model, "input": first_tool_input})
+                        await send(Message("Anthropic stream chunk received", {"chunk": fallback}))
+                        yield fallback
+                finally:
+                    if yielded:
+                        dispatch(Message("Model usage", {
+                            "provider": "anthropic",
+                            "model": model,
+                            "input_tokens": usage.get("input_tokens", 0),
+                            "output_tokens": usage.get("output_tokens", 0),
+                            "cache_read_tokens": usage.get("cache_read_input_tokens", 0),
+                            "cache_write_tokens": usage.get("cache_creation_input_tokens", 0),
+                        }))
 
                 if not yielded:
                     err = OSError("Anthropic returned empty response")
@@ -272,14 +286,6 @@ async def chat_json(base_url: str, api_key: str | None, model: str, messages: li
                         "usage": usage,
                     }
                     raise err
-                dispatch(Message("Model usage", {
-                    "provider": "anthropic",
-                    "model": model,
-                    "input_tokens": usage.get("input_tokens", 0),
-                    "output_tokens": usage.get("output_tokens", 0),
-                    "cache_read_tokens": usage.get("cache_read_input_tokens", 0),
-                    "cache_write_tokens": usage.get("cache_creation_input_tokens", 0),
-                }))
     except httpx.RequestError as e:
         logger.warning("Anthropic transport error", {"model": model, "error": str(e)})
         raise ConnectionError(str(e)) from e
