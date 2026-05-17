@@ -73,7 +73,7 @@ def environment() -> str:
     else:
         body += (
             "\n\n### Screen Control\n\n"
-            "No display is available right now — `screen`, `take_screenshot` and `desktop` tools will fail "
+            "No display is available right now — `screen` and `take_screenshot` will fail "
             "if you try them. If the person asks you to look at their screen or click "
             "something, tell them you can't see or touch the screen from here rather than "
             "attempting it."

@@ -20,55 +20,97 @@ Imports are lazy inside each function — instantiating pynput on Linux
 crashes on a Wayland session, and importing evdev on macOS/Windows
 would fail at module-load time.
 
-Positional-argument convention: every pixel-position kwarg on these
-verbs starts with `x` or `y` (e.g. `x`, `y`, `x_from`, `y_from`,
-`x_to`, `y_to`). The screen ability one layer up uses this prefix to
-decide which kwargs to scale from screenshot-pixel space to display-
-pixel space. Non-position kwargs (`button`, `count`, `dx`, `dy` for
-scroll ticks, `text`, `key`) must NOT start with `x` or `y` so they
-pass through untouched. Add new verbs with this convention.
+Positional-argument convention: every mouse action verb takes its target
+position as its first two args, named with the `x`/`y` prefix (e.g. `x`,
+`y`, `x_from`, `y_from`, `x_to`, `y_to`). Coordinates are compositor
+absolute — top-left of the desktop is (0, 0). Each verb writes the
+target via the kernel's absolute-pointer interface (EV_ABS on Linux,
+pynput's absolute position setter on mac/Windows), so cursor lands
+exactly there with no acceleration or relative-motion guesswork. The
+screen ability one layer up uses the `x`/`y` prefix to decide which
+kwargs to translate from screenshot-pixel space to compositor space.
+Non-position kwargs (`button`, `count`, `dx`, `dy` for scroll ticks,
+`text`, `key`) must NOT start with `x` or `y` so they pass through
+untouched.
 """
 
+import json
+import re
+import subprocess
 import time
 
 from application.platform import keyboard
 from application.platform.OS import get_supported
-from application.platform.tool import tool
 
 
-# Module-level cache of the lazy-opened UInput device. Each Linux verb
-# below opens it on first use (the same dance is duplicated across verbs
-# rather than extracted, so each verb reads top-to-bottom).
-uinput_device = None
+# Two cached uinput devices on Linux. They're created lazily on first use
+# of any verb that needs them. Splitting pointer and keyboard into separate
+# devices is load-bearing — libinput classifies an EV_ABS+full-keyboard
+# device as "weird" and silently drops its absolute pointer events. Keeping
+# the pointer device minimal (3 mouse buttons + ABS X/Y + INPUT_PROP_POINTER)
+# is what makes the compositor honor absolute placement.
+mouse_device = None
+keyboard_device = None
 
 
-@tool("Move the mouse cursor to absolute screen coordinates. Top-left is (0, 0). "
-      "Returns 'moved to (x, y)' — confirmation only, no view of the result.")
+def linux_bbox() -> tuple[int, int]:
+    """Compositor logical bbox (max_x, max_y) on Linux.
+
+    Used once at pointer-device init to set the EV_ABS axis ranges so the
+    compositor maps ABS values 1:1 to compositor coordinates. Tries
+    kscreen-doctor first (Plasma Wayland), falls back to xrandr (X11 and
+    XWayland), then to (1920, 1080) as a single-monitor floor.
+    """
+    try:
+        data = json.loads(subprocess.check_output(["kscreen-doctor", "-j"], timeout=2))
+        mx, my = 0, 0
+        for o in data.get("outputs", []):
+            if not o.get("enabled"):
+                continue
+            pos = o.get("pos") or {}
+            mid = o.get("currentModeId")
+            mode = next((m for m in o.get("modes", []) if m.get("id") == mid), None)
+            if not mode:
+                continue
+            scale = float(o.get("scale") or 1.0)
+            mx = max(mx, int(pos.get("x", 0)) + int(int(mode["size"]["width"]) / scale))
+            my = max(my, int(pos.get("y", 0)) + int(int(mode["size"]["height"]) / scale))
+        if mx and my:
+            return mx, my
+    except Exception:
+        pass
+    try:
+        out = subprocess.check_output(["xrandr", "--query"], timeout=2).decode()
+        m = re.search(r"current\s+(\d+)\s*x\s*(\d+)", out)
+        if m:
+            return int(m.group(1)), int(m.group(2))
+    except Exception:
+        pass
+    return 1920, 1080
+
+
 def mouse_move(x: int, y: int) -> str:
     if get_supported() == "linux":
-        from evdev import UInput, ecodes as e
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        from evdev import UInput, AbsInfo, ecodes as e
+        global mouse_device
+        if mouse_device is None:
+            bw, bh = linux_bbox()
+            mouse_device = UInput(
+                {
+                    e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
+                    e.EV_ABS: [
+                        (e.ABS_X, AbsInfo(value=0, min=0, max=bw, fuzz=0, flat=0, resolution=0)),
+                        (e.ABS_Y, AbsInfo(value=0, min=0, max=bh, fuzz=0, flat=0, resolution=0)),
+                    ],
+                    e.EV_REL: [e.REL_WHEEL, e.REL_HWHEEL],
+                },
+                name="eternego-pointer",
+                input_props=[e.INPUT_PROP_POINTER],
+            )
             time.sleep(0.1)
-        ui = uinput_device
-        # Slam cursor to (0,0) via massive relative move, then move to target —
-        # uinput has no absolute pointer registered, and Wayland exposes no API
-        # to query current cursor position, so this is the standard trick.
-        # The two syn() calls are load-bearing: relative events within a single
-        # syn batch accumulate as one net delta, so without the intermediate
-        # syn the compositor sees `(-10000 + x, -10000 + y)` — a huge negative
-        # delta that clamps the cursor to (0, 0) regardless of x/y. The slam
-        # must commit first so the second batch starts from origin.
-        ui.write(e.EV_REL, e.REL_X, -10000)
-        ui.write(e.EV_REL, e.REL_Y, -10000)
-        ui.syn()
-        time.sleep(0.05)
-        ui.write(e.EV_REL, e.REL_X, int(x))
-        ui.write(e.EV_REL, e.REL_Y, int(y))
+        ui = mouse_device
+        ui.write(e.EV_ABS, e.ABS_X, int(x))
+        ui.write(e.EV_ABS, e.ABS_Y, int(y))
         ui.syn()
     else:
         from pynput.mouse import Controller
@@ -76,25 +118,34 @@ def mouse_move(x: int, y: int) -> str:
     return f"moved to ({x}, {y})"
 
 
-@tool("Click the mouse at the cursor's current position. button is 'left', 'right', or 'middle' "
-      "(default 'left'). count is 1 for single click, 2 for double-click. "
-      "Returns '{button} click x{count}' — confirmation only, no view of what the click hit.")
-def mouse_click(button: str = "left", count: int = 1) -> str:
+def mouse_click(x: int, y: int, button: str = "left", count: int = 1) -> str:
     name = (button or "left").strip().lower()
     if get_supported() == "linux":
-        from evdev import UInput, ecodes as e
+        from evdev import UInput, AbsInfo, ecodes as e
         codes = {"left": e.BTN_LEFT, "right": e.BTN_RIGHT, "middle": e.BTN_MIDDLE}
         code = codes.get(name)
         if code is None:
             raise ValueError(f"unknown mouse button: {button!r}; expected left, right, or middle")
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        global mouse_device
+        if mouse_device is None:
+            bw, bh = linux_bbox()
+            mouse_device = UInput(
+                {
+                    e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
+                    e.EV_ABS: [
+                        (e.ABS_X, AbsInfo(value=0, min=0, max=bw, fuzz=0, flat=0, resolution=0)),
+                        (e.ABS_Y, AbsInfo(value=0, min=0, max=bh, fuzz=0, flat=0, resolution=0)),
+                    ],
+                    e.EV_REL: [e.REL_WHEEL, e.REL_HWHEEL],
+                },
+                name="eternego-pointer",
+                input_props=[e.INPUT_PROP_POINTER],
+            )
             time.sleep(0.1)
-        ui = uinput_device
+        ui = mouse_device
+        ui.write(e.EV_ABS, e.ABS_X, int(x))
+        ui.write(e.EV_ABS, e.ABS_Y, int(y))
+        ui.syn()
         for _ in range(int(count)):
             ui.write(e.EV_KEY, code, 1)
             ui.syn()
@@ -105,40 +156,44 @@ def mouse_click(button: str = "left", count: int = 1) -> str:
         btn = {"left": Button.left, "right": Button.right, "middle": Button.middle}.get(name)
         if btn is None:
             raise ValueError(f"unknown mouse button: {button!r}; expected left, right, or middle")
-        Controller().click(btn, int(count))
-    return f"{button} click x{count}"
+        mouse = Controller()
+        mouse.position = (int(x), int(y))
+        mouse.click(btn, int(count))
+    return f"{button} click x{count} at ({x}, {y})"
 
 
-@tool("Drag the mouse from (x_from, y_from) to (x_to, y_to) while holding a button. "
-      "button is 'left', 'right', or 'middle' (default 'left'). "
-      "Returns 'dragged (x_from, y_from) → (x_to, y_to) with {button}' — confirmation only.")
 def mouse_drag(x_from: int, y_from: int, x_to: int, y_to: int, button: str = "left") -> str:
     name = (button or "left").strip().lower()
     if get_supported() == "linux":
-        from evdev import UInput, ecodes as e
+        from evdev import UInput, AbsInfo, ecodes as e
         codes = {"left": e.BTN_LEFT, "right": e.BTN_RIGHT, "middle": e.BTN_MIDDLE}
         code = codes.get(name)
         if code is None:
             raise ValueError(f"unknown mouse button: {button!r}; expected left, right, or middle")
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        global mouse_device
+        if mouse_device is None:
+            bw, bh = linux_bbox()
+            mouse_device = UInput(
+                {
+                    e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
+                    e.EV_ABS: [
+                        (e.ABS_X, AbsInfo(value=0, min=0, max=bw, fuzz=0, flat=0, resolution=0)),
+                        (e.ABS_Y, AbsInfo(value=0, min=0, max=bh, fuzz=0, flat=0, resolution=0)),
+                    ],
+                    e.EV_REL: [e.REL_WHEEL, e.REL_HWHEEL],
+                },
+                name="eternego-pointer",
+                input_props=[e.INPUT_PROP_POINTER],
+            )
             time.sleep(0.1)
-        ui = uinput_device
-        # Move to start
-        ui.write(e.EV_REL, e.REL_X, -10000)
-        ui.write(e.EV_REL, e.REL_Y, -10000)
-        ui.write(e.EV_REL, e.REL_X, int(x_from))
-        ui.write(e.EV_REL, e.REL_Y, int(y_from))
+        ui = mouse_device
+        ui.write(e.EV_ABS, e.ABS_X, int(x_from))
+        ui.write(e.EV_ABS, e.ABS_Y, int(y_from))
         ui.syn()
-        # Press button, drag, release
         ui.write(e.EV_KEY, code, 1)
         ui.syn()
-        ui.write(e.EV_REL, e.REL_X, int(x_to) - int(x_from))
-        ui.write(e.EV_REL, e.REL_Y, int(y_to) - int(y_from))
+        ui.write(e.EV_ABS, e.ABS_X, int(x_to))
+        ui.write(e.EV_ABS, e.ABS_Y, int(y_to))
         ui.syn()
         ui.write(e.EV_KEY, code, 0)
         ui.syn()
@@ -155,25 +210,34 @@ def mouse_drag(x_from: int, y_from: int, x_to: int, y_to: int, button: str = "le
     return f"dragged ({x_from}, {y_from}) → ({x_to}, {y_to}) with {button}"
 
 
-@tool("Press a mouse button without releasing it. Pair with mouse_release; in between, "
-      "use mouse_move to drive the held-button movement. button: 'left', 'right', 'middle'. "
-      "Returns '{button} button down' — confirmation only.")
-def mouse_press(button: str = "left") -> str:
+def mouse_press(x: int, y: int, button: str = "left") -> str:
     name = (button or "left").strip().lower()
     if get_supported() == "linux":
-        from evdev import UInput, ecodes as e
+        from evdev import UInput, AbsInfo, ecodes as e
         codes = {"left": e.BTN_LEFT, "right": e.BTN_RIGHT, "middle": e.BTN_MIDDLE}
         code = codes.get(name)
         if code is None:
             raise ValueError(f"unknown mouse button: {button!r}; expected left, right, or middle")
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        global mouse_device
+        if mouse_device is None:
+            bw, bh = linux_bbox()
+            mouse_device = UInput(
+                {
+                    e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
+                    e.EV_ABS: [
+                        (e.ABS_X, AbsInfo(value=0, min=0, max=bw, fuzz=0, flat=0, resolution=0)),
+                        (e.ABS_Y, AbsInfo(value=0, min=0, max=bh, fuzz=0, flat=0, resolution=0)),
+                    ],
+                    e.EV_REL: [e.REL_WHEEL, e.REL_HWHEEL],
+                },
+                name="eternego-pointer",
+                input_props=[e.INPUT_PROP_POINTER],
+            )
             time.sleep(0.1)
-        ui = uinput_device
+        ui = mouse_device
+        ui.write(e.EV_ABS, e.ABS_X, int(x))
+        ui.write(e.EV_ABS, e.ABS_Y, int(y))
+        ui.syn()
         ui.write(e.EV_KEY, code, 1)
         ui.syn()
     else:
@@ -181,28 +245,40 @@ def mouse_press(button: str = "left") -> str:
         btn = {"left": Button.left, "right": Button.right, "middle": Button.middle}.get(name)
         if btn is None:
             raise ValueError(f"unknown mouse button: {button!r}; expected left, right, or middle")
-        Controller().press(btn)
-    return f"{button} button down"
+        mouse = Controller()
+        mouse.position = (int(x), int(y))
+        mouse.press(btn)
+    return f"{button} button down at ({x}, {y})"
 
 
-@tool("Release a previously held mouse button. button: 'left', 'right', 'middle'. "
-      "Returns '{button} button up' — confirmation only.")
-def mouse_release(button: str = "left") -> str:
+def mouse_release(x: int, y: int, button: str = "left") -> str:
     name = (button or "left").strip().lower()
     if get_supported() == "linux":
-        from evdev import UInput, ecodes as e
+        from evdev import UInput, AbsInfo, ecodes as e
         codes = {"left": e.BTN_LEFT, "right": e.BTN_RIGHT, "middle": e.BTN_MIDDLE}
         code = codes.get(name)
         if code is None:
             raise ValueError(f"unknown mouse button: {button!r}; expected left, right, or middle")
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        global mouse_device
+        if mouse_device is None:
+            bw, bh = linux_bbox()
+            mouse_device = UInput(
+                {
+                    e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
+                    e.EV_ABS: [
+                        (e.ABS_X, AbsInfo(value=0, min=0, max=bw, fuzz=0, flat=0, resolution=0)),
+                        (e.ABS_Y, AbsInfo(value=0, min=0, max=bh, fuzz=0, flat=0, resolution=0)),
+                    ],
+                    e.EV_REL: [e.REL_WHEEL, e.REL_HWHEEL],
+                },
+                name="eternego-pointer",
+                input_props=[e.INPUT_PROP_POINTER],
+            )
             time.sleep(0.1)
-        ui = uinput_device
+        ui = mouse_device
+        ui.write(e.EV_ABS, e.ABS_X, int(x))
+        ui.write(e.EV_ABS, e.ABS_Y, int(y))
+        ui.syn()
         ui.write(e.EV_KEY, code, 0)
         ui.syn()
     else:
@@ -210,24 +286,35 @@ def mouse_release(button: str = "left") -> str:
         btn = {"left": Button.left, "right": Button.right, "middle": Button.middle}.get(name)
         if btn is None:
             raise ValueError(f"unknown mouse button: {button!r}; expected left, right, or middle")
-        Controller().release(btn)
-    return f"{button} button up"
+        mouse = Controller()
+        mouse.position = (int(x), int(y))
+        mouse.release(btn)
+    return f"{button} button up at ({x}, {y})"
 
 
-@tool("Scroll at the cursor's current position. dx and dy are wheel units — "
-      "positive dy scrolls up, negative dy scrolls down; dx scrolls horizontally. "
-      "Returns 'scrolled (dx, dy)' — confirmation only, no view of what scrolled.")
-def mouse_scroll(dx: int = 0, dy: int = 0) -> str:
+def mouse_scroll(x: int, y: int, dx: int = 0, dy: int = 0) -> str:
     if get_supported() == "linux":
-        from evdev import UInput, ecodes as e
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        from evdev import UInput, AbsInfo, ecodes as e
+        global mouse_device
+        if mouse_device is None:
+            bw, bh = linux_bbox()
+            mouse_device = UInput(
+                {
+                    e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
+                    e.EV_ABS: [
+                        (e.ABS_X, AbsInfo(value=0, min=0, max=bw, fuzz=0, flat=0, resolution=0)),
+                        (e.ABS_Y, AbsInfo(value=0, min=0, max=bh, fuzz=0, flat=0, resolution=0)),
+                    ],
+                    e.EV_REL: [e.REL_WHEEL, e.REL_HWHEEL],
+                },
+                name="eternego-pointer",
+                input_props=[e.INPUT_PROP_POINTER],
+            )
             time.sleep(0.1)
-        ui = uinput_device
+        ui = mouse_device
+        ui.write(e.EV_ABS, e.ABS_X, int(x))
+        ui.write(e.EV_ABS, e.ABS_Y, int(y))
+        ui.syn()
         if int(dy):
             ui.write(e.EV_REL, e.REL_WHEEL, int(dy))
         if int(dx):
@@ -235,25 +322,24 @@ def mouse_scroll(dx: int = 0, dy: int = 0) -> str:
         ui.syn()
     else:
         from pynput.mouse import Controller
-        Controller().scroll(int(dx), int(dy))
-    return f"scrolled ({dx}, {dy})"
+        mouse = Controller()
+        mouse.position = (int(x), int(y))
+        mouse.scroll(int(dx), int(dy))
+    return f"scrolled ({dx}, {dy}) at ({x}, {y})"
 
 
-@tool("Type a string of text at the focused input. Sends one keystroke per character. "
-      "Returns 'typed N chars' — confirmation only. No check of which window had focus, "
-      "no view of where the characters actually landed.")
 def keyboard_type(text: str) -> str:
     text = text or ""
     if get_supported() == "linux":
         from evdev import UInput, ecodes as e
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        global keyboard_device
+        if keyboard_device is None:
+            keyboard_device = UInput(
+                {e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX))},
+                name="eternego-keyboard",
+            )
             time.sleep(0.1)
-        ui = uinput_device
+        ui = keyboard_device
         keymap = keyboard.ascii_keymap()
         for ch in text:
             entry = keymap.get(ch)
@@ -277,10 +363,6 @@ def keyboard_type(text: str) -> str:
     return f"typed {len(text)} chars"
 
 
-@tool("Press and release a single key or chord. Examples: 'enter', 'tab', 'esc', "
-      "'a', 'f5', 'ctrl+c', 'ctrl+shift+t'. Chord parts are joined with '+'. "
-      "Returns 'tapped {key}' — confirmation only. No check of which window had focus, "
-      "no view of what the key triggered.")
 def keyboard_tap(key: str) -> str:
     parts = [p.strip() for p in (key or "").split("+") if p.strip()]
     if not parts:
@@ -289,14 +371,14 @@ def keyboard_tap(key: str) -> str:
     resolved = [keyboard.resolve(target, p) for p in parts]
     if target == "linux":
         from evdev import UInput, ecodes as e
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        global keyboard_device
+        if keyboard_device is None:
+            keyboard_device = UInput(
+                {e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX))},
+                name="eternego-keyboard",
+            )
             time.sleep(0.1)
-        ui = uinput_device
+        ui = keyboard_device
         for code in resolved[:-1]:
             ui.write(e.EV_KEY, code, 1)
         ui.write(e.EV_KEY, resolved[-1], 1)
@@ -319,10 +401,6 @@ def keyboard_tap(key: str) -> str:
     return f"tapped {key}"
 
 
-@tool("Press a key without releasing it. Pair with keyboard_release. Use for held-modifier "
-      "patterns (e.g. shift held while clicking multiple items). key: same syntax as keyboard_tap "
-      "(but a single key, not a chord). "
-      "Returns '{key} down' — confirmation only.")
 def keyboard_press(key: str) -> str:
     raw = (key or "").strip()
     if not raw:
@@ -331,14 +409,14 @@ def keyboard_press(key: str) -> str:
     resolved = keyboard.resolve(target, raw)
     if target == "linux":
         from evdev import UInput, ecodes as e
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        global keyboard_device
+        if keyboard_device is None:
+            keyboard_device = UInput(
+                {e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX))},
+                name="eternego-keyboard",
+            )
             time.sleep(0.1)
-        ui = uinput_device
+        ui = keyboard_device
         ui.write(e.EV_KEY, resolved, 1)
         ui.syn()
     else:
@@ -347,8 +425,6 @@ def keyboard_press(key: str) -> str:
     return f"{key} down"
 
 
-@tool("Release a previously held key. "
-      "Returns '{key} up' — confirmation only.")
 def keyboard_release(key: str) -> str:
     raw = (key or "").strip()
     if not raw:
@@ -357,14 +433,14 @@ def keyboard_release(key: str) -> str:
     resolved = keyboard.resolve(target, raw)
     if target == "linux":
         from evdev import UInput, ecodes as e
-        global uinput_device
-        if uinput_device is None:
-            uinput_device = UInput({
-                e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX)) + [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
-                e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_HWHEEL],
-            }, name="eternego-virtual-input")
+        global keyboard_device
+        if keyboard_device is None:
+            keyboard_device = UInput(
+                {e.EV_KEY: list(range(e.KEY_RESERVED + 1, e.KEY_MAX))},
+                name="eternego-keyboard",
+            )
             time.sleep(0.1)
-        ui = uinput_device
+        ui = keyboard_device
         ui.write(e.EV_KEY, resolved, 0)
         ui.syn()
     else:

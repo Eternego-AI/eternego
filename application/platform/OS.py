@@ -224,17 +224,23 @@ async def install(program: str) -> None:
     raise NotImplementedError("Unsupported OS")
 
 
-@tool("Take a screenshot of the screen or a specific region. "
-      "Captures the full screen by default at the display's native resolution. "
-      "Pass left, top, width, height to zoom into a specific area. "
-      "path: where to save the image.")
 async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 0, path: str = "") -> str:
     """Capture a screenshot and return the file path.
+
+    Region kwargs are in compositor logical coords — (0, 0) is the
+    compositor origin, not any one monitor's origin. With no region given,
+    captures the full compositor span.
 
     One native API per OS — Linux goes through xdg-desktop-portal so the
     same call works on every compositor (X11, KDE, GNOME, sway, hyprland);
     macOS shells out to Apple's `screencapture` (TCC-gated, errors loudly
     when permission is missing); Windows uses Pillow's ImageGrab (Win32 GDI).
+
+    Linux wrinkle: xdg-desktop-portal renders the full compositor span at
+    `dominant_output_scale × logical_bbox` (e.g. with a 1.25× HiDPI output
+    in the layout, a logical 4992×1741 desktop returns as a 6240×2176 PNG).
+    We multiply the requested region by the portal scale before the Pillow
+    crop so the returned image matches what the caller asked for.
     """
     import os as _os
     import tempfile
@@ -280,7 +286,7 @@ async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 
             portal = portal_obj.get_interface("org.freedesktop.portal.Screenshot")
 
             sender = bus.unique_name.replace(".", "_").lstrip(":")
-            token = "eternego_" + uuid.uuid4().hex[:8]
+            token = uuid.uuid4().hex
             request_path = f"/org/freedesktop/portal/desktop/request/{sender}/{token}"
 
             # The Request object is created lazily by the portal once Screenshot is
@@ -326,8 +332,17 @@ async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 
             src = unquote(urlparse(results["uri"].value).path)
             if region_requested:
                 from PIL import Image
+                # Portal renders at dominant_output_scale × logical_bbox.
+                # Region is given in logical coords — multiply by the scale
+                # so the Pillow crop hits the right pixels.
+                s = await linux_portal_scale()
                 with Image.open(src) as img:
-                    img.crop((left, top, left + width, top + height)).save(path, "PNG")
+                    img.crop((
+                        int(left * s),
+                        int(top * s),
+                        int((left + width) * s),
+                        int((top + height) * s),
+                    )).save(path, "PNG")
             else:
                 shutil.copy(src, path)
         finally:
@@ -363,92 +378,149 @@ async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 
     return f"Screenshot saved to {path}"
 
 
-async def default_screen_size() -> tuple[int, int]:
-    """Width and height of the default screen in the unit the cursor uses.
+async def default_monitor() -> tuple[int, int, int, int]:
+    """The default monitor's geometry — (left, top, width, height) in
+    compositor logical coords (the unit the OS cursor lives in).
 
-    Whatever `desktop.mouse_move` accepts on this OS is what this returns.
-    On macOS that's points; on Linux/Windows it's pixels (logical pixels
-    under DPI awareness on Windows).
+    "Default monitor" is the one the persona sees through screen and
+    take_screenshot. On macOS/Windows it's the OS's primary display. On
+    Linux we pick the output marked primary if there is one, else the
+    largest by logical area, else the first enabled output.
 
-    Linux: tries `xrandr` first — works under both X11 and XWayland, which
-    most KDE Wayland sessions provide by default. Falls back to
-    `kscreen-doctor -j` (KDE pure Wayland). Final fallback takes one
-    screenshot via the existing portal path and reads its dimensions.
-
-    macOS: Quartz `CGDisplayBounds(CGMainDisplayID())` — returns points,
-    matching pynput's `Controller.position`. Native pixels (what
-    `screencapture` produces) are 2× this on Retina; we deliberately don't
-    return those.
-
-    Windows: `GetSystemMetrics` via ctypes — returns logical pixels,
-    matching pynput's `SetCursorPos`.
+    Logical coords mean: pynput on macOS uses points (HiDPI is 2× under),
+    `SetCursorPos` on Windows uses logical pixels under DPI awareness,
+    uinput on Linux drives the cursor in the compositor's coord system.
+    Adding `(left, top)` to a default-monitor-local point gets you a
+    compositor-global point that the platform input verbs accept.
     """
     target_os = get_supported()
 
     if target_os == "linux":
-        import re
-        import shutil
-
-        if shutil.which("xrandr"):
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "xrandr", "-q",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                out, _ = await proc.communicate()
-                m = re.search(rb"current\s+(\d+)\s*x\s*(\d+)", out)
-                if m:
-                    return int(m.group(1)), int(m.group(2))
-            except Exception as e:
-                logger.debug("xrandr probe failed", {"error": str(e)})
-
-        if shutil.which("kscreen-doctor"):
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "kscreen-doctor", "-j",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                out, _ = await proc.communicate()
-                data = json.loads(out.decode())
-                primary = next((o for o in data.get("outputs", []) if o.get("primary")), None)
-                if primary is None:
-                    primary = next((o for o in data.get("outputs", []) if o.get("enabled")), None)
-                if primary:
-                    sz = primary.get("currentModeSize", {})
-                    if sz.get("width") and sz.get("height"):
-                        return int(sz["width"]), int(sz["height"])
-            except Exception as e:
-                logger.debug("kscreen-doctor probe failed", {"error": str(e)})
-
-        # Last resort: take a screenshot and measure it.
-        import os as _os
-        import tempfile
-        from PIL import Image
-        fd, tmp = tempfile.mkstemp(suffix=".png")
-        _os.close(fd)
-        try:
-            await screenshot(path=tmp)
-            with Image.open(tmp) as img:
-                return img.width, img.height
-        finally:
-            try:
-                _os.unlink(tmp)
-            except OSError:
-                pass
+        outputs = await linux_outputs()
+        if outputs:
+            # Two signals depending on the probe: xrandr exposes a `primary`
+            # flag; Plasma 6's kscreen exposes ordered `priority` (1 = best).
+            # `primary` is the stronger statement when set — sort by it
+            # first, with priority as the tiebreak. Outputs with neither
+            # fall through to enumeration order.
+            outputs.sort(key=lambda o: (
+                0 if o.get("primary") else 1,
+                o.get("priority") if o.get("priority") is not None else 999,
+            ))
+            top_out = outputs[0]
+            return top_out["left"], top_out["top"], top_out["width"], top_out["height"]
+        raise RuntimeError(
+            "default_monitor: no display info from xrandr or kscreen-doctor"
+        )
 
     if target_os == "mac":
         from Quartz import CGMainDisplayID, CGDisplayBounds
-        bounds = CGDisplayBounds(CGMainDisplayID())
-        return int(bounds.size.width), int(bounds.size.height)
+        b = CGDisplayBounds(CGMainDisplayID())
+        return int(b.origin.x), int(b.origin.y), int(b.size.width), int(b.size.height)
 
     if target_os == "windows":
         import ctypes
         u = ctypes.windll.user32
-        return u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+        return 0, 0, u.GetSystemMetrics(0), u.GetSystemMetrics(1)
 
-    raise NotImplementedError("default_screen_size not supported on this OS")
+    raise NotImplementedError("default_monitor not supported on this OS")
+
+
+async def linux_outputs() -> list[dict]:
+    """Enabled display outputs on Linux in logical coords.
+
+    Each entry: {name, primary, left, top, width, height, scale}. Tries
+    xrandr first (works under X11 and XWayland), then kscreen-doctor (pure
+    Wayland on KDE). Returns [] if neither tool is present or both fail —
+    callers decide how to react.
+    """
+    import re
+    import shutil
+
+    if shutil.which("xrandr"):
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "xrandr", "--query",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            out, _ = await proc.communicate()
+            outputs = []
+            # `eDP-1 connected primary 1920x1080+0+0 (normal left ...) ...`
+            for line in out.decode().splitlines():
+                m = re.match(
+                    r"^(\S+)\s+connected\s+(primary\s+)?(\d+)x(\d+)\+(\d+)\+(\d+)",
+                    line,
+                )
+                if m:
+                    outputs.append({
+                        "name": m.group(1),
+                        "primary": bool(m.group(2)),
+                        "priority": None,
+                        "width": int(m.group(3)),
+                        "height": int(m.group(4)),
+                        "left": int(m.group(5)),
+                        "top": int(m.group(6)),
+                        "scale": 1.0,
+                    })
+            if outputs:
+                return outputs
+        except Exception as e:
+            logger.debug("xrandr probe failed", {"error": str(e)})
+
+    if shutil.which("kscreen-doctor"):
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "kscreen-doctor", "-j",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            out, _ = await proc.communicate()
+            data = json.loads(out.decode())
+            outputs = []
+            for o in data.get("outputs", []):
+                if not o.get("enabled"):
+                    continue
+                # currentModeSize is None on Plasma; look up modes[currentModeId].
+                size = o.get("currentModeSize")
+                if not (size and size.get("width") and size.get("height")):
+                    mid = o.get("currentModeId")
+                    mode = next((m for m in o.get("modes", []) if m.get("id") == mid), None)
+                    size = mode.get("size") if mode else None
+                if not (size and size.get("width") and size.get("height")):
+                    continue
+                scale = float(o.get("scale") or 1.0)
+                pos = o.get("pos") or {}
+                outputs.append({
+                    "name": o.get("name"),
+                    "primary": bool(o.get("primary")),
+                    "priority": o.get("priority"),
+                    "width": int(int(size["width"]) / scale),
+                    "height": int(int(size["height"]) / scale),
+                    "left": int(pos.get("x", 0)),
+                    "top": int(pos.get("y", 0)),
+                    "scale": scale,
+                })
+            if outputs:
+                return outputs
+        except Exception as e:
+            logger.debug("kscreen-doctor probe failed", {"error": str(e)})
+
+    return []
+
+
+async def linux_portal_scale() -> float:
+    """Dominant output scale on Linux — the factor the xdg-desktop-portal
+    screenshot is rendered at relative to compositor logical coords.
+
+    Plasma renders the union at `max(output.scale) × logical_bbox`. Returns
+    1.0 when we have no scale info (xrandr-only setups, headless, etc.) —
+    matching the previous behavior of cropping at 1:1.
+    """
+    outputs = await linux_outputs()
+    if not outputs:
+        return 1.0
+    return max(o.get("scale", 1.0) for o in outputs)
 
 
 @tool("Execute a command that completes on its own and return its output. "
