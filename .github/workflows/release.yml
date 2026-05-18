@@ -174,7 +174,10 @@ jobs:
 
   windows:
     name: Windows binary + installer
-    runs-on: windows-latest
+    # Pinned to windows-2025 — `windows-latest` is being redirected to this
+    # by 2026-06-15 anyway; pin explicitly so the runner image doesn't shift
+    # under us between releases.
+    runs-on: windows-2025
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -326,7 +329,7 @@ jobs:
   smoke-windows:
     name: Smoke (Windows)
     needs: windows
-    runs-on: windows-latest
+    runs-on: windows-2025
     env:
       OLLAMA_MODEL: qwen2.5:0.5b
     steps:
@@ -358,9 +361,11 @@ jobs:
         run: |
           # GHA's Windows runner kills any process started in a step when
           # that step exits — so ollama serve, model pull, daemon start,
-          # and smoke test all run inside this single step.
+          # and smoke test all run inside this single step. We capture
+          # PIDs with -PassThru and stop them after smoke.py returns so
+          # the post-job cleanup doesn't trip over locked workspace files.
 
-          Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\ollama.log" -RedirectStandardError "$env:RUNNER_TEMP\ollama.err.log"
+          $ollama = Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\ollama.log" -RedirectStandardError "$env:RUNNER_TEMP\ollama.err.log" -PassThru
           $ready = $false
           for ($i=1; $i -le 120; $i++) {
             try {
@@ -388,9 +393,17 @@ jobs:
           Write-Host "pulled $env:OLLAMA_MODEL"
 
           $bin = "dist\eternego-${{ github.ref_name }}-windows-x86_64.exe"
-          Start-Process -FilePath $bin -ArgumentList "daemon" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\daemon.log" -RedirectStandardError "$env:RUNNER_TEMP\daemon.err.log"
+          $daemon = Start-Process -FilePath $bin -ArgumentList "daemon" -WindowStyle Hidden -RedirectStandardOutput "$env:RUNNER_TEMP\daemon.log" -RedirectStandardError "$env:RUNNER_TEMP\daemon.err.log" -PassThru
 
-          python installation/smoke.py
+          try {
+            python installation/smoke.py
+          } finally {
+            # Release file handles on the workspace so post-job cleanup
+            # can delete the binary and checkout dir. Without this the
+            # job exits non-zero even when smoke passes.
+            if ($daemon) { Stop-Process -Id $daemon.Id -Force -ErrorAction SilentlyContinue }
+            if ($ollama) { Stop-Process -Id $ollama.Id -Force -ErrorAction SilentlyContinue }
+          }
 
       - name: Daemon log on failure
         if: failure()
