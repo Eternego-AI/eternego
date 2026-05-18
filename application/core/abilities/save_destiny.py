@@ -12,12 +12,13 @@ from application.platform import logger
     "recurrence: daily|weekly|monthly|hourly or empty."
 )
 async def save_destiny(
-    persona,
+    living,
     type: str = "reminder",
     trigger: str = "",
     content: str = "",
     recurrence: str = "",
 ) -> str:
+    persona = living.ego.persona
     logger.debug("ability.save_destiny", {"persona": persona, "type": type, "trigger": trigger, "recurrence": recurrence})
     if not trigger:
         raise ValueError("trigger is required")

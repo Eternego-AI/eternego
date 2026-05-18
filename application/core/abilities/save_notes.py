@@ -11,7 +11,8 @@ from application.platform import logger
     "every line you write here gets re-read every beat. Use sparingly: notes "
     "are what's left when none of the structured stores fit."
 )
-async def save_notes(persona, content: str = "") -> str:
+async def save_notes(living, content: str = "") -> str:
+    persona = living.ego.persona
     logger.debug("ability.save_notes", {"persona": persona, "content": content.strip()})
     if not content:
         raise ValueError("content is required")

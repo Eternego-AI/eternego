@@ -1,16 +1,18 @@
 """Abilities — registry filtering and look_at behavior.
 
-The registry filters abilities by their `requires` predicate. `look_at`
-requires `persona.vision is not None`, so it shows up in the prompt and is
-callable only for personas that have a vision model configured.
+look_at is now always available — without a dedicated vision model it
+falls back to the thinking model as eye. The `requires` predicate
+framework still exists for future abilities that genuinely depend on
+a capability; this test file no longer covers it because no production
+ability currently uses it.
 """
 
 from application.platform.processes import on_separate_process_async
 
 
-async def test_available_filters_by_requires_predicate():
-    """available(persona) excludes look_at when persona has no vision model,
-    includes it when vision is configured."""
+async def test_look_at_available_with_or_without_vision():
+    """look_at shows up in the registry for every persona, regardless of
+    whether a dedicated vision model is configured."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -28,9 +30,8 @@ async def test_available_filters_by_requires_predicate():
             names_without = {a.name for a in abilities.available(without_vision)}
             names_with = {a.name for a in abilities.available(with_vision)}
 
-            assert "look_at" not in names_without
+            assert "look_at" in names_without
             assert "look_at" in names_with
-            # other always-available abilities show in both
             assert "save_notes" in names_without
             assert "save_notes" in names_with
 
@@ -38,9 +39,8 @@ async def test_available_filters_by_requires_predicate():
     assert code == 0, error
 
 
-async def test_document_omits_unavailable_abilities():
-    """document(persona) renders only available abilities. The line for
-    look_at is absent for personas without vision."""
+async def test_document_lists_every_available_ability():
+    """document(persona) renders every available ability, including look_at."""
     def isolated():
         import os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -51,28 +51,7 @@ async def test_document_omits_unavailable_abilities():
             without_vision = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
             doc = abilities.document(without_vision)
             assert "save_notes" in doc
-            assert "look_at" not in doc
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
-async def test_call_refuses_unavailable_ability():
-    """call(persona, 'look_at', ...) raises ValueError when requires returns
-    False — defense in depth even if the prompt didn't list it."""
-    def isolated():
-        import asyncio, os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import abilities
-            from application.core.data import Model, Persona
-
-            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
-            try:
-                asyncio.run(abilities.call(persona, "look_at", source="/x.png"))
-                assert False, "expected ValueError"
-            except ValueError as e:
-                assert "not available" in str(e)
+            assert "look_at" in doc
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -83,6 +62,7 @@ async def test_look_at_raises_when_source_missing_or_file_absent():
     clock's executor wraps the exception into a TOOL_RESULT with status=error."""
     def isolated():
         import asyncio, os, tempfile
+        from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import abilities
@@ -93,13 +73,14 @@ async def test_look_at_raises_when_source_missing_or_file_absent():
                 thinking=Model(name="m", url="not used"),
                 vision=Model(name="v", url="not used"),
             )
+            living = SimpleNamespace(ego=SimpleNamespace(persona=persona), view={})
             try:
-                asyncio.run(abilities.call(persona, "look_at", source=""))
+                asyncio.run(abilities.call(living, "look_at", source=""))
                 assert False, "expected ValueError for empty source"
             except ValueError as e:
                 assert "source is required" in str(e)
             try:
-                asyncio.run(abilities.call(persona, "look_at", source="/no/such/image.png"))
+                asyncio.run(abilities.call(living, "look_at", source="/no/such/image.png"))
                 assert False, "expected ValueError for missing file"
             except ValueError as e:
                 assert "image not found" in str(e)
@@ -125,59 +106,10 @@ async def test_actions_skip_variadic_abilities():
             names = {a.name for a in abilities.actions(persona)}
             # `screen` has `**args` → must be excluded
             assert "tools.screen" not in names, names
-            # `ask` has typed params → must be present
-            assert "tools.ask" in names, names
+            # `save_notes` has typed params → must be present
+            assert "tools.save_notes" in names, names
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
-
-
-async def test_report_dispatches_say_command():
-    """`report` dispatches a 'Persona wants to say' Command — same dispatch as
-    `say`, but called from inside a procedure (steps[]) to narrate progress
-    while the beat continues."""
-    def isolated():
-        import asyncio, os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import abilities
-            from application.core.data import Model, Persona
-            from application.platform import observer
-
-            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
-
-            captured = []
-            async def capture(cmd: observer.Command):
-                if cmd.title == "Persona wants to say":
-                    captured.append(cmd.details.get("text", ""))
-            observer.subscribe(capture)
-
-            async def run_it():
-                result = await abilities.call(persona, "report", text="halfway through")
-                await asyncio.sleep(0)
-                assert result == "reported", result
-                assert captured == ["halfway through"], captured
-            asyncio.run(run_it())
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
-async def test_report_requires_text():
-    """Empty text is a programmer error — the ability raises ValueError so
-    the clock executor wraps it into a TOOL_RESULT with status=error."""
-    def isolated():
-        import asyncio, os, tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import abilities
-            from application.core.data import Model, Persona
-
-            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
-            try:
-                asyncio.run(abilities.call(persona, "report", text=""))
-                assert False, "expected ValueError"
-            except ValueError as e:
-                assert "text is required" in str(e)
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
@@ -203,38 +135,32 @@ async def test_var_keyword_params_excluded_from_schema():
     assert code == 0, error
 
 
-async def test_look_at_returns_eye_answer_for_real_image():
-    """When source is valid and vision is configured, look_at calls the eye
-    and returns its description as the ability's string result."""
+async def test_look_at_returns_media_with_question():
+    """look_at no longer talks to the eye directly — it returns a Media
+    carrying the persona's question. Realize on the next cycle is the
+    place that actually asks the eye."""
     def isolated():
-        import os, tempfile
+        import asyncio, os, tempfile
         from pathlib import Path
+        from types import SimpleNamespace
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import abilities
-            from application.core.data import Model, Persona
-            from application.platform import ollama
+            from application.core.data import Media, Model, Persona
 
             image_path = Path(tmp) / "shot.png"
             image_path.write_bytes(b"\x89PNG fake")
 
-            async def consume(url):
-                persona = Persona(
-                    id="t", name="T",
-                    thinking=Model(name="m", url=url),
-                    vision=Model(name="v", url=url),
-                )
-                result = await abilities.call(
-                    persona, "look_at",
-                    source=str(image_path),
-                    question="what color?",
-                )
-                assert result == "a small green square"
-
-            ollama.assert_call(
-                run=lambda url: consume(url),
-                responses=[[{"message": {"content": "a small green square"}, "done": True}]],
-            )
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            living = SimpleNamespace(ego=SimpleNamespace(persona=persona), view={})
+            result = asyncio.run(abilities.call(
+                living, "look_at",
+                source=str(image_path),
+                question="what color?",
+            ))
+            assert isinstance(result, Media)
+            assert result.source == str(image_path)
+            assert result.question == "what color?"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

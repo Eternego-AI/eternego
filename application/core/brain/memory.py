@@ -78,6 +78,7 @@ class Memory:
                     media = Media(
                         source=media_data.get("source", ""),
                         caption=media_data.get("caption", ""),
+                        question=media_data.get("question", ""),
                     )
                 self._messages.append(Message(
                     content=m.get("content", ""),
@@ -285,15 +286,14 @@ class Memory:
 
         When `media` is given (e.g. screenshot from take_screenshot), the
         TOOL_RESULT text travels as the media's caption and Prompt is left
-        unset — realize will route the image through Eye (if a vision model
-        is configured) or inline it as a multi-block prompt on the next
-        tick, the same way it handles incoming images from `see`."""
+        unset — realize hands the image to the eye on the next tick and
+        the answer arrives as a tools.vision pair."""
         call = json.dumps({selector: value})
         self.remember(Message(content=call, prompt=Prompt(role="assistant", content=call)))
         name = selector.split(".", 1)[1] if "." in selector else selector
         text = f"TOOL_RESULT\ntool: {name}\nstatus: {status}\nresult: {result}"
         if media:
-            self.remember(Message(content=text, media=Media(source=media.source, caption=text)))
+            self.remember(Message(content=text, media=Media(source=media.source, caption=text, question=media.question)))
         else:
             self.remember(Message(content=text, prompt=Prompt(role="user", content=text)))
 

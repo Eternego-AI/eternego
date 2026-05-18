@@ -142,120 +142,47 @@ async def test_archive_skips_failed_vision_call():
     assert code == 0, error
 
 
-async def test_archive_describes_inline_image_at_night():
-    """For images that were inlined (no vision model — image content blocks in
-    the prompt), archive asks the thinking model to describe what was seen and
-    saves the description to the gallery."""
-    def isolated():
-        import os, tempfile, json
-        from pathlib import Path
-        with tempfile.TemporaryDirectory() as tmp:
-            os.environ["ETERNEGO_HOME"] = tmp
-            from application.core import agents, paths
-            from application.core.brain.memory import Memory
-            from application.core.brain import functions
-            from application.core.brain.pulse import Phase, Pulse
-            from application.core.data import Media, Message, Model, Persona, Prompt
-            from application.platform import ollama
-
-            class FakeWorker:
-                def run(self, *a): pass
-                def nudge(self): pass
-
-            image_path = Path(tmp) / "shot.png"
-            image_path.write_bytes(b"\x89PNG fake")
-
-            async def consume(url):
-                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
-                ego = agents.Ego(persona)
-                eye = agents.Eye(persona)
-                consultant = agents.Consultant(persona)
-                teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-                living.pulse.phase = Phase.NIGHT
-
-                inline_blocks = [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "FAKE=="}},
-                    {"type": "text", "text": "what is here?"},
-                ]
-                living.memory.remember(Message(
-                    content="what is here?",
-                    media=Media(source=str(image_path), caption="what is here?"),
-                    prompt=Prompt(role="user", content=inline_blocks),
-                ))
-                living.memory.archive_messages()
-                living.memory.forget()
-
-                await functions.archive(living.memory, living.ego)
-
-                gallery_file = paths.gallery(persona.id)
-                assert gallery_file.exists()
-                entry = json.loads(gallery_file.read_text().strip().splitlines()[0])
-                assert entry["answer"] == "a fake png screenshot"
-                assert entry["source"] == str(image_path)
-
-            response = json.dumps({"description": "a fake png screenshot"})
-            ollama.assert_call(
-                run=lambda url: consume(url),
-                responses=[[{"message": {"content": response}, "done": True}]],
-            )
-
-    code, error = await on_separate_process_async(isolated)
-    assert code == 0, error
-
-
 async def test_archive_skips_screenshots_taken_by_persona():
-    """Screenshots from take_screenshot/screen abilities live under the
-    persona's screenshots/ dir and are working memory, not archive material —
-    archive must not gallery them or burn a model call describing them."""
+    """Screenshots from the take_screenshot / screen abilities live under
+    the persona's screenshots/ dir. They're working memory for the
+    screen-control loop, not material the persona's gallery should keep."""
     def isolated():
-        import os, tempfile
-        from pathlib import Path
+        import asyncio, os, tempfile
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
             from application.core import agents, paths
             from application.core.brain.memory import Memory
             from application.core.brain import functions
             from application.core.brain.pulse import Phase, Pulse
-            from application.core.data import Media, Message, Model, Persona, Prompt
+            from application.core.data import Model, Persona
 
             class FakeWorker:
                 def run(self, *a): pass
                 def nudge(self): pass
 
-            async def consume():
-                persona = Persona(id="t", name="T", thinking=Model(name="m", url="http://unused"))
-                ego = agents.Ego(persona)
-                eye = agents.Eye(persona)
-                consultant = agents.Consultant(persona)
-                teacher = agents.Teacher(persona)
-                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-                living.pulse.phase = Phase.NIGHT
+            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
+            ego = agents.Ego(persona)
+            eye = agents.Eye(persona)
+            consultant = agents.Consultant(persona)
+            teacher = agents.Teacher(persona)
+            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+            living.pulse.phase = Phase.NIGHT
 
-                screenshots_dir = paths.screenshots(persona.id)
-                screenshots_dir.mkdir(parents=True, exist_ok=True)
-                shot = screenshots_dir / "20260506000000.png"
-                shot.write_bytes(b"\x89PNG fake")
+            shot_path = str(paths.screenshots(persona.id) / "20260517090000.png")
+            living.memory.add_tool_result(
+                "tools.vision",
+                {"source": shot_path, "question": "what's on screen?"},
+                "ok",
+                "the pycharm window",
+            )
+            living.memory.archive_messages()
+            living.memory.forget()
 
-                inline_blocks = [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "FAKE=="}},
-                    {"type": "text", "text": "screenshot"},
-                ]
-                living.memory.remember(Message(
-                    content="screenshot",
-                    media=Media(source=str(shot), caption="screenshot"),
-                    prompt=Prompt(role="user", content=inline_blocks),
-                ))
-                living.memory.archive_messages()
-                living.memory.forget()
-
-                await functions.archive(living.memory, living.ego)
-
-                assert not paths.gallery(persona.id).exists(), \
-                    "gallery should not be written for self-taken screenshots"
-
-            import asyncio
-            asyncio.run(consume())
+            asyncio.run(functions.archive(living.memory, living.ego))
+            assert not paths.gallery(persona.id).exists(), \
+                "gallery should not record self-taken screenshots"
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error
+
+

@@ -6,7 +6,8 @@ from application.platform import logger
 
 
 @ability("Pull past conversations and media from a given day (YYYY-MM-DD).")
-async def recall_history(persona, date: str = "") -> str:
+async def recall_history(living, date: str = "") -> str:
+    persona = living.ego.persona
     logger.debug("ability.recall_history", {"persona": persona, "date": date})
     if not date:
         raise ValueError("date is required")

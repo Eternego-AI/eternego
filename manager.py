@@ -193,6 +193,10 @@ class Agent:
                 "content": text,
                 "channel": self.last_channel,
             })
+            # Speaking isn't a stopping point — it's part of how she thinks.
+            # Nudge the worker so a fresh cycle picks up where her own words
+            # land in memory.
+            self.living.pulse.worker.nudge()
 
         async def on_notify(command: Command):
             if command.title != "Persona wants to notify":

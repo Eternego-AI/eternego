@@ -78,6 +78,10 @@ class Ego:
 
 
 class Eye:
+    """The persona's sight. Realize hands the eye an image and a question;
+    the eye's identity (set in character.as_eye) gives it the framing it
+    needs to report facts rather than narrate around them."""
+
     def __init__(self, persona: Persona):
         self.persona = persona
         self.identity = [Prompt(role="system", content=character.as_eye(persona))]
@@ -149,6 +153,12 @@ class Living:
         self.eye = eye
         self.consultant = consultant
         self.teacher = teacher
+        # The persona's current perception state — populated by abilities
+        # that capture the screen (take_screenshot, locate, screen). Keys:
+        #   "landscape": {"x", "y", "w", "h"}  — rect on default monitor (logical)
+        #   "retina":    {"w", "h"}            — saved image dimensions
+        # Empty until the first capture; screen refuses to act until then.
+        self.view: dict = {}
         self.mind: list = []
 
     def phase(self, phase: Phase) -> None:

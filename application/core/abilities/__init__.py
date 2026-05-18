@@ -72,7 +72,9 @@ def ability(instruction: str, requires: Callable | None = None):
         hints = get_type_hints(fn)
         params = {}
         for param_name, param in inspect.signature(fn).parameters.items():
-            if param_name == "persona":
+            if param_name == "living":
+                # `living` is implicit — always passed by the dispatcher.
+                # The model never sees it.
                 continue
             if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 continue
@@ -152,14 +154,21 @@ def actions(persona) -> list[Action]:
     return out
 
 
-async def call(persona, name: str, **args):
+async def call(living, name: str, **args):
     """Dispatch an ability by name. Returns the ability's result — a string for
     most abilities, or a `Media` for abilities that produce visual output.
+
+    The ability receives `living` as its first positional argument so it
+    can reach persona (`living.ego.persona`), perception state
+    (`living.view`), and any other runtime piece it needs. The model
+    never sees `living` — the dispatcher strips it from the schema.
+
     Raises ValueError if the ability is unknown or unavailable for this
     persona; propagates any exception the ability raises."""
+    persona = living.ego.persona
     for a in _registry:
         if a.name == name:
             if a.requires is not None and not a.requires(persona):
                 raise ValueError(f"ability {name} not available for this persona")
-            return await a.fn(persona, **args)
+            return await a.fn(living, **args)
     raise ValueError(f"unknown ability: {name}")

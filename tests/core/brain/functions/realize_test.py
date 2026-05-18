@@ -1,8 +1,11 @@
 """Realize stage — integration tests over a real Living.
 
-Realize surveys what just landed in memory and brings it in. Plain text gets a
-string prompt; images take one of two paths — inline content blocks (no vision
-model) or vision-tool roundtrip (consultant formulates questions, eye answers).
+Realize surveys what just landed in memory and brings it in. Plain text
+gets a string prompt; images always go through the eye, with two
+sub-paths: (1) the media already carries a question (set by the ability
+that produced it — take_screenshot, screen, look_at) and the consultant
+is skipped, or (2) the media has no question (e.g., an external image
+from hear/see) and the consultant formulates one text-only first.
 """
 
 from application.platform.processes import on_separate_process_async
@@ -80,11 +83,12 @@ async def test_realize_skips_already_realized_messages():
     assert code == 0, error
 
 
-async def test_realize_image_without_vision_inlines_content_blocks():
-    """When persona has no vision model, the image is inlined as content blocks
-    (text + image source) directly in the prompt — the thinking model sees it."""
+async def test_realize_image_without_vision_falls_back_to_thinking():
+    """When persona has no vision model, realize uses the thinking model as
+    eye — the message's prompt is text-only (caption) and a vision tool-call
+    pair is added with the answer. No image blocks ever live in a prompt."""
     def isolated():
-        import asyncio, os, tempfile, base64
+        import asyncio, json, os, tempfile
         from pathlib import Path
         with tempfile.TemporaryDirectory() as tmp:
             os.environ["ETERNEGO_HOME"] = tmp
@@ -93,6 +97,7 @@ async def test_realize_image_without_vision_inlines_content_blocks():
             from application.core.brain import functions
             from application.core.brain.pulse import Pulse
             from application.core.data import Media, Message, Model, Persona
+            from application.platform import ollama
 
             class FakeWorker:
                 def run(self, *a): pass
@@ -101,28 +106,97 @@ async def test_realize_image_without_vision_inlines_content_blocks():
             image_path = Path(tmp) / "shot.png"
             image_path.write_bytes(b"\x89PNG fake bytes")
 
-            persona = Persona(id="t", name="T", thinking=Model(name="m", url="not used"))
-            ego = agents.Ego(persona)
-            eye = agents.Eye(persona)
-            consultant = agents.Consultant(persona)
-            teacher = agents.Teacher(persona)
-            living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
-            living.memory.remember(Message(
-                content="caption!",
-                media=Media(source=str(image_path), caption="caption!"),
-            ))
-            messages_before = len(living.memory.messages)
+            async def consume(url):
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(
+                    content="caption!",
+                    media=Media(source=str(image_path), caption="caption!"),
+                ))
 
-            consequences = asyncio.run(functions.realize(living.memory, living.ego, living.eye, living.consultant))
+                await functions.realize(living.memory, living.ego, living.eye, living.consultant)
 
-            assert consequences == []
-            assert len(living.memory.messages) == messages_before
-            prompt = living.memory.messages[-1].prompt
-            assert prompt is not None
-            assert isinstance(prompt.content, list)
-            kinds = [b.get("type") for b in prompt.content]
-            assert "image" in kinds
-            assert "text" in kinds
+                msgs = living.memory.messages
+                # original message: prompt is text-only (the caption)
+                original = msgs[0]
+                assert original.prompt is not None
+                assert original.prompt.content == "caption!"
+                # followed by a tools.vision call + TOOL_RESULT pair
+                assert any(m.prompt and "tools.vision" in str(m.prompt.content) for m in msgs[1:])
+                tool_result = next(m for m in msgs if m.prompt and isinstance(m.prompt.content, str) and m.prompt.content.startswith("TOOL_RESULT"))
+                assert "fake answer" in tool_result.prompt.content
+
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[
+                    [{"message": {"content": json.dumps({"questions": ["q1"]})}, "done": True}],
+                    [{"message": {"content": "fake answer"}, "done": True}],
+                ],
+            )
+
+    code, error = await on_separate_process_async(isolated)
+    assert code == 0, error
+
+
+async def test_realize_skips_consultant_when_media_carries_question():
+    """When the media already has a question (set by take_screenshot,
+    screen, or look_at), realize asks the eye directly — no consultant
+    formulation step, only one model call instead of two."""
+    def isolated():
+        import asyncio, os, tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["ETERNEGO_HOME"] = tmp
+            from application.core import agents
+            from application.core.brain.memory import Memory
+            from application.core.brain import functions
+            from application.core.brain.pulse import Pulse
+            from application.core.data import Media, Message, Model, Persona
+            from application.platform import ollama
+
+            class FakeWorker:
+                def run(self, *a): pass
+                def nudge(self): pass
+
+            image_path = Path(tmp) / "shot.png"
+            image_path.write_bytes(b"\x89PNG fake bytes")
+
+            async def consume(url):
+                persona = Persona(id="t", name="T", thinking=Model(name="m", url=url))
+                ego = agents.Ego(persona)
+                eye = agents.Eye(persona)
+                consultant = agents.Consultant(persona)
+                teacher = agents.Teacher(persona)
+                living = agents.Living(pulse=Pulse(FakeWorker(), ego.persona), ego=ego, memory=Memory(ego.persona), eye=eye, consultant=consultant, teacher=teacher)
+                living.memory.remember(Message(
+                    content="screenshot",
+                    media=Media(
+                        source=str(image_path),
+                        caption="screenshot",
+                        question="I clicked at (300, 400). What's the effect?",
+                    ),
+                ))
+
+                await functions.realize(living.memory, living.ego, living.eye, living.consultant)
+
+                msgs = living.memory.messages
+                tool_result = next(m for m in msgs if m.prompt and isinstance(m.prompt.content, str) and m.prompt.content.startswith("TOOL_RESULT"))
+                assert "the dialog opened" in tool_result.prompt.content
+                # Check the recorded vision call carries the original question.
+                vision_call = next(m for m in msgs if m.prompt and m.prompt.role == "assistant" and "tools.vision" in str(m.prompt.content))
+                assert "I clicked at (300, 400)" in vision_call.prompt.content
+
+            # Only ONE model call expected — no consultant — the eye answer.
+            ollama.assert_call(
+                run=lambda url: consume(url),
+                responses=[
+                    [{"message": {"content": "the dialog opened"}, "done": True}],
+                ],
+            )
 
     code, error = await on_separate_process_async(isolated)
     assert code == 0, error

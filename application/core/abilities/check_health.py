@@ -8,7 +8,8 @@ from application.platform import logger
 @ability("Read the last health-check entries the body logged — fault counts and which "
          "providers failed in recent ticks. Use when troubleshooting to see whether the "
          "machine itself has been struggling. count: how many recent entries (default 5).")
-async def check_health(persona, count: int = 5) -> str:
+async def check_health(living, count: int = 5) -> str:
+    persona = living.ego.persona
     logger.debug("ability.check_health", {"persona": persona, "count": count})
     if count < 1:
         count = 5
