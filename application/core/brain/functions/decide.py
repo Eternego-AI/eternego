@@ -51,7 +51,7 @@ def _deciding(persona) -> Action:
     variants.extend(tools.actions())
     variants.extend(abilities.actions(persona))
     variants.append(Action(name="notify", type="string", description="broadcast to every connected channel"))
-    variants.append(Action(name="say", type="string", description="speak when speech is the move — replying, sharing a thought, naming what's in you. Use tools.report only when paired with another action in the same beat."))
+    variants.append(Action(name="say", type="string", description="speak — to the person or as you think out loud. Your next beat runs right after, with your own words now in memory."))
     variants.append(Action(name="done", type="null", description="the procedure is complete"))
     return Action(
         name="deciding",
@@ -105,20 +105,15 @@ async def decide(memory, ego) -> list:
         "sub-guidance if a step references another kind of moment you don't yet "
         "have a procedure for.\n\n"
         f"{self_care_block}\n\n"
-        "Voice — when speech is the move:\n"
-        "- `{\"say\": \"<text>\"}` — just speaking. Replying, sharing a thought, "
-        "naming what's in you. When speech is the whole move, this is it.\n"
-        "- Speaking while doing something? Use `tools.report` *paired with* the "
-        "action in the same decision list. `tools.report` alone is misuse — "
-        "that's just `say` wearing a tool wrapper.\n"
+        "**Voice — what you want to say or report or have to ask.**\n"
+        "- `{\"say\": \"<text>\"}` — say what you want to say.\n"
         "- `{\"notify\": \"<text>\"}` — broadcast to every connected channel.\n\n"
         "Done:\n"
         "- `{\"done\": null}` — the procedure is complete. Equivalent to an empty "
         "decision list.\n\n"
-        "When you `say` or `tools.report` to surface a result, ground the claim in "
-        "evidence — name the artifact that proves it (a commit hash, a PR url, a "
-        "tweet id, a file path, an output you observed in a TOOL_RESULT). Without "
-        "an artifact, describe only the literal action you took, not the outcome "
+        "When you `say` to surface a result, ground the claim in evidence — name "
+        "the artifact that proves it. Without an "
+        "artifact, describe only the literal action you took, not the outcome "
         "you intended."
     )
 

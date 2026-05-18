@@ -236,11 +236,15 @@ async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 
     macOS shells out to Apple's `screencapture` (TCC-gated, errors loudly
     when permission is missing); Windows uses Pillow's ImageGrab (Win32 GDI).
 
-    Linux wrinkle: xdg-desktop-portal renders the full compositor span at
-    `dominant_output_scale × logical_bbox` (e.g. with a 1.25× HiDPI output
-    in the layout, a logical 4992×1741 desktop returns as a 6240×2176 PNG).
-    We multiply the requested region by the portal scale before the Pillow
-    crop so the returned image matches what the caller asked for.
+    The saved image is always at logical resolution, regardless of how
+    the host renders pixels. Each OS captures at its own buffer scale —
+    Linux portal renders the compositor union at `dominant_output_scale
+    × logical_bbox`, macOS `screencapture` writes at Retina native
+    pixels, Windows `ImageGrab` returns native buffer when the process
+    is per-monitor DPI-aware — and each branch resizes back down to the
+    requested logical `(width, height)` before save. Callers — and the
+    persona reading the file — never deal with scale; image pixels
+    equal logical pixels everywhere downstream.
     """
     import os as _os
     import tempfile
@@ -253,7 +257,6 @@ async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 
     target_os = get_supported()
 
     if target_os == "linux":
-        import shutil
         import uuid
         from urllib.parse import unquote, urlparse
 
@@ -330,21 +333,23 @@ async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 
                 )
 
             src = unquote(urlparse(results["uri"].value).path)
-            if region_requested:
-                from PIL import Image
-                # Portal renders at dominant_output_scale × logical_bbox.
-                # Region is given in logical coords — multiply by the scale
-                # so the Pillow crop hits the right pixels.
-                s = await linux_portal_scale()
-                with Image.open(src) as img:
-                    img.crop((
-                        int(left * s),
-                        int(top * s),
-                        int((left + width) * s),
-                        int((top + height) * s),
-                    )).save(path, "PNG")
-            else:
-                shutil.copy(src, path)
+            # Normalize the portal capture to the compositor's logical
+            # bbox before doing anything else. The portal renders the
+            # union at `dominant_output_scale × logical_bbox`, so a
+            # default monitor at scale=1 alongside a HiDPI secondary
+            # comes back interpolated up. After this resize, image
+            # pixels match logical pixels 1:1, and every crop below is
+            # plain logical-coord rectangle math — no scale to track.
+            from PIL import Image
+            outputs = await linux_outputs()
+            logical_w = max((o["left"] + o["width"]) for o in outputs) if outputs else 0
+            logical_h = max((o["top"] + o["height"]) for o in outputs) if outputs else 0
+            with Image.open(src) as img:
+                if logical_w and logical_h and img.size != (logical_w, logical_h):
+                    img = img.resize((logical_w, logical_h), Image.LANCZOS)
+                if region_requested:
+                    img = img.crop((left, top, left + width, top + height))
+                img.save(path, "PNG")
         finally:
             bus.disconnect()
 
@@ -362,12 +367,25 @@ async def screenshot(left: int = 0, top: int = 0, width: int = 0, height: int = 
                 "missing or not honored for this binary (System Settings → Privacy & "
                 f"Security → Screen Recording): {result.stderr.decode().strip()}"
             )
+        # screencapture takes -R in logical coords but writes at native
+        # pixels (Retina = 2× or 3× logical). Normalize so the saved image
+        # is 1:1 with logical pixels.
+        if region_requested:
+            from PIL import Image
+            with Image.open(path) as img:
+                if img.size != (width, height):
+                    img.resize((width, height), Image.LANCZOS).save(path, "PNG")
 
     elif target_os == "windows":
-        from PIL import ImageGrab
+        from PIL import Image, ImageGrab
 
         if region_requested:
             img = ImageGrab.grab(bbox=(left, top, left + width, top + height), all_screens=True)
+            # ImageGrab on per-monitor DPI-aware processes may return at
+            # native buffer pixels rather than logical. Normalize so the
+            # saved image is 1:1 with logical pixels.
+            if img.size != (width, height):
+                img = img.resize((width, height), Image.LANCZOS)
         else:
             img = ImageGrab.grab(all_screens=True)
         img.save(path, "PNG")
@@ -507,20 +525,6 @@ async def linux_outputs() -> list[dict]:
             logger.debug("kscreen-doctor probe failed", {"error": str(e)})
 
     return []
-
-
-async def linux_portal_scale() -> float:
-    """Dominant output scale on Linux — the factor the xdg-desktop-portal
-    screenshot is rendered at relative to compositor logical coords.
-
-    Plasma renders the union at `max(output.scale) × logical_bbox`. Returns
-    1.0 when we have no scale info (xrandr-only setups, headless, etc.) —
-    matching the previous behavior of cropping at 1:1.
-    """
-    outputs = await linux_outputs()
-    if not outputs:
-        return 1.0
-    return max(o.get("scale", 1.0) for o in outputs)
 
 
 @tool("Execute a command that completes on its own and return its output. "

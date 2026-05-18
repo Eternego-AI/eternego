@@ -6,7 +6,8 @@ from application.platform import logger
 
 
 @ability("Look up scheduled events for a date (YYYY-MM-DD) or month (YYYY-MM).")
-async def check_calendar(persona, date: str = "") -> str:
+async def check_calendar(living, date: str = "") -> str:
+    persona = living.ego.persona
     logger.debug("ability.check_calendar", {"persona": persona, "date": date})
     if not date:
         raise ValueError("date is required")

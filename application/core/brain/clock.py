@@ -62,7 +62,7 @@ async def run(living) -> None:
                 status, result = "error", str(e)
         elif name in ability_names:
             try:
-                ability_result = await abilities.call(persona, name, **args)
+                ability_result = await abilities.call(living, name, **args)
                 status = "ok"
                 if isinstance(ability_result, Media):
                     media = ability_result

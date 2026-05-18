@@ -49,6 +49,7 @@ class Prompt(Data):
 class Media(Data):
     source: str
     caption: str
+    question: str = ""
 
 
 @dataclass(kw_only=True)

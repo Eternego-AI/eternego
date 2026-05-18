@@ -53,6 +53,30 @@ mouse_device = None
 keyboard_device = None
 
 
+def locate_cursor() -> tuple[int, int]:
+    """Current cursor position in compositor coords. Queried fresh on every
+    call — no cache. macOS uses Quartz, Windows uses GetCursorPos, Linux
+    goes through pynput (which reads via XWayland on Wayland sessions)."""
+    target_os = get_supported()
+    if target_os == "mac":
+        from Quartz import NSEvent
+        loc = NSEvent.mouseLocation()
+        # Quartz origin is bottom-left; flip to top-left.
+        from Quartz import CGMainDisplayID, CGDisplayBounds
+        screen_h = int(CGDisplayBounds(CGMainDisplayID()).size.height)
+        return int(loc.x), int(screen_h - loc.y)
+    if target_os == "windows":
+        import ctypes
+        pt = ctypes.wintypes.POINT()
+        ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+        return int(pt.x), int(pt.y)
+    if target_os == "linux":
+        from pynput.mouse import Controller
+        x, y = Controller().position
+        return int(x), int(y)
+    raise NotImplementedError(f"locate_cursor not supported on this OS")
+
+
 def linux_bbox() -> tuple[int, int]:
     """Compositor logical bbox (max_x, max_y) on Linux.
 

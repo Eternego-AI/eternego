@@ -52,7 +52,7 @@ def _recognizing(persona) -> Action:
     ]
     variants.extend(tools.actions())
     variants.extend(abilities.actions(persona))
-    variants.append(Action(name="say", type="string", description="speak when speech is the move — replying, sharing a thought, naming what's in you. Use tools.report only when paired with another action in the same beat."))
+    variants.append(Action(name="say", type="string", description="speak — to the person or as you think out loud. Your next beat runs right after, with your own words now in memory."))
     variants.append(Action(name="done", type="null", description="rest; nothing more to do this beat"))
     return Action(
         name="recognizing",
@@ -107,13 +107,8 @@ async def recognize(pulse, memory, ego) -> list:
             "For a feeling, a wondering, or a state there's no procedure to "
             "follow; `say` what's in you instead.\n"
             "- `{\"tools.load_instruction\": {\"intention\": \"<exact catalog text or new phrase>\"}}`\n\n"
-            "**Voice — when speech is the move.**\n"
-            "- Just speaking? Use `say` — replying, sharing a thought, naming "
-            "what's in you.\n"
-            "- Speaking while doing something? Use `tools.report` *paired "
-            "with* the action in the same decision list.\n"
-            "- `tools.report` alone is misuse — that's just `say` wearing a "
-            "tool wrapper. If there's no accompanying action, reach for `say`.\n"
+            "**Voice — what you want to say or report or have to ask.**\n"
+            "Say what you want to say.\n"
             "- `{\"say\": \"<text>\"}`\n\n"
             "**Rest — nothing to begin yet.**\n"
             "- `{\"done\": null}`\n\n"
@@ -123,13 +118,10 @@ async def recognize(pulse, memory, ego) -> list:
             "belong together. An empty list is the same as `done`. After any "
             "action that touches the world, the cycle re-runs and you'll "
             "perceive the result on the next beat.\n\n"
-            "When you `say` or `tools.report` to surface a result, ground "
-            "the claim in evidence — name the artifact that proves it (a "
-            "commit hash, a PR url, a tweet id, a file path you wrote, an "
-            "output you observed in a TOOL_RESULT). Without an artifact, "
-            "describe only the literal action you took, not the outcome you "
-            "intended. If a step didn't produce the artifact you expected, "
-            "say so plainly."
+            "When you `say` to surface a result, ground the claim in evidence "
+            "— name the artifact that proves it. Without an artifact, describe only the literal "
+            "action you took, not the outcome you intended. If a step didn't "
+            "produce the artifact you expected, say so plainly."
         )
     else:
         question = (
@@ -166,13 +158,8 @@ async def recognize(pulse, memory, ego) -> list:
             "multi-step path. For a feeling, a wondering, or a state there's "
             "no procedure to follow; `say` what's in you instead.\n"
             "- `{\"tools.load_instruction\": {\"intention\": \"<exact catalog text or new phrase>\"}}`\n\n"
-            "**Voice — when speech is the move.**\n"
-            "- Just speaking? Use `say` — replying, sharing a thought, naming "
-            "what's in you.\n"
-            "- Speaking while doing something? Use `tools.report` *paired "
-            "with* the action in the same decision list.\n"
-            "- `tools.report` alone is misuse — that's just `say` wearing a "
-            "tool wrapper. If there's no accompanying action, reach for `say`.\n"
+            "**Voice — what you want to say or report or have to ask.**\n"
+            "Say what you have to say.\n"
             "- `{\"say\": \"<text>\"}`\n\n"
             "**Rest — nothing reactive, nothing deliberate.**\n"
             "- `{\"done\": null}`\n\n"
@@ -182,13 +169,10 @@ async def recognize(pulse, memory, ego) -> list:
             "belong together. An empty list is the same as `done`. After any "
             "action that touches the world, the cycle re-runs and you'll "
             "perceive the result on the next beat.\n\n"
-            "When you `say` or `tools.report` to surface a result, ground "
-            "the claim in evidence — name the artifact that proves it (a "
-            "commit hash, a PR url, a tweet id, a file path you wrote, an "
-            "output you observed in a TOOL_RESULT). Without an artifact, "
-            "describe only the literal action you took, not the outcome you "
-            "intended. If a step didn't produce the artifact you expected, "
-            "say so plainly."
+            "When you `say` to surface a result, ground the claim in evidence "
+            "— name the artifact that proves it. Without an artifact, describe only the literal "
+            "action you took, not the outcome you intended. If a step didn't "
+            "produce the artifact you expected, say so plainly."
         )
 
     try:

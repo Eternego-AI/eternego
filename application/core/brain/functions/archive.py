@@ -5,27 +5,16 @@ messages to the archive. Walks archived batches looking for vision
 tool-call pairs (assistant call + user TOOL_RESULT) and builds a
 persistent media map (gallery) so recall_history can surface past images.
 
-For images that were processed inline (no vision model — image content
-blocks in the prompt), archive asks the thinking model what it saw in
-the context of the conversation.
+No model call — every image arrived at realize, was turned into text via
+the eye, and left a `tools.vision` (or `tools.look_at`) pair in memory.
+Archive's job is just to file those pairs into the gallery.
 """
 
-from application.core import models, paths
+from application.core import paths
 from application.core.brain.signals import Tick, Tock
-from application.core.data import Action, Prompt
-from application.core.exceptions import ModelError
 from application.platform import datetimes, logger
 from application.platform.objects import to_dict
 from application.platform.observer import dispatch
-
-
-ARCHIVING = Action(
-    name="archiving",
-    description="A short description of the image as the persona remembers it.",
-    fields=[
-        Action(name="description", type="string", required=True),
-    ],
-)
 
 
 async def archive(memory, ego) -> list:
@@ -61,6 +50,11 @@ async def archive(memory, ego) -> list:
             source = args.get("source", "")
             if not source:
                 continue
+            # Skip self-taken UI screenshots — those are working memory for
+            # the screen-control loop, not material the persona needs to
+            # remember as part of her gallery.
+            if source.startswith(screenshots_dir):
+                continue
 
             answer = ""
             if i + 1 < len(messages):
@@ -83,46 +77,6 @@ async def archive(memory, ego) -> list:
                 "source": relative_source,
                 "question": args.get("question", ""),
                 "answer": answer,
-                "time": datetimes.iso_8601(datetimes.now()),
-            })
-
-        for m in batch:
-            if not m.media:
-                continue
-            if m.media.source.startswith(screenshots_dir):
-                continue
-            if not isinstance(m.prompt.content, list):
-                continue
-
-            prompts = [
-                Prompt(role=msg.prompt.role, content=msg.prompt.content)
-                for msg in batch if msg.prompt
-            ]
-            question = (
-                "You saw this image during a conversation. "
-                "What did you see in it that was relevant to the conversation and helped you?\n\n"
-                "## Output\n\n"
-                "```json\n"
-                "{\"description\": \"<what you saw and why it mattered>\"}\n"
-                "```"
-            )
-            try:
-                result = await models.tool(ego.model, ego.identity + memory.context_prompt + prompts, question, ARCHIVING)
-                description = str(result.get("description", "")).strip() if isinstance(result, dict) else ""
-            except ModelError as e:
-                logger.warning("brain.archive description failed", {"persona": persona, "source": m.media.source, "error": str(e)})
-                description = ""
-
-            if not description:
-                continue
-
-            relative_source = m.media.source
-            if relative_source.startswith(home_str):
-                relative_source = relative_source[len(home_str):].lstrip("/")
-            paths.append_jsonl(gallery_file, {
-                "source": relative_source,
-                "question": "",
-                "answer": description,
                 "time": datetimes.iso_8601(datetimes.now()),
             })
 
